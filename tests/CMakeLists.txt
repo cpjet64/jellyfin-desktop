@@ -76,6 +76,8 @@ add_test(NAME test_webclient_fault_webengine COMMAND test_webclient_fault_webeng
 set_tests_properties(test_webclient_fault_webengine PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "webengine;gui")
 
 add_executable(test_renderer_loss_playback test_renderer_loss_playback.cpp)
+target_sources(test_renderer_loss_playback PRIVATE "${CMAKE_BINARY_DIR}/src/qrc_resources.cpp")
+add_dependencies(test_renderer_loss_playback generate_resources)
 target_link_libraries(test_renderer_loss_playback jmp_core Qt6::Test Qt6::Quick)
 target_include_directories(test_renderer_loss_playback PRIVATE ${TEST_INCLUDE_DIRS})
 target_compile_definitions(test_renderer_loss_playback PRIVATE ${TEST_COMPILE_DEFS})
