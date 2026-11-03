@@ -19,6 +19,9 @@ class MirrorTests(unittest.TestCase):
         self.releases = {}
         self.assets = []
         self.fail_upload = False
+        self.content = b"binary"
+        self.etag = '"one"'
+        self.patches = []
 
     def api(self, url, token=None, method="GET", payload=None):
         if url.endswith("/git/ref/tags/v1"):
@@ -27,6 +30,7 @@ class MirrorTests(unittest.TestCase):
             self.releases["v1"] = dict(payload, id=7)
             return self.releases["v1"]
         if method == "PATCH":
+            self.patches.append(dict(payload))
             self.releases["v1"].update(payload)
             return self.releases["v1"]
         raise AssertionError((url, method))
@@ -43,15 +47,82 @@ class MirrorTests(unittest.TestCase):
     def sync(self):
         with patch.object(mirror, "api", side_effect=self.api), \
              patch.object(mirror, "request", side_effect=self.request), \
-             patch.object(mirror, "pages", side_effect=lambda *_: list(self.assets)):
+             patch.object(mirror, "pages", side_effect=lambda *_: list(self.assets)), \
+             patch.object(mirror, "asset_bytes", side_effect=self.fetch):
             mirror.sync_release(self.release, self.releases, "token")
+
+    def fetch(self, url, etag=None):
+        if not mirror.valid_asset_url(url):
+            raise ValueError("unsafe URL")
+        if etag and etag == self.etag:
+            return None, etag
+        return self.content, self.etag
 
     def test_create_and_repeat_are_idempotent(self):
         self.sync()
         self.assertFalse(self.releases["v1"]["draft"])
-        with patch.object(mirror, "asset_bytes", side_effect=AssertionError("redownload")):
-            self.sync()
+        self.patches.clear()
+        self.sync()
+        self.assertEqual(self.patches, [])
         self.assertEqual(len(self.assets), 1)
+
+    def test_same_url_changed_bytes_fail_without_writes(self):
+        self.sync()
+        self.content, self.etag = b"different", '"two"'
+        self.patches.clear()
+        with self.assertRaises(ValueError):
+            self.sync()
+        self.assertEqual(self.patches, [])
+
+    def test_no_etag_downloads_each_time(self):
+        self.etag = None
+        self.sync()
+        with patch.object(self, "fetch", wraps=self.fetch) as fetch:
+            self.sync()
+            self.assertIsNone(fetch.call_args.args[1])
+
+    def test_conditional_304_requires_strong_etag(self):
+        from urllib.error import HTTPError
+        from unittest.mock import MagicMock
+        opener = MagicMock()
+        opener.open.side_effect = HTTPError("https://gitlab.curtpme.com/file", 304,
+                                          "Not Modified", {}, None)
+        with patch.object(mirror.urllib.request, "build_opener", return_value=opener):
+            self.assertEqual(mirror.asset_bytes("https://gitlab.curtpme.com/file", '"v1"'),
+                             (None, '"v1"'))
+            self.assertEqual(opener.open.call_args.args[0].get_header("If-none-match"), '"v1"')
+            with self.assertRaises(HTTPError):
+                mirror.asset_bytes("https://gitlab.curtpme.com/file", 'W/"v1"')
+            self.assertIsNone(opener.open.call_args.args[0].get_header("If-none-match"))
+
+    def test_removed_asset_fails_without_writes(self):
+        self.sync()
+        self.release["assets"]["links"] = []
+        self.patches.clear()
+        with self.assertRaises(ValueError):
+            self.sync()
+        self.assertEqual(self.patches, [])
+
+    def test_existing_published_upload_failure_drafts_then_retry(self):
+        self.sync()
+        self.release["assets"]["links"].append(
+            {"name": "other.zip", "url": "https://gitlab.curtpme.com/other"})
+        self.fail_upload = True
+        with self.assertRaises(ValueError):
+            self.sync()
+        self.assertTrue(self.releases["v1"]["draft"])
+        self.fail_upload = False
+        # Fixture upload reports the second asset under its requested name.
+        original = self.request
+        def upload(url, *args, **kwargs):
+            result = original(url, *args, **kwargs)
+            if "other.zip" in url:
+                self.assets[-1]["name"] = "other.zip"
+                return json.dumps(self.assets[-1]).encode()
+            return result
+        with patch.object(self, "request", side_effect=upload):
+            self.sync()
+        self.assertFalse(self.releases["v1"]["draft"])
 
     def test_same_host_redirect_and_unsafe_targets(self):
         handler = mirror.GitLabRedirect()
@@ -110,6 +181,7 @@ class MirrorTests(unittest.TestCase):
         future = dict(self.release, released_at="2999-01-01T00:00:00Z")
         with patch.dict(mirror.os.environ, {"GITHUB_TOKEN": "token"}), \
              patch.object(mirror, "pages", side_effect=[[future], []]), \
+             patch.object(mirror, "api", return_value={"id": 1}), \
              patch.object(mirror, "sync_release") as sync:
             mirror.main()
             sync.assert_not_called()
@@ -119,6 +191,7 @@ class MirrorTests(unittest.TestCase):
         new = dict(self.release, tag_name="v2", released_at="2021-01-01T00:00:00Z")
         with patch.dict(mirror.os.environ, {"GITHUB_TOKEN": "token"}), \
              patch.object(mirror, "pages", side_effect=[[new, old], []]), \
+             patch.object(mirror, "api", return_value={"id": 1}), \
              patch.object(mirror, "sync_release") as sync:
             mirror.main()
             self.assertFalse(sync.call_args_list[0].args[3])
