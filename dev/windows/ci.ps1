@@ -9,6 +9,7 @@ $qtVersion = '6.9.3'
 $mpvVersion = '20261018-git-01e2533f31'
 . "$PSScriptRoot/ci-tools.ps1"
 . "$PSScriptRoot/ci-mpv.ps1"
+. "$PSScriptRoot/ci-gui.ps1"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 function Run-Native {
@@ -18,6 +19,12 @@ function Run-Native {
 }
 
 if (-not $env:CI_JOB_ID) { throw 'This script requires an isolated GitLab job checkout.' }
+if ($env:CI_JOB_IMAGE) { throw 'BLOCKED: native shell runner required' }
+if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'BLOCKED: Windows x64 runner required' }
+$mode = if ($env:CI_MPVQT_MODE) { $env:CI_MPVQT_MODE } else { 'static' }
+if ($mode -notin @('static', 'system')) { throw 'CI_MPVQT_MODE must be static or system' }
+$sourceSha = & git.exe -C external/mpvqt rev-parse HEAD
+if ($LASTEXITCODE -ne 0 -or $sourceSha -ne '2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e') { throw 'Unexpected mpvqt source revision' }
 $drive = Get-PSDrive -Name ([System.IO.Path]::GetPathRoot($root).Substring(0, 1))
 if ($drive.Free -lt 20GB) { throw 'At least 20 GiB free space is required before dependency downloads.' }
 $python = Find-OptionalTool 'python.exe'
@@ -86,15 +93,19 @@ Invoke-WebRequest -UseBasicParsing 'https://aka.ms/vs/17/release/vc_redist.x64.e
 $qt = "$ci/qt/$qtVersion/msvc2022_64"
 $env:PATH = "$qt/bin;$env:PATH"
 $env:QT_PLUGIN_PATH = "$qt/plugins"
-Run-Native 'cmake.exe' @('-S', $root, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=RelWithDebInfo', "-DCMAKE_INSTALL_PREFIX=$build/output", "-DQTROOT=$qt", "-DMPV_INCLUDE_DIR=$build/mpv/include", "-DMPV_LIBRARY=$build/mpv/libmpv-2.dll.lib", '-DCHECK_FOR_UPDATES=ON', '-DUSE_STATIC_MPVQT=ON')
+$static = if ($mode -eq 'static') { 'ON' } else { 'OFF' }
+Run-Native 'cmake.exe' @('-S', $root, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=RelWithDebInfo', "-DCMAKE_INSTALL_PREFIX=$build/output", "-DQTROOT=$qt", "-DMPV_INCLUDE_DIR=$build/mpv/include", "-DMPV_LIBRARY=$build/mpv/libmpv-2.dll.lib", '-DCHECK_FOR_UPDATES=ON', "-DUSE_STATIC_MPVQT=$static", "-DMPVQT_EXTERNAL_EVENTS=$static")
 Run-Native 'cmake.exe' @('--build', $build, '--parallel', '4')
-Run-Native 'ctest.exe' @('--test-dir', $build, '--output-on-failure', '--timeout', '60', '--output-junit', "$results/ctest.xml")
+Run-Native 'ctest.exe' @('--test-dir', $build, '-LE', 'gui', '--no-tests=error', '--output-on-failure', '--timeout', '60', '--output-junit', "$results/ctest.xml")
+Run-Native $venvPython @('dev/ci/check_results.py', 'junit', "$results/ctest.xml", '--require', 'test_webclient_fault_guard')
+Invoke-NativeGuiTests $build $results $venvPython
 Run-Native $venvPython @('tests/windows_mpv_loader_integration.py')
 Run-Native $venvPython @('tests/windows_packaging_runtime_test.py')
 $env:ISCC = $found.Inno
 $env:WINDOWS_VCRUNTIME_DIR = "$deps/vcruntime"
 $env:WINDOWS_VCREDIST_EXE = "$deps/vc_redist.x64.exe"
 Run-Native $venvPython @('tests/windows_installer_compile_test.py')
+Run-Native $venvPython @('tests/test_bundle_paths.py')
 Run-Native $found.Node @('--test', 'tests/test_inputPlugin.js')
 Run-Native $found.Node @('tests/windows_hidden_desktop_fixture.mjs')
 Run-Native 'cmake.exe' @('--build', $build, '--target', 'windows_all', '--parallel', '4')

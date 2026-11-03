@@ -1,0 +1,147 @@
+"""Native Unix CI gate; missing runner capabilities are hard failures."""
+
+import os
+from pathlib import Path
+import platform
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[2]
+BUILD = ROOT / "build"
+RESULTS = BUILD / "ci-results"
+
+
+def command(name, args, *, env=None, timeout=120):
+    print(f"Running {name}", flush=True)
+    log = RESULTS / f"{name}.log"
+    with log.open("w", encoding="utf-8") as output:
+        process = subprocess.Popen(args, cwd=ROOT, env=env, stdout=output,
+                                   stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            code = process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+            raise RuntimeError(f"{name} exceeded {timeout}s; see {log}")
+        finally:
+            try:
+                os.killpg(process.pid, 0)
+            except ProcessLookupError:
+                pass
+            else:
+                os.killpg(process.pid, signal.SIGKILL)
+                raise RuntimeError(f"{name} left descendant processes; see {log}")
+    if code:
+        raise RuntimeError(f"{name} failed ({code}); see {log}")
+
+
+def preflight():
+    system = platform.system()
+    machine = platform.machine().lower()
+    if (system, machine) not in (("Linux", "x86_64"), ("Darwin", "x86_64")):
+        raise RuntimeError(f"Unsupported native runner: {system}/{machine}")
+    if os.environ.get("CI_JOB_IMAGE"):
+        raise RuntimeError("BLOCKED: native shell runner required")
+    if shutil.disk_usage(ROOT).free < 10 * 1024**3:
+        raise RuntimeError("BLOCKED: at least 10 GiB free space required")
+    tools = ["cmake", "ctest", "ninja", "pkg-config", "git", "c++", "node"]
+    if system == "Linux":
+        tools += ["xvfb-run", "xauth", "dbus-run-session", "glxinfo"]
+    elif os.environ.get("CI_DEDICATED_GUI_SESSION") != "1":
+        raise RuntimeError("BLOCKED: dedicated macOS GUI session not attested")
+    missing = [tool for tool in tools if not shutil.which(tool)]
+    if missing:
+        raise RuntimeError("BLOCKED: missing tools: " + ", ".join(missing))
+    if system == "Darwin":
+        result = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+        if result.returncode:
+            raise RuntimeError("BLOCKED: dedicated macOS GUI session is unavailable")
+        print(f"macOS GUI session available for uid {os.getuid()}", flush=True)
+    mode = os.environ.get("CI_MPVQT_MODE")
+    if mode not in ("static", "system"):
+        raise RuntimeError("CI_MPVQT_MODE must be static or system")
+    return system, mode
+
+
+def configure(system, mode):
+    command("compiler-version", ["c++", "--version"])
+    command("cmake-version", ["cmake", "--version"])
+    command("mpv-version", ["pkg-config", "--modversion", "mpv"])
+    command("qt-versions", ["pkg-config", "--modversion", "Qt6Core", "Qt6WebEngineQuick", "Qt6WebChannel", "Qt6Positioning"])
+    command("mpvqt-source", ["git", "-C", "external/mpvqt", "rev-parse", "HEAD"])
+    sha = subprocess.check_output(["git", "-C", "external/mpvqt", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    if sha != "2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e":
+        raise RuntimeError("Unexpected mpvqt source revision")
+    options = ["cmake", "-S", str(ROOT), "-B", str(BUILD), "-G", "Ninja",
+               "-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-DUSE_STATIC_MPVQT=" + ("ON" if mode == "static" else "OFF"),
+               "-DMPVQT_EXTERNAL_EVENTS=" + ("ON" if mode == "static" else "OFF")]
+    command("configure", options, timeout=300)
+    command("build", ["cmake", "--build", str(BUILD), "--parallel", "4"], timeout=1800)
+    prefix = ["dbus-run-session", "--"] if system == "Linux" else []
+    command("ctest", prefix + ["ctest", "--test-dir", str(BUILD), "-LE", "gui", "--output-on-failure",
+                               "--no-tests=error", "--timeout", "60", "--output-junit", str(RESULTS / "ctest.xml")], timeout=900)
+    report = [sys.executable, "dev/ci/check_results.py", "junit", str(RESULTS / "ctest.xml"), "--require", "test_webclient_fault_guard"]
+    if system == "Linux":
+        report += ["--require", "test_mpris_fault"]
+    command("ctest-report", report)
+    command("input-plugin", ["node", "--test", "tests/test_inputPlugin.js"], timeout=120)
+    command("bundle-paths", [sys.executable, "tests/test_bundle_paths.py"], timeout=120)
+
+
+def gui(system):
+    env = os.environ.copy()
+    env["QSG_INFO"] = "1"
+    env["QT_QPA_PLATFORM"] = "xcb" if system == "Linux" else "cocoa"
+    media = RESULTS / "recovery.y4m"
+    command("media", [sys.executable, "tests/generate_recovery_media.py", str(media)], timeout=120)
+    prefix = ["xvfb-run", "-a", "-s", "-screen 0 1280x800x24 +extension GLX", "dbus-run-session", "--"] if system == "Linux" else []
+    if system == "Linux":
+        command("render-backend", prefix + ["glxinfo", "-B"], env=env)
+    executable = BUILD / "tests" / "test_webclient_fault_webengine"
+    command("webengine", prefix + [str(executable), "-o", str(RESULTS / "webengine.txt") + ",txt"], env=env, timeout=90)
+    if not (RESULTS / "webengine.txt").is_file():
+        raise RuntimeError("WebEngine test did not produce its result")
+    command("webengine-report", [sys.executable, "dev/ci/check_results.py", "qtest", str(RESULTS / "webengine.txt")])
+    for fixture in ("test_renderer_loss_playback", "test_webclient_containment"):
+        run_scenarios(fixture, prefix, env, media)
+
+
+def run_scenarios(fixture, prefix, env, media):
+    for scenario in ("playing", "paused", "held-hook"):
+        evidence = RESULTS / fixture / scenario
+        evidence.mkdir(parents=True, exist_ok=True)
+        local = env.copy()
+        local.update({"RECOVERY_SCENARIO": scenario, "RECOVERY_MEDIA": str(media), "RECOVERY_EVIDENCE_DIR": str(evidence)})
+        command(f"{fixture}-{scenario}", prefix + [str(BUILD / "tests" / fixture),
+                "-o", str(evidence / "qtest.txt") + ",txt"], env=local, timeout=90)
+        if not (evidence / "qtest.txt").is_file():
+            raise RuntimeError(f"Missing {fixture} {scenario} result")
+        command(f"{fixture}-{scenario}-report", [sys.executable, "dev/ci/check_results.py", "qtest", str(evidence / "qtest.txt")])
+        if fixture == "test_renderer_loss_playback" and scenario != "held-hook":
+            if any(not (evidence / name).is_file() for name in ("before.png", "after.png")):
+                raise RuntimeError(f"Missing {scenario} image evidence")
+
+
+def main():
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    system, mode = preflight()
+    with tempfile.TemporaryDirectory(prefix="ci-runtime-", dir=BUILD) as runtime:
+        for name in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR"):
+            path = Path(runtime) / name.lower()
+            path.mkdir(mode=0o700)
+            os.environ[name] = str(path)
+        configure(system, mode)
+        gui(system)
+    print(f"PASS: {system} {mode}, WebEngine and 6 playback scenarios")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        print(f"CI failure: {error}", file=sys.stderr)
+        sys.exit(1)
