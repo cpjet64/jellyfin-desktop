@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 // Diagnostic only: the offscreen platform cannot prove GPU rendering, clean exit,
 // or child cleanup after a parent crash. This script never returns an acceptance pass.
-import { mkdir, open, rm, writeFile, access, realpath } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, rm, writeFile, realpath } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
 import { once } from 'node:events';
@@ -15,7 +16,6 @@ const build = await realpath(buildArg);
 const qt = await realpath(qtArg);
 const executable = path.join(build, 'src', 'Jellyfin Desktop.exe');
 const marker = path.join(build, 'src', 'portable');
-const cache = path.join(build, 'src', 'cache');
 const output = path.join(build, 'desktop-smoke');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -60,17 +60,18 @@ async function cdp(url, method, params = {}) {
 }
 
 async function stopTree(child) {
-  if (child.exitCode !== null) return;
+  if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
   const killer = spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'],
     { windowsHide: true, stdio: 'ignore' });
   await Promise.race([once(killer, 'exit'), delay(5000)]);
   await Promise.race([once(child, 'exit'), delay(5000)]);
-  if (child.exitCode === null) throw new Error(`app process ${child.pid} did not exit`);
+  if (child.exitCode === null && child.signalCode === null) throw new Error(`app process ${child.pid} did not exit`);
 }
 
 async function runCase(spec) {
-  const dir = path.join(output, `${spec.name}-${Date.now()}`);
-  const profile = '0123456789abcdef0123456789abcdef';
+  await mkdir(output, { recursive: true });
+  const dir = await mkdtemp(path.join(output, `${spec.name}-`));
+  const profile = randomUUID().replaceAll('-', '');
   const data = path.join(dir, 'data');
   const profileDir = path.join(data, 'profiles', profile);
   await mkdir(profileDir, { recursive: true });
@@ -86,12 +87,16 @@ async function runCase(spec) {
     QT_LOGGING_RULES: 'qt.webenginecontext.debug=true', QTWEBENGINE_CHROMIUM_FLAGS: spec.flags || '',
     LOCALAPPDATA: dir, APPDATA: dir, TEMP: path.join(dir, 'temp'), TMP: path.join(dir, 'temp') };
   const child = spawn(executable, ['--config-dir', data, ...spec.args], { env, windowsHide: true });
+  let spawnError;
+  child.on('error', error => { spawnError = error; });
   let log = '';
   child.stdout.on('data', chunk => { log += chunk; });
   child.stderr.on('data', chunk => { log += chunk; });
-  const result = { case: spec.name, dir, cleanExit: false,
+  const result = { case: spec.name, dir, cacheDir: path.join(build, 'src', 'cache', 'profiles', profile), cleanExit: false,
     cleanupLimitation: 'Descendants cannot be verified if the parent exits before taskkill.' };
   try {
+    await once(child, 'spawn');
+    if (spawnError) throw spawnError;
     const version = await waitForDebug(port, child);
     const base = `http://127.0.0.1:${port}`;
     result.gpu = await cdp(version.webSocketDebuggerUrl, 'SystemInfo.getInfo');
@@ -103,7 +108,8 @@ async function runCase(spec) {
     result.status = 'observed';
   } catch (error) { result.status = 'failed'; result.error = String(error); }
   finally {
-    await stopTree(child);
+    try { await stopTree(child); }
+    catch (error) { result.cleanupError = String(error); result.status = 'failed'; }
     await writeFile(path.join(dir, 'console.log'), log);
     await writeFile(path.join(dir, 'result.json'), JSON.stringify(result, null, 2));
   }
@@ -111,11 +117,9 @@ async function runCase(spec) {
 }
 
 async function main() {
-  try { await access(cache); throw new Error(`Refusing pre-existing portable cache: ${cache}`); }
-  catch (error) { if (error.code !== 'ENOENT') throw error; }
   const markerFile = await open(marker, 'wx');
-  await markerFile.close();
   try {
+    await markerFile.close();
     const cases = [
       { name: 'normal', args: [] },
       { name: 'cli-disable-gpu', args: ['--disable-gpu'] },
