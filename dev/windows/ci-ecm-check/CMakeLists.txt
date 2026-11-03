@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.16...3.31)
+project(CheckEcmMissingFormatter LANGUAGES NONE)
+set(KDE_CLANG_FORMAT_EXECUTABLE "" CACHE FILEPATH "" FORCE)
+include("${ECM_KDE_MODULE_DIR}/KDEClangFormat.cmake")
+if(KDE_CLANG_FORMAT_EXECUTABLE)
+  message(FATAL_ERROR "This regression requires clang-format to be absent")
+endif()
+kde_clang_format("${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt")

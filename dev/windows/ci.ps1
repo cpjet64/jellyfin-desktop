@@ -55,8 +55,9 @@ if ($found.Node) {
 if ($found.CMake) {
     $ctest = Join-Path (Split-Path $found.CMake) 'ctest.exe'
     $versionLine = & $found.CMake --version | Select-Object -First 1
+    $minimumCmake = if ($mode -eq 'system') { [version]'3.30' } else { [version]'3.21' }
     if ($LASTEXITCODE -ne 0 -or $versionLine -notmatch 'cmake version (\d+\.\d+)' -or
-        [version]$Matches[1] -lt [version]'3.21' -or -not (Test-Path -LiteralPath $ctest)) {
+        [version]$Matches[1] -lt $minimumCmake -or -not (Test-Path -LiteralPath $ctest)) {
         $found.CMake = $null
     }
 }

@@ -6,14 +6,16 @@ function Install-JobMpvQt {
     }
     $tools = Join-Path $Workspace 'system-mpvqt'
     New-Item -ItemType Directory -Path $tools | Out-Null
-    $archive = Join-Path $tools 'extra-cmake-modules-6.18.0.tar.xz'
-    # Published checksum: https://download.kde.org/stable/frameworks/6.18/extra-cmake-modules-6.18.0.tar.xz.sha256
-    Get-VerifiedDownload 'https://download.kde.org/stable/frameworks/6.18/extra-cmake-modules-6.18.0.tar.xz' $archive 'B2D2222CFE5ACE502C60BD8A77A79BC0230F48CEE83265C89DCC2618B960E293'
+    $archive = Join-Path $tools 'extra-cmake-modules-6.31.0.tar.xz'
+    # Published checksum: https://download.kde.org/stable/frameworks/6.31/extra-cmake-modules-6.31.0.tar.xz.sha256
+    Get-VerifiedDownload 'https://download.kde.org/stable/frameworks/6.31/extra-cmake-modules-6.31.0.tar.xz' $archive '8F74AF329E4C918358BFE54316F8CF4D530C28444595A3E2FB15075F72877F17'
     $extract = Join-Path $tools 'ecm-source'
     Run-Native $Python @('dev/ci/safe_extract.py', $archive, $extract)
     $ecm = Join-Path $tools 'ecm-install'
-    Run-Native 'cmake.exe' @('-S', "$extract/extra-cmake-modules-6.18.0", '-B', "$tools/ecm-build", '-G', 'Ninja', "-DCMAKE_INSTALL_PREFIX=$ecm", '-DBUILD_TESTING=OFF')
+    Run-Native 'cmake.exe' @('-S', "$extract/extra-cmake-modules-6.31.0", '-B', "$tools/ecm-build", '-G', 'Ninja', "-DCMAKE_INSTALL_PREFIX=$ecm", '-DBUILD_TESTING=OFF', '-DBUILD_DOC=OFF')
     Run-Native 'cmake.exe' @('--build', "$tools/ecm-build", '--target', 'install', '--parallel', '4')
+    Run-Native 'cmake.exe' @('-S', 'dev/windows/ci-ecm-check', '-B', "$tools/ecm-check", '-G', 'Ninja', "-DECM_KDE_MODULE_DIR=$ecm/share/ECM/kde-modules")
+    Run-Native 'cmake.exe' @('--build', "$tools/ecm-check", '--target', 'clang-format')
     $source = Join-Path $tools 'mpvqt-source'
     $tree = & git.exe -C external/mpvqt ls-tree -r HEAD
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect pinned MpvQt source tree' }

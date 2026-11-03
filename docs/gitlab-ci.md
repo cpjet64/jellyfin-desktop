@@ -59,7 +59,9 @@ create or attest that session.
 
 System jobs use an independently installed mpvqt package. Windows builds the
 unmodified pinned upstream source as a shared library in a job-owned prefix,
-using pinned KDE ECM 6.18.0 and the job's Qt and mpv inputs. It verifies the
+using pinned KDE ECM 6.31.0 and the job's Qt and mpv inputs. System mode
+requires CMake 3.30 or newer for ECM. A focused configure/build check exercises
+ECM's missing-formatter branch before building mpvqt. The job verifies the
 imported runtime lies in that prefix and records the application's shared-library
 linkage. This is an installed-package compatibility check using the job's own
 build, not proof of a separately supplied vendor package. Missing prerequisites
