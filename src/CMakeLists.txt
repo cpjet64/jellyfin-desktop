@@ -156,10 +156,14 @@ endif()
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ui/webview.qml
   PROPERTIES QT_RESOURCE_ALIAS webview.qml
 )
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ui/RendererLoss.js
+  PROPERTIES QT_RESOURCE_ALIAS RendererLoss.js
+)
 qt_add_qml_module(${MAIN_TARGET}
   URI Konvergo
   VERSION 1.0
   QML_FILES ${CMAKE_CURRENT_SOURCE_DIR}/ui/webview.qml
+  RESOURCES ${CMAKE_CURRENT_SOURCE_DIR}/ui/RendererLoss.js
   NO_RESOURCE_TARGET_PATH
 )
 

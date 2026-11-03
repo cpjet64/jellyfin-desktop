@@ -83,6 +83,14 @@ target_include_directories(test_renderer_loss_playback PRIVATE ${TEST_INCLUDE_DI
 target_compile_definitions(test_renderer_loss_playback PRIVATE ${TEST_COMPILE_DEFS})
 # Run each scenario in an isolated native desktop process with RECOVERY_* inputs.
 
+add_executable(test_webclient_containment test_webclient_containment.cpp
+  "${CMAKE_BINARY_DIR}/src/qrc_resources.cpp")
+add_dependencies(test_webclient_containment generate_resources)
+target_link_libraries(test_webclient_containment jmp_core Qt6::Test Qt6::Quick Qt6::WebEngineQuick Qt6::WebChannel)
+target_include_directories(test_webclient_containment PRIVATE ${TEST_INCLUDE_DIRS})
+target_compile_definitions(test_webclient_containment PRIVATE ${TEST_COMPILE_DEFS} TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+# CI explicitly runs all three scenarios in isolated native desktop processes.
+
 if(LINUX_DBUS)
   add_executable(test_mpris_fault test_mpris_fault.cpp)
   target_link_libraries(test_mpris_fault jmp_core Qt6::Test Qt6::DBus)
