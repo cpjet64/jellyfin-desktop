@@ -9,7 +9,7 @@ const [helper, build, qt, mode] = process.argv.slice(2);
 if (![helper, build, qt].every(value => value && path.isAbsolute(value))) {
   throw new Error('Pass absolute paths to helper, integration build, and Qt root');
 }
-if (mode && !['--baseline', '--log-failure', '--window-actions', '--geometry'].includes(mode)) throw new Error('Unknown mode');
+if (mode && !['--baseline', '--log-failure', '--window-actions', '--geometry', '--packaged'].includes(mode)) throw new Error('Unknown mode');
 const marker = path.join(build, 'src', 'portable');
 const outputRoot = path.join(build, 'desktop-smoke-native');
 let output;
@@ -29,6 +29,26 @@ async function getJson(url) {
   const response = await fetch(url, { signal: AbortSignal.timeout(1500) });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
+}
+
+function caseEnvironment(spec, dir, port) {
+  const env = { ...process.env };
+  if (mode === '--packaged') {
+    for (const key of Object.keys(env)) {
+      if (/^(QT|QML|CMAKE_PREFIX_PATH|VCPKG_ROOT|OPENSSL_CONF|OPENSSL_MODULES|SSL_CERT_FILE|SSL_CERT_DIR)/i.test(key) ||
+          key.toUpperCase() === 'PATH') delete env[key];
+    }
+    const windows = process.env.SystemRoot || process.env.WINDIR;
+    if (!windows || !path.isAbsolute(windows)) throw new Error('Windows system directory is unavailable');
+    env.PATH = [path.join(windows, 'System32'), windows, path.join(windows, 'System32', 'Wbem')].join(';');
+  } else {
+    env.PATH = `${path.join(qt, 'bin')};${process.env.PATH}`;
+    env.QT_PLUGIN_PATH = path.join(qt, 'plugins');
+    env.QML2_IMPORT_PATH = path.join(qt, 'qml');
+  }
+  return { ...env, QT_QPA_PLATFORM: 'windows', QTWEBENGINE_REMOTE_DEBUGGING: `127.0.0.1:${port}`,
+    QTWEBENGINE_CHROMIUM_FLAGS: spec.flags || '', QT_LOGGING_RULES: 'qt.webenginecontext.debug=true',
+    LOCALAPPDATA: dir, APPDATA: dir, TEMP: path.join(dir, 'temp'), TMP: path.join(dir, 'temp') };
 }
 
 async function cdp(url, method, params = {}) {
@@ -85,11 +105,7 @@ async function runCase(spec) {
     }
     if (spec.logFailure) await writeFile(path.join(data, 'profiles', profile, 'logs'), 'block log directory');
     const port = await portNumber();
-    const env = { ...process.env, PATH: `${path.join(qt, 'bin')};${process.env.PATH}`,
-      QT_PLUGIN_PATH: path.join(qt, 'plugins'), QML2_IMPORT_PATH: path.join(qt, 'qml'),
-      QT_QPA_PLATFORM: 'windows', QTWEBENGINE_REMOTE_DEBUGGING: `127.0.0.1:${port}`,
-      QTWEBENGINE_CHROMIUM_FLAGS: spec.flags || '', QT_LOGGING_RULES: 'qt.webenginecontext.debug=true', LOCALAPPDATA: dir, APPDATA: dir,
-      TEMP: path.join(dir, 'temp'), TMP: path.join(dir, 'temp') };
+    const env = caseEnvironment(spec, dir, port);
     const child = spawn(helper, [path.join(build, 'src', 'Jellyfin Desktop.exe'), data, ...(spec.arg ? [spec.arg] : [])],
       { env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     let log = '';
@@ -112,6 +128,8 @@ async function runCase(spec) {
     const diagnostic = log.split(/\r?\n/).filter(line =>
       /app pid|app wait|job active|window actions|window bounds|Failed to create temporary log|ERROR:/.test(line)).join('\n');
     const result = { case: spec.name, observation, helperExit: code, log: diagnostic };
+    if (mode === '--packaged') result.runtimeEnvironment = { path: env.PATH,
+      qtVariableNames: Object.keys(env).filter(key => /^(QT|QML)/i.test(key)).sort() };
     if (spec.sharedData) {
       const storage = await readFile(path.join(data, 'profiles', profile, 'storage.json'), 'utf8');
       await writeFile(path.join(dir, 'storage.json'), storage);
@@ -156,7 +174,7 @@ async function main() {
     const cases = [{ name: 'normal' }, { name: 'cli-disable-gpu', arg: '--disable-gpu' },
       { name: 'env-disable-gpu-pinch', flags: '--disable-gpu', disablePinch: true },
       { name: 'quoted-flags', flags: '--user-agent="Desktop Smoke Test"' }];
-    const selected = mode === '--baseline' ? cases.slice(0, 2) :
+    const selected = mode === '--packaged' ? cases.slice(0, 1) : mode === '--baseline' ? cases.slice(0, 2) :
       mode === '--log-failure' ? [{ name: 'log-failure', logFailure: true }] :
       mode === '--geometry' ? [
         { name: 'geometry-1', arg: '--window-actions', windowActions: true, sharedData: true },
