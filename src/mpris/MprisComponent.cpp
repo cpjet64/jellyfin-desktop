@@ -5,6 +5,7 @@
 #include "player/AlbumArtProvider.h"
 #include "input/InputComponent.h"
 #include "system/SystemComponent.h"
+#include "system/WebClientFaultGuard.h"
 #include "settings/SettingsComponent.h"
 #include "core/Globals.h"
 #include "core/ProfileManager.h"
@@ -38,6 +39,12 @@ MprisComponent::MprisComponent(QObject* parent)
   , m_isNavigating(false)
   , m_playerState(PlayerComponent::State::finished)
 {
+  connect(&WebClientFaultGuard::instance(), &WebClientFaultGuard::rendererLostChanged,
+          this, [this]() {
+    m_seekPending = false;
+    m_expectedPosition = 0;
+    emitPropertyChange("org.mpris.MediaPlayer2.Player", "CanSeek", false);
+  });
 }
 
 MprisComponent::~MprisComponent()
@@ -194,7 +201,7 @@ bool MprisComponent::canPause() const
 
 bool MprisComponent::canSeek() const
 {
-  if (m_playbackStatus == "Stopped")
+  if (WebClientFaultGuard::instance().rendererLost() || m_playbackStatus == "Stopped")
     return false;
 
   bool result = m_duration > 0;
