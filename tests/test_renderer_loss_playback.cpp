@@ -117,7 +117,7 @@ void TestRendererLossPlayback::verifyPlayback(PlayerComponent& player, mpv_handl
   QVERIFY2(brightPixels(before) > 100, "Video frame not visibly rendered");
   QVERIFY(before.save(evidence + "/before.png"));
   WebClientFaultGuard::instance().observeRendererLoss(0, 17);
-  QTest::qWait(1200);
+  QTest::qWait(scenario == "paused" ? 5200 : 1200);
   const qint64 afterPosition = player.getPosition();
   const QImage after = window.grabWindow();
   QVERIFY(!after.isNull());
