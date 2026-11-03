@@ -8,7 +8,6 @@
 #include <QStandardPaths>
 #include <QUuid>
 #include <cerrno>
-#include <filesystem>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #else
@@ -42,19 +41,35 @@ static bool contained(const QString& path, const QString& root)
   return relative != ".." && !relative.startsWith("../") && !QDir::isAbsolutePath(relative);
 }
 
+static bool supportedAbsolutePath(const QString& path)
+{
+  if (path.contains(QChar('\0'))) return false;
+#ifdef Q_OS_WIN
+  if (path.size() < 3 || path.at(1) != ':' || (path.at(2) != '/' && path.at(2) != '\\')) return false;
+  const QChar drive = path.at(0);
+  return (drive >= 'A' && drive <= 'Z') || (drive >= 'a' && drive <= 'z');
+#else
+  return QDir::isAbsolutePath(path);
+#endif
+}
+
 bool checkCandidate(const QString& candidate, const QString& ownedRoot,
                     const Inspector& inspect, QString* error)
 {
-  if (!QDir::isAbsolutePath(candidate) || !QDir::isAbsolutePath(ownedRoot)) {
-    if (error) *error = "Config candidate and owned root must be absolute";
+  if (!supportedAbsolutePath(candidate) || !supportedAbsolutePath(ownedRoot)) {
+    if (error) *error = "Unsupported config candidate or owned root path";
     return false;
   }
-  const QString absolute = QDir::cleanPath(candidate);
+  const QString absolute = QDir::cleanPath(QDir::fromNativeSeparators(candidate));
 #ifdef Q_OS_WIN
-  const QString root = QDir::fromNativeSeparators(QString::fromStdWString(std::filesystem::path(absolute.toStdWString()).root_path().wstring()));
+  const QString root = absolute.left(3);
 #else
   const QString root = "/";
 #endif
+  if (inspect(root) != Entry::Directory) {
+    if (error) *error = "Filesystem root is unavailable or untrusted: " + root;
+    return false;
+  }
   const QStringList parts = absolute.mid(root.size()).split('/', Qt::SkipEmptyParts);
   QString current = root;
   for (int i = 0; i < parts.size(); ++i) {
@@ -80,6 +95,10 @@ bool prepareMpvTestEnvironment(const QString& ownedRoot, QString* error)
 {
   if (!QCoreApplication::instance()) {
     if (error) *error = "A Qt application must exist before bootstrap";
+    return false;
+  }
+  if (!supportedAbsolutePath(ownedRoot)) {
+    if (error) *error = "Unsupported owned test root path";
     return false;
   }
   const QFileInfo owner(ownedRoot);

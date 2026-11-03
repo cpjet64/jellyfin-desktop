@@ -6,8 +6,13 @@ find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
 add_executable(test_mpv_test_bootstrap test_mpv_test_bootstrap.cpp mpv_test_bootstrap.cpp)
 target_link_libraries(test_mpv_test_bootstrap PRIVATE Qt6::Core Qt6::Test)
-add_test(NAME test_mpv_test_bootstrap COMMAND test_mpv_test_bootstrap)
-set_tests_properties(test_mpv_test_bootstrap PROPERTIES TIMEOUT 60)
+set(_mpv_guard_pure absentAndExisting rejectLinksAndErrorsBeforeInitialization rootAndDescendantCases pathSyntax)
+if(WIN32)
+  list(APPEND _mpv_guard_pure unusedWindowsDrive)
+endif()
+add_test(NAME test_mpv_test_bootstrap_pure COMMAND test_mpv_test_bootstrap ${_mpv_guard_pure})
+add_test(NAME test_mpv_test_bootstrap COMMAND test_mpv_test_bootstrap runtimePrerequisites)
+set_tests_properties(test_mpv_test_bootstrap test_mpv_test_bootstrap_pure PROPERTIES TIMEOUT 60)
 
 # This probe is diagnostic only; the failing playback result remains authoritative.
 add_executable(native_gl_probe native_gl_probe.cpp)
