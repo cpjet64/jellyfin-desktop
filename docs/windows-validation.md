@@ -135,9 +135,12 @@ See [the issue inventory](windows-issue-triage.md) for report-specific acceptanc
 ## Follow-up review corrections
 
 QML fullscreen wrappers now call the native window manager, so keyboard and DOM
-requests use its restore behavior. The first hidden-desktop keyboard diagnostic
-failed to establish action delivery and was forcibly contained with zero remaining
-job processes. This is not keyboard acceptance; input automation is being repaired.
+requests use its restore behavior. After correcting readiness and modifier-key
+delivery in the hidden-desktop diagnostic, posted Windows F11 and Alt+Return
+messages each entered fullscreen and restored the maximized window. The actual
+application then exited through its native bridge with code zero, no forced
+cleanup and no remaining job processes. Physical keyboard input, normal-window
+restoration and geometry persistence across launches remain separate checks.
 
 The seven native suites passed again after the QML change and geometry-helper
 extraction. The logging suite now forces a same-thread Qt diagnostic during a
