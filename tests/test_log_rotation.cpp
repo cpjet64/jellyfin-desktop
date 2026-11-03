@@ -14,10 +14,40 @@ class TestLogRotation : public QObject
 {
   Q_OBJECT
 private slots:
+  void initTestCase();
+  void cleanup();
+  void cleanupTestCase();
   void normalRotation();
   void failedRotationKeepsWriting();
   void repeatedStartupAndConcurrentMessages();
+  void rotateAfterCleanup();
+private:
+  QtMessageHandler previousHandler = nullptr;
 };
+
+void TestLogRotation::initTestCase()
+{
+  previousHandler = qInstallMessageHandler(nullptr);
+  qInstallMessageHandler(previousHandler);
+}
+
+void TestLogRotation::cleanup()
+{
+  Log::Cleanup();
+  Paths::setConfigDir(QString());
+  Paths::setCacheDir(QString());
+}
+
+void TestLogRotation::cleanupTestCase()
+{
+  qInstallMessageHandler(previousHandler);
+}
+
+static void useTestDirectory(const QString& path)
+{
+  Paths::setConfigDir(path + "/data");
+  Paths::setCacheDir(path + "/cache");
+}
 
 static QString mainLogPath()
 {
@@ -34,9 +64,9 @@ static QByteArray readFile(const QString& path)
 
 void TestLogRotation::normalRotation()
 {
-  QTemporaryDir dir;
+  QTemporaryDir dir(QDir::currentPath() + "/log-rotation-XXXXXX");
   QVERIFY(dir.isValid());
-  Paths::setConfigDir(dir.path());
+  useTestDirectory(dir.path());
   QVERIFY(QDir().mkpath(ProfileManager::activeProfile().logDir()));
   QFile previous(mainLogPath());
   QVERIFY(previous.open(QIODevice::WriteOnly));
@@ -54,9 +84,9 @@ void TestLogRotation::normalRotation()
 
 void TestLogRotation::failedRotationKeepsWriting()
 {
-  QTemporaryDir dir;
+  QTemporaryDir dir(QDir::currentPath() + "/log-rotation-XXXXXX");
   QVERIFY(dir.isValid());
-  Paths::setConfigDir(dir.path());
+  useTestDirectory(dir.path());
   const QString logDir = ProfileManager::activeProfile().logDir();
   QVERIFY(QDir().mkpath(logDir));
   QVERIFY(QDir().mkpath(mainLogPath())); // A directory cannot be rotated as a file.
@@ -74,9 +104,9 @@ void TestLogRotation::failedRotationKeepsWriting()
 
 void TestLogRotation::repeatedStartupAndConcurrentMessages()
 {
-  QTemporaryDir dir;
+  QTemporaryDir dir(QDir::currentPath() + "/log-rotation-XXXXXX");
   QVERIFY(dir.isValid());
-  Paths::setConfigDir(dir.path());
+  useTestDirectory(dir.path());
   QVERIFY(QDir().mkpath(ProfileManager::activeProfile().logDir()));
   Log::Init();
   qInfo("first startup");
@@ -93,6 +123,18 @@ void TestLogRotation::repeatedStartupAndConcurrentMessages()
                          .entryList({"jellyfin-desktop-*.log"}, QDir::Files);
   QCOMPARE(files.size(), 1);
   QVERIFY(readFile(ProfileManager::activeProfile().logDir() + "/" + files.first()).contains("first startup"));
+}
+
+void TestLogRotation::rotateAfterCleanup()
+{
+  QTemporaryDir dir(QDir::currentPath() + "/log-rotation-XXXXXX");
+  QVERIFY(dir.isValid());
+  useTestDirectory(dir.path());
+  QVERIFY(QDir().mkpath(ProfileManager::activeProfile().logDir()));
+  Log::Init();
+  Log::Cleanup();
+  Log::RotateLog(); // The test runner's timeout bounds this deadlock regression.
+  QVERIFY(true);
 }
 
 QTEST_GUILESS_MAIN(TestLogRotation)
