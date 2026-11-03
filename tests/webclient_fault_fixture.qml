@@ -30,6 +30,7 @@ Item {
         WebEngineView {
             webChannel: webClientFaultGuard.rendererLost ? null : channel
             profile: fixtureProfile
+            backgroundColor: "transparent"
             onLoadingChanged: function(info) {
                 if (info.status === WebEngineView.LoadSucceededStatus) root.loads++
             }
