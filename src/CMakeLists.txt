@@ -223,10 +223,11 @@ if(LINUX_DBUS)
   target_link_libraries(jmp_core Qt6::DBus)
 endif()
 
-# Delay-load libmpv on Windows for runtime AVX2 fallback
-if(WIN32)
-  target_link_libraries(jmp_core delayimp.lib)
-  target_link_options(jmp_core PRIVATE /DELAYLOAD:libmpv-2.dll)
+# The hook must be linked into every executable that uses the static core.
+if(WIN32 AND MSVC)
+  target_sources(jmp_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/player/WindowsMpvLoader.cpp)
+  target_link_libraries(jmp_core INTERFACE delayimp.lib)
+  target_link_options(jmp_core INTERFACE /DELAYLOAD:libmpv-2.dll)
 endif()
 
 target_link_libraries(${MAIN_TARGET} PRIVATE jmp_core)
