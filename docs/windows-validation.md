@@ -226,3 +226,32 @@ execution and connected playback remain untested.
 | Installer | `f1ce89f3dc06ce07725a41e8e75319adb0430032083c3b71cfaa59c50a0af6bd` |
 | Portable ZIP | `41dd2b22ec301541978b918bd48486fe0c14fed85c3889f60b2d0a97a34a8b65` |
 | Packaged executable | `df194f34afdde872eee7ee3db7b7410a88864178a05699005f6e4df1a77c92b2` |
+
+## Third review follow-up
+
+Source `217dafdfed722aab5a77a22836b009d23d506644` clears timers on a matching
+manager-only player stop and preserves the redistributable's 3010 restart request
+through Inno's `NeedRestart` event. Four input-plugin tests and eighteen release
+mirror tests passed. A fresh native build, all seven CTest suites, two packaging
+fixtures, two installer compilation fixtures and the hidden-desktop lifecycle
+fixture passed. `windows_all` produced the installer and portable ZIP below.
+
+The extracted ZIP rendered the server-selection form with system-only PATH,
+then exited with code zero and no remaining job processes. Its screenshot was
+visually inspected. Logs, packages and hashes remain in the local
+`deps/windows-validation-proof/candidate-217dafd` evidence directory. Generated
+build output was cleaned after preservation. Installer execution, reboot handling
+in a clean Windows environment and connected playback remain unverified.
+
+| Third-batch artifact | SHA-256 |
+| --- | --- |
+| Installer | `1b3bcffe48357ad7c9983de9d0affbebd5d67534420b448c6b6b5c53b7bbd100` |
+| Portable ZIP | `a439a68458f3f211db8a04d8e5e89edb0f9abdfc906775c95de747b98569a60a` |
+| Packaged executable | `3edea68f87466013ad7a6a785d7d93986f8c8830d8109c512dfcc5bf293e9fe1` |
+
+Pipeline 32058 (`6e52aeb`) failed when SourceForge returned HTML instead of the
+mpv archive; 7-Zip rejected it with exit code 2. Commit `138d7b3` validates direct
+downloads and their pinned hashes before Qt setup. Both real archives downloaded
+and extracted locally. Subsequent exact pipeline status was unavailable during
+repeated GitLab HTTPS handshake timeouts; SSH pushes and downstream mirroring
+continued to work. Local success does not establish remote CI success.
