@@ -151,7 +151,7 @@ Run-Native $found.Node @('tests/windows_hidden_desktop_fixture.mjs')
     $env:JELLYFIN_TEST_OWNED_ROOT = $oldOwnedRoot
     Remove-Item -LiteralPath $testHome -Recurse -Force
 }
-Run-Native 'cmake.exe' @('--build', $build, '--target', 'windows_all', '--parallel', '4')
+Run-Native $venvPython @('dev/windows/package.py', $build, '--parallel', '4')
 $artifacts = @(Get-ChildItem -Path "$build/JellyfinDesktop-*.exe", "$build/JellyfinDesktop-*.zip")
 if (@($artifacts | Where-Object Extension -eq '.exe').Count -ne 1 -or @($artifacts | Where-Object Extension -eq '.zip').Count -ne 1) { throw 'Expected exactly one installer and one portable ZIP' }
 $artifacts | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $($_.Path | Split-Path -Leaf)" } | Set-Content "$results/SHA256SUMS.txt"
