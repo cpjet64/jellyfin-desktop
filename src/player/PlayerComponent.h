@@ -54,6 +54,12 @@ public:
 
   // Stop playback and clear all queued items.
   Q_INVOKABLE virtual void stop();
+  struct NativeStopResult {
+    enum class Status { Unavailable, Accepted, Error };
+    Status status;
+    int error;
+  };
+  NativeStopResult requestNativeStop();
 
   // A full reload of the stream is imminent (stop() + load())
   // Used for not resetting display mode with the next stop() call.
@@ -224,6 +230,7 @@ Q_SIGNALS:
   void bufferedRangesUpdated(const QVariantList& ranges);
 
 private:
+  NativeStopResult stopMpv();
   // this is the function actually implemented in the backends. the variantmap contains
   // a few known keys:
   // * subtitleStreamIndex

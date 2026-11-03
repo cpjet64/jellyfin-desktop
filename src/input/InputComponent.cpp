@@ -2,6 +2,8 @@
 #include "InputComponent.h"
 #include "settings/SettingsComponent.h"
 #include "system/SystemComponent.h"
+#include "system/WebClientFaultGuard.h"
+#include "player/PlayerComponent.h"
 #include "power/PowerComponent.h"
 #include "InputKeyboard.h"
 #include "InputSocket.h"
@@ -39,6 +41,15 @@
 InputComponent::InputComponent(QObject* parent) : ComponentBase(parent)
 {
   m_mappings = new InputMapping(this);
+  m_autoRepeatTimer = new QTimer(this);
+  connect(m_autoRepeatTimer, &QTimer::timeout, this, [this]() {
+    if (!m_autoRepeatActions.isEmpty()) dispatchHostActions(m_autoRepeatActions);
+    m_autoRepeatTimer->setInterval(AUTOREPEAT_MSEC);
+  });
+  connect(&WebClientFaultGuard::instance(), &WebClientFaultGuard::rendererLostChanged, this, [this]() {
+    cancelAutoRepeat();
+    m_currentLongPressAction.clear();
+  });
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -57,20 +68,6 @@ bool InputComponent::addInput(InputBase* base)
   // needs to be remaped in remapInput and then finally send it out to JS land.
   //
   connect(base, &InputBase::receivedInput, this, &InputComponent::remapInput);
-
-  // for auto-repeating inputs
-  //
-  m_autoRepeatTimer = new QTimer(this);
-  connect(m_autoRepeatTimer, &QTimer::timeout, [=]()
-  {
-    if (!m_autoRepeatActions.isEmpty())
-    {
-      qDebug() << "Emit input action (autorepeat):" << m_autoRepeatActions;
-      emit hostInput(m_autoRepeatActions);
-    }
-
-    m_autoRepeatTimer->setInterval(AUTOREPEAT_MSEC);
-  });
 
   return true;
 }
@@ -183,7 +180,7 @@ void InputComponent::remapInput(const QString &source, const QString &keycode, I
       m_currentLongPressAction.clear();
 
       qDebug() << "Emit input action (" + type + "):" << action;
-      emit hostInput(QStringList{action});
+      dispatchHostActions(QStringList{action});
     }
 
     return;
@@ -198,7 +195,7 @@ void InputComponent::remapInput(const QString &source, const QString &keycode, I
     if (action.typeId() == QMetaType::QString)
     {
       queuedActions.append(action.toString());
-      m_autoRepeatActions.append(action.toString());
+      if (action.toString() != "stop") m_autoRepeatActions.append(action.toString());
     }
     else if (action.typeId() == QMetaType::QVariantMap)
     {
@@ -230,16 +227,7 @@ void InputComponent::remapInput(const QString &source, const QString &keycode, I
 
   if (!queuedActions.isEmpty())
   {
-    if (SystemComponent::Get().isWebClientConnected())
-    {
-      qDebug() << "Emit input action:" << queuedActions;
-      emit hostInput(queuedActions);
-    }
-    else
-    {
-      qDebug() << "Web Client has not connected, handling input in host instead.";
-      executeActions(queuedActions);
-    }
+    dispatchHostActions(queuedActions);
   }
 }
 
@@ -253,9 +241,28 @@ void InputComponent::executeActions(const QStringList& actions)
 /////////////////////////////////////////////////////////////////////////////////////////
 void InputComponent::sendAction(const QString action)
 {
-  QStringList actionsToSend;
-  actionsToSend.append(action);
-  emit hostInput(actionsToSend);
+  if (QThread::currentThread() != thread()) {
+    QMetaObject::invokeMethod(this, [this, action]() { dispatchHostActions({action}); }, Qt::QueuedConnection);
+    return;
+  }
+  dispatchHostActions({action});
+}
+
+void InputComponent::dispatchHostActions(const QStringList& actions)
+{
+  QStringList webActions;
+  const bool lost = WebClientFaultGuard::instance().rendererLost();
+  const bool ready = SystemComponent::Get().isWebClientConnected();
+  for (const auto& action : actions) {
+    if (ready && !lost) webActions.append(action);
+    else if (action.startsWith("host:")) handleAction(action);
+    else if (lost && action == "stop") {
+      auto result = PlayerComponent::Get().requestNativeStop();
+      if (result.status != PlayerComponent::NativeStopResult::Status::Accepted)
+        qWarning() << "Native stop not accepted:" << result.error;
+    }
+  }
+  if (!webActions.isEmpty()) emit hostInput(webActions);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

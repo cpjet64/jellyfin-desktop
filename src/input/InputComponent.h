@@ -135,6 +135,7 @@ private:
   explicit InputComponent(QObject *parent = nullptr);
   bool addInput(InputBase* base);
   void handleAction(const QString& action);
+  void dispatchHostActions(const QStringList& actions);
 
   QHash<QString, ReceiverSlot*> m_hostCommands;
   QList<InputBase*> m_inputs;

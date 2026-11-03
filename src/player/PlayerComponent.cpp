@@ -8,6 +8,7 @@
 #include "display/DisplayComponent.h"
 #include "settings/SettingsComponent.h"
 #include "system/SystemComponent.h"
+#include "system/WebClientFaultGuard.h"
 #include "utils/Utils.h"
 #include "utils/Log.h"
 #include "ComponentManager.h"
@@ -821,12 +822,20 @@ void PlayerComponent::notifyVolumeChange(double volume)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::stop()
 {
-  if (!m_mpv) {
-    qWarning() << "PlayerComponent::stop: mpv not initialized yet";
-    return;
-  }
-  QStringList args("stop");
-  m_mpv->command( args);
+  if (!WebClientFaultGuard::instance().rendererLost()) stopMpv();
+}
+
+PlayerComponent::NativeStopResult PlayerComponent::requestNativeStop()
+{
+  return stopMpv();
+}
+
+PlayerComponent::NativeStopResult PlayerComponent::stopMpv()
+{
+  if (!m_mpv || !m_mpv->mpv()) return {NativeStopResult::Status::Unavailable, 0};
+  const char* args[] = {"stop", nullptr};
+  const int error = mpv_command(m_mpv->mpv(), args);
+  return {error < 0 ? NativeStopResult::Status::Error : NativeStopResult::Status::Accepted, error};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
