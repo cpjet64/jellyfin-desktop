@@ -1,71 +1,62 @@
-# GitLab Windows candidate pipeline
+# GitLab native CI
 
 The public primary is [GitLab project 314](https://gitlab.curtpme.com/cpjet64/jellyfin-desktop).
-Pushes go to the `gitlab` remote. GitLab's SSH push mirror copies all branches
-and tags to GitHub while retaining divergent refs. Release notes and uploaded
-assets use the separate [release synchronization workflow](release-mirroring.md).
+Push to the `gitlab` remote. GitLab's SSH push mirror copies branches and tags
+to the public GitHub fork and retains divergent refs. All GitHub Actions are
+currently disabled, including the separate release synchronization workflow;
+the Git push mirror does not by itself copy release notes or assets. See
+[release mirroring](release-mirroring.md) for that workflow's design and status.
 
-This pipeline validates the Windows x64 candidate using the shell executor on
-the `win203-unprotected` runner. It builds with MSVC, Qt 6.9.3 and the same
-primary and fallback mpv versions as the existing GitHub Windows workflow. It
-runs CTest, the Windows mpv loader, input-listener, hidden-harness fixture and
-packaging and installer-compilation checks, then creates the installer and
-portable ZIP. Artifacts include CTest's JUnit report, SHA-256 checksums and
-pipeline/job/commit provenance. The packages are unsigned and are not releases.
+The required GitLab pipeline has six native jobs: Windows x64, Linux x64, and
+macOS Intel, each with a bundled static mpvqt configuration and a separately
+installed system mpvqt compatibility configuration. The static jobs require
+the pinned mpvqt submodule and set `USE_STATIC_MPVQT=ON` and
+`MPVQT_EXTERNAL_EVENTS=ON`. System jobs use `USE_STATIC_MPVQT=OFF` and
+`MPVQT_EXTERNAL_EVENTS=OFF`. Each job builds and verifies its own dependencies;
+one runner's artifacts do not establish another runner's prerequisites.
 
 Branch pushes, merge requests, and web/API branch pipelines are admitted.
 Push pipelines are suppressed when an MR pipeline covers the same branch.
-Protected refs, tags, schedules and other pipeline sources are excluded pending
-an explicit protected-resource policy. No caches, signing, deployment, package
-registry or release operations are configured. The GitHub workflows remain in
-place, including Linux and macOS; this is deliberately Windows-only coverage.
+Protected refs, tags, schedules and other pipeline sources remain excluded
+pending the protected-resource policy. Jobs use unprotected runner boundaries
+and contain no signing, release, deployment, or registry publication step.
 
-## Migration scope and parity
+Every job must pass native preflight and build checks, the required non-GUI
+CTest cases, input and bundle checks, and seven separate GUI processes: the
+WebEngine fixture and both renderer-loss and web-client containment fixtures
+for playing, paused, and held-hook scenarios. Reports must contain the required
+cases and successful, unskipped results. Playing and paused scenarios also
+require their before/after images. Static jobs additionally require the mpvqt
+event-ownership test; Linux requires the real MPRIS test on a private session
+bus. Failure or absence of a prerequisite or required result fails the job.
 
-The requested replacement is the Windows candidate validation run. It is a
-deliberate exception to a full multi-platform CI migration: other GitHub
-workflows remain active and are not claimed to have been migrated or proven by
-this pipeline. Retirement of the legacy GitHub build workflows is a separate
-repository setting; the release-copy workflow is distinct from those builds.
+Windows runs GUI fixtures through a task-owned hidden desktop and job object;
+Linux uses job-owned Xvfb and private D-Bus sessions and records the rendering
+backend. macOS requires a dedicated, authorized GUI session, an available GUI
+domain owned by the runner's console user, and the dedicated-session assertion.
+It refuses an existing user mpvqt configuration that would otherwise be read.
+The runner must already have the required GUI/session facilities; the jobs do
+not install host packages or change runner settings. Resource groups serialize
+each platform's project jobs; they do not establish host-wide isolation.
 
-| Behavior | Existing GitHub Windows workflow | GitLab candidate |
-| --- | --- | --- |
-| Admission | Reusable workflow, manual dispatch, or push to `master`; the parent build also calls it on pushes to `release`, `prerelease`, and `test` and manual dispatch | Unprotected branch pushes, merge requests, and web/API branch runs; duplicate branch push suppressed for an open MR |
-| Platform | Hosted Windows x64; ARM64 disabled | Shell executor on `win203-unprotected`, Windows x64 |
-| Inputs | Recursive submodules, MSVC, Qt 6.9.3, primary and fallback mpv, VC runtime and Inno | Same product inputs; host tools are prerequisites and dependencies are installed in the checkout |
-| Validation | Build, CTest and mpv loader harness, then package | Same validation plus the Windows packaging fixture before packaging |
-| Outputs | Installer and portable ZIP | Installer and portable ZIP, JUnit report, checksums and provenance |
-| Privileged actions | No signing or release in the Windows build workflow | No signing, release, deployment or registry writes |
+Windows requires Python with venv, Windows tar and curl, VS 2022 x64 C++ tools
+and redistributable, and at least 20 GiB free. It bootstraps missing 7-Zip,
+CMake, Ninja, Node, and Inno Setup into the checkout from pinned downloads;
+the Inno installer signature and extracted compiler are verified. Windows
+also downloads Qt 6.9.3, its WebEngine, WebChannel and Positioning modules,
+and primary and fallback mpv archives. The archives are checked against
+SourceForge's published SHA-256 values before the larger Qt download.
 
-GitHub's separate Linux test/coverage workflow and Linux, macOS, AppImage,
-coverage-comment and aggregate build workflows remain outside this candidate's
-scope. Protected refs are intentionally excluded while the protected-resource
-policy is unresolved; they do not receive replacement validation from this file.
+Linux and macOS require their native compiler, CMake, Ninja, pkg-config, mpv,
+Qt modules, Node and Python, plus at least 10 GiB free. Linux additionally
+requires Xvfb, xauth, D-Bus and glxinfo. Each system job needs a compatible
+installed mpvqt development package; missing packages fail rather than switch
+to the bundled library. No host package installation is attempted. Each job
+records its build and test evidence, and the Windows packaging job publishes an
+unsigned installer, portable ZIP, checksums and provenance when successful.
 
-The runner must have Python with venv, Windows tar and curl, Visual Studio 2022 x64 C++
-tools and redistributable. Existing CMake, Ninja, 7-Zip and Inno Setup are used
-when available. Missing tools are downloaded into the job checkout: 7-Zip
-26.00, CMake 4.1.2, Ninja 1.13.2, Node.js 22.21.1, and Inno Setup 6.7.3. Downloads are pinned
-to SHA-256 hashes; the Inno installer additionally requires a valid Pyrsys
-signature and the extracted compiler is checked against its pinned hash.
-Inno is extracted with pinned innoextract 670, not installed on the host.
-It needs network access for the recursive submodule, pinned aqtinstall 3.3.0,
-Qt modules, the existing SourceForge mpv archives, and Microsoft's VC runtime
-installer. Dependencies are installed under the job checkout and require at
-least 20 GiB free on its volume before download. This threshold is a preflight,
-not a guarantee against concurrent disk use. The job does not modify the host
-installation.
-
-Both mpv archives are checked against the SHA-256 values published on their
-SourceForge file pages before extraction and before the larger Qt download.
-SourceForge may return a download page instead of the archive; in that case
-the job follows only its HTTPS refresh URL for the exact requested project
-file and rejects HTML or an unexpected checksum. Each request has a 120-second
-timeout. A failure indicates that SourceForge access or its published files
-need attention; it does not fall back to an unrelated mirror.
-
-Desktop end-to-end tests require an interactive desktop and are intentionally
-not run on the headless runner. A green job does not prove interactive playback,
-clean-machine installation, signing, or release readiness. The runner's actual
-tool availability, project assignment, effective GitLab configuration, and
-successful artifacts must be established by a pipeline for the delivered SHA.
+The configuration describes required proof, not a claim that the six jobs
+have passed. Verify runner eligibility, exact delivered SHA, terminal results,
+and artifacts in the actual GitLab pipeline. A green pipeline does not alone
+establish clean-machine installation, hardware-specific behavior, signing,
+release readiness, or hands-on user acceptance.

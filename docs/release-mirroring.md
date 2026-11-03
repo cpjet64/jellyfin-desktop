@@ -8,11 +8,17 @@ are retained and reported as mirror errors instead of being overwritten.
 The repository's default push destination is the existing `gitlab` remote;
 the `origin` GitHub remote and upstream reference are preserved.
 
-GitLab project 314 is the release source. GitHub polls its public release API
-every ten minutes, on manual dispatch, and after relevant pushes to `master`.
-Scheduled runs can be delayed by GitHub; this is not immediate synchronization.
-The workflow uses GitHub's short-lived `GITHUB_TOKEN` with contents write access.
-It neither builds nor signs assets and does not create a GitLab release.
+GitLab project 314 is the release source. All GitHub Actions are currently
+disabled, including the release synchronization workflow. Consequently, GitLab
+release notes and assets are not automatically copied to GitHub by that
+workflow. The SSH Git mirror described above continues to handle Git refs.
+
+The remaining sections describe the existing workflow's behavior if it is
+enabled in a separately authorized operation. Its configured triggers are a
+ten-minute schedule, manual dispatch, and relevant pushes to `master`; scheduled
+runs may be delayed. It uses GitHub's short-lived `GITHUB_TOKEN` with contents
+write access. It neither builds nor signs assets and does not create a GitLab
+release. The workflow's presence in the repository does not mean it is running.
 
 Only releases whose `released_at` is no longer in the future are considered.
 The GitHub tag must already exist and resolve to the exact GitLab release commit;
