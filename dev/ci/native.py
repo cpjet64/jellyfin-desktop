@@ -111,7 +111,7 @@ def configure(system, mode):
     report = [sys.executable, "dev/ci/check_results.py", "junit", str(RESULTS / "ctest.xml")]
     required = ["test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard"]
     if mode == "static":
-        required.extend(["test_mpvqt_event_ownership", "test_mpvqt_player_binding"])
+        required.extend(["test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state"])
     if system == "Linux":
         required.append("test_mpris_fault")
     for name in required:

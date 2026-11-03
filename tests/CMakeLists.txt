@@ -17,6 +17,12 @@ if(MPVQT_EXTERNAL_EVENTS)
   target_include_directories(test_mpvqt_player_binding PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
   add_test(NAME test_mpvqt_player_binding COMMAND test_mpvqt_player_binding)
   set_tests_properties(test_mpvqt_player_binding PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+  add_executable(test_player_released_state test_player_released_state.cpp "${_test_resources}")
+  add_dependencies(test_player_released_state generate_resources)
+  target_link_libraries(test_player_released_state jmp_core Qt6::Test Qt6::Quick)
+  target_include_directories(test_player_released_state PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
+  add_test(NAME test_player_released_state COMMAND test_player_released_state)
+  set_tests_properties(test_player_released_state PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
 
 set(TEST_INCLUDE_DIRS
