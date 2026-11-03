@@ -76,6 +76,8 @@ macos-static:
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
     CI_MPVQT_MODE: static
+    CI_ALLOWED_GUI_ACCOUNT: runner
+    CI_ALLOWED_GUI_HOST: tahoe-runner-114
 
 macos-system:
   extends: macos-static
