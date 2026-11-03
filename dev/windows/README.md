@@ -42,6 +42,14 @@ dev\windows\test.bat
 - `test.bat` - Run unit tests (sets up Qt/mpv in PATH)
 - `common.bat` - Shared variables (sourced by other scripts)
 
+Windows packages require the VC runtime DLLs and redistributable installer.
+`build.bat` configures these from `dev/windows/deps/vcruntime` and
+`dev/windows/deps/vc_redist.x64.exe`. For custom CMake builds, set the cache
+paths `WINDOWS_VCRUNTIME_DIR` and `WINDOWS_VCREDIST_EXE`; their defaults are
+`deps/vcruntime` and `deps/vc_redist.x64.exe` at the project root, as used by CI.
+Packaging fails if these inputs are missing. Compilation and tests do not
+require them or Inno Setup.
+
 ## Clean Build
 
 ```cmd

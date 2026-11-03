@@ -10,10 +10,6 @@ if not exist "%DEPS_DIR%\mpv\libmpv-2.dll" (
     echo ERROR: libmpv not found. Run setup.bat first
     exit /b 1
 )
-if not exist "%DEPS_DIR%\vcruntime" (
-    echo ERROR: VC runtime DLLs not found. Run setup.bat first
-    exit /b 1
-)
 
 REM === Find Qt ===
 set QTROOT_WIN=%DEPS_DIR%\qt\%QT_VERSION%\msvc2022_64
@@ -67,6 +63,8 @@ cmake -GNinja ^
     -DQTROOT=%QTROOT% ^
     -DMPV_INCLUDE_DIR="%DEPS_CMAKE%/mpv/include" ^
     -DMPV_LIBRARY="%DEPS_CMAKE%/mpv/libmpv-2.dll.lib" ^
+    -DWINDOWS_VCRUNTIME_DIR="%DEPS_CMAKE%/vcruntime" ^
+    -DWINDOWS_VCREDIST_EXE="%DEPS_CMAKE%/vc_redist.x64.exe" ^
     -DCHECK_FOR_UPDATES=ON ^
     -DUSE_STATIC_MPVQT=ON ^
     "%PROJECT_ROOT%"

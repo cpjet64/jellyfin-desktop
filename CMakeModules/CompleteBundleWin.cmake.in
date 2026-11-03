@@ -1,5 +1,6 @@
 set(PROJECT_SOURCE_DIR @PROJECT_SOURCE_DIR@)
 set(QTROOT "@QTROOT@")
+include("@CMAKE_BINARY_DIR@/ValidateWindowsRuntime.cmake")
 
 message(STATUS "Running windeployqt from: ${QTROOT}/bin/windeployqt.exe")
 message(STATUS "Target: ${CMAKE_INSTALL_PREFIX}/Jellyfin Desktop.exe")
@@ -49,25 +50,16 @@ else()
 endif()
 
 # Bundle MSVC runtime DLLs (pre-extracted by setup-windows.bat)
-set(VCRUNTIME_DIR "@PROJECT_SOURCE_DIR@/deps/vcruntime")
-set(VCREDIST_EXE "@PROJECT_SOURCE_DIR@/deps/vc_redist.x64.exe")
+file(MAKE_DIRECTORY "${CMAKE_INSTALL_PREFIX}/redist")
+file(GLOB RUNTIME_DLLS "${VCRUNTIME_DIR}/*.dll")
+foreach(dll_path ${RUNTIME_DLLS})
+  get_filename_component(dll_name "${dll_path}" NAME)
+  file(INSTALL "${dll_path}" DESTINATION "${CMAKE_INSTALL_PREFIX}/redist")
+  message(STATUS "Bundled runtime: ${dll_name}")
+endforeach()
 
-if(EXISTS "${VCRUNTIME_DIR}" AND EXISTS "${VCREDIST_EXE}")
-  # Copy runtime DLLs to redist subfolder
-  file(MAKE_DIRECTORY "${CMAKE_INSTALL_PREFIX}/redist")
-  file(GLOB RUNTIME_DLLS "${VCRUNTIME_DIR}/*.dll")
-  foreach(dll_path ${RUNTIME_DLLS})
-    get_filename_component(dll_name "${dll_path}" NAME)
-    file(INSTALL "${dll_path}" DESTINATION "${CMAKE_INSTALL_PREFIX}/redist")
-    message(STATUS "Bundled runtime: ${dll_name}")
-  endforeach()
-
-  # Copy VCRedist installer for bundling
-  file(INSTALL "${VCREDIST_EXE}" DESTINATION "${CMAKE_INSTALL_PREFIX}")
-  message(STATUS "Bundled VCRedist installer: vc_redist.x64.exe")
-else()
-  message(WARNING "VCRuntime DLLs not found. Run setup-windows.bat first.")
-endif()
+file(INSTALL "${VCREDIST_EXE}" DESTINATION "${CMAKE_INSTALL_PREFIX}" RENAME "vc_redist.x64.exe")
+message(STATUS "Bundled VCRedist installer: vc_redist.x64.exe")
 
 if(@DO_SIGN@)
   file(GLOB_RECURSE EXES ${CMAKE_INSTALL_PREFIX}/*.exe ${CMAKE_INSTALL_PREFIX}/*.dll)

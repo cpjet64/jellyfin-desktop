@@ -7,6 +7,11 @@ endif()
 
 project(JellyfinDesktop CXX C)
 
+if(WIN32)
+  set(WINDOWS_VCRUNTIME_DIR "${PROJECT_SOURCE_DIR}/deps/vcruntime" CACHE PATH "Directory containing the VC runtime DLLs for Windows packages")
+  set(WINDOWS_VCREDIST_EXE "${PROJECT_SOURCE_DIR}/deps/vc_redist.x64.exe" CACHE FILEPATH "VC redistributable installer for Windows packages")
+endif()
+
 # we want this to be able to run clang-tidy
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL "" FORCE)
 

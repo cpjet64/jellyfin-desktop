@@ -1,0 +1,11 @@
+set(VCRUNTIME_DIR "@WINDOWS_VCRUNTIME_DIR@")
+set(VCREDIST_EXE "@WINDOWS_VCREDIST_EXE@")
+
+foreach(runtime vcruntime140.dll vcruntime140_1.dll msvcp140.dll)
+  if(NOT EXISTS "${VCRUNTIME_DIR}/${runtime}" OR IS_DIRECTORY "${VCRUNTIME_DIR}/${runtime}")
+    message(FATAL_ERROR "Windows packaging requires ${runtime} in WINDOWS_VCRUNTIME_DIR: ${VCRUNTIME_DIR}")
+  endif()
+endforeach()
+if(NOT EXISTS "${VCREDIST_EXE}" OR IS_DIRECTORY "${VCREDIST_EXE}")
+  message(FATAL_ERROR "Windows packaging requires WINDOWS_VCREDIST_EXE: ${VCREDIST_EXE}")
+endif()

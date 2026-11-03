@@ -4,6 +4,7 @@
 set(SOURCE_DIR "@CMAKE_INSTALL_PREFIX@")
 set(ZIP_DIR "@CMAKE_CURRENT_BINARY_DIR@/portable")
 set(PROJECT_SOURCE_DIR "@PROJECT_SOURCE_DIR@")
+include("@CMAKE_BINARY_DIR@/ValidateWindowsRuntime.cmake")
 
 # Clean and create ZIP staging directory
 file(REMOVE_RECURSE "${ZIP_DIR}")
@@ -25,14 +26,11 @@ foreach(f ${ALL_FILES})
 endforeach()
 
 # Copy runtime DLLs to root (for portable use)
-set(VCRUNTIME_DIR "${PROJECT_SOURCE_DIR}/deps/vcruntime")
-if(EXISTS "${VCRUNTIME_DIR}")
-  file(GLOB RUNTIME_DLLS "${VCRUNTIME_DIR}/*.dll")
-  foreach(dll ${RUNTIME_DLLS})
-    file(COPY "${dll}" DESTINATION "${ZIP_DIR}")
-  endforeach()
-  message(STATUS "Bundled VC runtime DLLs for portable package")
-endif()
+file(GLOB RUNTIME_DLLS "${VCRUNTIME_DIR}/*.dll")
+foreach(dll ${RUNTIME_DLLS})
+  file(COPY "${dll}" DESTINATION "${ZIP_DIR}")
+endforeach()
+message(STATUS "Bundled VC runtime DLLs for portable package")
 
 # Create portable marker file
 file(WRITE "${ZIP_DIR}/portable" "")
