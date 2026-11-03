@@ -56,10 +56,10 @@ The final application lists mpv only as a delay-load dependency and no shared
 mpvqt dependency. Inspection of the provisioned 138 Qt DLLs found no mpv imports;
 this is not a complete recursive system/plugin dependency audit.
 
-Native installation staging through `cmake --install build` succeeded. Inno Setup
-is absent locally, so a local installer build and clean-machine installation remain
-unperformed. The staging run warned that the legacy source-relative VC runtime
-bundle location was absent; it is not accepted as a standalone distributable.
+Initial installation staging warned that the legacy source-relative VC runtime
+location was absent. The follow-up packaging correction and actual package proof
+below supersede that incomplete staging result. No global Inno installation or
+clean-machine installer execution was performed.
 The Windows workflow now runs CTest and the loader harness before packaging,
 and propagates failures instead of continuing to a later successful command.
 
@@ -143,8 +143,11 @@ requests use its restore behavior. After correcting readiness and modifier-key
 delivery in the hidden-desktop diagnostic, posted Windows F11 and Alt+Return
 messages each entered fullscreen and restored the maximized window. The actual
 application then exited through its native bridge with code zero, no forced
-cleanup and no remaining job processes. Physical keyboard input, normal-window
-restoration and geometry persistence across launches remain separate checks.
+cleanup and no remaining job processes. A further three-launch run passed both
+shortcuts in normal state and restored the same outer bounds (120,120,1080,800)
+on the next two launches without resizing. Per-launch serialized settings were
+preserved alongside observed bounds. Physical keyboard input, reboot and display
+changes remain separate checks.
 
 The seven native suites passed again after the QML change and geometry-helper
 extraction. The logging suite now forces a same-thread Qt diagnostic during a
@@ -154,4 +157,28 @@ the fallback output, and verifies subsequent file logging.
 Windows packaging now accepts explicit runtime DLL and redistributable paths;
 missing required inputs fail at packaging time without blocking ordinary builds.
 Two native CMake staging fixture tests passed, including paths with spaces and
-missing-input failure before staging. Actual cumulative packaging remains pending.
+missing-input failure before staging.
+
+## Cumulative local package proof
+
+`cmake --build build --target windows_all --parallel 4` completed successfully
+using project-local Inno Setup 6.7.3 and Microsoft's signed VC redistributable.
+Explicit runtime inputs pointed to the shared project-local DLLs and installer.
+The source was `04a2c63228ae681a5f9c9dcb27471fa93d9708bf`; subsequent changes
+only add diagnostic tooling and evidence. The seven native suites passed again.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| JellyfinDesktop-2.0.0-dev-x64.exe | `d1507522031247bd800b663164f4453563e4294551958f4b748095e734b14fcf` |
+| JellyfinDesktop-2.0.0-dev-x64.zip | `d2b171bb4a97aa0b984a3e4b6e079bd7bf89f362c57c2c2de20d9a8657451c9f` |
+| Extracted Jellyfin Desktop.exe | `8ba68d256389b2209d7384d95b31e6e5963e973ac8cab29b5fdefc2bcc03c42d` |
+
+The actual ZIP was extracted into a fresh task-owned fixture. The packaged-mode
+diagnostic launched it with PATH restricted to Windows system directories and
+development Qt/QML environment overrides removed. Its initial server-selection
+page rendered using bundled QtWebEngineProcess and ANGLE D3D11; native exit was
+zero, with no forced cleanup or remaining job processes. Full DLL hashes and
+observations were preserved locally. The empty portable marker was temporarily
+replaced by the harness's isolated cache marker; shipped executables/DLLs were
+not changed. No installer execution, clean-machine proof, signing, release,
+server connection, or playback is implied by this local portable launch.
