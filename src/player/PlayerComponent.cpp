@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QDebug>
+#include <QThread>
 #include "display/DisplayComponent.h"
 #include "settings/SettingsComponent.h"
 #include "system/SystemComponent.h"
@@ -875,6 +876,23 @@ void PlayerComponent::seekTo(qint64 ms)
   double timeSecs = ms / 1000.0;
   QStringList args = (QStringList() << "seek" << QString::number(timeSecs) << "absolute+exact");
   m_mpv->command( args);
+}
+
+PlayerComponent::NativeSeekResult PlayerComponent::requestNativeSeek(qint64 milliseconds)
+{
+  if (QThread::currentThread() != thread()) return {NativeSeekResult::Status::Unavailable, 0};
+  if (WebClientFaultGuard::instance().rendererLost() || !m_mpv || !m_mpv->mpv() || milliseconds < 0)
+    return {NativeSeekResult::Status::Unavailable, 0};
+  return checkedSeek(m_mpv->mpv(), milliseconds, mpv_command);
+}
+
+PlayerComponent::NativeSeekResult PlayerComponent::checkedSeek(mpv_handle* handle, qint64 milliseconds,
+                                                                int (*command)(mpv_handle*, const char**))
+{
+  const QByteArray position = QString::number(milliseconds / 1000.0).toUtf8();
+  const char* args[] = {"seek", position.constData(), "absolute+exact", nullptr};
+  const int error = command(handle, args);
+  return {error < 0 ? NativeSeekResult::Status::Error : NativeSeekResult::Status::Accepted, error};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

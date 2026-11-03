@@ -103,6 +103,10 @@ bool InputComponent::componentInitialize()
 /////////////////////////////////////////////////////////////////////////////////////////
 void InputComponent::handleAction(const QString& action)
 {
+  if (WebClientFaultGuard::instance().rendererLost() && action != "host:fullscreen") {
+    emit hostActionUnavailable();
+    return;
+  }
   if (action.startsWith("host:"))
   {
     QStringList argList = action.mid(5).split(" ");
@@ -274,7 +278,7 @@ void InputComponent::dispatchHostActions(const QStringList& actions)
   const bool ready = SystemComponent::Get().isWebClientConnected();
   for (const auto& action : actions) {
     if (ready && !lost) webActions.append(action);
-    else if (action.startsWith("host:")) handleAction(action);
+    else if ((!lost && action.startsWith("host:")) || (lost && action == "host:fullscreen")) handleAction(action);
     else if (lost && action == "stop") {
       auto result = PlayerComponent::Get().requestNativeStop();
       emit nativeStopResult(static_cast<int>(result.status), result.error);
@@ -299,6 +303,11 @@ void InputComponent::setVolume(int volume)
 /////////////////////////////////////////////////////////////////////////////////////////
 void InputComponent::seekTo(qint64 position)
 {
+  if (QThread::currentThread() != thread()) {
+    QMetaObject::invokeMethod(this, [this, position]() { seekTo(position); }, Qt::QueuedConnection);
+    return;
+  }
+  if (WebClientFaultGuard::instance().rendererLost()) return;
   qDebug() << "InputComponent: seekTo" << position << "ms";
   emit positionSeek(position);
 }

@@ -62,12 +62,8 @@ static QString keyEventToKeyString(QKeyEvent *kevent)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-bool EventFilter::eventFilter(QObject* watched, QEvent* event)
+bool EventFilter::desktopEventFilter(QObject* watched, QEvent* event, QQuickWindow* window)
 {
-  QQuickWindow* window = qobject_cast<QQuickWindow*>(parent());
-
-  if (window && window->property("webDesktopMode").toBool())
-  {
     // For desktop mode we don't want fullblown keyboard handling in
     // the host yet. We just want to handle some specific keyboard
     // events.
@@ -95,6 +91,8 @@ bool EventFilter::eventFilter(QObject* watched, QEvent* event)
 
         if (desktopWhiteListedKeys.contains(seq))
         {
+          if (event->type() == QEvent::ShortcutOverride ||
+              (event->type() == QEvent::KeyRelease && key->isAutoRepeat())) return true;
           InputKeyboard::Get().keyPress(seq, keystatus);
           return true;
         }
@@ -142,8 +140,14 @@ bool EventFilter::eventFilter(QObject* watched, QEvent* event)
         return true;
     }
 
-    return QObject::eventFilter(watched, event);
-  }
+  return QObject::eventFilter(watched, event);
+}
+
+bool EventFilter::eventFilter(QObject* watched, QEvent* event)
+{
+  QQuickWindow* window = qobject_cast<QQuickWindow*>(parent());
+  if (window && window->property("webDesktopMode").toBool())
+    return desktopEventFilter(watched, event, window);
 
   // ignore mouse events if mouse is disabled
   if  (SettingsComponent::Get().value(SETTINGS_SECTION_MAIN, "disablemouse").toBool() &&
@@ -172,6 +176,7 @@ bool EventFilter::eventFilter(QObject* watched, QEvent* event)
     QKeyEvent* kevent = dynamic_cast<QKeyEvent*>(event);
     if (!kevent)
       return QObject::eventFilter(watched, event);
+    if (kevent->isAutoRepeat() && event->type() == QEvent::KeyRelease) return true;
 
     QString keyName = keyEventToKeyString(kevent);
 

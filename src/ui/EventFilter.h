@@ -7,6 +7,7 @@
 
 #include <QObject>
 #include <QEvent>
+class QQuickWindow;
 
 class EventFilter : public QObject
 {
@@ -18,6 +19,7 @@ protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+  bool desktopEventFilter(QObject* watched, QEvent* event, QQuickWindow* window);
   bool m_currentKeyDown;
 };
 

@@ -4,7 +4,11 @@
 
 #include "InputAppleMediaKeys.h"
 #include "player/AlbumArtProvider.h"
+#include "system/WebClientFaultGuard.h"
 #include <QDebug>
+#include <QThread>
+#include <cmath>
+#include <limits>
 
 #import <dlfcn.h>
 
@@ -71,8 +75,13 @@
 
 -(MPRemoteCommandHandlerStatus)gotPlaybackPosition:(MPChangePlaybackPositionCommandEvent *)event
 {
-  PlayerComponent::Get().seekTo(event.positionTime * 1000);
-  return MPRemoteCommandHandlerStatusSuccess;
+  if (QThread::currentThread() != input->thread()) return MPRemoteCommandHandlerStatusCommandFailed;
+  const double seconds = event.positionTime;
+  if (!std::isfinite(seconds) || seconds < 0 || seconds >= std::numeric_limits<qint64>::max() / 1000.0)
+    return MPRemoteCommandHandlerStatusCommandFailed;
+  const auto result = PlayerComponent::Get().requestNativeSeek(static_cast<qint64>(seconds * 1000));
+  return result.status == PlayerComponent::NativeSeekResult::Status::Accepted
+      ? MPRemoteCommandHandlerStatusSuccess : MPRemoteCommandHandlerStatusCommandFailed;
 }
 
 @end
@@ -91,6 +100,12 @@ bool InputAppleMediaKeys::initInput()
   m_currentTime = 0;
   m_pendingUpdate = false;
   m_delegate = [[MediaKeysDelegate alloc] initWithInput:this];
+  auto& faultGuard = WebClientFaultGuard::instance();
+  connect(&faultGuard, &WebClientFaultGuard::rendererLostChanged, this, []() {
+    [MPRemoteCommandCenter sharedCommandCenter].changePlaybackPositionCommand.enabled = NO;
+  });
+  if (faultGuard.rendererLost())
+    [MPRemoteCommandCenter sharedCommandCenter].changePlaybackPositionCommand.enabled = NO;
   connect(&PlayerComponent::Get(), &PlayerComponent::stateChanged, this,
           &InputAppleMediaKeys::handleStateChanged);
   connect(&PlayerComponent::Get(), &PlayerComponent::positionUpdate, this,

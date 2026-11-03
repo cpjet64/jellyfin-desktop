@@ -60,6 +60,12 @@ public:
     int error;
   };
   NativeStopResult requestNativeStop();
+  struct NativeSeekResult {
+    enum class Status { Unavailable, Accepted, Error };
+    Status status;
+    int error;
+  };
+  NativeSeekResult requestNativeSeek(qint64 milliseconds);
 
   // A full reload of the stream is imminent (stop() + load())
   // Used for not resetting display mode with the next stop() call.
@@ -233,6 +239,8 @@ private:
   friend class TestFaultStop;
   NativeStopResult stopMpv();
   static NativeStopResult checkedStop(mpv_handle* handle, int (*command)(mpv_handle*, const char**));
+  static NativeSeekResult checkedSeek(mpv_handle* handle, qint64 milliseconds,
+                                      int (*command)(mpv_handle*, const char**));
   // this is the function actually implemented in the backends. the variantmap contains
   // a few known keys:
   // * subtitleStreamIndex
