@@ -1,0 +1,91 @@
+$ErrorActionPreference = 'Stop'
+$root = (Resolve-Path "$PSScriptRoot/../..").Path
+Set-Location $root
+$build = Join-Path $root 'build'
+$deps = Join-Path $root 'deps'
+$ci = Join-Path $deps "ci-$env:CI_JOB_ID"
+$results = Join-Path $build 'ci-results'
+$qtVersion = '6.9.3'
+$mpvVersion = '20261018-git-01e2533f31'
+
+function Run-Native {
+    param([string]$Program, [string[]]$Arguments)
+    & $Program @Arguments
+    if ($LASTEXITCODE -ne 0) { throw "$Program failed with exit code $LASTEXITCODE" }
+}
+
+function Find-Tool {
+    param([string]$Name, [string[]]$Candidates)
+    foreach ($candidate in $Candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+    $command = Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($command) { return $command.Source }
+    throw "Required tool not found: $Name"
+}
+
+function Install-Mpv {
+    param([string]$Architecture, [string]$Destination, [string]$SevenZip)
+    $archive = Join-Path $ci "mpv-$Architecture.7z"
+    $extract = Join-Path $ci "extract-$Architecture"
+    $url = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-$Architecture-$mpvVersion.7z/download"
+    Invoke-WebRequest -Uri $url -OutFile $archive
+    Run-Native $SevenZip @('x', $archive, "-o$extract", '-y')
+    $dll = Get-ChildItem -LiteralPath $extract -Recurse -Filter 'libmpv-2.dll' | Select-Object -First 1
+    if (-not $dll) { throw "libmpv DLL missing in $archive" }
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    Copy-Item -LiteralPath $dll.FullName -Destination $Destination
+    $include = Join-Path $dll.DirectoryName 'include'
+    if ($Architecture -eq 'x86_64-v3') {
+        if (-not (Test-Path -LiteralPath $include)) { throw 'mpv headers missing' }
+        Copy-Item -LiteralPath $include -Destination $Destination -Recurse
+    }
+}
+
+if (-not $env:CI_JOB_ID) { throw 'This script requires an isolated GitLab job checkout.' }
+$drive = Get-PSDrive -Name ([System.IO.Path]::GetPathRoot($root).Substring(0, 1))
+if ($drive.Free -lt 20GB) { throw 'At least 20 GiB free space is required before dependency downloads.' }
+$sevenZip = Find-Tool '7z.exe' @("$env:ProgramFiles/7-Zip/7z.exe")
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+if (-not (Test-Path -LiteralPath $vswhere)) { throw 'vswhere not found' }
+$vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+if ($LASTEXITCODE -ne 0 -or -not $vs) { throw 'MSVC x64 tools not found' }
+$vcvars = Join-Path $vs 'VC/Auxiliary/Build/vcvars64.bat'
+$inno = Find-Tool 'ISCC.exe' @("${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe", "$env:ProgramFiles/Inno Setup 6/ISCC.exe")
+$env:PATH = "$(Split-Path $inno);$env:PATH"
+foreach ($name in @('PATH', 'INCLUDE', 'LIB', 'LIBPATH')) {
+    $value = & cmd.exe /d /v:on /s /c "`"`"$vcvars`" >nul && echo !$name!`""
+    if ($LASTEXITCODE -ne 0 -or -not $value) { throw "MSVC environment setup failed for $name" }
+    [Environment]::SetEnvironmentVariable($name, ($value -join "`n"), 'Process')
+}
+New-Item -ItemType Directory -Force -Path $ci, $build, $results | Out-Null
+$python = (Get-Command python.exe -CommandType Application -ErrorAction Stop).Source
+Run-Native $python @('-m', 'venv', "$ci/venv")
+$venvPython = Join-Path $ci 'venv/Scripts/python.exe'
+Run-Native $venvPython @('-m', 'pip', 'install', 'aqtinstall==3.3.0')
+Run-Native $venvPython @('-m', 'aqt', 'install-qt', 'windows', 'desktop', $qtVersion, 'win64_msvc2022_64', '-m', 'qtwebengine', 'qtwebchannel', 'qtpositioning', '-O', "$ci/qt")
+Install-Mpv 'x86_64-v3' "$build/mpv" $sevenZip
+Install-Mpv 'x86_64' "$build/mpv-fallback" $sevenZip
+$exports = & dumpbin.exe /exports "$build/mpv/libmpv-2.dll"
+if ($LASTEXITCODE -ne 0) { throw 'dumpbin failed' }
+$names = @($exports | ForEach-Object { if ($_ -match '^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]+\s+(mpv_\w+)\s*$') { $Matches[1] } })
+if ($names.Count -eq 0) { throw 'No mpv exports found' }
+@('LIBRARY libmpv-2.dll', 'EXPORTS') + $names | Set-Content -LiteralPath "$build/mpv/mpv.def" -Encoding ASCII
+Run-Native 'lib.exe' @("/def:$build/mpv/mpv.def", "/out:$build/mpv/libmpv-2.dll.lib", '/MACHINE:X64')
+$redist = Get-ChildItem -Path "$vs/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT" -Directory | Sort-Object FullName -Descending | Select-Object -First 1
+if (-not $redist) { throw 'MSVC x64 redistributable DLLs not found' }
+New-Item -ItemType Directory -Force -Path "$deps/vcruntime" | Out-Null
+Copy-Item -Path "$($redist.FullName)/*.dll" -Destination "$deps/vcruntime"
+Invoke-WebRequest 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile "$deps/vc_redist.x64.exe"
+$qt = "$ci/qt/$qtVersion/msvc2022_64"
+$env:PATH = "$qt/bin;$env:PATH"
+$env:QT_PLUGIN_PATH = "$qt/plugins"
+Run-Native 'cmake.exe' @('-S', $root, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=RelWithDebInfo', "-DCMAKE_INSTALL_PREFIX=$build/output", "-DQTROOT=$qt", "-DMPV_INCLUDE_DIR=$build/mpv/include", "-DMPV_LIBRARY=$build/mpv/libmpv-2.dll.lib", '-DCHECK_FOR_UPDATES=ON', '-DUSE_STATIC_MPVQT=ON')
+Run-Native 'cmake.exe' @('--build', $build)
+Run-Native 'ctest.exe' @('--test-dir', $build, '--output-on-failure', '--timeout', '60', '--output-junit', "$results/ctest.xml")
+Run-Native $venvPython @('tests/windows_mpv_loader_integration.py')
+Run-Native 'cmake.exe' @('--build', $build, '--target', 'windows_all')
+$artifacts = @(Get-ChildItem -Path "$build/JellyfinDesktop-*.exe", "$build/JellyfinDesktop-*.zip")
+if (@($artifacts | Where-Object Extension -eq '.exe').Count -ne 1 -or @($artifacts | Where-Object Extension -eq '.zip').Count -ne 1) { throw 'Expected exactly one installer and one portable ZIP' }
+$artifacts | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $($_.Path | Split-Path -Leaf)" } | Set-Content "$results/SHA256SUMS.txt"
+@("commit=$env:CI_COMMIT_SHA", "pipeline=$env:CI_PIPELINE_ID", "job=$env:CI_JOB_ID", "qt=$qtVersion", "mpv=$mpvVersion") | Set-Content "$results/provenance.txt"
