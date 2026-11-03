@@ -181,10 +181,12 @@ int wmain(int argc, wchar_t **argv)
     CloseDesktop(desktop);
     return 4;
   }
-  std::wstring command = L"\"" + std::wstring(argv[1]) + L"\" --config-dir \"" + argv[2] + L"\"";
+  const bool testExecutable = argc == 4 && std::wstring(argv[3]) == L"--test-executable";
+  std::wstring command = L"\"" + std::wstring(argv[1]) + L"\"";
+  if (!testExecutable) command += L" --config-dir \"" + std::wstring(argv[2]) + L"\"";
   const bool geometryOnly = argc == 4 && std::wstring(argv[3]) == L"--geometry-observe";
   const bool windowActions = argc == 4 && (std::wstring(argv[3]) == L"--window-actions" || geometryOnly);
-  if (argc == 4 && !windowActions) command += L" " + std::wstring(argv[3]);
+  if (argc == 4 && !windowActions && !testExecutable) command += L" " + std::wstring(argv[3]);
   STARTUPINFOW startup{};
   startup.cb = sizeof(startup);
   startup.lpDesktop = const_cast<wchar_t *>(name.c_str());
@@ -212,7 +214,7 @@ int wmain(int argc, wchar_t **argv)
     actionsOk = waitForReady() && checkWindowActions(desktop, process.dwProcessId, geometryOnly);
     std::printf("window actions %s\n", actionsOk ? "passed" : "failed"); std::fflush(stdout);
   }
-  const DWORD wait = WaitForSingleObject(process.hProcess, 12000);
+  const DWORD wait = WaitForSingleObject(process.hProcess, testExecutable ? 60000 : 12000);
   DWORD exitCode = 0;
   GetExitCodeProcess(process.hProcess, &exitCode);
   std::printf("app wait %lu exit %lu\n", wait, exitCode); std::fflush(stdout);
