@@ -184,12 +184,17 @@ int wmain(int argc, wchar_t **argv)
   const bool testExecutable = argc == 4 && std::wstring(argv[3]) == L"--test-executable";
   std::wstring command = L"\"" + std::wstring(argv[1]) + L"\"";
   if (!testExecutable) command += L" --config-dir \"" + std::wstring(argv[2]) + L"\"";
+  if (testExecutable) command += L" -o \"" + std::wstring(argv[2]) + L"\\qtest.txt,txt\"";
   const bool geometryOnly = argc == 4 && std::wstring(argv[3]) == L"--geometry-observe";
   const bool windowActions = argc == 4 && (std::wstring(argv[3]) == L"--window-actions" || geometryOnly);
   if (argc == 4 && !windowActions && !testExecutable) command += L" " + std::wstring(argv[3]);
   STARTUPINFOW startup{};
   startup.cb = sizeof(startup);
   startup.lpDesktop = const_cast<wchar_t *>(name.c_str());
+  startup.dwFlags = STARTF_USESTDHANDLES;
+  startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+  startup.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+  startup.hStdError = GetStdHandle(STD_ERROR_HANDLE);
   PROCESS_INFORMATION process{};
   if (!CreateProcessW(argv[1], &command[0], nullptr, nullptr, TRUE, CREATE_SUSPENDED,
                       nullptr, nullptr, &startup, &process)) {
