@@ -226,7 +226,7 @@ endif()
 # The hook must be linked into every executable that uses the static core.
 if(WIN32 AND MSVC)
   target_sources(jmp_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/player/WindowsMpvLoader.cpp)
-  target_link_libraries(jmp_core INTERFACE delayimp.lib)
+  target_link_libraries(jmp_core delayimp.lib)
   target_link_options(jmp_core INTERFACE /DELAYLOAD:libmpv-2.dll)
 endif()
 
