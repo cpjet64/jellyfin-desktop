@@ -2,7 +2,11 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QProcess>
+#include <QProcessEnvironment>
 #include <QTemporaryDir>
+#include <iostream>
+#include <sstream>
 #include <thread>
 #include <vector>
 #ifdef Q_OS_WIN
@@ -27,6 +31,7 @@ private slots:
   void rotateAfterCleanup();
   void lockedArchiveKeepsDestination();
   void failedStartupKeepsPreviousSink();
+  void reentrantDiagnostic();
 private:
   QtMessageHandler previousHandler = nullptr;
 };
@@ -67,6 +72,24 @@ static QByteArray readFile(const QString& path)
     return {};
   return file.readAll();
 }
+
+// The rotation failure writes to stderr while holding the production lock.
+// Emit a Qt diagnostic from that write to exercise same-thread reentry.
+class DiagnosticStream : public std::stringbuf
+{
+protected:
+  std::streamsize xsputn(const char* text, std::streamsize count) override
+  {
+    if (!triggered)
+    {
+      triggered = true;
+      qWarning("nested api_key=0123456789abcdef0123456789abcdef");
+    }
+    return std::stringbuf::xsputn(text, count);
+  }
+private:
+  bool triggered = false;
+};
 
 void TestLogRotation::normalRotation()
 {
@@ -208,6 +231,52 @@ void TestLogRotation::failedStartupKeepsPreviousSink()
   const QByteArray contents = readFile(workingLogDir + "/" + files.first());
   QVERIFY(contents.contains("before failed restart"));
   QVERIFY(contents.contains("after failed restart"));
+}
+
+void TestLogRotation::reentrantDiagnostic()
+{
+  if (!qEnvironmentVariableIsSet("JELLYFIN_LOG_REENTRY_CHILD"))
+  {
+    QTemporaryDir results(QDir::currentPath() + "/log-reentry-result-XXXXXX");
+    QVERIFY(results.isValid());
+    const QString resultPath = results.path() + "/result.txt";
+    QProcess child;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("JELLYFIN_LOG_REENTRY_CHILD", "1");
+    child.setProcessEnvironment(env);
+    child.start(QCoreApplication::applicationFilePath(),
+                {"reentrantDiagnostic", "-o", resultPath + ",txt"});
+    QVERIFY(child.waitForStarted(5000));
+    if (!child.waitForFinished(10000))
+    {
+      child.kill();
+      child.waitForFinished();
+      QFAIL("Logging diagnostic deadlocked");
+    }
+    QCOMPARE(child.exitStatus(), QProcess::NormalExit);
+    QVERIFY2(child.exitCode() == 0, readFile(resultPath).constData());
+    return;
+  }
+
+  QTemporaryDir dir(QDir::currentPath() + "/log-reentry-XXXXXX");
+  QVERIFY(dir.isValid());
+  useTestDirectory(dir.path());
+  const QString logDir = ProfileManager::activeProfile().logDir();
+  QVERIFY(QDir().mkpath(logDir));
+  QVERIFY(QDir().mkpath(mainLogPath()));
+  Log::Init();
+  DiagnosticStream capture;
+  std::streambuf* original = std::cerr.rdbuf(&capture);
+  Log::RotateLog();
+  std::cerr.rdbuf(original);
+  const QByteArray output = QByteArray::fromStdString(capture.str());
+  QVERIFY(output.contains("nested api_key=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"));
+  QVERIFY(!output.contains("0123456789abcdef0123456789abcdef"));
+  qInfo("logging continues after nested warning");
+  Log::Cleanup();
+  const auto files = QDir(logDir).entryList({"jellyfin-desktop-*.log"}, QDir::Files);
+  QCOMPARE(files.size(), 1);
+  QVERIFY(readFile(logDir + "/" + files.first()).contains("logging continues after nested warning"));
 }
 
 QTEST_GUILESS_MAIN(TestLogRotation)
