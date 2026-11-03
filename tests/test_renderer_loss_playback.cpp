@@ -18,6 +18,7 @@
 #include "player/PlayerComponent.h"
 #include "system/WebClientFaultGuard.h"
 #include "shared/Paths.h"
+#include "settings/SettingsComponent.h"
 
 namespace {
 int brightPixels(const QImage& image)
@@ -63,6 +64,8 @@ void TestRendererLossPlayback::actualPlayback()
   QVERIFY(QFileInfo(evidence).isDir());
   Paths::setConfigDir(QDir(evidence).absoluteFilePath("config"));
   Paths::setCacheDir(QDir(evidence).absoluteFilePath("cache"));
+  Q_INIT_RESOURCE(resources);
+  QVERIFY(SettingsComponent::Get().componentInitialize());
 
   QQuickWindow window;
   window.resize(640, 360);
