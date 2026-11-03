@@ -34,7 +34,7 @@ bool supportsX64V3()
 #endif
 }
 
-HMODULE loadFallback()
+HMODULE loadMpv(bool primary)
 {
   wchar_t path[32768];
   const DWORD capacity = static_cast<DWORD>(sizeof(path) / sizeof(path[0]));
@@ -44,14 +44,14 @@ HMODULE loadFallback()
   const auto slash = directory.find_last_of(L"\\/");
   if (slash == std::wstring::npos) return nullptr;
   directory.resize(slash + 1);
-  directory += L"libmpv-fallback.dll";
+  directory += primary ? L"libmpv-2.dll" : L"libmpv-fallback.dll";
   return LoadLibraryExW(directory.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
                         LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
 }
 
-HMODULE selectMpv(bool supportsV3, HMODULE (*load)())
+HMODULE selectMpv(bool supportsV3, HMODULE (*load)(bool))
 {
-  return supportsV3 ? nullptr : load();
+  return load(supportsV3);
 }
 
 FARPROC WINAPI mpvDelayHook(unsigned notification, PDelayLoadInfo info)
@@ -59,17 +59,29 @@ FARPROC WINAPI mpvDelayHook(unsigned notification, PDelayLoadInfo info)
   if (notification != dliNotePreLoadLibrary ||
       _stricmp(info->szDll, "libmpv-2.dll") != 0) return nullptr;
   const bool supportsV3 = supportsX64V3();
-  HMODULE fallback = selectMpv(supportsV3, loadFallback);
-  if (supportsV3) return nullptr;
-  if (!fallback) {
+  HMODULE module = selectMpv(supportsV3, loadMpv);
+  if (!module) {
 #ifndef JELLYFIN_LOADER_TEST_V3
-    MessageBoxW(nullptr, L"This computer requires libmpv-fallback.dll, but it could not be loaded. Reinstall Jellyfin Desktop.",
+    MessageBoxW(nullptr, supportsV3 ? L"libmpv-2.dll could not be loaded. Reinstall Jellyfin Desktop."
+                                  : L"libmpv-fallback.dll could not be loaded. Reinstall Jellyfin Desktop.",
                 L"Jellyfin Desktop", MB_OK | MB_ICONERROR);
 #endif
     ExitProcess(ERROR_MOD_NOT_FOUND);
   }
-  return reinterpret_cast<FARPROC>(fallback);
+  return reinterpret_cast<FARPROC>(module);
+}
+
+FARPROC WINAPI mpvFailureHook(unsigned notification, PDelayLoadInfo info)
+{
+  if (notification != dliFailGetProc || _stricmp(info->szDll, "libmpv-2.dll") != 0)
+    return nullptr;
+#ifndef JELLYFIN_LOADER_TEST_V3
+  MessageBoxW(nullptr, L"The installed libmpv is incompatible. Reinstall Jellyfin Desktop.",
+              L"Jellyfin Desktop", MB_OK | MB_ICONERROR);
+#endif
+  ExitProcess(ERROR_PROC_NOT_FOUND);
 }
 }
 
 extern "C" const PfnDliHook __pfnDliNotifyHook2 = mpvDelayHook;
+extern "C" const PfnDliHook __pfnDliFailureHook2 = mpvFailureHook;

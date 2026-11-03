@@ -6,12 +6,14 @@
 
 namespace {
 int calls = 0;
-HMODULE success()
+bool selectedPrimary = false;
+HMODULE success(bool primary)
 {
   ++calls;
+  selectedPrimary = primary;
   return reinterpret_cast<HMODULE>(static_cast<uintptr_t>(1));
 }
-HMODULE failure()
+HMODULE failure(bool)
 {
   ++calls;
   return nullptr;
@@ -20,10 +22,10 @@ HMODULE failure()
 
 int main()
 {
-  assert(selectMpv(true, success) == nullptr);
-  assert(calls == 0);
+  assert(selectMpv(true, success) != nullptr);
+  assert(calls == 1 && selectedPrimary);
   assert(selectMpv(false, success) != nullptr);
-  assert(calls == 1);
+  assert(calls == 2 && !selectedPrimary);
   assert(selectMpv(false, failure) == nullptr);
-  assert(calls == 2);
+  assert(calls == 3);
 }
