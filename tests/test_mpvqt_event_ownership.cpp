@@ -22,6 +22,14 @@ void countWake(void* context)
   static_cast<std::atomic<int>*>(context)->fetch_add(1);
 }
 
+void logMpvVersion(mpv_handle* mpv)
+{
+  char* version = mpv_get_property_string(mpv, "mpv-version");
+  qInfo() << "libmpv version:" << (version ? version : "unavailable")
+          << "client API (hex):" << QString::number(mpv_client_api_version(), 16);
+  if (version) mpv_free(version);
+}
+
 bool drainUntilPause(mpv_handle* mpv)
 {
   QElapsedTimer timer;
@@ -54,6 +62,7 @@ void TestMpvQtEventOwnership::internalModeRemainsCompatible()
   ControllerFixture fixture;
   QCOMPARE(fixture.controller.eventMode(), MpvController::EventMode::Internal);
   mpv_handle* mpv = fixture.controller.mpv();
+  logMpvVersion(mpv);
   QSignalSpy changes(&fixture.controller, &MpvController::propertyChanged);
   QCOMPARE(mpv_observe_property(mpv, 11, "pause", MPV_FORMAT_FLAG), 0);
   QTRY_VERIFY_WITH_TIMEOUT(changes.count() > 0, 5000);
@@ -65,6 +74,7 @@ void TestMpvQtEventOwnership::externalModeLeavesEventsForOwner()
   ControllerFixture fixture(MpvController::EventMode::External);
   auto& controller = fixture.controller;
   mpv_handle* mpv = controller.mpv();
+  logMpvVersion(mpv);
   QCOMPARE(controller.eventMode(), MpvController::EventMode::External);
   QCOMPARE(mpv_observe_property(mpv, 12, "pause", MPV_FORMAT_FLAG), 0);
   controller.eventHandler(); // Must not drain an externally owned queue.
