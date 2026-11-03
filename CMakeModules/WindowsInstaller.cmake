@@ -1,94 +1,55 @@
-# Find Inno Setup Compiler
 find_program(ISCC iscc
-  PATHS
-    "$ENV{LOCALAPPDATA}/Programs/Inno Setup 6"
-    "$ENV{ProgramFiles\(x86\)}/Inno Setup 6"
-    "$ENV{ProgramFiles}/Inno Setup 6"
-    "C:/Program Files (x86)/Inno Setup 6"
-    "C:/Program Files/Inno Setup 6"
-  DOC "Inno Setup Compiler"
-)
-
+  PATHS "$ENV{LOCALAPPDATA}/Programs/Inno Setup 6"
+    "$ENV{ProgramFiles\(x86\)}/Inno Setup 6" "$ENV{ProgramFiles}/Inno Setup 6"
+    "C:/Program Files (x86)/Inno Setup 6" "C:/Program Files/Inno Setup 6"
+  DOC "Inno Setup Compiler")
 if(NOT ISCC)
   message(WARNING "Inno Setup Compiler (iscc) not found. Windows installer will not be built.")
   return()
 endif()
 
-message(STATUS "Found Inno Setup: ${ISCC}")
-
-# Configure the Inno Setup script with version and paths
-configure_file(
-  ${PROJECT_SOURCE_DIR}/bundle/win/JellyfinDesktop.iss.in
-  ${CMAKE_CURRENT_BINARY_DIR}/JellyfinDesktop.iss
-  @ONLY
-)
-
-# Create install target that copies files to CMAKE_INSTALL_PREFIX
-add_custom_target(innosetup_install
-  COMMAND ${CMAKE_COMMAND} -P cmake_install.cmake
-  COMMENT "Copying files for installer..."
-  DEPENDS JellyfinDesktop
-)
-
-# Determine architecture string for output filename
 if(CMAKE_SIZEOF_VOID_P MATCHES 8)
   set(INSTALLER_ARCH_STR x64)
 else()
   set(INSTALLER_ARCH_STR x86)
 endif()
-
 set(INSTALLER_BASE_NAME "JellyfinDesktop-${VERSION_STRING}-${INSTALLER_ARCH_STR}")
-set(INSTALLER_OUTPUT_NAME "${INSTALLER_BASE_NAME}.exe")
+set(PACKAGE_WORK "${CMAKE_CURRENT_BINARY_DIR}/windows-package-work")
+set(PACKAGE_STAGE "${PACKAGE_WORK}/stage")
+set(PACKAGE_PORTABLE "${PACKAGE_WORK}/portable")
+set(PACKAGE_TEMP "${PACKAGE_WORK}/temporary")
+set(PACKAGE_INSTALLER "${CMAKE_CURRENT_BINARY_DIR}/${INSTALLER_BASE_NAME}.exe")
+set(PACKAGE_ZIP "${CMAKE_CURRENT_BINARY_DIR}/${INSTALLER_BASE_NAME}.zip")
 
-# Create the installer using Inno Setup
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${INSTALLER_OUTPUT_NAME}
-  DEPENDS innosetup_install ${CMAKE_CURRENT_BINARY_DIR}/JellyfinDesktop.iss
-  COMMAND ${ISCC}
-    /O${CMAKE_CURRENT_BINARY_DIR}
-    /F${INSTALLER_BASE_NAME}
-    ${CMAKE_CURRENT_BINARY_DIR}/JellyfinDesktop.iss
-  COMMENT "Building Inno Setup installer: ${INSTALLER_OUTPUT_NAME}"
-  VERBATIM
-)
+# The Inno script must reference the same fresh stage as the ZIP.
+set(_original_install_prefix "${CMAKE_INSTALL_PREFIX}")
+set(CMAKE_INSTALL_PREFIX "${PACKAGE_STAGE}")
+configure_file("${PROJECT_SOURCE_DIR}/bundle/win/JellyfinDesktop.iss.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/JellyfinDesktop.iss" @ONLY)
+set(CMAKE_INSTALL_PREFIX "${_original_install_prefix}")
+configure_file("${PROJECT_SOURCE_DIR}/CMakeModules/WindowsPackageStage.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/WindowsPackageStage.cmake" @ONLY)
+configure_file("${PROJECT_SOURCE_DIR}/CMakeModules/WindowsPackagePublish.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/WindowsPackagePublish.cmake" @ONLY)
 
-# Target to build the installer
+# A requested package always starts from one fresh build-owned stage. This
+# shared target runs once when windows_all requests both package variants.
+add_custom_target(innosetup_install
+  COMMAND "${CMAKE_COMMAND}" "-DPACKAGE_CONFIG=$<CONFIG>" -P "${CMAKE_CURRENT_BINARY_DIR}/WindowsPackageStage.cmake"
+  DEPENDS JellyfinDesktop
+  COMMENT "Staging fresh Windows package files" VERBATIM)
+
 add_custom_target(JellyfinDesktopInstaller
-  DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${INSTALLER_OUTPUT_NAME}
-)
-
-# Alias target for convenience
+  COMMAND "${CMAKE_COMMAND}" -DPACKAGE_KIND=installer -P "${CMAKE_CURRENT_BINARY_DIR}/WindowsPackagePublish.cmake"
+  DEPENDS innosetup_install
+  BYPRODUCTS "${PACKAGE_INSTALLER}"
+  COMMENT "Building Windows installer" VERBATIM)
 add_custom_target(windows_package DEPENDS JellyfinDesktopInstaller)
 
-# Create portable ZIP archive (includes bundled runtime DLLs in root)
-set(ZIP_OUTPUT_NAME "${INSTALLER_BASE_NAME}.zip")
-set(ZIP_STAGING_DIR "${CMAKE_CURRENT_BINARY_DIR}/portable")
-
-# Configure the prepare script
-configure_file(
-  ${PROJECT_SOURCE_DIR}/CMakeModules/PreparePortableZip.cmake.in
-  ${CMAKE_CURRENT_BINARY_DIR}/PreparePortableZip.cmake
-  @ONLY
-)
-
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${ZIP_OUTPUT_NAME}
-  DEPENDS innosetup_install ${CMAKE_CURRENT_BINARY_DIR}/PreparePortableZip.cmake
-  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/PreparePortableZip.cmake
-  COMMAND ${CMAKE_COMMAND} -E chdir ${ZIP_STAGING_DIR} ${CMAKE_COMMAND} -E tar cf ${CMAKE_CURRENT_BINARY_DIR}/${ZIP_OUTPUT_NAME} --format=zip .
-  COMMENT "Building portable ZIP: ${ZIP_OUTPUT_NAME}"
-  VERBATIM
-)
-
 add_custom_target(JellyfinDesktopZip
-  DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${ZIP_OUTPUT_NAME}
-)
-
+  COMMAND "${CMAKE_COMMAND}" -DPACKAGE_KIND=zip -P "${CMAKE_CURRENT_BINARY_DIR}/WindowsPackagePublish.cmake"
+  DEPENDS innosetup_install
+  BYPRODUCTS "${PACKAGE_ZIP}"
+  COMMENT "Building Windows portable ZIP" VERBATIM)
 add_custom_target(windows_zip DEPENDS JellyfinDesktopZip)
-
-# Combined target for both installer and ZIP
 add_custom_target(windows_all DEPENDS JellyfinDesktopInstaller JellyfinDesktopZip)
-
-message(STATUS "Windows installer target configured: windows_package")
-message(STATUS "Windows portable ZIP target configured: windows_zip")
-message(STATUS "Windows combined target configured: windows_all")

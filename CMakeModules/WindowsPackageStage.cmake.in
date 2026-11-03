@@ -1,0 +1,17 @@
+set(work "@PACKAGE_WORK@")
+set(stage "@PACKAGE_STAGE@")
+file(REMOVE "@PACKAGE_INSTALLER@" "@PACKAGE_ZIP@")
+if(EXISTS "@PACKAGE_INSTALLER@" OR EXISTS "@PACKAGE_ZIP@")
+  message(FATAL_ERROR "Could not invalidate existing Windows packages")
+endif()
+file(REMOVE_RECURSE "${work}")
+if(EXISTS "${work}")
+  message(FATAL_ERROR "Could not clear the Windows package staging directory")
+endif()
+file(MAKE_DIRECTORY "${stage}" "@PACKAGE_TEMP@")
+execute_process(COMMAND "@CMAKE_COMMAND@" "-DCMAKE_INSTALL_PREFIX=${stage}"
+  "-DCMAKE_INSTALL_CONFIG_NAME=${PACKAGE_CONFIG}" -P "@CMAKE_CURRENT_BINARY_DIR@/cmake_install.cmake"
+  RESULT_VARIABLE result)
+if(NOT "${result}" STREQUAL "0")
+  message(FATAL_ERROR "Windows package staging failed: ${result}")
+endif()
