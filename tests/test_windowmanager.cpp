@@ -11,6 +11,8 @@ private slots:
   void restoredSizeSurvivesUnchangedSave();
   void fullscreenTransitionsNotifyOnce();
   void nonWindowedGeometryIsPreserved();
+  void publicFullscreenRestoresWindowState();
+  void kioskRestoresFullscreen();
 };
 
 void TestWindowManager::initTestCase()
@@ -81,6 +83,54 @@ void TestWindowManager::nonWindowedGeometryIsPreserved()
     QCOMPARE(state->value(manager.positionYKey()).toInt(), 40);
     QVERIFY(state->value(manager.maximizedKey()).toBool());
   }
+}
+
+void TestWindowManager::publicFullscreenRestoresWindowState()
+{
+  QQuickWindow window;
+  WindowManager manager;
+  manager.m_window = &window;
+  connect(&window, &QWindow::visibilityChanged,
+          &manager, &WindowManager::onVisibilityChanged);
+  QSignalSpy spy(&manager, &WindowManager::fullScreenSwitched);
+  window.showNormal();
+  QTRY_COMPARE(window.visibility(), QWindow::Windowed);
+  manager.setFullScreen(true);
+  QTRY_COMPARE(window.visibility(), QWindow::FullScreen);
+  manager.setFullScreen(false);
+  QTRY_COMPARE(window.visibility(), QWindow::Windowed);
+  QCOMPARE(spy.count(), 2);
+
+  window.showMaximized();
+  QTRY_COMPARE(window.visibility(), QWindow::Maximized);
+  manager.setFullScreen(true);
+  QTRY_COMPARE(window.visibility(), QWindow::FullScreen);
+  manager.setFullScreen(false);
+  QTRY_COMPARE(window.visibility(), QWindow::Maximized);
+  QCOMPARE(spy.count(), 4);
+  window.showMinimized();
+  QTRY_COMPARE(window.visibility(), QWindow::Minimized);
+  QCOMPARE(manager.m_previousVisibility, QWindow::Maximized);
+}
+
+void TestWindowManager::kioskRestoresFullscreen()
+{
+  QQuickWindow window;
+  WindowManager manager;
+  manager.m_window = &window;
+  connect(&window, &QWindow::visibilityChanged,
+          &manager, &WindowManager::onVisibilityChanged);
+  auto* main = SettingsComponent::Get().getSection(SETTINGS_SECTION_MAIN);
+  window.showNormal();
+  QTRY_COMPARE(window.visibility(), QWindow::Windowed);
+  manager.setFullScreen(true);
+  QTRY_COMPARE(window.visibility(), QWindow::FullScreen);
+  main->setValue("forceAlwaysFS", true);
+  window.showNormal();
+  QTRY_COMPARE(window.visibility(), QWindow::FullScreen);
+  main->setValue("forceAlwaysFS", false);
+  manager.setFullScreen(false);
+  QTRY_COMPARE(window.visibility(), QWindow::Windowed);
 }
 
 QTEST_MAIN(TestWindowManager)
