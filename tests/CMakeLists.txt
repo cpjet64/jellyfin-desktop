@@ -40,7 +40,7 @@ target_include_directories(test_displaymanager PRIVATE ${TEST_INCLUDE_DIRS})
 target_compile_definitions(test_displaymanager PRIVATE ${TEST_COMPILE_DEFS})
 add_test(NAME test_displaymanager COMMAND test_displaymanager)
 
-foreach(test_name test_windowmanager test_log_rotation)
+foreach(test_name test_windowmanager test_log_rotation test_fault_stop)
   add_executable(${test_name} ${test_name}.cpp)
   target_link_libraries(${test_name} jmp_core Qt6::Test)
   target_include_directories(${test_name} PRIVATE ${TEST_INCLUDE_DIRS})
@@ -49,6 +49,7 @@ foreach(test_name test_windowmanager test_log_rotation)
   set_tests_properties(${test_name} PROPERTIES TIMEOUT 60)
 endforeach()
 set_tests_properties(test_windowmanager PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_fault_stop PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 add_executable(test_chromiumflags test_chromiumflags.cpp)
 target_link_libraries(test_chromiumflags Qt6::Test)
@@ -73,3 +74,9 @@ target_include_directories(test_webclient_fault_webengine PRIVATE ${TEST_INCLUDE
 target_compile_definitions(test_webclient_fault_webengine PRIVATE ${TEST_COMPILE_DEFS} TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME test_webclient_fault_webengine COMMAND test_webclient_fault_webengine)
 set_tests_properties(test_webclient_fault_webengine PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "webengine;gui")
+
+add_executable(test_renderer_loss_playback test_renderer_loss_playback.cpp)
+target_link_libraries(test_renderer_loss_playback jmp_core Qt6::Test Qt6::Quick)
+target_include_directories(test_renderer_loss_playback PRIVATE ${TEST_INCLUDE_DIRS})
+target_compile_definitions(test_renderer_loss_playback PRIVATE ${TEST_COMPILE_DEFS})
+# Run each scenario in an isolated native desktop process with RECOVERY_* inputs.
