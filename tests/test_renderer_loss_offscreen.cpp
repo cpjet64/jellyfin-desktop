@@ -8,6 +8,7 @@
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
 #include <QOpenGLFramebufferObject>
+#include <QOpenGLFunctions>
 #include <QQuickGraphicsDevice>
 #include <QQuickRenderControl>
 #include <QQuickRenderTarget>
@@ -17,6 +18,8 @@
 #include <MpvController>
 #include <mpv/client.h>
 #include <memory>
+#include <cstdio>
+#include <cstdlib>
 
 #include "player/MpvVideoItem.h"
 #include "player/PlayerComponent.h"
@@ -35,11 +38,13 @@ public:
   ~OffscreenScene();
   QOpenGLContext context;
   QOffscreenSurface surface;
-  QQuickRenderControl control;
-  QQuickWindow window{&control};
+  std::unique_ptr<QQuickRenderControl> control;
+  std::unique_ptr<QQuickWindow> window;
   std::unique_ptr<QOpenGLFramebufferObject> target;
   MpvVideoItem* video = nullptr;
   bool initialized = false;
+  bool sceneGraphFailed = false;
+  QString sceneGraphMessage;
 };
 
 bool OffscreenScene::initialize()
@@ -52,27 +57,45 @@ bool OffscreenScene::initialize()
   const QSize size(640, 360);
   target = std::make_unique<QOpenGLFramebufferObject>(size);
   if (!target->isValid()) return false;
-  window.resize(size);
-  window.setColor(Qt::black);
-  window.setGraphicsDevice(QQuickGraphicsDevice::fromOpenGLContext(&context));
-  window.setRenderTarget(QQuickRenderTarget::fromOpenGLTexture(target->texture(), size));
-  video = new MpvVideoItem(window.contentItem());
-  video->setParent(window.contentItem());
+  auto* gl = context.functions();
+  qInfo() << "Offscreen GL vendor:" << reinterpret_cast<const char*>(gl->glGetString(GL_VENDOR))
+          << "renderer:" << reinterpret_cast<const char*>(gl->glGetString(GL_RENDERER))
+          << "version:" << reinterpret_cast<const char*>(gl->glGetString(GL_VERSION))
+          << "context valid:" << context.isValid() << "surface valid:" << surface.isValid()
+          << "current context:" << (QOpenGLContext::currentContext() == &context)
+          << "target valid:" << target->isValid() << "target texture:" << target->texture();
+  control = std::make_unique<QQuickRenderControl>();
+  window = std::make_unique<QQuickWindow>(control.get());
+  QObject::connect(window.get(), &QQuickWindow::sceneGraphError, window.get(),
+                   [this](QQuickWindow::SceneGraphError error, const QString& message) {
+    sceneGraphFailed = true;
+    sceneGraphMessage = message;
+    qCritical() << "Offscreen scene graph error:" << error << message;
+  }, Qt::DirectConnection);
+  window->resize(size);
+  window->setColor(Qt::black);
+  window->setGraphicsDevice(QQuickGraphicsDevice::fromOpenGLContext(&context));
+  window->setRenderTarget(QQuickRenderTarget::fromOpenGLTexture(target->texture(), size));
+  video = new MpvVideoItem(window->contentItem());
+  video->setParent(window->contentItem());
   video->setObjectName("video");
   video->setSize(QSizeF(size));
-  initialized = control.initialize();
-  return initialized;
+  initialized = control->initialize();
+  qInfo() << "Offscreen scene graph graphics API:" << window->rendererInterface()->graphicsApi()
+          << "initialized:" << initialized;
+  return initialized && !sceneGraphFailed &&
+         window->rendererInterface()->graphicsApi() == QSGRendererInterface::OpenGL;
 }
 
 bool OffscreenScene::frame()
 {
-  if (!context.makeCurrent(&surface)) return false;
-  control.polishItems();
-  control.beginFrame();
-  control.sync();
-  control.render();
-  control.endFrame();
-  return true;
+  if (sceneGraphFailed || !context.makeCurrent(&surface)) return false;
+  control->polishItems();
+  control->beginFrame();
+  control->sync();
+  control->render();
+  control->endFrame();
+  return !sceneGraphFailed;
 }
 
 QImage OffscreenScene::image()
@@ -83,11 +106,24 @@ QImage OffscreenScene::image()
 
 OffscreenScene::~OffscreenScene()
 {
-  if (context.isValid() && surface.isValid() && context.makeCurrent(&surface)) {
-    if (initialized) control.invalidate();
-    context.makeCurrent(&surface);
+  if (video || target || initialized) {
+    auto requireContext = [this]() {
+      if (!context.isValid() || !surface.isValid() || !context.makeCurrent(&surface)) {
+        std::fputs("Offscreen cleanup cannot restore its OpenGL context\n", stderr);
+        std::fflush(stderr);
+        std::_Exit(EXIT_FAILURE);
+      }
+    };
+    requireContext();
+    if (control && initialized) control->invalidate();
+    requireContext();
     delete video;
     video = nullptr;
+    requireContext();
+    window.reset();
+    requireContext();
+    control.reset();
+    requireContext();
     target.reset();
     context.doneCurrent();
   }
@@ -162,17 +198,18 @@ void TestRendererLossOffscreen::actualPlayback()
   QVERIFY(SettingsComponent::Get().componentInitialize());
   OffscreenScene scene;
   QVERIFY2(scene.initialize(), "Unable to initialize native OpenGL offscreen scene");
-  QVERIFY(!scene.window.isVisible());
+  QVERIFY(!scene.window->isVisible());
   QSignalSpy ready(scene.video, &MpvAbstractItem::ready);
   auto& player = PlayerComponent::Get();
   QVERIFY(player.componentInitialize());
-  player.setWindow(&scene.window);
+  player.setWindow(scene.window.get());
   QElapsedTimer deadline;
   deadline.start();
-  while (ready.isEmpty() && deadline.elapsed() < 15000) {
+  while (ready.isEmpty() && !scene.sceneGraphFailed && deadline.elapsed() < 15000) {
     QVERIFY(scene.frame());
     QTest::qWait(20);
   }
+  QVERIFY2(!scene.sceneGraphFailed, qPrintable(scene.sceneGraphMessage));
   QVERIFY2(!ready.isEmpty(), "Offscreen mpv renderer readiness timed out");
   QTRY_COMPARE_WITH_TIMEOUT(player.requestNativeStop().status,
                             PlayerComponent::NativeStopResult::Status::Accepted, 15000);
