@@ -1,15 +1,22 @@
 import { spawn } from 'node:child_process';
-import { mkdir, open, rm, writeFile, access } from 'node:fs/promises';
+// Diagnostic only: the offscreen platform cannot prove GPU rendering, clean exit,
+// or child cleanup after a parent crash. This script never returns an acceptance pass.
+import { mkdir, open, rm, writeFile, access, realpath } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { once } from 'node:events';
 
-const build = 'E:\\CursorAI\\JellyfinDesktop\\deps\\worktrees\\integration\\build';
+const [buildArg, qtArg, ...extraArgs] = process.argv.slice(2);
+if (!buildArg || !qtArg || extraArgs.length || !path.isAbsolute(buildArg) || !path.isAbsolute(qtArg)) {
+  console.error('Usage: node windows_desktop_smoke.mjs <absolute-build-dir> <absolute-qt-dir>');
+  process.exit(2);
+}
+const build = await realpath(buildArg);
+const qt = await realpath(qtArg);
 const executable = path.join(build, 'src', 'Jellyfin Desktop.exe');
 const marker = path.join(build, 'src', 'portable');
 const cache = path.join(build, 'src', 'cache');
 const output = path.join(build, 'desktop-smoke');
-const qt = 'E:\\CursorAI\\JellyfinDesktop\\dev\\windows\\deps\\qt\\6.9.3\\msvc2022_64';
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function unusedPort() {
@@ -71,7 +78,7 @@ async function runCase(spec) {
   await writeFile(path.join(data, 'profiles.json'), JSON.stringify({ defaultProfile: profile }));
   await writeFile(path.join(profileDir, 'profile.json'), JSON.stringify({ name: 'Smoke' }));
   await writeFile(path.join(profileDir, 'jellyfin-desktop.conf'),
-    JSON.stringify({ sections: { main: { allowBrowserZoom: !spec.disablePinch } } }));
+    JSON.stringify({ version: 7, sections: { main: { allowBrowserZoom: !spec.disablePinch } } }));
   const port = await unusedPort();
   const env = { ...process.env, PATH: `${path.join(qt, 'bin')};${process.env.PATH}`,
     QT_PLUGIN_PATH: path.join(qt, 'plugins'), QML2_IMPORT_PATH: path.join(qt, 'qml'),
@@ -82,7 +89,8 @@ async function runCase(spec) {
   let log = '';
   child.stdout.on('data', chunk => { log += chunk; });
   child.stderr.on('data', chunk => { log += chunk; });
-  const result = { case: spec.name, dir, cleanExit: false };
+  const result = { case: spec.name, dir, cleanExit: false,
+    cleanupLimitation: 'Descendants cannot be verified if the parent exits before taskkill.' };
   try {
     const version = await waitForDebug(port, child);
     const base = `http://127.0.0.1:${port}`;
@@ -117,7 +125,8 @@ async function main() {
     const results = [];
     for (const spec of cases) results.push(await runCase(spec));
     console.log(JSON.stringify(results, null, 2));
-    if (results.some(result => result.status !== 'observed')) process.exitCode = 1;
+    console.error('Diagnostic only: observations do not constitute an acceptance pass.');
+    process.exitCode = 2;
   } finally { await rm(marker); }
 }
 
