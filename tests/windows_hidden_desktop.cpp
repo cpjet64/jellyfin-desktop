@@ -172,6 +172,7 @@ int wmain(int argc, wchar_t **argv)
   const std::wstring name = L"JellyfinSmoke-" + std::to_wstring(GetCurrentProcessId());
   HDESK desktop = CreateDesktopW(name.c_str(), nullptr, nullptr, 0, GENERIC_ALL, nullptr);
   if (!desktop) { std::fprintf(stderr, "CreateDesktop failed: %lu\n", GetLastError()); return 3; }
+  std::printf("created desktop JellyfinSmoke-%lu\n", GetCurrentProcessId()); std::fflush(stdout);
   HANDLE job = CreateJobObjectW(nullptr, nullptr);
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
   limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
@@ -181,10 +182,12 @@ int wmain(int argc, wchar_t **argv)
     CloseDesktop(desktop);
     return 4;
   }
-  const bool testExecutable = argc == 4 && std::wstring(argv[3]) == L"--test-executable";
+  const bool glProbe = argc == 4 && std::wstring(argv[3]) == L"--gl-probe";
+  const bool testExecutable = glProbe || (argc == 4 && std::wstring(argv[3]) == L"--test-executable");
   std::wstring command = L"\"" + std::wstring(argv[1]) + L"\"";
   if (!testExecutable) command += L" --config-dir \"" + std::wstring(argv[2]) + L"\"";
-  if (testExecutable) command += L" -o \"" + std::wstring(argv[2]) + L"\\qtest.txt,txt\"";
+  if (glProbe) command += L" \"" + std::wstring(argv[2]) + L"\\gl-probe.json\"";
+  else if (testExecutable) command += L" -o \"" + std::wstring(argv[2]) + L"\\qtest.txt,txt\"";
   const bool geometryOnly = argc == 4 && std::wstring(argv[3]) == L"--geometry-observe";
   const bool windowActions = argc == 4 && (std::wstring(argv[3]) == L"--window-actions" || geometryOnly);
   if (argc == 4 && !windowActions && !testExecutable) command += L" " + std::wstring(argv[3]);
