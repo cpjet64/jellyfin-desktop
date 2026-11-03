@@ -13,10 +13,17 @@ sys.dont_write_bytecode = True
 from native_bootstrap import bootstrap
 from native_inventory import incompatible_tools, inventory, prepare_process_paths, unavailable_compilers
 from macos_session import verify_existing_session
+from headless_requirements import missing_build_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
 RESULTS = BUILD / "ci-results"
+# Explicitly audited QTEST_APPLESS_MAIN or QTEST_GUILESS_MAIN fixtures.
+# Mpv initialization, QTEST_MAIN, QGuiApplication and QQuickWindow stay out.
+HEADLESS_TESTS = ("test_systemcomponent", "test_log", "test_settings", "test_displaymanager",
+                  "test_log_rotation", "test_chromiumflags", "test_webclient_transport",
+                  "test_mpv_test_bootstrap_pure")
+LINUX_DESKTOP_TOOLS = frozenset(("xvfb-run", "xauth", "dbus-run-session", "glxinfo"))
 
 
 def command(name, args, *, env=None, timeout=120):
@@ -77,43 +84,40 @@ def preflight():
         if tool not in missing:
             missing.append(tool)
     can_bootstrap = {"cmake", "ctest", "ninja", "node"} if system == "Linux" else set()
-    host_missing = [name for name in missing if name not in can_bootstrap]
+    desktop_missing = [name for name in missing if system == "Linux" and name in LINUX_DESKTOP_TOOLS]
+    host_missing = [name for name in missing if name not in can_bootstrap and name not in desktop_missing]
     if host_missing:
         raise RuntimeError("BLOCKED: missing host prerequisites: " + ", ".join(host_missing))
-    if missing:
+    bootstrap_missing = [name for name in missing if name in can_bootstrap]
+    if bootstrap_missing:
+        absent = missing_build_inputs(mode, os.environ, found.get("pkg-config"))
+        if absent:
+            raise RuntimeError("BLOCKED: build inputs not found before tool bootstrap: " + ", ".join(absent))
         job = os.environ.get("CI_JOB_ID", "")
         if not job.isdecimal():
             raise RuntimeError("BLOCKED: numeric CI_JOB_ID required for job-local tools")
-        requested = set(missing)
+        requested = set(bootstrap_missing)
         if "ctest" in requested:
             requested.add("cmake")
         bins = bootstrap(requested, ROOT / "deps" / ("ci-" + job) / "native-tools")
         os.environ["PATH"] = os.pathsep.join([str(path) for path in bins] + [os.environ.get("PATH", "")])
-        for name in missing:
+        for name in bootstrap_missing:
             if not shutil.which(name):
                 raise RuntimeError(f"BLOCKED: bootstrapped tool unavailable: {name}")
     if mode not in ("static", "system"):
         raise RuntimeError("CI_MPVQT_MODE must be static or system")
-    if system == "Darwin":
-        # MpvQt appends this name to Qt ConfigLocation (~/Library/Preferences on macOS).
-        # Inspect existence only: the contents belong to the session owner.
-        config = Path.home() / "Library/Preferences/mpvqt/mpvqt.conf"
-        print(f"MpvQt writable configuration candidate: {config}", flush=True)
-        try:
-            config.lstat()
-        except FileNotFoundError:
-            pass
-        else:
-            raise RuntimeError("BLOCKED: existing non-job-owned mpvqt configuration would be consumed")
-        verify_existing_session(os.environ)
-    return system, mode
+    return system, mode, desktop_missing
 
 
-def configure(system, mode):
+def portable_checks():
     command("report-gate-tests", [sys.executable, "tests/test_ci_results.py"])
     command("archive-safety-tests", [sys.executable, "dev/ci/test_safe_extract.py"])
     command("inventory-tests", [sys.executable, "dev/ci/test_native_inventory.py"])
     command("mac-session-tests", [sys.executable, "dev/ci/test_macos_session.py"])
+    command("headless-routing-tests", [sys.executable, "dev/ci/test_headless_routing.py"])
+
+
+def configure(system, mode):
     command("compiler-version", ["c++", "--version"])
     command("cmake-version", ["cmake", "--version"])
     command("mpv-version", ["pkg-config", "--modversion", "mpv"])
@@ -137,6 +141,41 @@ def configure(system, mode):
         options.append("-DCMAKE_PREFIX_PATH=" + ";".join(prefixes))
     command("configure", options, timeout=300)
     command("build", ["cmake", "--build", str(BUILD), "--parallel", "4"], timeout=1800)
+
+
+def headless_checks():
+    expression = "^(" + "|".join(HEADLESS_TESTS) + ")$"
+    report_path = RESULTS / "ctest.xml"
+    command("headless-ctest", ["ctest", "--test-dir", str(BUILD), "-R", expression,
+            "--output-on-failure", "--no-tests=error", "--timeout", "60", "--output-junit", str(report_path)], timeout=900)
+    report = [sys.executable, "dev/ci/check_results.py", "junit", str(report_path)]
+    for name in HEADLESS_TESTS:
+        report += ["--require", name]
+    command("headless-ctest-report", report)
+    command("input-plugin", ["node", "--test", "tests/test_inputPlugin.js"], timeout=120)
+    command("bundle-paths", [sys.executable, "tests/test_bundle_paths.py"], timeout=120)
+    command("package-freshness", [sys.executable, "tests/test_windows_package_freshness.py"], timeout=300)
+    print(f"PASS: {len(HEADLESS_TESTS)} explicitly classified headless CTest cases", flush=True)
+
+
+def desktop_preflight(system, desktop_missing):
+    if desktop_missing:
+        raise RuntimeError("BLOCKED: missing native desktop prerequisites: " + ", ".join(desktop_missing))
+    if system == "Darwin":
+        # MpvQt uses Qt ConfigLocation (~/Library/Preferences on macOS).
+        # Inspect existence only; never read the session owner's configuration.
+        config = Path.home() / "Library/Preferences/mpvqt/mpvqt.conf"
+        print(f"MpvQt writable configuration candidate: {config}", flush=True)
+        try:
+            config.lstat()
+        except FileNotFoundError:
+            pass
+        else:
+            raise RuntimeError("BLOCKED: existing non-job-owned mpvqt configuration would be consumed")
+        verify_existing_session(os.environ)
+
+
+def desktop_ctest(system, mode):
     prefix = ["dbus-run-session", "--"] if system == "Linux" else []
     command("ctest", prefix + ["ctest", "--test-dir", str(BUILD), "-LE", "gui", "--output-on-failure",
                                "--no-tests=error", "--timeout", "60", "--output-junit", str(RESULTS / "ctest.xml")], timeout=900)
@@ -149,9 +188,6 @@ def configure(system, mode):
     for name in required:
         report += ["--require", name]
     command("ctest-report", report)
-    command("input-plugin", ["node", "--test", "tests/test_inputPlugin.js"], timeout=120)
-    command("bundle-paths", [sys.executable, "tests/test_bundle_paths.py"], timeout=120)
-    command("package-freshness", [sys.executable, "tests/test_windows_package_freshness.py"], timeout=300)
 
 
 def gui(system):
@@ -191,17 +227,25 @@ def run_scenarios(fixture, prefix, env, media):
                 raise RuntimeError(f"Missing containment {scenario} image evidence")
 
 
+def run_stages(system, mode, desktop_missing):
+    configure(system, mode)
+    headless_checks()
+    desktop_preflight(system, desktop_missing)
+    desktop_ctest(system, mode)
+    gui(system)
+
+
 def main():
     RESULTS.mkdir(parents=True, exist_ok=True)
-    system, mode = preflight()
+    portable_checks()
+    system, mode, desktop_missing = preflight()
     with tempfile.TemporaryDirectory(prefix="ci-runtime-", dir=BUILD) as runtime:
         os.environ["JELLYFIN_TEST_OWNED_ROOT"] = str(BUILD)
         for name in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR"):
             path = Path(runtime) / name.lower()
             path.mkdir(mode=0o700)
             os.environ[name] = str(path)
-        configure(system, mode)
-        gui(system)
+        run_stages(system, mode, desktop_missing)
     print(f"PASS: {system} {mode}, WebEngine and 6 playback scenarios")
 
 

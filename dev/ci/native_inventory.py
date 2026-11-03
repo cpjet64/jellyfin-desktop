@@ -1,6 +1,7 @@
 """Bounded native runner inventory; never installs host packages."""
 
 import os
+import json
 from pathlib import Path
 import platform
 import re
@@ -70,7 +71,10 @@ def package_versions():
     if not shutil.which("dpkg-query"):
         print("Display package metadata: dpkg-query unavailable", flush=True)
         return
-    for package in ("xvfb", "xauth", "dbus-x11", "mesa-utils"):
+    packages = ("xvfb", "xauth", "dbus-x11", "mesa-utils", "qt6-base-dev", "qt6-base-private-dev",
+                "qt6-declarative-dev", "qt6-webengine-dev", "qt6-webchannel-dev", "qt6-positioning-dev",
+                "qml6-module-qtwebengine", "qml6-module-qtwebchannel", "libmpv-dev", "libmpv2", "libmpvqt-dev")
+    for package in packages:
         installed = probe(["dpkg-query", "-W", "-f=${Status} ${Version}", package])
         print(f"Package {package}: {installed}", flush=True)
         if shutil.which("apt-cache"):
@@ -82,6 +86,29 @@ def package_versions():
                 print(f"Package {package} versions: {'; '.join(lines) or 'unavailable'}", flush=True)
             except (OSError, subprocess.TimeoutExpired):
                 print(f"Package {package} versions: unavailable", flush=True)
+
+
+def brew_versions():
+    brew = shutil.which("brew")
+    if not brew:
+        print("Homebrew metadata: client unavailable", flush=True)
+        return
+    environment = os.environ.copy()
+    environment.update({"HOMEBREW_NO_AUTO_UPDATE": "1", "HOMEBREW_NO_INSTALL_FROM_API": "1"})
+    try:
+        result = subprocess.run([brew, "list", "--versions", "qt", "mpv"], text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, env=environment)
+        print(f"Homebrew installed qt/mpv: {result.stdout.strip() or 'not reported'}", flush=True)
+        info = subprocess.run([brew, "info", "--installed", "--json=v2", "qt", "mpv"], text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, env=environment)
+        if info.returncode == 0:
+            for formula in json.loads(info.stdout).get("formulae", []):
+                versions = [item.get("version") for item in formula.get("installed", [])]
+                print(f"Homebrew {formula.get('name')} installed versions: {versions}", flush=True)
+        else:
+            print("Homebrew installed info unavailable", flush=True)
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        print("Homebrew installed metadata unavailable", flush=True)
 
 
 def mpv_files(pkgconfig, allowed):
@@ -125,6 +152,8 @@ def inventory(system, mode):
                 if line.startswith(("ID=", "VERSION_ID=", "PRETTY_NAME=")):
                     print(f"Distribution {line}", flush=True)
         package_versions()
+    elif system == "Darwin":
+        brew_versions()
     for key in ("CI_QT_PREFIX", "CI_MPV_PREFIX", "CI_NATIVE_TOOL_PREFIX"):
         value = os.environ.get(key)
         print(f"Explicit {key}: {value or 'not set'}", flush=True)

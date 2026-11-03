@@ -30,6 +30,17 @@ require their before/after images. Static jobs additionally require the mpvqt
 event-ownership test; Linux requires the real MPRIS test on a private session
 bus. Failure or absence of a prerequisite or required result fails the job.
 
+On Linux and macOS, the job first builds and runs an explicit headless set:
+system, logging, settings, display-manager mock, log rotation, Chromium flags,
+WebChannel transport, and the pure mpv test-bootstrap checks. These are
+application-less or QCoreApplication tests; the selection does not infer that
+every test without a `gui` label is nonvisual. Node and portable packaging
+fixtures also run before desktop verification. The remaining CTest cases,
+including QGuiApplication, Quick, mpv initialization, and MPRIS cases, are
+deferred until the platform's desktop prerequisites are checked. The job
+still fails if those prerequisites or any required GUI proof are missing; a
+passing headless subset is not a replacement for the complete native gate.
+
 Windows runs GUI fixtures through a task-owned hidden desktop and job object;
 Linux uses job-owned Xvfb and private D-Bus sessions and records the rendering
 backend. macOS requires the explicitly authorized `runner` account on
@@ -60,9 +71,12 @@ the explicit `CI_QT_PREFIX` and `CI_MPV_PREFIX` paths. macOS requires its native
 tools and a separately authorized dedicated GUI session; inventory does not
 create or attest that session.
 
-System jobs use an independently installed mpvqt package. Windows builds the
-unmodified pinned upstream source as a shared library in a job-owned prefix,
-using pinned KDE ECM 6.31.0 and the job's Qt and mpv inputs. System mode
+System jobs use an independently installed mpvqt package. Windows builds
+MpvQt at pinned revision `2ebbd38` as a shared library in a job-owned prefix,
+applying the destructor compatibility patch only to the verified build copy; it
+does not apply the external-events patch to this system-compatibility path.
+See [MpvQt compatibility](mpvqt-compatibility.md) for the patch and evidence.
+The build uses pinned KDE ECM 6.31.0 and the job's Qt and mpv inputs. System mode
 requires CMake 3.30 or newer for ECM. A focused configure/build check exercises
 ECM's missing-formatter branch before building mpvqt. The job verifies the
 imported runtime lies in that prefix and records the application's shared-library

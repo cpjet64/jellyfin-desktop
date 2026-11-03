@@ -5,6 +5,7 @@ import io
 from pathlib import Path
 import sys
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.dont_write_bytecode = True
@@ -43,6 +44,31 @@ class TestInventory(unittest.TestCase):
                          "Module Qt6WebEngineQuick: unavailable", "Prerequisite MpvQtConfig.cmake:"):
             self.assertIn(expected, text)
         self.assertTrue(all(value is None for value in found.values()))
+
+    def test_linux_package_inventory_includes_build_and_display_inputs(self):
+        calls = []
+        def run(args, **kwargs):
+            calls.append(args)
+            return SimpleNamespace(returncode=0, stdout="Installed: (none)\nCandidate: 1.2.3\n")
+        with redirect_stdout(io.StringIO()), patch.object(native_inventory.shutil, "which", return_value="/usr/bin/tool"), \
+                patch.object(native_inventory, "probe", return_value="unavailable"), \
+                patch.object(native_inventory.subprocess, "run", side_effect=run):
+            native_inventory.package_versions()
+        checked = {args[-1] for args in calls}
+        self.assertTrue({"xvfb", "mesa-utils", "qt6-base-dev", "qt6-webengine-dev", "libmpv-dev"}.issubset(checked))
+        self.assertTrue(all(args[1] == "policy" for args in calls))
+
+    def test_macos_brew_queries_do_not_install_or_update(self):
+        calls = []
+        def run(args, **kwargs):
+            calls.append((args, kwargs["env"]))
+            payload = '{"formulae":[{"name":"mpv","installed":[{"version":"1.0"}]}]}'
+            return SimpleNamespace(returncode=0, stdout=payload if "info" in args else "mpv 1.0")
+        with redirect_stdout(io.StringIO()), patch.object(native_inventory.shutil, "which", return_value="/usr/local/bin/brew"), \
+                patch.object(native_inventory.subprocess, "run", side_effect=run):
+            native_inventory.brew_versions()
+        self.assertEqual([args[1] for args, _ in calls], ["list", "info"])
+        self.assertTrue(all(env["HOMEBREW_NO_AUTO_UPDATE"] == "1" for _, env in calls))
 
 
 if __name__ == "__main__":
