@@ -8,6 +8,7 @@ $results = Join-Path $build 'ci-results'
 $qtVersion = '6.9.3'
 $mpvVersion = '20261018-git-01e2533f31'
 . "$PSScriptRoot/ci-tools.ps1"
+. "$PSScriptRoot/ci-mpv.ps1"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 function Run-Native {
@@ -16,29 +17,12 @@ function Run-Native {
     if ($LASTEXITCODE -ne 0) { throw "$Program failed with exit code $LASTEXITCODE" }
 }
 
-function Install-Mpv {
-    param([string]$Architecture, [string]$Destination, [string]$SevenZip)
-    $archive = Join-Path $ci "mpv-$Architecture.7z"
-    $extract = Join-Path $ci "extract-$Architecture"
-    $url = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-$Architecture-$mpvVersion.7z/download"
-    Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $archive
-    Run-Native $SevenZip @('x', $archive, "-o$extract", '-y')
-    $dll = Get-ChildItem -LiteralPath $extract -Recurse -Filter 'libmpv-2.dll' | Select-Object -First 1
-    if (-not $dll) { throw "libmpv DLL missing in $archive" }
-    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
-    Copy-Item -LiteralPath $dll.FullName -Destination $Destination
-    $include = Join-Path $dll.DirectoryName 'include'
-    if ($Architecture -eq 'x86_64-v3') {
-        if (-not (Test-Path -LiteralPath $include)) { throw 'mpv headers missing' }
-        Copy-Item -LiteralPath $include -Destination $Destination -Recurse
-    }
-}
-
 if (-not $env:CI_JOB_ID) { throw 'This script requires an isolated GitLab job checkout.' }
 $drive = Get-PSDrive -Name ([System.IO.Path]::GetPathRoot($root).Substring(0, 1))
 if ($drive.Free -lt 20GB) { throw 'At least 20 GiB free space is required before dependency downloads.' }
 $python = Find-OptionalTool 'python.exe'
 if (-not $python) { throw 'Python is required on the runner' }
+if (-not (Find-OptionalTool 'curl.exe')) { throw 'Windows curl.exe is required for mpv downloads' }
 $found = @{
     SevenZip = Find-OptionalTool '7z.exe' @("$env:ProgramFiles/7-Zip/7z.exe")
     CMake = Find-OptionalTool 'cmake.exe'
@@ -84,12 +68,12 @@ foreach ($name in @('PATH', 'INCLUDE', 'LIB', 'LIBPATH')) {
 New-Item -ItemType Directory -Force -Path $ci, $build, $results | Out-Null
 Install-CiTools "$ci/tools" $found
 $sevenZip = $found.SevenZip
+Install-Mpv 'x86_64-v3' "$build/mpv" $sevenZip $ci $mpvVersion '49533E80D681672E42AB38FCCFDB9DB0CC9FC423F86D34F5F9634EBA71109912'
+Install-Mpv 'x86_64' "$build/mpv-fallback" $sevenZip $ci $mpvVersion 'D7F5621F42B6E161FE032DF914A10BDECE28A89DF3E57C6C3E16A5A250929B5E'
 Run-Native $python @('-m', 'venv', "$ci/venv")
 $venvPython = Join-Path $ci 'venv/Scripts/python.exe'
 Run-Native $venvPython @('-m', 'pip', 'install', 'aqtinstall==3.3.0')
 Run-Native $venvPython @('-m', 'aqt', 'install-qt', 'windows', 'desktop', $qtVersion, 'win64_msvc2022_64', '-m', 'qtwebengine', 'qtwebchannel', 'qtpositioning', '-O', "$ci/qt")
-Install-Mpv 'x86_64-v3' "$build/mpv" $sevenZip
-Install-Mpv 'x86_64' "$build/mpv-fallback" $sevenZip
 $exports = & dumpbin.exe /exports "$build/mpv/libmpv-2.dll"
 if ($LASTEXITCODE -ne 0) { throw 'dumpbin failed' }
 $names = @($exports | ForEach-Object { if ($_ -match '^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]+\s+(mpv_\w+)\s*$') { $Matches[1] } })

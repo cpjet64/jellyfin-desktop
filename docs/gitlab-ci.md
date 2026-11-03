@@ -42,7 +42,7 @@ coverage-comment and aggregate build workflows remain outside this candidate's
 scope. Protected refs are intentionally excluded while the protected-resource
 policy is unresolved; they do not receive replacement validation from this file.
 
-The runner must have Python with venv, Windows tar, Visual Studio 2022 x64 C++
+The runner must have Python with venv, Windows tar and curl, Visual Studio 2022 x64 C++
 tools and redistributable. Existing CMake, Ninja, 7-Zip and Inno Setup are used
 when available. Missing tools are downloaded into the job checkout: 7-Zip
 26.00, CMake 4.1.2, Ninja 1.13.2, Node.js 22.21.1, and Inno Setup 6.7.3. Downloads are pinned
@@ -55,6 +55,14 @@ installer. Dependencies are installed under the job checkout and require at
 least 20 GiB free on its volume before download. This threshold is a preflight,
 not a guarantee against concurrent disk use. The job does not modify the host
 installation.
+
+Both mpv archives are checked against the SHA-256 values published on their
+SourceForge file pages before extraction and before the larger Qt download.
+SourceForge may return a download page instead of the archive; in that case
+the job follows only its HTTPS refresh URL for the exact requested project
+file and rejects HTML or an unexpected checksum. Each request has a 120-second
+timeout. A failure indicates that SourceForge access or its published files
+need attention; it does not fall back to an unrelated mirror.
 
 Desktop end-to-end tests require an interactive desktop and are intentionally
 not run on the headless runner. A green job does not prove interactive playback,
