@@ -32,7 +32,7 @@ only on a valid conditional 304 response when the existing GitHub asset also
 matches its recorded size and digest. Missing or weak validators require a full
 download and hash comparison. Changed bytes at the same URL cause a collision
 failure rather than overwriting the existing asset. Removed source assets and
-unexpected GitHub assets also fail for operator review; nothing is deleted.
+unexpected GitHub assets also fail for operator review; completed assets are never deleted.
 The sole automatic deletion is an expected asset on a mirror-owned release
 that GitHub reports as an empty `starter` with no digest and a valid asset ID,
 the residue of a failed upload. The mirror first makes the release a draft,
