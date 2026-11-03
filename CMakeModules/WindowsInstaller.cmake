@@ -20,6 +20,8 @@ set(PACKAGE_PORTABLE "${PACKAGE_WORK}/portable")
 set(PACKAGE_TEMP "${PACKAGE_WORK}/temporary")
 set(PACKAGE_INSTALLER "${CMAKE_CURRENT_BINARY_DIR}/${INSTALLER_BASE_NAME}.exe")
 set(PACKAGE_ZIP "${CMAKE_CURRENT_BINARY_DIR}/${INSTALLER_BASE_NAME}.zip")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/windows-package-outputs.txt"
+  "${INSTALLER_BASE_NAME}.exe\n${INSTALLER_BASE_NAME}.zip\n")
 
 # The Inno script must reference the same fresh stage as the ZIP.
 set(_original_install_prefix "${CMAKE_INSTALL_PREFIX}")
@@ -36,6 +38,7 @@ configure_file("${PROJECT_SOURCE_DIR}/CMakeModules/WindowsPackagePublish.cmake.i
 # shared target runs once when windows_all requests both package variants.
 add_custom_target(innosetup_install
   COMMAND "${CMAKE_COMMAND}" "-DPACKAGE_CONFIG=$<CONFIG>" -P "${CMAKE_CURRENT_BINARY_DIR}/WindowsPackageStage.cmake"
+  DEPENDS JellyfinDesktop
   COMMENT "Staging fresh Windows package files" VERBATIM)
 
 add_custom_target(JellyfinDesktopInstaller

@@ -90,3 +90,13 @@ Common causes:
 - Qt 6.10.1 requires VS 2022 toolset (v143) for ABI compatibility
 - Version info centralized in `common.bat`
 - `run.bat` adds Qt/mpv to PATH; `bundle.bat` creates standalone packages
+# Windows packaging
+
+After configuring the build, run `python dev/windows/package.py <build-dir>`
+to invalidate the configured installer and ZIP before building `windows_all`.
+For a multi-configuration generator, pass `--config <configuration>`. A failed
+build returns nonzero; one independently completed fresh package can remain if
+the other producer fails, so consume outputs only after a successful driver run.
+The individual CMake package targets remain available. When called directly,
+they stage fresh content after the application builds, but cannot invalidate
+previous artifacts if an application build prerequisite fails first.

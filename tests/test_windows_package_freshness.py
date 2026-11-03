@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -92,6 +93,14 @@ class PackageFreshnessTest(unittest.TestCase):
     def package(self, target="windows_all", expected=True):
         return self.command(["--build", str(self.build), "--target", target, "--parallel", "2"], expected)
 
+    def driver(self, expected=True):
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        result = subprocess.run([sys.executable, "-B", str(ROOT / "dev/windows/package.py"),
+                                 str(self.build), "--parallel", "2"], env=self.env,
+                                capture_output=True, text=True, timeout=120, creationflags=flags)
+        self.assertEqual(result.returncode == 0, expected, result.stdout + result.stderr)
+        return result
+
     def contents(self):
         with zipfile.ZipFile(self.zip) as archive:
             return {name.removeprefix("./"): archive.read(name) for name in archive.namelist()
@@ -162,11 +171,29 @@ class PackageFreshnessTest(unittest.TestCase):
         self.assertEqual(self.contents()["data.bin"], b"old!")
 
     def test_failed_application_build_invalidates_previous_packages(self):
-        self.package()
+        self.driver()
         (self.source / "app.c").write_text("this is not valid C code\n")
-        self.package(expected=False)
+        self.driver(expected=False)
         self.assertFalse(self.installer.exists())
         self.assertFalse(self.zip.exists())
+
+    def test_mixed_targets_compile_once_and_package_new_binary(self):
+        self.package()
+        previous = self.contents()["Jellyfin Desktop.exe"]
+        (self.source / "app.c").write_text("int main(void) { return 23; }\n")
+        result = self.command(["--build", str(self.build), "--target", "JellyfinDesktop",
+                               "windows_all", "--parallel", "2"])
+        output = result.stdout.replace("\\", "/")
+        self.assertEqual(output.count("Building C object CMakeFiles/JellyfinDesktop.dir/app.c"), 1)
+        self.assertNotEqual(self.contents()["Jellyfin Desktop.exe"], previous)
+        self.assertEqual((self.build / "stage-count.txt").read_text().count("stage"), 2)
+
+    def test_driver_rejects_untrusted_output_names(self):
+        marker = self.build / "preserve.exe"
+        marker.write_bytes(b"preserve")
+        (self.build / "windows-package-outputs.txt").write_text("../preserve.exe\n../preserve.zip\n")
+        self.driver(expected=False)
+        self.assertEqual(marker.read_bytes(), b"preserve")
 
     def test_windows_all_producer_failure_never_keeps_old_outputs(self):
         self.package()
