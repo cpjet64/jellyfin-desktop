@@ -119,8 +119,8 @@ These tests belong on the local desktop workstation, not headless CI runners.
 
 ## Outstanding acceptance
 
-- Server connection, representative playback, stop, playback-end restoration,
-  and relaunch need an authorized test account and media. No before/after
+- Server connection, representative playback, stop, and playback-end restoration
+  need an authorized test account and media. No before/after
   real-playback claim is made.
 - Production watch-history changes were not assumed authorized.
 - Reboot persistence, display rearrangement, HDR/capture and mixed-GPU cases,
@@ -131,3 +131,20 @@ These tests belong on the local desktop workstation, not headless CI runners.
   must be verified separately; local success is not remote CI proof.
 
 See [the issue inventory](windows-issue-triage.md) for report-specific acceptance.
+
+## Follow-up review corrections
+
+QML fullscreen wrappers now call the native window manager, so keyboard and DOM
+requests use its restore behavior. The first hidden-desktop keyboard diagnostic
+failed to establish action delivery and was forcibly contained with zero remaining
+job processes. This is not keyboard acceptance; input automation is being repaired.
+
+The seven native suites passed again after the QML change and geometry-helper
+extraction. The logging suite now forces a same-thread Qt diagnostic during a
+production rotation failure in a bounded subprocess, checks token censoring in
+the fallback output, and verifies subsequent file logging.
+
+Windows packaging now accepts explicit runtime DLL and redistributable paths;
+missing required inputs fail at packaging time without blocking ordinary builds.
+Two native CMake staging fixture tests passed, including paths with spaces and
+missing-input failure before staging. Actual cumulative packaging remains pending.
