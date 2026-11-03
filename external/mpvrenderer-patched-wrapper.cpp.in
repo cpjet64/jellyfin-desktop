@@ -1,0 +1,3 @@
+// Compile the pinned renderer from the same patched source copy as MpvQt.
+#include "@CMAKE_CURRENT_SOURCE_DIR@/qt-wayland-compat.h"
+#include "@_mpvqt_src@/mpvrenderer.cpp"

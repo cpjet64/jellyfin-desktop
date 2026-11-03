@@ -143,9 +143,16 @@ public:
   AlbumArtProvider* albumArtProvider() const { return m_albumArtProvider; }
 
   void setMpvController(MpvController* controller) {
-    if (!m_mpv)
+    if (!m_mpv) {
       m_mpv = controller;
+#ifdef MPVQT_EXTERNAL_EVENTS
+      ++m_mpvGeneration;
+#endif
+    }
   }
+#ifdef MPVQT_EXTERNAL_EVENTS
+  void releaseMpvController(MpvController* controller);
+#endif
   void initializeMpv();
 
   virtual void setWindow(QQuickWindow* window);
@@ -253,6 +260,13 @@ private:
   void setQtQuickWindow(QQuickWindow* window);
   void updatePlaybackState();
   void handleMpvEvent(mpv_event *event);
+  void setupMpvEvents();
+  void finishMpvEventSetup();
+  void scheduleMpvHook(const std::function<void()>& resume);
+  void scheduleMpvHook(const QString& resumeId);
+#if MPV_CLIENT_API_VERSION >= MPV_MAKE_VERSION(1, 100)
+  void scheduleMpvHook(uint64_t id);
+#endif
   // Potentially switch the display refresh rate, and return true if the refresh rate
   // was actually changed.
   bool switchDisplayFrameRate();
@@ -263,6 +277,9 @@ private:
   void reselectStream(const QVariant &streamSelection, MediaType target);
 
   MpvController* m_mpv = nullptr;
+#ifdef MPVQT_EXTERNAL_EVENTS
+  quint64 m_mpvGeneration = 0;
+#endif
 
   State m_state;
   bool m_paused;

@@ -35,13 +35,6 @@
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-static void wakeup_cb(void *context)
-{
-  auto *player = static_cast<PlayerComponent*>(context);
-
-  emit player->onMpvEvents();
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 PlayerComponent::PlayerComponent(QObject* parent)
   : ComponentBase(parent), m_state(State::finished), m_paused(false), m_playbackActive(false),
@@ -76,6 +69,9 @@ void PlayerComponent::componentPostInitialize()
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 PlayerComponent::~PlayerComponent()
 {
+#ifdef MPVQT_EXTERNAL_EVENTS
+  if (m_mpv) releaseMpvController(m_mpv);
+#endif
   // m_mpv is owned by MpvVideoItem, don't access it here as it may be destroyed
 }
 
@@ -99,7 +95,7 @@ void PlayerComponent::initializeMpv()
   mpv_request_log_messages(m_mpv->mpv(), "terminal-default");
   m_mpv->setProperty("msg-level", "all=v");
 
-  mpv_set_wakeup_callback(m_mpv->mpv(), wakeup_cb, this);
+  setupMpvEvents();
 
   // Keep window open even when idle (no file loaded)
   m_mpv->setProperty("force-window", true);
@@ -229,8 +225,7 @@ void PlayerComponent::initializeMpv()
   if (auto* s = SettingsComponent::Get().getSection(SETTINGS_SECTION_OTHER))
     connect(s, &SettingsSection::valuesUpdated, this, &PlayerComponent::updateConfiguration);
 
-  connect(this, &PlayerComponent::onMpvEvents, this, &PlayerComponent::handleMpvEvents, Qt::QueuedConnection);
-  emit onMpvEvents();
+  finishMpvEventSetup();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -635,25 +630,7 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       // We use this to block loading until we explicitly tell it to continue.
       if (!strcmp(msg->args[1], "1"))
       {
-        // Calling this lambda will instruct mpv to continue loading the file.
-        auto resume = [=] {
-          qInfo() << "resuming loading";
-          m_mpv->command( QStringList() << "hook-ack" << resumeId);
-        };
-        if (switchDisplayFrameRate())
-        {
-          // Now wait for some time for mode change - this is needed because mode changing can take some
-          // time, during which the screen is black, and initializing hardware decoding could fail due
-          // to various strange OS-related reasons.
-          // (Better hope the user doesn't try to exit Konvergo during mode change.)
-          int pause = SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, "refreshrate.delay").toInt() * 1000;
-          qInfo() << "waiting" << pause << "msec after rate switch before loading";
-          QTimer::singleShot(pause, resume);
-        }
-        else
-        {
-          resume();
-        }
+        scheduleMpvHook(resumeId);
         break;
       }
       // Start "on_preloaded" hook.
@@ -675,25 +652,7 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
 
       if (!strcmp(hook->name, "on_load"))
       {
-        // Calling this lambda will instruct mpv to continue loading the file.
-        auto resume = [=] {
-          qInfo() << "resuming loading";
-          mpv_hook_continue(m_mpv->mpv(), id);
-        };
-        if (switchDisplayFrameRate())
-        {
-          // Now wait for some time for mode change - this is needed because mode changing can take some
-          // time, during which the screen is black, and initializing hardware decoding could fail due
-          // to various strange OS-related reasons.
-          // (Better hope the user doesn't try to exit Konvergo during mode change.)
-          int pause = SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, "refreshrate.delay").toInt() * 1000;
-          qInfo() << "waiting" << pause << "msec after rate switch before loading";
-          QTimer::singleShot(pause, resume);
-        }
-        else
-        {
-          resume();
-        }
+        scheduleMpvHook(id);
         break;
       }
       if (!strcmp(hook->name, "on_preloaded"))
@@ -714,6 +673,9 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::handleMpvEvents()
 {
+#ifdef MPVQT_EXTERNAL_EVENTS
+  if (!m_mpv) return;
+#endif
   // Process all events, until the event queue is empty.
   while (1)
   {

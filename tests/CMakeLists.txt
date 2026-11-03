@@ -4,6 +4,13 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+if(MPVQT_EXTERNAL_EVENTS)
+  add_executable(test_mpvqt_event_ownership test_mpvqt_event_ownership.cpp)
+  target_link_libraries(test_mpvqt_event_ownership MpvQt Qt6::Test)
+  add_test(NAME test_mpvqt_event_ownership COMMAND test_mpvqt_event_ownership)
+  set_tests_properties(test_mpvqt_event_ownership PROPERTIES TIMEOUT 60)
+endif()
+
 set(TEST_INCLUDE_DIRS
   ${CMAKE_SOURCE_DIR}/src
   ${CMAKE_SOURCE_DIR}/src/core

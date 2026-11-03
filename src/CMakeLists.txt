@@ -54,6 +54,9 @@ endforeach(sfile in ${ALL_SRCS})
 
 # Build core sources as static library for reuse by tests
 add_library(jmp_core STATIC ${ALL_SRCS})
+if(MPVQT_EXTERNAL_EVENTS)
+  target_compile_definitions(jmp_core PUBLIC MPVQT_EXTERNAL_EVENTS)
+endif()
 
 file(GLOB_RECURSE RESOURCE_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/resources/*)
 file(GLOB_RECURSE NATIVE_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/native/*)

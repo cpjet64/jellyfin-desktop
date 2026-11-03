@@ -4,7 +4,11 @@
 #include <QDebug>
 
 MpvVideoItem::MpvVideoItem(QQuickItem *parent)
+#ifdef MPVQT_EXTERNAL_EVENTS
+    : MpvAbstractItem(MpvController::EventMode::External, parent)
+#else
     : MpvAbstractItem(parent)
+#endif
 {
     connect(this, &MpvAbstractItem::ready, this, [this]() {
         qDebug() << "MpvVideoItem ready() signal fired!";
@@ -23,6 +27,14 @@ MpvVideoItem::MpvVideoItem(QQuickItem *parent)
 #endif
 }
 
+MpvVideoItem::~MpvVideoItem()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+    if (m_initialized && m_player)
+        m_player->releaseMpvController(mpvController());
+#endif
+}
+
 void MpvVideoItem::setPlayerComponent(PlayerComponent* player)
 {
     qDebug() << "MpvVideoItem::setPlayerComponent called, mpvController():" << mpvController();
@@ -36,10 +48,12 @@ void MpvVideoItem::initialize() {
         return;
     }
 
+#ifndef MPVQT_EXTERNAL_EVENTS
     if (!m_ready) {
         qDebug() << "MpvVideoItem not ready yet, waiting for ready() signal";
         return;
     }
+#endif
 
     if (!m_player) {
         qDebug() << "MpvVideoItem has no player, waiting for setPlayerComponent()";

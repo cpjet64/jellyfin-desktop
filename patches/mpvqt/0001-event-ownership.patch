@@ -1,0 +1,58 @@
+Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
+diff --git a/src/mpvabstractitem.cpp b/src/mpvabstractitem.cpp
+index 7000478..ffccf4a 100644
+--- a/src/mpvabstractitem.cpp
++++ b/src/mpvabstractitem.cpp
+@@ -21,0 +22,5 @@ MpvAbstractItem::MpvAbstractItem(QQuickItem *parent)
++    : MpvAbstractItem(MpvController::EventMode::Internal, parent)
++{
++}
++
++MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *parent)
+@@ -34 +39 @@ MpvAbstractItem::MpvAbstractItem(QQuickItem *parent)
+-    d_ptr->m_mpvController = new MpvController;
++    d_ptr->m_mpvController = new MpvController(mode);
+diff --git a/src/mpvabstractitem.h b/src/mpvabstractitem.h
+index 6268ac1..74ec427 100644
+--- a/src/mpvabstractitem.h
++++ b/src/mpvabstractitem.h
+@@ -10,0 +11 @@
++#include "mpvcontroller.h"
+@@ -23,0 +25 @@ public:
++    explicit MpvAbstractItem(MpvController::EventMode mode, QQuickItem *parent = nullptr);
+diff --git a/src/mpvcontroller.cpp b/src/mpvcontroller.cpp
+index 53a9b7b..aff81be 100644
+--- a/src/mpvcontroller.cpp
++++ b/src/mpvcontroller.cpp
+@@ -166,0 +167,5 @@ MpvController::MpvController(QObject *parent)
++    : MpvController(EventMode::Internal, parent)
++{
++}
++
++MpvController::MpvController(EventMode mode, QObject *parent)
+@@ -167,0 +173 @@ MpvController::MpvController(QObject *parent)
++    , m_eventMode(mode)
+@@ -170,0 +177,2 @@ MpvController::MpvController(QObject *parent)
++MpvController::~MpvController() = default;
++
+@@ -185 +193,2 @@ void MpvController::init()
+-    mpv_set_wakeup_callback(d_ptr->m_mpv, MpvController::mpvEvents, this);
++    if (m_eventMode == EventMode::Internal)
++        mpv_set_wakeup_callback(d_ptr->m_mpv, MpvController::mpvEvents, this);
+@@ -202 +211 @@ void MpvController::eventHandler()
+-    while (d_ptr->m_mpv) {
++    while (m_eventMode == EventMode::Internal && d_ptr->m_mpv) {
+diff --git a/src/mpvcontroller.h b/src/mpvcontroller.h
+index 97433af..d8b2883 100644
+--- a/src/mpvcontroller.h
++++ b/src/mpvcontroller.h
+@@ -65,0 +66 @@ public:
++    enum class EventMode { Internal, External };
+@@ -66,0 +68,3 @@ public:
++    explicit MpvController(EventMode mode, QObject *parent = nullptr);
++    ~MpvController() override;
++    EventMode eventMode() const { return m_eventMode; }
+@@ -76,0 +81,3 @@ public:
++private:
++    const EventMode m_eventMode;
++
