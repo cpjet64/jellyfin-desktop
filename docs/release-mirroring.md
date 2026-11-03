@@ -26,11 +26,16 @@ requires separate operator review.
 
 Asset links and their bounded redirects must use HTTPS on `gitlab.curtpme.com`;
 no GitLab credentials are sent. GitHub API requests never follow redirects.
-The release notes contain an encoded asset manifest and a fingerprint of source
-link names and URLs. When those match and GitHub's asset sizes and digests still
-match, later runs skip downloading the bytes. This assumes an asset URL's bytes
-are immutable; publish changed bytes at a new URL or rename the asset. Changing
-bytes in place is not detected by the polling optimization.
+The release notes contain an encoded digest manifest and separate source URL and
+strong ETag validators. Each poll checks the source: it skips downloading bytes
+only on a valid conditional 304 response when the existing GitHub asset also
+matches its recorded size and digest. Missing or weak validators require a full
+download and hash comparison. Changed bytes at the same URL cause a collision
+failure rather than overwriting the existing asset. Removed source assets and
+unexpected GitHub assets also fail for operator review; nothing is deleted.
+When adding assets to a published release, the mirror returns it to draft before
+uploading. If upload fails, the release remains unavailable as a public release
+until a successful retry; this avoids exposing a partially updated release.
 Each response is limited to 512 MiB. Off-host links or redirects, larger assets,
 missing tags, mismatches, API errors and partial uploads fail the run visibly.
 After resolving the cause, dispatch the workflow again; matching uploaded assets

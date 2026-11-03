@@ -92,13 +92,30 @@ def github_commit(tag, token):
     raise ValueError("Tag nesting limit exceeded")
 
 
-def asset_bytes(url):
+def asset_bytes(url, etag=None):
     if not valid_asset_url(url):
         raise ValueError("Release asset must use the intended GitLab HTTPS host")
-    return request(url, asset=True)
+    headers = {"User-Agent": "jellyfin-release-mirror"}
+    if etag and not etag.startswith("W/") and etag.startswith('"') and etag.endswith('"'):
+        headers["If-None-Match"] = etag
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.build_opener(GitLabRedirect()).open(req, timeout=120) as response:
+            data = response.read(MAX_ASSET + 1)
+            if len(data) > MAX_ASSET:
+                raise ValueError("Response exceeds maximum asset size")
+            new_etag = response.headers.get("ETag")
+            if not new_etag or new_etag.startswith("W/") or not new_etag.startswith('"') or not new_etag.endswith('"'):
+                new_etag = None
+            return data, new_etag
+    except urllib.error.HTTPError as exc:
+        if exc.code == 304 and "If-None-Match" in headers:
+            exc.close()
+            return None, etag
+        raise
 
 
-def desired_assets(release):
+def desired_assets(release, prior, uploaded):
     links = release.get("assets", {}).get("links", [])
     names = set()
     result = []
@@ -107,16 +124,18 @@ def desired_assets(release):
         if not name or name in names or "/" in name or "\\" in name:
             raise ValueError("Invalid or duplicate release asset name")
         names.add(name)
-        data = asset_bytes(link["url"])
-        result.append((name, data, "sha256:" + hashlib.sha256(data).hexdigest()))
+        old = prior.get(name, {})
+        remote = uploaded.get(name, {})
+        verified = (old.get("url") == link["url"] and old.get("digest") and
+                    remote.get("digest") == old.get("digest") and
+                    remote.get("size") == old.get("size"))
+        data, etag = asset_bytes(link["url"], old.get("etag") if verified else None)
+        if data is None:
+            result.append((name, None, old["digest"], old["size"], etag, link["url"]))
+        else:
+            result.append((name, data, "sha256:" + hashlib.sha256(data).hexdigest(),
+                           len(data), etag, link["url"]))
     return result
-
-
-def fingerprint(release):
-    links = release.get("assets", {}).get("links", [])
-    raw = json.dumps([(x["name"], x["url"]) for x in links],
-                     ensure_ascii=True, separators=(",", ":")).encode()
-    return hashlib.sha256(raw).hexdigest()
 
 
 def read_manifest(body):
@@ -132,7 +151,7 @@ def write_body(description, manifest):
     return (description or "") + "\n\n" + MARKER + "\n" + MANIFEST + encoded + " -->"
 
 
-def sync_release(release, existing, token, latest=False):
+def sync_release(release, existing, token, latest=False, current_latest=None):
     tag = release["tag_name"]
     if github_commit(tag, token) != release["commit"]["id"]:
         raise ValueError(f"Tag target mismatch for {tag}")
@@ -142,44 +161,58 @@ def sync_release(release, existing, token, latest=False):
     uploaded = {} if not target else {
         a["name"]: a for a in pages(f"{GITHUB}/releases/{target['id']}/assets", token)}
     old = read_manifest(target.get("body", "")) if target else {}
-    source = fingerprint(release)
-    assets = old.get("assets", {})
+    prior = {name: dict(value, **old.get("validators", {}).get(name, {}))
+             for name, value in old.get("assets", {}).items()}
     link_names = [link["name"] for link in release.get("assets", {}).get("links", [])]
-    unchanged = (old.get("source") == source and len(link_names) == len(set(link_names)) and
-                 set(assets) == set(link_names) and
-                 all(name in uploaded and uploaded[name].get("digest") == value["digest"] and
-                     uploaded[name].get("size") == value["size"]
-                     for name, value in assets.items()))
-    data = [] if unchanged else desired_assets(release)
-    if not unchanged:
-        assets = {name: {"digest": digest, "size": len(content)}
-                  for name, content, digest in data}
-    body = write_body(release.get("description"), {"source": source, "assets": assets})
+    if set(prior) - set(link_names) or set(uploaded) - set(link_names):
+        raise ValueError(f"Source asset removed or unexpected GitHub asset: {tag}")
+    data = desired_assets(release, prior, uploaded)
+    assets = {name: {"digest": digest, "size": size}
+              for name, _, digest, size, etag, url in data}
+    validators = {name: {"etag": etag, "url": url}
+                  for name, _, digest, size, etag, url in data}
+    for name, _, digest, size, _, _ in data:
+        if name in uploaded and (uploaded[name].get("digest") != digest or
+                                 uploaded[name].get("size") != size):
+            raise ValueError(f"Asset collision or unverifiable digest: {tag}/{name}")
+    body = write_body(release.get("description"), {"assets": assets, "validators": validators})
+    missing = [item for item in data if item[0] not in uploaded]
     if not target:
         target = api(f"{GITHUB}/releases", token, "POST", {
             "tag_name": tag, "name": release.get("name") or tag,
             "body": body, "draft": True})
         existing[tag] = target
-    for name, content, digest in data:
-        if name in uploaded:
-            if uploaded[name].get("digest") != digest or uploaded[name].get("size") != len(content):
-                raise ValueError(f"Asset collision or unverifiable digest: {tag}/{name}")
-            continue
+    elif missing and not target.get("draft"):
+        api(f"{GITHUB}/releases/{target['id']}", token, "PATCH", {"draft": True})
+        target["draft"] = True
+    for name, content, digest, size, _, _ in missing:
+        if content is None:
+            raise ValueError(f"Missing bytes for new asset: {tag}/{name}")
         response = json.loads(request(
             f"{UPLOAD}/releases/{target['id']}/assets?name={quote(name)}", token,
             "POST", content, "application/octet-stream"))
         if response.get("digest") != digest or response.get("size") != len(content):
             raise ValueError(f"Uploaded asset digest mismatch or unavailable: {tag}/{name}")
-    api(f"{GITHUB}/releases/{target['id']}", token, "PATCH", {
-        "name": release.get("name") or tag, "body": body, "draft": False,
-        "make_latest": "true" if latest else "false"})
-    return not unchanged
+    name = release.get("name") or tag
+    changed = (target.get("draft") or target.get("name") != name or
+               target.get("body") != body or (latest and target["id"] != current_latest))
+    if changed:
+        api(f"{GITHUB}/releases/{target['id']}", token, "PATCH", {
+            "name": name, "body": body, "draft": False,
+            "make_latest": "true" if latest else "false"})
+    return bool(changed)
 
 
 def main():
     token = os.environ["GITHUB_TOKEN"]
     releases = pages(f"{GITLAB}/releases")
     existing = {r["tag_name"]: r for r in pages(f"{GITHUB}/releases", token)}
+    try:
+        current_latest = api(f"{GITHUB}/releases/latest", token)["id"]
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            raise
+        current_latest = None
     now = dt.datetime.now(dt.timezone.utc)
     published = [(dt.datetime.fromisoformat(r["released_at"].replace("Z", "+00:00")), r)
                  for r in releases]
@@ -187,7 +220,8 @@ def main():
                        key=lambda item: (item[0], item[1]["tag_name"]))
     changed = 0
     for index, (_, release) in enumerate(published):
-        changed += bool(sync_release(release, existing, token, index == len(published) - 1))
+        changed += bool(sync_release(release, existing, token, index == len(published) - 1,
+                                     current_latest))
     print(f"Published releases checked: {len(published)}; asset manifests refreshed: {changed}")
 
 
