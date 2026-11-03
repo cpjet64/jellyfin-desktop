@@ -1,6 +1,7 @@
 // Diagnostic: runs the real application on a non-input desktop for 25 seconds.
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, open, rm, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, rm, writeFile, readFile, lstat } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
 import { once } from 'node:events';
@@ -13,8 +14,12 @@ if (mode && !['--baseline', '--log-failure', '--window-actions', '--geometry', '
 const marker = path.join(build, 'src', 'portable');
 const outputRoot = path.join(build, 'desktop-smoke-native');
 let output;
-const profile = '0123456789abcdef0123456789abcdef';
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function bounded(promise, ms, fallback) {
+  let timer;
+  try { return await Promise.race([promise, new Promise(resolve => { timer = setTimeout(() => resolve(fallback), ms); })]); }
+  finally { clearTimeout(timer); }
+}
 
 async function portNumber() {
   const server = net.createServer();
@@ -66,10 +71,11 @@ async function cdp(url, method, params = {}) {
   } finally { socket.close(); }
 }
 
-async function observe(port, child, requestExit = true) {
+async function observe(port, child, dir, requestExit = true) {
   const url = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 35; i++) {
-    if (child.exitCode !== null) throw new Error(`helper exited ${child.exitCode}`);
+    if (child.diagnosticClosed || child.exitCode !== null || child.signalCode !== null)
+      throw new Error(`helper exited ${child.exitCode ?? child.signalCode}`);
     try {
       const version = await getJson(`${url}/json/version`);
       const targets = await getJson(`${url}/json/list`);
@@ -79,6 +85,10 @@ async function observe(port, child, requestExit = true) {
         { expression: '({url:location.href,title:document.title,text:document.body?.innerText?.slice(0,1000),exitType:typeof window.api?.system?.exit})', returnByValue: true });
       if (page.result.value.url === 'about:blank') throw new Error('Page still loading');
       const gpu = await cdp(version.webSocketDebuggerUrl, 'SystemInfo.getInfo');
+      if (requestExit) {
+        const screenshot = await cdp(target.webSocketDebuggerUrl, 'Page.captureScreenshot');
+        await writeFile(path.join(dir, 'page.png'), Buffer.from(screenshot.data, 'base64'));
+      }
       if (requestExit && page.result.value.exitType === 'function') {
         await cdp(target.webSocketDebuggerUrl, 'Runtime.evaluate',
           { expression: "setTimeout(() => window.api.system.exit(), 250); 'requested'", returnByValue: true });
@@ -92,9 +102,56 @@ async function observe(port, child, requestExit = true) {
   throw new Error('WebEngine debug endpoint unavailable');
 }
 
+async function runProcess(spec, dir, data, port, env) {
+  const child = spawn(helper, [path.join(build, 'src', 'Jellyfin Desktop.exe'), data, ...(spec.arg ? [spec.arg] : [])],
+    { env, cwd: mode === '--packaged' ? path.join(build, 'src') : undefined,
+      windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+  let log = '';
+  let stdinError;
+  child.stdin.on('error', error => { stdinError = String(error); });
+  child.stdout.on('data', chunk => { log += chunk; });
+  child.stderr.on('data', chunk => { log += chunk; });
+  const completion = new Promise(resolve => {
+    let spawnError;
+    child.on('error', error => { spawnError = String(error); });
+    child.on('close', (code, signal) => { child.diagnosticClosed = true; resolve({ code, signal, spawnError }); });
+  });
+  let observation;
+  try {
+    const work = async () => {
+      if (spec.windowActions) {
+        await observe(port, child, dir, false);
+        child.stdin.end('x');
+        for (let i = 0; i < 240 && !/window actions (passed|failed)/.test(log) &&
+             child.exitCode === null && child.signalCode === null && !stdinError; i++) await delay(250);
+        if (stdinError) throw new Error(`helper stdin: ${stdinError}`);
+      }
+      const result = await observe(port, child, dir);
+      if (spec.windowActions && !log.includes('window actions passed')) result.actionError = 'Window actions failed or timed out';
+      return result;
+    };
+    observation = await bounded(Promise.race([work(), completion.then(result => {
+      throw new Error(`helper closed: ${JSON.stringify(result)}`);
+    })]), 90000, { error: 'case deadline exceeded' });
+  } catch (error) { observation = { error: String(error) }; }
+  let closed = await bounded(completion, 15000, null);
+  if (!closed) {
+    child.kill();
+    closed = await bounded(completion, 5000, null);
+    observation.cleanupError = closed ? 'helper terminated after deadline' : 'helper did not close after termination';
+  }
+  return { observation, closed, log };
+}
+
 async function runCase(spec) {
     const dir = path.join(output, spec.name);
     const data = path.join(spec.sharedData ? path.join(output, 'geometry-profile') : dir, 'data');
+    const profile = spec.profile;
+    const cacheDir = path.join(build, 'src', 'cache', 'profiles', profile);
+    await mkdir(dir, { recursive: true });
+    let log = '';
+    let result = { case: spec.name, cacheDir, observation: { error: 'case did not start' }, helperExit: null, log: '' };
+    try {
     await mkdir(path.join(data, 'profiles', profile), { recursive: true });
     await mkdir(path.join(dir, 'temp'), { recursive: true });
     if (!spec.reuseData) {
@@ -106,28 +163,13 @@ async function runCase(spec) {
     if (spec.logFailure) await writeFile(path.join(data, 'profiles', profile, 'logs'), 'block log directory');
     const port = await portNumber();
     const env = caseEnvironment(spec, dir, port);
-    const child = spawn(helper, [path.join(build, 'src', 'Jellyfin Desktop.exe'), data, ...(spec.arg ? [spec.arg] : [])],
-      { env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-    let log = '';
-    child.stdout.on('data', chunk => { log += chunk; });
-    child.stderr.on('data', chunk => { log += chunk; });
-    let observation;
-    try {
-      if (spec.windowActions) {
-        await observe(port, child, false);
-        child.stdin.end('x');
-        for (let i = 0; i < 240 && !/window actions (passed|failed)/.test(log) && child.exitCode === null; i++) await delay(250);
-      }
-      observation = await observe(port, child);
-      if (spec.windowActions && !log.includes('window actions passed'))
-        observation.actionError = 'Window actions failed or timed out';
-    }
-    catch (error) { observation = { error: String(error) }; }
-    const [code] = child.exitCode === null ? await once(child, 'exit') : [child.exitCode];
-    await writeFile(path.join(dir, 'console.log'), log);
+    const outcome = await runProcess(spec, dir, data, port, env);
+    log = outcome.log;
     const diagnostic = log.split(/\r?\n/).filter(line =>
       /app pid|app wait|job active|window actions|window bounds|Failed to create temporary log|ERROR:/.test(line)).join('\n');
-    const result = { case: spec.name, observation, helperExit: code, log: diagnostic };
+    result = { case: spec.name, cacheDir, observation: outcome.observation,
+      helperExit: outcome.closed?.code ?? null, helperSignal: outcome.closed?.signal ?? null,
+      spawnError: outcome.closed?.spawnError, log: diagnostic };
     if (mode === '--packaged') result.runtimeEnvironment = { path: env.PATH,
       qtVariableNames: Object.keys(env).filter(key => /^(QT|QML)/i.test(key)).sort() };
     if (spec.sharedData) {
@@ -135,9 +177,12 @@ async function runCase(spec) {
       await writeFile(path.join(dir, 'storage.json'), storage);
       result.bounds = /window bounds (-?\d+ -?\d+ -?\d+ -?\d+)/.exec(log)?.[1];
     }
-    result.failures = checkCase(spec, result);
-    await writeFile(path.join(dir, 'result.json'), JSON.stringify(result, null, 2));
-    delete result.observation.raw;
+    } catch (error) { result.observation = { error: String(error) }; }
+    finally {
+      result.failures = checkCase(spec, result);
+      await writeFile(path.join(dir, 'console.log'), log);
+      await writeFile(path.join(dir, 'result.json'), JSON.stringify(result, null, 2));
+    }
     return result;
 }
 
@@ -147,6 +192,8 @@ function checkCase(spec, result) {
   if ((helperExit !== 0 && !(spec.windowActions && helperExit === 7)) || !log.includes('app wait 0 exit 0') ||
       !log.includes('forcedCleanup false; job active processes 0')) failures.push('unclean exit');
   if (observation.error) return [...failures, observation.error];
+  if (observation.cleanupError || result.spawnError || result.helperSignal)
+    failures.push(observation.cleanupError || result.spawnError || `helper signal ${result.helperSignal}`);
   if (observation.actionError) failures.push(observation.actionError);
   const { page, gpu, exitRequested } = observation;
   if (page.title !== 'Jellyfin' || !page.text.includes('Server Address') ||
@@ -165,8 +212,17 @@ function checkCase(spec, result) {
 }
 
 async function main() {
-  const markerFile = await open(marker, 'wx');
-  await markerFile.close();
+  let ownsMarker = false;
+  try {
+    const markerFile = await open(marker, 'wx');
+    ownsMarker = true;
+    await markerFile.close();
+  } catch (error) {
+    if (ownsMarker) { await rm(marker); throw error; }
+    if (mode !== '--packaged' || error.code !== 'EEXIST') throw error;
+    const existing = await lstat(marker);
+    if (!existing.isFile() || existing.size !== 0) throw new Error('Existing portable marker is not an empty file');
+  }
   try {
     await mkdir(outputRoot, { recursive: true });
     output = await mkdtemp(path.join(outputRoot, 'run-'));
@@ -183,18 +239,21 @@ async function main() {
       ] :
       mode === '--window-actions' ? [{ name: 'window-actions', arg: '--window-actions', windowActions: true }] : cases;
     let firstBounds;
+    const geometryProfile = randomUUID().replaceAll('-', '');
     for (const spec of selected) {
+      spec.profile = spec.sharedData ? geometryProfile : randomUUID().replaceAll('-', '');
       const result = await runCase(spec);
       if (spec.sharedData) {
         if (!firstBounds) firstBounds = result.bounds;
         if (!result.bounds || result.bounds !== firstBounds) result.failures.push('restored bounds differ');
         await writeFile(path.join(output, spec.name, 'result.json'), JSON.stringify(result, null, 2));
       }
+      delete result.observation.raw;
       console.log(JSON.stringify(result));
       if (result.failures.length) process.exitCode = 1;
     }
   } finally {
-    await rm(marker);
+    if (ownsMarker) await rm(marker);
   }
 }
 
