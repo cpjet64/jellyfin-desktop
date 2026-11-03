@@ -17,6 +17,7 @@ class TestFaultStop : public QObject
 private:
   void healthyRoute(InputComponent& input, QSignalSpy& forwarded, QSignalSpy& nativeStops);
   void detachedRoute(InputComponent& input, QSignalSpy& forwarded, QSignalSpy& nativeStops);
+  void appleStop(InputComponent& input, QSignalSpy& forwarded, QSignalSpy& nativeStops, bool detached);
   void nativeResult();
 private slots:
   void routesAndNativeResult();
@@ -55,6 +56,7 @@ void TestFaultStop::healthyRoute(InputComponent& input, QSignalSpy& forwarded, Q
 
 void TestFaultStop::detachedRoute(InputComponent& input, QSignalSpy& forwarded, QSignalSpy& nativeStops)
 {
+  const int forwardedBaseline = forwarded.count();
   QSignalSpy unavailableActions(&input, &InputComponent::hostActionUnavailable);
   input.m_currentLongPressAction.insert("short", "stop");
   input.m_autoRepeatActions = {"stop"};
@@ -79,10 +81,19 @@ void TestFaultStop::detachedRoute(InputComponent& input, QSignalSpy& forwarded, 
   QCOMPARE(nativeStops.count(), 3);
   input.remapInput("LIRC", "KEY_STOP_LIRCUP", InputBase::KeyUp);
   input.executeActions({"host:test-fault-route"});
-  QCOMPARE(forwarded.count(), 5);
+  QCOMPARE(forwarded.count(), forwardedBaseline);
   QCOMPARE(hostCalls, 2);
   input.sendAction("host:test-fault-route");
   QCOMPARE(hostCalls, 3);
+}
+
+void TestFaultStop::appleStop(InputComponent& input, QSignalSpy& forwarded, QSignalSpy& nativeStops, bool detached)
+{
+  const int forwardedBaseline = forwarded.count();
+  const int nativeBaseline = nativeStops.count();
+  input.remapInput("AppleMediaKeys", "KEY_STOP", InputBase::KeyPressed);
+  QCOMPARE(forwarded.count(), forwardedBaseline + (detached ? 0 : 1));
+  QCOMPARE(nativeStops.count(), nativeBaseline + (detached ? 1 : 0));
 }
 
 void TestFaultStop::nativeResult()
@@ -113,13 +124,19 @@ void TestFaultStop::routesAndNativeResult()
   const QString mapping = QFINDTESTDATA("../resources/inputmaps/LIRC.json");
   QVERIFY(!mapping.isEmpty());
   QVERIFY(QFile::copy(mapping, profile.path() + "/profiles/inputmaps/LIRC.json"));
+  const QString appleMapping = QFINDTESTDATA("../resources/inputmaps/apple-media-keys.json");
+  QVERIFY(!appleMapping.isEmpty());
+  QVERIFY(QFile::copy(appleMapping, profile.path() + "/profiles/inputmaps/apple-media-keys.json"));
   auto& input = InputComponent::Get();
   QVERIFY(input.m_mappings->loadMappings());
   QVERIFY(input.m_mappings->mapToAction("LIRC", "KEY_STOP").contains(QVariant(QStringLiteral("stop"))));
+  QVERIFY(input.m_mappings->mapToAction("AppleMediaKeys", "KEY_STOP").contains(QVariant(QStringLiteral("stop"))));
   QSignalSpy forwarded(&input, &InputComponent::hostInput);
   QSignalSpy nativeStops(&input, &InputComponent::nativeStopResult);
   healthyRoute(input, forwarded, nativeStops);
+  appleStop(input, forwarded, nativeStops, false);
   detachedRoute(input, forwarded, nativeStops);
+  appleStop(input, forwarded, nativeStops, true);
   nativeResult();
 }
 
