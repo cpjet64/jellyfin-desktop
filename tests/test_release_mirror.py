@@ -22,6 +22,7 @@ class MirrorTests(unittest.TestCase):
         self.content = b"binary"
         self.etag = '"one"'
         self.patches = []
+        self.deleted = []
 
     def api(self, url, token=None, method="GET", payload=None):
         if url.endswith("/git/ref/tags/v1"):
@@ -38,9 +39,14 @@ class MirrorTests(unittest.TestCase):
     def request(self, url, token=None, method="GET", payload=None, content_type=None, asset=False):
         if method == "GET":
             return b"binary"
+        if method == "DELETE":
+            asset_id = int(url.rsplit("/", 1)[1])
+            self.deleted.append(asset_id)
+            self.assets[:] = [item for item in self.assets if item.get("id") != asset_id]
+            return b""
         if self.fail_upload:
             raise ValueError("interrupted upload")
-        self.assets.append({"name": "app.zip", "size": len(payload),
+        self.assets.append({"name": "app.zip", "state": "uploaded", "size": len(payload),
                             "digest": "sha256:" + hashlib.sha256(payload).hexdigest()})
         return json.dumps(self.assets[-1]).encode()
 
@@ -73,6 +79,30 @@ class MirrorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.sync()
         self.assertEqual(self.patches, [])
+
+    def test_failed_upload_starter_is_replaced_and_verified(self):
+        self.fail_upload = True
+        with self.assertRaises(ValueError):
+            self.sync()
+        self.assets.append({"name": "app.zip", "state": "starter", "size": 0,
+                            "digest": None, "id": 91})
+        self.fail_upload = False
+        self.sync()
+        self.assertEqual(self.deleted, [91])
+        self.assertEqual(self.assets[0]["state"], "uploaded")
+        self.assertFalse(self.releases["v1"]["draft"])
+
+    def test_nonempty_or_unowned_starter_is_preserved(self):
+        self.releases["v1"] = {"id": 7, "body": "human release", "draft": True}
+        self.assets.append({"name": "app.zip", "state": "starter", "size": 0,
+                            "digest": None, "id": 91})
+        with self.assertRaises(ValueError):
+            self.sync()
+        self.releases["v1"]["body"] = mirror.MARKER
+        self.assets[0]["size"] = 1
+        with self.assertRaises(ValueError):
+            self.sync()
+        self.assertEqual(self.deleted, [])
 
     def test_no_etag_downloads_each_time(self):
         self.etag = None

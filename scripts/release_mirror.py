@@ -171,12 +171,17 @@ def sync_release(release, existing, token, latest=False, current_latest=None):
               for name, _, digest, size, etag, url in data}
     validators = {name: {"etag": etag, "url": url}
                   for name, _, digest, size, etag, url in data}
+    starters = {}
     for name, _, digest, size, _, _ in data:
-        if name in uploaded and (uploaded[name].get("digest") != digest or
-                                 uploaded[name].get("size") != size):
+        asset = uploaded.get(name)
+        if (asset and asset.get("state") == "starter" and asset.get("size") == 0 and
+                asset.get("digest") is None and type(asset.get("id")) is int and asset["id"] > 0):
+            starters[name] = asset["id"]
+        elif asset and (asset.get("state") != "uploaded" or asset.get("digest") != digest or
+                        asset.get("size") != size):
             raise ValueError(f"Asset collision or unverifiable digest: {tag}/{name}")
     body = write_body(release.get("description"), {"assets": assets, "validators": validators})
-    missing = [item for item in data if item[0] not in uploaded]
+    missing = [item for item in data if item[0] not in uploaded or item[0] in starters]
     if not target:
         target = api(f"{GITHUB}/releases", token, "POST", {
             "tag_name": tag, "name": release.get("name") or tag,
@@ -185,6 +190,8 @@ def sync_release(release, existing, token, latest=False, current_latest=None):
     elif missing and not target.get("draft"):
         api(f"{GITHUB}/releases/{target['id']}", token, "PATCH", {"draft": True})
         target["draft"] = True
+    for asset_id in starters.values():
+        request(f"{GITHUB}/releases/assets/{asset_id}", token, "DELETE")
     for name, content, digest, size, _, _ in missing:
         if content is None:
             raise ValueError(f"Missing bytes for new asset: {tag}/{name}")
