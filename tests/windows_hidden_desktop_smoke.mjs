@@ -1,6 +1,6 @@
 // Diagnostic: runs the real application on a non-input desktop for 25 seconds.
 import { spawn } from 'node:child_process';
-import { mkdir, open, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { once } from 'node:events';
@@ -11,7 +11,8 @@ if (![helper, build, qt].every(value => value && path.isAbsolute(value))) {
 }
 if (mode && !['--baseline', '--log-failure'].includes(mode)) throw new Error('Unknown mode');
 const marker = path.join(build, 'src', 'portable');
-const output = path.join(build, 'desktop-smoke-native');
+const outputRoot = path.join(build, 'desktop-smoke-native');
+let output;
 const profile = '0123456789abcdef0123456789abcdef';
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -59,11 +60,13 @@ async function observe(port, child) {
       if (page.result.value.url === 'about:blank') throw new Error('Page still loading');
       const gpu = await cdp(version.webSocketDebuggerUrl, 'SystemInfo.getInfo');
       if (page.result.value.exitType === 'function') {
-        await cdp(target.webSocketDebuggerUrl, 'Runtime.evaluate', { expression: 'window.api.system.exit()' }).catch(() => {});
+        await cdp(target.webSocketDebuggerUrl, 'Runtime.evaluate',
+          { expression: "setTimeout(() => window.api.system.exit(), 250); 'requested'", returnByValue: true });
       }
       return { page: page.result.value, gpu: { featureStatus: gpu.gpu.featureStatus,
         displayType: gpu.gpu.auxAttributes.displayType, renderer: gpu.gpu.auxAttributes.glRenderer,
-        commandLine: gpu.commandLine } };
+        commandLine: gpu.commandLine }, exitRequested: page.result.value.exitType === 'function',
+        raw: { version, targets, page, gpu } };
     } catch { await delay(500); }
   }
   throw new Error('WebEngine debug endpoint unavailable');
@@ -94,16 +97,45 @@ async function runCase(spec) {
     try { observation = await observe(port, child); }
     catch (error) { observation = { error: String(error) }; }
     const [code] = child.exitCode === null ? await once(child, 'exit') : [child.exitCode];
+    await writeFile(path.join(dir, 'console.log'), log);
     const diagnostic = log.split(/\r?\n/).filter(line =>
       /app pid|app wait|job active|Failed to create temporary log|ERROR:/.test(line)).join('\n');
-    return { case: spec.name, observation, helperExit: code, log: diagnostic };
+    const result = { case: spec.name, observation, helperExit: code, log: diagnostic };
+    result.failures = checkCase(spec, result);
+    await writeFile(path.join(dir, 'result.json'), JSON.stringify(result, null, 2));
+    delete result.observation.raw;
+    return result;
+}
+
+function checkCase(spec, result) {
+  const failures = [];
+  const { observation, log, helperExit } = result;
+  if (helperExit !== 0 || !log.includes('app wait 0 exit 0') ||
+      !log.includes('forcedCleanup false; job active processes 0')) failures.push('unclean exit');
+  if (observation.error) return [...failures, observation.error];
+  const { page, gpu, exitRequested } = observation;
+  if (page.title !== 'Jellyfin' || !page.text.includes('Server Address') ||
+      !page.text.includes('CONNECT') || !exitRequested) failures.push('initial page or native exit');
+  const disabled = spec.arg === '--disable-gpu' || spec.flags === '--disable-gpu';
+  if (mode !== '--baseline' && gpu.featureStatus.gpu_compositing !== (disabled ? 'disabled_software' : 'enabled'))
+    failures.push('unexpected GPU compositing');
+  if (mode !== '--baseline' && disabled && !gpu.commandLine.includes('--disable-gpu')) failures.push('missing disable-gpu');
+  if (mode === '--baseline' && (gpu.featureStatus.gpu_compositing !== 'enabled' ||
+      (disabled && gpu.commandLine.includes('--disable-gpu')))) failures.push('unexpected baseline backend');
+  if (spec.disablePinch && !gpu.commandLine.includes('--disable-pinch')) failures.push('missing disable-pinch');
+  if (spec.name === 'quoted-flags' && !gpu.commandLine.includes('--user-agent="Desktop Smoke Test"'))
+    failures.push('quoted argument not preserved');
+  if (spec.logFailure && !log.includes('Failed to create temporary log file')) failures.push('missing log failure diagnostic');
+  return failures;
 }
 
 async function main() {
   const markerFile = await open(marker, 'wx');
   await markerFile.close();
   try {
-    await mkdir(output);
+    await mkdir(outputRoot, { recursive: true });
+    output = await mkdtemp(path.join(outputRoot, 'run-'));
+    console.log(`Evidence: ${output}`);
     const cases = [{ name: 'normal' }, { name: 'cli-disable-gpu', arg: '--disable-gpu' },
       { name: 'env-disable-gpu-pinch', flags: '--disable-gpu', disablePinch: true },
       { name: 'quoted-flags', flags: '--user-agent="Desktop Smoke Test"' }];
@@ -112,7 +144,7 @@ async function main() {
     for (const spec of selected) {
       const result = await runCase(spec);
       console.log(JSON.stringify(result));
-      if (result.helperExit !== 0 || result.observation.error) process.exitCode = 1;
+      if (result.failures.length) process.exitCode = 1;
     }
   } finally {
     await rm(marker);

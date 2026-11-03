@@ -2,12 +2,16 @@
 #include <cstdio>
 #include <string>
 
-BOOL CALLBACK closeAppWindow(HWND window, LPARAM context)
+DWORD waitForJob(HANDLE job)
 {
-  DWORD pid = 0;
-  GetWindowThreadProcessId(window, &pid);
-  if (pid == static_cast<DWORD>(context)) PostMessageW(window, WM_CLOSE, 0, 0);
-  return TRUE;
+  JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting{};
+  for (int i = 0; i < 50; ++i) {
+    if (!QueryInformationJobObject(job, JobObjectBasicAccountingInformation, &accounting, sizeof(accounting), nullptr))
+      return static_cast<DWORD>(-1);
+    if (accounting.ActiveProcesses == 0) return 0;
+    Sleep(100);
+  }
+  return accounting.ActiveProcesses;
 }
 
 int wmain(int argc, wchar_t **argv)
@@ -49,24 +53,19 @@ int wmain(int argc, wchar_t **argv)
     CloseHandle(process.hThread); CloseHandle(process.hProcess); CloseHandle(job); CloseDesktop(desktop);
     return 8;
   }
-  DWORD wait = WaitForSingleObject(process.hProcess, 12000);
-  if (wait == WAIT_TIMEOUT) {
-    EnumDesktopWindows(desktop, closeAppWindow, static_cast<LPARAM>(process.dwProcessId));
-    wait = WaitForSingleObject(process.hProcess, 5000);
-  }
+  const DWORD wait = WaitForSingleObject(process.hProcess, 12000);
   DWORD exitCode = 0;
   GetExitCodeProcess(process.hProcess, &exitCode);
   std::printf("app wait %lu exit %lu\n", wait, exitCode); std::fflush(stdout);
-  TerminateJobObject(job, 1);
-  JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting{};
-  bool queried = false;
-  for (int i = 0; i < 50; ++i) {
-    if (!QueryInformationJobObject(job, JobObjectBasicAccountingInformation, &accounting, sizeof(accounting), nullptr)) break;
-    queried = true;
-    if (accounting.ActiveProcesses == 0) break;
-    Sleep(100);
+  DWORD active = waitForJob(job);
+  const bool success = wait == WAIT_OBJECT_0 && exitCode == 0 && active == 0;
+  const bool forced = !success;
+  if (forced) {
+    TerminateJobObject(job, 1);
+    active = waitForJob(job);
   }
-  std::printf("job active processes %lu\n", accounting.ActiveProcesses); std::fflush(stdout);
+  std::printf("forcedCleanup %s; job active processes %lu\n", forced ? "true" : "false", active);
+  std::fflush(stdout);
   CloseHandle(process.hThread); CloseHandle(process.hProcess); CloseHandle(job); CloseDesktop(desktop);
-  return queried && accounting.ActiveProcesses == 0 ? 0 : 7;
+  return success ? 0 : 7;
 }
