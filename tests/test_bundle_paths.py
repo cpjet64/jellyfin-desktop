@@ -29,6 +29,13 @@ set(QTROOT "${CMAKE_SOURCE_DIR}/mock Qt")
 set(WINDOWS_VCRUNTIME_DIR "${CMAKE_SOURCE_DIR}/runtime files")
 set(WINDOWS_VCREDIST_EXE "${CMAKE_SOURCE_DIR}/vc_redist.x64.exe")
 set(CEC_LIBRARY "C:\\fixture space\\cec.lib")
+set(INSTALL_BIN_DIR ".")
+if(NOT FIXTURE_MPVQT_KIND)
+  set(FIXTURE_MPVQT_KIND SHARED)
+endif()
+add_library(MpvQt::MpvQt ${FIXTURE_MPVQT_KIND} IMPORTED)
+set_target_properties(MpvQt::MpvQt PROPERTIES
+  IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/mpvqt files/MpvQt.dll")
 add_executable(windeployqt stub.c)
 set_target_properties(windeployqt PROPERTIES SUFFIX ".exe"
   RUNTIME_OUTPUT_DIRECTORY "$<1:${QTROOT}/bin>")
@@ -61,7 +68,7 @@ class BundlePathsTest(unittest.TestCase):
             shutil.copy2(MODULES / name, modules / name)
 
     def make_inputs(self):
-        for directory in ("mock Qt/bin", "runtime files", "mpv files", "mpv-fallback"):
+        for directory in ("mock Qt/bin", "runtime files", "mpv files", "mpv-fallback", "mpvqt files"):
             (self.source / directory).mkdir(parents=True, exist_ok=True)
         for name in ("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll"):
             (self.source / "runtime files" / name).write_bytes(name.encode())
@@ -69,21 +76,28 @@ class BundlePathsTest(unittest.TestCase):
         (self.source / "mock Qt/bin/Qt6Xml.dll").write_bytes(b"qt")
         (self.source / "mpv files/libmpv-2.dll").write_bytes(b"primary")
         (self.source / "mpv-fallback/libmpv-2.dll").write_bytes(b"fallback")
+        (self.source / "mpvqt files/MpvQt.dll").write_bytes(b"external-mpvqt")
 
-    def check_bundle(self, mpv_path):
+    def check_bundle(self, mpv_path, shared=True):
         env = os.environ.copy()
         env["BUNDLE_ARGS"] = str(self.args_log)
         self.run_cmake(["-S", str(self.source), "-B", str(self.binary),
-                        "-DMPV_LIBRARY=" + mpv_path], env)
+                        "-DMPV_LIBRARY=" + mpv_path,
+                        "-DFIXTURE_MPVQT_KIND=" + ("SHARED" if shared else "STATIC")], env)
         cache = (self.binary / "CMakeCache.txt").read_text().splitlines()
         library = next(line.split("=", 1)[1] for line in cache
                        if line.startswith("MPV_LIBRARY:"))
         self.assertEqual(library, mpv_path)
         self.run_cmake(["--build", str(self.binary), "--config", "Debug"], env)
-        self.run_cmake(["-DCMAKE_INSTALL_PREFIX=" + str(self.install), "-P",
-                        str(self.binary / "CompleteBundleWin.cmake")], env)
+        self.run_cmake(["-DCMAKE_INSTALL_PREFIX=" + str(self.install),
+                        "-DCMAKE_INSTALL_CONFIG_NAME=Debug", "-P",
+                        str(self.binary / "cmake_install.cmake")], env)
         self.assertEqual((self.install / "libmpv-2.dll").read_bytes(), b"primary")
         self.assertEqual((self.install / "libmpv-fallback.dll").read_bytes(), b"fallback")
+        if shared:
+            self.assertEqual((self.install / "MpvQt.dll").read_bytes(), b"external-mpvqt")
+        else:
+            self.assertFalse((self.install / "MpvQt.dll").exists())
         args = self.args_log.read_text().splitlines()
         self.assertEqual(Path(args[args.index("--qmldir") + 1]), self.source / "src/ui")
 
@@ -103,6 +117,9 @@ class BundlePathsTest(unittest.TestCase):
     def test_relative_path_resolves_from_build(self):
         relative = os.path.relpath(self.source / "mpv files/libmpv-2.dll.lib", self.binary)
         self.check_bundle(relative)
+
+    def test_static_mpvqt_does_not_install_a_runtime(self):
+        self.check_bundle((self.source / "mpv files/libmpv-2.dll.lib").as_posix(), shared=False)
 
 
 if __name__ == "__main__":
