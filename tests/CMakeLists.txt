@@ -6,7 +6,7 @@ find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
 add_executable(test_mpv_test_bootstrap test_mpv_test_bootstrap.cpp mpv_test_bootstrap.cpp)
 target_link_libraries(test_mpv_test_bootstrap PRIVATE Qt6::Core Qt6::Test)
-set(_mpv_guard_pure absentAndExisting rejectLinksAndErrorsBeforeInitialization rootAndDescendantCases pathSyntax)
+set(_mpv_guard_pure absentAndExisting rejectLinksAndErrorsBeforeInitialization rootAndDescendantCases pathSyntax standardLocationSyntax)
 if(WIN32)
   list(APPEND _mpv_guard_pure unusedWindowsDrive)
 endif()

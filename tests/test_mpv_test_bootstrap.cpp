@@ -17,6 +17,7 @@ private slots:
   void rejectLinksAndErrorsBeforeInitialization();
   void rootAndDescendantCases();
   void pathSyntax();
+  void standardLocationSyntax();
   void unusedWindowsDrive();
   void runtimePrerequisites();
 };
@@ -41,6 +42,33 @@ void TestMpvTestBootstrap::absentAndExisting()
   QVERIFY(external.open(QIODevice::WriteOnly));
   external.close();
   QVERIFY(!checkCandidateOnDisk(other, owned.path(), &error));
+}
+
+void TestMpvTestBootstrap::standardLocationSyntax()
+{
+  int inspected = 0;
+  const auto inspect = [&](const QString& path) {
+    ++inspected;
+#ifdef Q_OS_WIN
+    return path.endsWith(":/") ? Entry::Directory : Entry::Missing;
+#else
+    return path == "/" ? Entry::Directory : Entry::Missing;
+#endif
+  };
+  QString error;
+  const QString valid = QDir::currentPath();
+#ifdef Q_OS_WIN
+  const QString invalid = QStringLiteral("\\\\?\\C:\\example path");
+  // Qt strips this namespace in QDir::filePath; reject it before constructing QDir.
+  QVERIFY(QDir(invalid).filePath("mpvqt/mpvqt.conf").startsWith("C:/"));
+#else
+  const QString invalid = QStringLiteral("relative/config");
+#endif
+  QVERIFY(!checkStandardLocations(invalid, valid, valid, inspect, &error));
+  QVERIFY(!checkStandardLocations(valid, invalid, valid, inspect, &error));
+  QCOMPARE(inspected, 0);
+  QVERIFY(checkStandardLocations(valid, valid, valid, inspect, &error));
+  QVERIFY(inspected > 0);
 }
 
 void TestMpvTestBootstrap::rootAndDescendantCases()

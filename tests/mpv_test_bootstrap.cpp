@@ -91,6 +91,25 @@ bool checkCandidate(const QString& candidate, const QString& ownedRoot,
   return false;
 }
 
+bool checkStandardLocations(const QString& config, const QString& cache, const QString& ownedRoot,
+                            const Inspector& inspect, QString* error)
+{
+  if (!supportedAbsolutePath(config) || !supportedAbsolutePath(cache) || !supportedAbsolutePath(ownedRoot)) {
+    if (error) *error = "Unsupported Qt config, cache, or owned root path";
+    return false;
+  }
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
+  if (!contained(QDir::cleanPath(config), ownedRoot) || !contained(QDir::cleanPath(cache), ownedRoot)) {
+    if (error) *error = "Linux Qt config/cache must be under the owned test root";
+    return false;
+  }
+  if (!checkCandidate(QDir(cache).filePath(".mpv-test-cache-probe"), ownedRoot, inspect, error)) return false;
+#endif
+  const QString candidate = QDir(config).filePath("mpvqt/mpvqt.conf");
+  qInfo().noquote() << "MpvQt config candidate:" << candidate;
+  return checkCandidate(candidate, ownedRoot, inspect, error);
+}
+
 bool prepareMpvTestEnvironment(const QString& ownedRoot, QString* error)
 {
   if (!QCoreApplication::instance()) {
@@ -120,22 +139,8 @@ bool prepareMpvTestEnvironment(const QString& ownedRoot, QString* error)
 #endif
   const QString config = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
   const QString cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-  const QString candidate = QDir(config).filePath("mpvqt/mpvqt.conf");
-  qInfo().noquote() << "Qt config:" << config << "Qt cache:" << cache << "MpvQt config candidate:" << candidate;
-  if (config.isEmpty() || cache.isEmpty()) {
-    if (error) *error = "Qt did not provide config and cache locations";
-    return false;
-  }
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
-  if (!contained(QDir::cleanPath(config), owner.canonicalFilePath()) ||
-      !contained(QDir::cleanPath(cache), owner.canonicalFilePath())) {
-    if (error) *error = "Linux Qt config/cache must be under the owned test root";
-    return false;
-  }
-  if (!checkCandidateOnDisk(QDir(cache).filePath(".mpv-test-cache-probe"), owner.canonicalFilePath(), error))
-    return false;
-#endif
-  return checkCandidateOnDisk(candidate, owner.canonicalFilePath(), error);
+  qInfo().noquote() << "Qt config:" << config << "Qt cache:" << cache;
+  return checkStandardLocations(config, cache, owner.canonicalFilePath(), inspectPath, error);
 }
 
 bool checkCandidateOnDisk(const QString& candidate, const QString& ownedRoot, QString* error)

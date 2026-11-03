@@ -11,5 +11,7 @@ using Inspector = std::function<Entry(const QString&)>;
 bool checkCandidate(const QString& candidate, const QString& ownedRoot,
                     const Inspector& inspect, QString* error);
 bool checkCandidateOnDisk(const QString& candidate, const QString& ownedRoot, QString* error);
+bool checkStandardLocations(const QString& config, const QString& cache, const QString& ownedRoot,
+                            const Inspector& inspect, QString* error);
 bool prepareMpvTestEnvironment(const QString& ownedRoot, QString* error);
 }
