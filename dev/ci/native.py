@@ -9,6 +9,10 @@ import subprocess
 import sys
 import tempfile
 
+sys.dont_write_bytecode = True
+from native_bootstrap import bootstrap
+from native_inventory import incompatible_tools, inventory
+
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
 RESULTS = BUILD / "ci-results"
@@ -43,20 +47,48 @@ def preflight():
     machine = platform.machine().lower()
     free = shutil.disk_usage(ROOT).free
     print(f"Runner OS={system} architecture={machine} free_bytes={free}", flush=True)
+    print(f"CI job={os.environ.get('CI_JOB_ID', 'unknown')} runner={os.environ.get('CI_RUNNER_ID', 'unknown')} runner_arch={os.environ.get('CI_RUNNER_EXECUTABLE_ARCH', 'unknown')}", flush=True)
+    mode = os.environ.get("CI_MPVQT_MODE")
+    prefixes = [os.environ[key] for key in ("CI_QT_PREFIX", "CI_MPV_PREFIX", "CI_NATIVE_TOOL_PREFIX") if os.environ.get(key)]
+    invalid_prefixes = [prefix for prefix in prefixes if not Path(prefix).is_absolute() or not Path(prefix).is_dir()]
+    valid_prefixes = [prefix for prefix in prefixes if prefix not in invalid_prefixes]
+    standard_bins = ["/usr/local/bin", "/usr/bin", "/bin"]
+    if system == "Darwin":
+        standard_bins = ["/opt/homebrew/bin"] + standard_bins + ["/usr/sbin", "/sbin"]
+    os.environ["PATH"] = os.pathsep.join([str(Path(prefix) / "bin") for prefix in valid_prefixes] + standard_bins)
+    os.environ["PKG_CONFIG_PATH"] = os.pathsep.join(str(Path(prefix) / "lib/pkgconfig") for prefix in valid_prefixes)
+    for key in ("PKG_CONFIG_LIBDIR", "CMAKE_PREFIX_PATH", "CC", "CXX", "CPATH", "LIBRARY_PATH"):
+        os.environ.pop(key, None)
+    found = inventory(system, mode)
     if (system, machine) not in (("Linux", "x86_64"), ("Darwin", "x86_64")):
         raise RuntimeError(f"Unsupported native runner: {system}/{machine}")
     if os.environ.get("CI_JOB_IMAGE"):
         raise RuntimeError("BLOCKED: native shell runner required")
-    tools = ["cmake", "ctest", "ninja", "pkg-config", "git", "c++", "node"]
-    if system == "Linux":
-        tools += ["xvfb-run", "xauth", "dbus-run-session", "glxinfo"]
-    for tool in tools:
-        print(f"Tool {tool}: {shutil.which(tool) or 'MISSING'}", flush=True)
     if free < 10 * 1024**3:
         raise RuntimeError("BLOCKED: at least 10 GiB free space required")
-    missing = [tool for tool in tools if not shutil.which(tool)]
+    if invalid_prefixes:
+        raise RuntimeError("BLOCKED: explicit native prefixes must be existing absolute directories")
+    missing = [tool for tool, path in found.items() if not path]
+    for tool in incompatible_tools(found):
+        print(f"Tool {tool}: incompatible version", flush=True)
+        if tool not in missing:
+            missing.append(tool)
+    can_bootstrap = {"cmake", "ctest", "ninja", "node"} if system == "Linux" else set()
+    host_missing = [name for name in missing if name not in can_bootstrap]
+    if host_missing:
+        raise RuntimeError("BLOCKED: missing host prerequisites: " + ", ".join(host_missing))
     if missing:
-        raise RuntimeError("BLOCKED: missing tools: " + ", ".join(missing))
+        job = os.environ.get("CI_JOB_ID", "")
+        if not job.isdecimal():
+            raise RuntimeError("BLOCKED: numeric CI_JOB_ID required for job-local tools")
+        requested = set(missing)
+        if "ctest" in requested:
+            requested.add("cmake")
+        bins = bootstrap(requested, ROOT / "deps" / ("ci-" + job) / "native-tools")
+        os.environ["PATH"] = os.pathsep.join([str(path) for path in bins] + [os.environ.get("PATH", "")])
+        for name in missing:
+            if not shutil.which(name):
+                raise RuntimeError(f"BLOCKED: bootstrapped tool unavailable: {name}")
     if system == "Darwin":
         if os.environ.get("CI_DEDICATED_GUI_SESSION") != "1":
             raise RuntimeError("BLOCKED: dedicated macOS GUI session not attested")
@@ -78,7 +110,6 @@ def preflight():
         if console != str(os.getuid()):
             raise RuntimeError("BLOCKED: dedicated GUI session does not own the console")
         print(f"Dedicated macOS GUI session and console uid: {os.getuid()}", flush=True)
-    mode = os.environ.get("CI_MPVQT_MODE")
     if mode not in ("static", "system"):
         raise RuntimeError("CI_MPVQT_MODE must be static or system")
     return system, mode
@@ -86,6 +117,8 @@ def preflight():
 
 def configure(system, mode):
     command("report-gate-tests", [sys.executable, "tests/test_ci_results.py"])
+    command("archive-safety-tests", [sys.executable, "dev/ci/test_safe_extract.py"])
+    command("inventory-tests", [sys.executable, "dev/ci/test_native_inventory.py"])
     command("compiler-version", ["c++", "--version"])
     command("cmake-version", ["cmake", "--version"])
     command("mpv-version", ["pkg-config", "--modversion", "mpv"])
@@ -102,7 +135,11 @@ def configure(system, mode):
         raise RuntimeError("Unexpected mpvqt source revision")
     options = ["cmake", "-S", str(ROOT), "-B", str(BUILD), "-G", "Ninja",
                "-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-DUSE_STATIC_MPVQT=" + ("ON" if mode == "static" else "OFF"),
-               "-DMPVQT_EXTERNAL_EVENTS=" + ("ON" if mode == "static" else "OFF")]
+               "-DMPVQT_EXTERNAL_EVENTS=" + ("ON" if mode == "static" else "OFF"),
+               "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF", "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF"]
+    prefixes = [os.environ[key] for key in ("CI_QT_PREFIX", "CI_MPV_PREFIX") if os.environ.get(key)]
+    if prefixes:
+        options.append("-DCMAKE_PREFIX_PATH=" + ";".join(prefixes))
     command("configure", options, timeout=300)
     command("build", ["cmake", "--build", str(BUILD), "--parallel", "4"], timeout=1800)
     prefix = ["dbus-run-session", "--"] if system == "Linux" else []
@@ -163,6 +200,7 @@ def main():
     RESULTS.mkdir(parents=True, exist_ok=True)
     system, mode = preflight()
     with tempfile.TemporaryDirectory(prefix="ci-runtime-", dir=BUILD) as runtime:
+        os.environ["JELLYFIN_TEST_OWNED_ROOT"] = str(BUILD)
         for name in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR"):
             path = Path(runtime) / name.lower()
             path.mkdir(mode=0o700)

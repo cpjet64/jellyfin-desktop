@@ -47,13 +47,33 @@ also downloads Qt 6.9.3, its WebEngine, WebChannel and Positioning modules,
 and primary and fallback mpv archives. The archives are checked against
 SourceForge's published SHA-256 values before the larger Qt download.
 
-Linux and macOS require their native compiler, CMake, Ninja, pkg-config, mpv,
-Qt modules, Node and Python, plus at least 10 GiB free. Linux additionally
-requires Xvfb, xauth, D-Bus and glxinfo. Each system job needs a compatible
-installed mpvqt development package; missing packages fail rather than switch
-to the bundled library. No host package installation is attempted. Each job
-records its build and test evidence, and the Windows packaging job publishes an
-unsigned installer, portable ZIP, checksums and provenance when successful.
+Linux and macOS require a native compiler, pkg-config, mpv, Qt modules, Python,
+and at least 10 GiB free. Linux additionally requires installed Xvfb, xauth,
+D-Bus and glxinfo. Linux can bootstrap missing CMake, CTest, Ninja and Node into
+a job-owned prefix from pinned official archives. Inventory reports the observed
+distribution and installed/candidate display-package versions; it does not
+install host packages. Qt and mpv must be available from standard locations or
+the explicit `CI_QT_PREFIX` and `CI_MPV_PREFIX` paths. macOS requires its native
+tools and a separately authorized dedicated GUI session; inventory does not
+create or attest that session.
+
+System jobs use an independently installed mpvqt package. Windows builds the
+unmodified pinned upstream source as a shared library in a job-owned prefix,
+using pinned KDE ECM 6.18.0 and the job's Qt and mpv inputs. It verifies the
+imported runtime lies in that prefix and records the application's shared-library
+linkage. This is an installed-package compatibility check using the job's own
+build, not proof of a separately supplied vendor package. Missing prerequisites
+fail rather than switch to the bundled implementation. Windows system packaging
+also requires the installed mpvqt runtime to be staged by the bundle rules.
+Each job records build and test evidence; the Windows packaging job publishes
+an unsigned installer, portable ZIP, checksums and provenance when successful.
+
+Qt's Windows known-folder paths do not necessarily follow `APPDATA` and
+`LOCALAPPDATA`. The CI test scope sets task-owned environment paths as defense
+in depth; test-side pre-initialization checks must prove actual Qt configuration
+and cache paths before mpv starts. A renderer readiness or scene-graph failure
+triggers a separate hidden-desktop OpenGL diagnostic while retaining the
+original failure. Other failures do not trigger the diagnostic.
 
 The configuration describes required proof, not a claim that the six jobs
 have passed. Verify runner eligibility, exact delivered SHA, terminal results,

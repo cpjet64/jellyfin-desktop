@@ -10,7 +10,7 @@ function Find-OptionalTool {
 
 function Get-VerifiedDownload {
     param([string]$Url, [string]$Destination, [string]$Sha256)
-    Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Destination
+    Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Destination -TimeoutSec 120
     if ((Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash -ne $Sha256) {
         throw "SHA-256 mismatch for $Url"
     }

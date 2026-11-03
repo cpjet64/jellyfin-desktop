@@ -10,6 +10,8 @@ $mpvVersion = '20261018-git-01e2533f31'
 . "$PSScriptRoot/ci-tools.ps1"
 . "$PSScriptRoot/ci-mpv.ps1"
 . "$PSScriptRoot/ci-gui.ps1"
+. "$PSScriptRoot/ci-mpvqt.ps1"
+. "$PSScriptRoot/ci-preflight.ps1"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 function Run-Native {
@@ -18,13 +20,9 @@ function Run-Native {
     if ($LASTEXITCODE -ne 0) { throw "$Program failed with exit code $LASTEXITCODE" }
 }
 
-if (-not $env:CI_JOB_ID) { throw 'This script requires an isolated GitLab job checkout.' }
+if ($env:CI_JOB_ID -notmatch '^\d+$') { throw 'This script requires an isolated GitLab job checkout.' }
 $drive = Get-PSDrive -Name ([System.IO.Path]::GetPathRoot($root).Substring(0, 1))
-Write-Host "Runner OS=$([Environment]::OSVersion.VersionString) architecture=$env:PROCESSOR_ARCHITECTURE free_bytes=$($drive.Free)"
-foreach ($name in @('git.exe', 'python.exe', 'curl.exe', 'tar.exe', 'cmake.exe', 'ninja.exe', 'node.exe', '7z.exe', 'ISCC.exe')) {
-    $tool = Find-OptionalTool $name
-    if ($tool) { Write-Host "Tool ${name}: $tool" } else { Write-Host "Tool ${name}: not on PATH" }
-}
+Write-NativeInventory $root $ci $env:CI_MPVQT_MODE
 if ($env:CI_JOB_IMAGE) { throw 'BLOCKED: native shell runner required' }
 if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'BLOCKED: Windows x64 runner required' }
 $mode = if ($env:CI_MPVQT_MODE) { $env:CI_MPVQT_MODE } else { 'static' }
@@ -85,6 +83,8 @@ Install-Mpv 'x86_64' "$build/mpv-fallback" $sevenZip $ci $mpvVersion 'D7F5621F42
 Run-Native $python @('-m', 'venv', "$ci/venv")
 $venvPython = Join-Path $ci 'venv/Scripts/python.exe'
 Run-Native $venvPython @('tests/test_ci_results.py')
+Run-Native $venvPython @('dev/ci/test_safe_extract.py')
+Run-Native 'powershell.exe' @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', 'dev/windows/test_ci_gui.ps1')
 Run-Native $venvPython @('-m', 'pip', 'install', 'aqtinstall==3.3.0')
 Run-Native $venvPython @('-m', 'aqt', 'install-qt', 'windows', 'desktop', $qtVersion, 'win64_msvc2022_64', '-m', 'qtwebengine', 'qtwebchannel', 'qtpositioning', '-O', "$ci/qt")
 $exports = & dumpbin.exe /exports "$build/mpv/libmpv-2.dll"
@@ -100,8 +100,32 @@ $qt = "$ci/qt/$qtVersion/msvc2022_64"
 $env:PATH = "$qt/bin;$env:PATH"
 $env:QT_PLUGIN_PATH = "$qt/plugins"
 $static = if ($mode -eq 'static') { 'ON' } else { 'OFF' }
-Run-Native 'cmake.exe' @('-S', $root, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=RelWithDebInfo', "-DCMAKE_INSTALL_PREFIX=$build/output", "-DQTROOT=$qt", "-DMPV_INCLUDE_DIR=$build/mpv/include", "-DMPV_LIBRARY=$build/mpv/libmpv-2.dll.lib", '-DCHECK_FOR_UPDATES=ON', "-DUSE_STATIC_MPVQT=$static", "-DMPVQT_EXTERNAL_EVENTS=$static")
+$configure = @('-S', $root, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=RelWithDebInfo', "-DCMAKE_INSTALL_PREFIX=$build/output", "-DQTROOT=$qt", "-DMPV_INCLUDE_DIR=$build/mpv/include", "-DMPV_LIBRARY=$build/mpv/libmpv-2.dll.lib", '-DCHECK_FOR_UPDATES=ON', "-DUSE_STATIC_MPVQT=$static", "-DMPVQT_EXTERNAL_EVENTS=$static")
+if ($mode -eq 'system') {
+    Install-JobMpvQt $ci $qt "$build/mpv/include" "$build/mpv/libmpv-2.dll.lib" $venvPython
+    $mpvqtPrefix = "$ci/system-mpvqt/mpvqt-install"
+    $configure += @("-DCMAKE_PREFIX_PATH=$qt;$mpvqtPrefix", "-DMpvQt_DIR=$script:JobMpvQtConfigDirectory", "-DLibmpv_INCLUDE_DIRS=$build/mpv/include", "-DLibmpv_LIBRARIES=$build/mpv/libmpv-2.dll.lib")
+} else {
+    $configure += "-DCMAKE_PREFIX_PATH=$qt"
+}
+Run-Native 'cmake.exe' $configure
 Run-Native 'cmake.exe' @('--build', $build, '--parallel', '4')
+if ($mode -eq 'system') {
+    & dumpbin.exe /dependents "$build/src/Jellyfin Desktop.exe" | Set-Content "$results/system-mpvqt-dependents.txt"
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect system MpvQt linkage' }
+    if (-not (Select-String -LiteralPath "$results/system-mpvqt-dependents.txt" -Pattern 'MpvQt.*\.dll')) { throw 'Expected shared MpvQt linkage is missing' }
+    Write-Host "Verified job-local system MpvQt runtime: $script:JobMpvQtRuntime"
+}
+$testHome = Join-Path $build "ci-test-home-$env:CI_JOB_ID"
+if (Test-Path -LiteralPath $testHome) { throw 'Test runtime directory already exists' }
+New-Item -ItemType Directory -Path "$testHome/roaming", "$testHome/local" -Force | Out-Null
+$oldAppData = $env:APPDATA
+$oldLocalAppData = $env:LOCALAPPDATA
+$oldOwnedRoot = $env:JELLYFIN_TEST_OWNED_ROOT
+try {
+$env:APPDATA = "$testHome/roaming"
+$env:LOCALAPPDATA = "$testHome/local"
+$env:JELLYFIN_TEST_OWNED_ROOT = $build
 Run-Native 'ctest.exe' @('--test-dir', $build, '-LE', 'gui', '--no-tests=error', '--output-on-failure', '--timeout', '60', '--output-junit', "$results/ctest.xml")
 $reportArgs = @('dev/ci/check_results.py', 'junit', "$results/ctest.xml")
 $required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard')
@@ -119,6 +143,12 @@ Run-Native $venvPython @('tests/test_bundle_paths.py')
 Run-Native $venvPython @('tests/test_windows_package_freshness.py')
 Run-Native $found.Node @('--test', 'tests/test_inputPlugin.js')
 Run-Native $found.Node @('tests/windows_hidden_desktop_fixture.mjs')
+} finally {
+    $env:APPDATA = $oldAppData
+    $env:LOCALAPPDATA = $oldLocalAppData
+    $env:JELLYFIN_TEST_OWNED_ROOT = $oldOwnedRoot
+    Remove-Item -LiteralPath $testHome -Recurse -Force
+}
 Run-Native 'cmake.exe' @('--build', $build, '--target', 'windows_all', '--parallel', '4')
 $artifacts = @(Get-ChildItem -Path "$build/JellyfinDesktop-*.exe", "$build/JellyfinDesktop-*.zip")
 if (@($artifacts | Where-Object Extension -eq '.exe').Count -ne 1 -or @($artifacts | Where-Object Extension -eq '.zip').Count -ne 1) { throw 'Expected exactly one installer and one portable ZIP' }

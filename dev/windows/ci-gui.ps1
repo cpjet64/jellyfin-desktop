@@ -1,8 +1,21 @@
 function Run-HiddenTest {
-    param([string]$Helper, [string]$Executable, [string]$Evidence, [string]$Python)
+    param([string]$Helper, [string]$Executable, [string]$Evidence, [string]$Python, [string]$DiagnosticExe = '')
     New-Item -ItemType Directory -Force -Path $Evidence | Out-Null
     & $Helper $Executable $Evidence '--test-executable'
-    if ($LASTEXITCODE -ne 0) { throw "Hidden desktop test failed: $Executable ($LASTEXITCODE)" }
+    $testExit = $LASTEXITCODE
+    if ($testExit -ne 0) {
+        $report = Join-Path $Evidence 'qtest.txt'
+        $marker = 'Video ready timed out; see startup-result\.json|Scene graph reported an error; see startup-result\.json'
+        if ($DiagnosticExe -and (Test-Path -LiteralPath $report) -and (Select-String -LiteralPath $report -Pattern $marker -Quiet)) {
+            if (Test-Path -LiteralPath $DiagnosticExe -PathType Leaf) {
+                try {
+                    & $Helper $DiagnosticExe $Evidence '--gl-probe'
+                    Write-Host "Renderer diagnostic exit: $LASTEXITCODE; original test remains failed"
+                } catch { Write-Host 'Renderer diagnostic could not run; original test remains failed' }
+            } else { Write-Host 'Renderer diagnostic executable missing; original test remains failed' }
+        }
+        throw "Hidden desktop test failed: $Executable ($testExit)"
+    }
     if (-not (Test-Path -LiteralPath "$Evidence/qtest.txt" -PathType Leaf)) {
         throw "Hidden desktop test did not produce a result: $Executable"
     }
@@ -11,20 +24,7 @@ function Run-HiddenTest {
 
 function Invoke-NativeGuiTests {
     param([string]$Build, [string]$Results, [string]$Python)
-    $scratch = Join-Path $Build "ci-gui-runtime-$env:CI_JOB_ID"
-    if (Test-Path -LiteralPath $scratch) { throw 'GUI runtime directory already exists' }
-    $oldAppData = $env:APPDATA
-    $oldLocalAppData = $env:LOCALAPPDATA
-    New-Item -ItemType Directory -Path "$scratch/roaming", "$scratch/local" -Force | Out-Null
-    try {
-        $env:APPDATA = "$scratch/roaming"
-        $env:LOCALAPPDATA = "$scratch/local"
-        Invoke-NativeGuiSuite $Build $Results $Python
-    } finally {
-        $env:APPDATA = $oldAppData
-        $env:LOCALAPPDATA = $oldLocalAppData
-        Remove-Item -LiteralPath $scratch -Recurse -Force
-    }
+    Invoke-NativeGuiSuite $Build $Results $Python
 }
 
 function Invoke-NativeGuiSuite {
@@ -42,7 +42,8 @@ function Invoke-NativeGuiSuite {
             $env:RECOVERY_SCENARIO = $scenario
             $env:RECOVERY_MEDIA = $media
             $env:RECOVERY_EVIDENCE_DIR = $evidence
-            Run-HiddenTest $helper "$Build/tests/$fixture.exe" $evidence $Python
+            $diagnostic = if ($fixture -eq 'test_renderer_loss_playback') { "$Build/tests/native_gl_probe.exe" } else { '' }
+            Run-HiddenTest $helper "$Build/tests/$fixture.exe" $evidence $Python $diagnostic
             if ($fixture -eq 'test_renderer_loss_playback' -and $scenario -ne 'held-hook') {
                 foreach ($image in @('before.png', 'after.png')) {
                     if (-not (Test-Path -LiteralPath "$evidence/$image" -PathType Leaf)) { throw "Missing $scenario image $image" }
