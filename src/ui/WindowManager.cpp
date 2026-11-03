@@ -87,6 +87,30 @@ void WindowManager::initializeWindow(QQuickWindow* window)
   // Setup screen management
   updateScreens();
 
+  connectGeometryTracking();
+
+  // Find web view and connect to zoom changes
+  m_webView = m_window->findChild<QQuickItem*>("web");
+  if (m_webView)
+  {
+    connect(m_webView, SIGNAL(zoomFactorChanged()), this, SLOT(onZoomFactorChanged()));
+    enforceZoom();
+  }
+
+  m_infoTimer = new QTimer(this);
+  m_infoTimer->setInterval(1000);
+
+  m_systemDebugInfo = SystemComponent::Get().debugInformation();
+
+  connect(m_infoTimer, &QTimer::timeout, this, &WindowManager::updateDebugInfo);
+  connect(m_window, &QQuickWindow::beforeSynchronizing, this, &WindowManager::updateOpenGLInfo, static_cast<Qt::ConnectionType>(Qt::DirectConnection|Qt::SingleShotConnection));
+
+  QQmlProperty(m_window, "showDebugLayer").connectNotifySignal(this, SLOT(onShowDebugLayerChanged()));
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+void WindowManager::connectGeometryTracking()
+{
   // Debounced disk sync timer (30s)
   // Values are written to memory immediately, timer syncs to disk
   m_geometrySaveTimer = new QTimer(this);
@@ -140,24 +164,6 @@ void WindowManager::initializeWindow(QQuickWindow* window)
   // Connect to application shutdown
   connect(qApp, &QGuiApplication::aboutToQuit,
           this, &WindowManager::saveGeometrySlot);
-
-  // Find web view and connect to zoom changes
-  m_webView = m_window->findChild<QQuickItem*>("web");
-  if (m_webView)
-  {
-    connect(m_webView, SIGNAL(zoomFactorChanged()), this, SLOT(onZoomFactorChanged()));
-    enforceZoom();
-  }
-
-  m_infoTimer = new QTimer(this);
-  m_infoTimer->setInterval(1000);
-
-  m_systemDebugInfo = SystemComponent::Get().debugInformation();
-
-  connect(m_infoTimer, &QTimer::timeout, this, &WindowManager::updateDebugInfo);
-  connect(m_window, &QQuickWindow::beforeSynchronizing, this, &WindowManager::updateOpenGLInfo, static_cast<Qt::ConnectionType>(Qt::DirectConnection|Qt::SingleShotConnection));
-
-  QQmlProperty(m_window, "showDebugLayer").connectNotifySignal(this, SLOT(onShowDebugLayerChanged()));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

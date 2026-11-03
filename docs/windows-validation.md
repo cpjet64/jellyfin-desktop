@@ -1,6 +1,9 @@
 # Windows repair validation — 2026-11-03
 
 Baseline: upstream `a96ee9dfc2fee7090b644283b2de767b5ee7b9e8`.
+The unchanged baseline also built successfully and passed its four CTest suites.
+Its executable SHA-256 was
+`4760c660ea8eadc61f12de23e6291ac8df79bce015b1143e5d13b07320dd9d05`.
 The original checkout and its branch were preserved. This is a candidate batch,
 not a claim that all open Windows reports are resolved or ready for user acceptance.
 
@@ -75,17 +78,56 @@ The application reported that the offscreen plugin cannot create an OpenGL
 context. No Chromium backend, initial web UI, or clean UI exit was verified.
 The temporary portable marker was removed; diagnostic files were retained locally.
 
+## Native Windows desktop proof
+
+The follow-up `windows_hidden_desktop.cpp` helper creates a temporary non-input
+Windows desktop without switching the user's desktop. It assigns the application
+to a kill-on-close job before resuming it, and fails unless the application exits
+normally with code zero and its descendants drain naturally. The Node harness
+stores full browser observations and console diagnostics in unique local run
+directories. It requires the actual server-selection page and native exit method.
+
+Compile the helper with the existing VS 2022 x64 environment:
+
+```powershell
+cl /nologo /std:c++14 /W4 /WX /EHsc tests/windows_hidden_desktop.cpp `
+  /Fe:build/hidden-desktop.exe /Fo:build/hidden-desktop.obj user32.lib
+node tests/windows_hidden_desktop_smoke.mjs `
+  "$PWD/build/hidden-desktop.exe" "$PWD/build" "$deps/qt/6.9.3/msvc2022_64"
+node tests/windows_hidden_desktop_smoke.mjs `
+  "$PWD/build/hidden-desktop.exe" "$PWD/build" "$deps/qt/6.9.3/msvc2022_64" --log-failure
+```
+
+On the tested RTX 3080 Ti host, all four candidate cases and the log-failure case
+passed the page, native-exit, zero-process and no-forced-cleanup assertions.
+Normal and quoted-argument cases used ANGLE D3D11 with GPU compositing enabled.
+CLI and environment GPU-disable cases reported software compositing; the latter
+also retained the setting-generated `--disable-pinch`. The quoted user-agent
+remained one quoted argument in the actual browser command line.
+
+The unchanged baseline's normal and CLI-GPU-disable cases both rendered the same
+page and exited normally. Both still used GPU compositing, and the baseline CLI
+case lacked `--disable-gpu` in the browser command line. This supplies a native
+before/after observation for the flag repair.
+
+With a regular file obstructing the candidate profile's log directory, stderr
+reported the logging failure, the server-selection page remained usable, and
+native exit completed normally. No server login or playback was performed.
+Software-compositing cases still reported GLES/shared-context diagnostics:
+initial UI success does not establish mpv rendering or playback compatibility.
+These tests belong on the local desktop workstation, not headless CI runners.
+
 ## Outstanding acceptance
 
-- A full pre-change application baseline build/launch was not captured; no
-  before/after real-playback claim is made.
-- Real Windows UI, WebEngine backend, server connection, representative playback,
-  stop, clean exit, and relaunch need an authorized test account and media.
+- Server connection, representative playback, stop, playback-end restoration,
+  and relaunch need an authorized test account and media. No before/after
+  real-playback claim is made.
 - Production watch-history changes were not assumed authorized.
 - Reboot persistence, display rearrangement, HDR/capture and mixed-GPU cases,
   sustained memory growth, and affected non-AVX2 CPU compatibility remain open.
 - No upstream issue was closed, and no release, signing, or deployment was performed.
-- GitHub workflow results must be checked for the exact pushed SHA separately;
-  local success is not remote CI proof.
+- At the user's request, Windows CI is being moved to GitLab while the public
+  GitHub fork remains the review source. The exact GitLab pipeline and artifacts
+  must be verified separately; local success is not remote CI proof.
 
 See [the issue inventory](windows-issue-triage.md) for report-specific acceptance.

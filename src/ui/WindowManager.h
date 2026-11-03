@@ -76,6 +76,7 @@ private slots:
 private:
   friend class TestWindowManager;
   // Geometry (separate size/position)
+  void connectGeometryTracking();
   void loadGeometry();
   QRect loadGeometryRect();
   void saveWindowSize();
