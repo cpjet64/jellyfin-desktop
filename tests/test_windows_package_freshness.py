@@ -161,6 +161,22 @@ class PackageFreshnessTest(unittest.TestCase):
         self.assertFalse(self.installer.exists())
         self.assertEqual(self.contents()["data.bin"], b"old!")
 
+    def test_failed_application_build_invalidates_previous_packages(self):
+        self.package()
+        (self.source / "app.c").write_text("this is not valid C code\n")
+        self.package(expected=False)
+        self.assertFalse(self.installer.exists())
+        self.assertFalse(self.zip.exists())
+
+    def test_windows_all_producer_failure_never_keeps_old_outputs(self):
+        self.package()
+        (self.source / "payload/data.bin").write_bytes(b"new!")
+        self.env["PACKAGE_TEST_COMPILER_FAIL"] = "1"
+        self.package(expected=False)
+        self.assertFalse(self.installer.exists())
+        if self.zip.exists():
+            self.assertEqual(self.contents()["data.bin"], b"new!")
+
 
 if __name__ == "__main__":
     unittest.main()

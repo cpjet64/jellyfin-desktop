@@ -36,7 +36,6 @@ configure_file("${PROJECT_SOURCE_DIR}/CMakeModules/WindowsPackagePublish.cmake.i
 # shared target runs once when windows_all requests both package variants.
 add_custom_target(innosetup_install
   COMMAND "${CMAKE_COMMAND}" "-DPACKAGE_CONFIG=$<CONFIG>" -P "${CMAKE_CURRENT_BINARY_DIR}/WindowsPackageStage.cmake"
-  DEPENDS JellyfinDesktop
   COMMENT "Staging fresh Windows package files" VERBATIM)
 
 add_custom_target(JellyfinDesktopInstaller
