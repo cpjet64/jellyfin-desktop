@@ -4,6 +4,9 @@
 #include <QTemporaryDir>
 #include <thread>
 #include <vector>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 #include "core/ProfileManager.h"
 #include "shared/Names.h"
@@ -21,6 +24,7 @@ private slots:
   void failedRotationKeepsWriting();
   void repeatedStartupAndConcurrentMessages();
   void rotateAfterCleanup();
+  void lockedArchiveKeepsDestination();
 private:
   QtMessageHandler previousHandler = nullptr;
 };
@@ -135,6 +139,44 @@ void TestLogRotation::rotateAfterCleanup()
   Log::Cleanup();
   Log::RotateLog(); // The test runner's timeout bounds this deadlock regression.
   QVERIFY(true);
+}
+
+void TestLogRotation::lockedArchiveKeepsDestination()
+{
+#ifdef Q_OS_WIN
+  QTemporaryDir dir(QDir::currentPath() + "/log-rotation-XXXXXX");
+  QVERIFY(dir.isValid());
+  useTestDirectory(dir.path());
+  QVERIFY(QDir().mkpath(ProfileManager::activeProfile().logDir()));
+  const QString source = mainLogPath() + ".9";
+  const QString destination = mainLogPath() + ".10";
+  QFile sourceFile(source);
+  QVERIFY(sourceFile.open(QIODevice::WriteOnly));
+  QCOMPARE(sourceFile.write("source archive"), qint64(14));
+  sourceFile.close();
+  QFile destinationFile(destination);
+  QVERIFY(destinationFile.open(QIODevice::WriteOnly));
+  QCOMPARE(destinationFile.write("older archive"), qint64(13));
+  destinationFile.close();
+  Log::Init();
+  HANDLE handle = CreateFileW(reinterpret_cast<LPCWSTR>(source.utf16()), GENERIC_READ,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+  QVERIFY(handle != INVALID_HANDLE_VALUE);
+  Log::RotateLog();
+  CloseHandle(handle);
+  QCOMPARE(readFile(source), QByteArray("source archive"));
+  QCOMPARE(readFile(destination), QByteArray("older archive"));
+  qInfo("still logging after locked archive");
+  Log::Cleanup();
+  const auto files = QDir(ProfileManager::activeProfile().logDir())
+                         .entryList({"jellyfin-desktop-*.log"}, QDir::Files);
+  QCOMPARE(files.size(), 1);
+  QVERIFY(readFile(ProfileManager::activeProfile().logDir() + "/" + files.first())
+              .contains("still logging after locked archive"));
+#else
+  QSKIP("Windows sharing semantics required");
+#endif
 }
 
 QTEST_GUILESS_MAIN(TestLogRotation)

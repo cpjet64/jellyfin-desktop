@@ -144,6 +144,34 @@ void Log::Init()
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
+static bool rotateArchive(const QString& from, const QString& to)
+{
+  if (!QFile::exists(to))
+    return QFile::rename(from, to);
+
+  // Keep the destination until its replacement has been moved successfully.
+  QTemporaryFile backup(to + ".backup-XXXXXX");
+  backup.setAutoRemove(false);
+  if (!backup.open())
+    return false;
+  const QString backupPath = backup.fileName();
+  backup.close();
+  if (backupPath.isEmpty() || !QFile::remove(backupPath))
+    return false;
+  if (!QFile::rename(to, backupPath))
+    return false;
+  if (!QFile::rename(from, to))
+  {
+    if (!QFile::rename(backupPath, to))
+      std::cerr << "Failed to restore log archive; backup retained" << std::endl;
+    return false;
+  }
+  if (!QFile::remove(backupPath))
+    std::cerr << "Failed to remove old log archive backup" << std::endl;
+  return true;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
 void Log::RotateLog()
 {
   LogOperation lock;
@@ -162,7 +190,7 @@ void Log::RotateLog()
     QString to = mainLog + "." + QString::number(i + 1);
     if (QFile::exists(from))
     {
-      if ((QFile::exists(to) && !QFile::remove(to)) || !QFile::rename(from, to))
+      if (!rotateArchive(from, to))
       {
         std::cerr << "Failed to rotate log archive" << std::endl;
         return;
