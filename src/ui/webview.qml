@@ -5,6 +5,7 @@ import QtWebChannel
 import QtQuick.Window
 import QtQuick.Controls
 import Qt.labs.platform as Labs
+import "RendererLoss.js" as RendererLoss
 
 Window
 {
@@ -305,8 +306,7 @@ Window
 
     onRenderProcessTerminated: function(status, exitCode)
     {
-      web.webChannel = null;
-      webClientFaultGuard.observeRendererLoss(status, exitCode);
+      RendererLoss.cutOff(web, webClientFaultGuard, status, exitCode);
     }
 
     onNewWindowRequested:

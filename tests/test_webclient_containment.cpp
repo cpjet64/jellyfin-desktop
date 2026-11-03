@@ -1,0 +1,243 @@
+#include <QtTest/QtTest>
+#include <QDir>
+#include <QFileInfo>
+#include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QQmlContext>
+#include <QQuickItem>
+#include <QQuickView>
+#include <QSGRendererInterface>
+#include <QTemporaryDir>
+#include <QUrl>
+#include <QtWebEngineQuick/qtwebenginequickglobal.h>
+#include <MpvController>
+#include <mpv/client.h>
+#include <memory>
+
+#include "input/InputComponent.h"
+#include "player/MpvVideoItem.h"
+#include "player/PlayerComponent.h"
+#include "settings/SettingsComponent.h"
+#include "shared/Paths.h"
+#include "system/WebClientFaultGuard.h"
+
+class Hook
+{
+public:
+  explicit Hook(mpv_handle* primary) : client(mpv_create_client(primary, "web-containment-hook")) {}
+  ~Hook() { if (client && active) mpv_hook_continue(client, id); if (client) mpv_destroy(client); }
+  bool poll()
+  {
+    if (active) return true;
+    while (mpv_event* event = mpv_wait_event(client, 0)) {
+      if (event->event_id == MPV_EVENT_NONE) break;
+      if (event->event_id == MPV_EVENT_HOOK && event->data) {
+        id = static_cast<mpv_event_hook*>(event->data)->id;
+        return active = true;
+      }
+    }
+    return false;
+  }
+  bool release() { if (mpv_hook_continue(client, id) < 0) return false; active = false; return true; }
+  mpv_handle* client = nullptr;
+  bool active = false;
+private:
+  uint64_t id = 0;
+};
+
+static bool idle(mpv_handle* mpv)
+{
+  int value = 0;
+  return mpv_get_property(mpv, "idle-active", MPV_FORMAT_FLAG, &value) >= 0 && value;
+}
+
+static bool mediaReady(mpv_handle* mpv, bool paused)
+{
+  int isPaused = 0;
+  int64_t width = 0;
+  return !idle(mpv) && mpv_get_property(mpv, "pause", MPV_FORMAT_FLAG, &isPaused) >= 0 &&
+         bool(isPaused) == paused && mpv_get_property(mpv, "video-params/w", MPV_FORMAT_INT64, &width) >= 0 && width > 0;
+}
+
+static QString jsonString(const QString& value)
+{
+  QByteArray data = QJsonDocument(QJsonArray{value}).toJson(QJsonDocument::Compact);
+  return QString::fromUtf8(data.mid(1, data.size() - 2));
+}
+
+class TestWebClientContainment : public QObject
+{
+  Q_OBJECT
+private slots:
+  void containment();
+private:
+  void connectBridge(QObject* root, PlayerComponent& player, SettingsComponent& settings);
+  void checkProxies(QObject* root);
+  void preflightInputAndSettings(QObject* root, SettingsComponent& settings, int& hostCalls);
+  void attemptStaleCalls(QObject* root, const QString& mediaUrl, bool desiredSetting);
+  void verifyHeld(PlayerComponent& player, mpv_handle* primary, Hook& hook);
+  void verifyPlaying(PlayerComponent& player, mpv_handle* primary, Hook& hook,
+                     const QString& scenario, qint64 before);
+};
+
+void TestWebClientContainment::connectBridge(QObject* root, PlayerComponent& player, SettingsComponent& settings)
+{
+  QVERIFY(QMetaObject::invokeMethod(root, "registerComponents",
+                                   Q_ARG(QVariant, QVariant::fromValue(static_cast<QObject*>(&player))),
+                                   Q_ARG(QVariant, QVariant::fromValue(static_cast<QObject*>(&settings)))));
+  QVERIFY(QMetaObject::invokeMethod(root, "loadPage"));
+  QTRY_COMPARE_WITH_TIMEOUT(root->property("loads").toInt(), 1, 15000);
+  QVERIFY(QMetaObject::invokeMethod(root, "connectBridge"));
+  QTRY_VERIFY_WITH_TIMEOUT((QMetaObject::invokeMethod(root, "checkReady"),
+                            root->property("bridgeReady").toBool()), 15000);
+}
+
+void TestWebClientContainment::preflightInputAndSettings(QObject* root, SettingsComponent& settings, int& hostCalls)
+{
+  auto& input = InputComponent::Get();
+  QSignalSpy seeks(&input, &InputComponent::positionSeek);
+  const bool oldSetting = settings.value("main", "enableInputRepeat").toBool();
+  const QString code = QStringLiteral("fixtureInput.executeActions(['host:containment-probe']);"
+      "fixtureInput.seekTo(100); fixtureSettings.setValue('main','enableInputRepeat',%1); 'sent'")
+      .arg(oldSetting ? QStringLiteral("false") : QStringLiteral("true"));
+  QVERIFY(QMetaObject::invokeMethod(root, "evaluate", Q_ARG(QVariant, QVariant(code))));
+  QTRY_COMPARE_WITH_TIMEOUT(hostCalls, 1, 5000);
+  QTRY_COMPARE_WITH_TIMEOUT(seeks.count(), 1, 5000);
+  QTRY_VERIFY_WITH_TIMEOUT(settings.value("main", "enableInputRepeat").toBool() != oldSetting, 5000);
+  settings.setValue("main", "enableInputRepeat", oldSetting);
+  hostCalls = 0;
+}
+
+void TestWebClientContainment::checkProxies(QObject* root)
+{
+  const QString code = QStringLiteral("['seekTo','stop','load'].every(k => typeof fixturePlayer[k] === 'function')"
+      " && typeof fixtureInput.executeActions === 'function' && typeof fixtureInput.seekTo === 'function'"
+      " && typeof fixtureSettings.setValue === 'function'");
+  QVERIFY(QMetaObject::invokeMethod(root, "evaluate", Q_ARG(QVariant, QVariant(code))));
+  QTRY_COMPARE_WITH_TIMEOUT(root->property("result").toString(), QStringLiteral("true"), 5000);
+}
+
+void TestWebClientContainment::attemptStaleCalls(QObject* root, const QString& mediaUrl, bool desiredSetting)
+{
+  const QString code = QStringLiteral("let n=0; const calls=["
+      "()=>fixturePlayer.seekTo(8500),()=>fixturePlayer.stop(),"
+      "()=>fixturePlayer.load(%1,{autoplay:true},{type:'video'},null,null),"
+      "()=>fixtureInput.executeActions(['host:containment-probe']),()=>fixtureInput.seekTo(8500),"
+      "()=>fixtureSettings.setValue('main','enableInputRepeat',%2)];"
+      "for (const call of calls) { try { call(); } catch(e) {} n++; } n;")
+      .arg(jsonString(mediaUrl), desiredSetting ? QStringLiteral("true") : QStringLiteral("false"));
+  QVERIFY(QMetaObject::invokeMethod(root, "evaluate", Q_ARG(QVariant, QVariant(code))));
+  QTRY_COMPARE_WITH_TIMEOUT(root->property("result").toString(), QStringLiteral("6"), 5000);
+}
+
+void TestWebClientContainment::verifyHeld(PlayerComponent& player, mpv_handle* primary, Hook& hook)
+{
+  QVERIFY(hook.active);
+  QCOMPARE(player.requestNativeStop().status, PlayerComponent::NativeStopResult::Status::Accepted);
+  QVERIFY(hook.release());
+  QTRY_VERIFY_WITH_TIMEOUT(idle(primary), 10000);
+  QTest::qWait(500);
+  QVERIFY(idle(primary));
+}
+
+void TestWebClientContainment::verifyPlaying(PlayerComponent& player, mpv_handle* primary,
+                                              Hook& hook, const QString& scenario, qint64 before)
+{
+  QTest::qWait(600);
+  QVERIFY(!idle(primary));
+  QVERIFY(!hook.poll()); // No stale load reached the mpv on_load hook.
+  const qint64 after = player.getPosition();
+  if (scenario == "playing") {
+    QVERIFY(after > before + 200);
+    QVERIFY(after < before + 3000);
+  } else {
+    QVERIFY(qAbs(after - before) < 100);
+  }
+  QCOMPARE(player.requestNativeStop().status, PlayerComponent::NativeStopResult::Status::Accepted);
+  QTRY_VERIFY_WITH_TIMEOUT(idle(primary), 10000);
+}
+
+void TestWebClientContainment::containment()
+{
+  const QString scenario = qEnvironmentVariable("RECOVERY_SCENARIO");
+  const QString media = qEnvironmentVariable("RECOVERY_MEDIA");
+  QVERIFY(scenario == "playing" || scenario == "paused" || scenario == "held-hook");
+  QVERIFY(QFileInfo::exists(media));
+  QTemporaryDir profile(QDir::currentPath() + "/web-containment-XXXXXX");
+  QVERIFY(profile.isValid());
+  Paths::setConfigDir(profile.path() + "/config");
+  Paths::setCacheDir(profile.path() + "/cache");
+  Q_INIT_RESOURCE(resources);
+  auto& settings = SettingsComponent::Get();
+  QVERIFY(settings.componentInitialize());
+  auto& input = InputComponent::Get();
+  auto& player = PlayerComponent::Get();
+  auto& guard = WebClientFaultGuard::instance();
+  QQuickView view;
+  view.rootContext()->setContextProperty("webClientFaultGuard", &guard);
+  view.rootContext()->setContextProperty("fixtureInput", &input);
+  view.setSource(QUrl::fromLocalFile(QStringLiteral(TEST_SOURCE_DIR "/webclient_fault_fixture.qml")));
+  QCOMPARE(view.status(), QQuickView::Ready);
+  QObject* root = view.rootObject();
+  QVERIFY(root);
+  auto* video = new MpvVideoItem(view.contentItem());
+  video->setParent(view.contentItem());
+  video->setObjectName("video");
+  video->setSize(QSizeF(320, 240));
+  video->setZ(-1);
+  QSignalSpy ready(video, &MpvAbstractItem::ready);
+  QVERIFY(player.componentInitialize());
+  player.setWindow(&view);
+  view.show();
+  QTRY_VERIFY_WITH_TIMEOUT(ready.count() > 0, 15000);
+  QVERIFY(video->controller());
+  mpv_handle* primary = video->controller()->mpv();
+  QVERIFY(primary);
+  QTRY_COMPARE_WITH_TIMEOUT(player.requestNativeStop().status,
+                            PlayerComponent::NativeStopResult::Status::Accepted, 15000);
+  connectBridge(root, player, settings);
+  QVERIFY(!QTest::currentTestFailed());
+  checkProxies(root);
+  QVERIFY(!QTest::currentTestFailed());
+  auto hostCalls = std::make_shared<int>(0);
+  input.registerHostCommand("containment-probe", [hostCalls] { ++*hostCalls; });
+  preflightInputAndSettings(root, settings, *hostCalls);
+  QVERIFY(!QTest::currentTestFailed());
+  Hook hook(primary);
+  QVERIFY(hook.client);
+  if (scenario == "held-hook") QCOMPARE(mpv_hook_add(hook.client, 77, "on_load", -10), 0);
+  const QString mediaUrl = QUrl::fromLocalFile(media).toString();
+  QVERIFY(player.load(mediaUrl, {{"autoplay", scenario != "paused"}}, {{"type", "video"}}));
+  if (scenario == "held-hook") QTRY_VERIFY_WITH_TIMEOUT(hook.poll(), 10000);
+  else {
+    QTRY_VERIFY_WITH_TIMEOUT(mediaReady(primary, scenario == "paused"), 10000);
+    if (scenario == "playing") QTRY_VERIFY_WITH_TIMEOUT(player.getPosition() > 500, 10000);
+  }
+  if (scenario != "held-hook") QCOMPARE(mpv_hook_add(hook.client, 77, "on_load", -10), 0);
+  const qint64 before = player.getPosition();
+  const bool oldSetting = settings.value("main", "enableInputRepeat").toBool();
+  QSignalSpy seeks(&input, &InputComponent::positionSeek);
+  QSignalSpy settingsChanges(&settings, &SettingsComponent::sectionValueUpdate);
+  QVERIFY(QMetaObject::invokeMethod(root, "loseRenderer"));
+  QVERIFY(guard.rendererLost());
+  attemptStaleCalls(root, mediaUrl, !oldSetting);
+  QVERIFY(!QTest::currentTestFailed());
+  QCOMPARE(*hostCalls, 0);
+  QCOMPARE(seeks.count(), 0);
+  QCOMPARE(settings.value("main", "enableInputRepeat").toBool(), oldSetting);
+  QCOMPARE(settingsChanges.count(), 0);
+  if (scenario == "held-hook") verifyHeld(player, primary, hook);
+  else verifyPlaying(player, primary, hook, scenario, before);
+}
+
+int main(int argc, char** argv)
+{
+  QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+  QtWebEngineQuick::initialize();
+  QGuiApplication app(argc, argv);
+  TestWebClientContainment test;
+  return QTest::qExec(&test, argc, argv);
+}
+
+#include "test_webclient_containment.moc"

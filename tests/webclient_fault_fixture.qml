@@ -1,6 +1,7 @@
 import QtQuick
 import QtWebEngine
 import QtWebChannel
+import "../src/ui/RendererLoss.js" as RendererLoss
 
 Item {
     id: root
@@ -39,8 +40,12 @@ Item {
     function loadPage() { loader.item.url = "data:text/html,<html><body>fixture</body></html>" }
     function transportCount() { return channel.transports.length }
     function reloadPage() { loader.item.reload() }
+    function registerComponents(player, settings) {
+        channel.registerObject("player", player)
+        channel.registerObject("settings", settings)
+    }
     function connectBridge() {
-        loader.item.runJavaScript("new QWebChannel(qt.webChannelTransport, function(c) { window.fixtureInput = c.objects.input; window.fixtureReady = true; });")
+        loader.item.runJavaScript("new QWebChannel(qt.webChannelTransport, function(c) { window.fixtureInput = c.objects.input; window.fixturePlayer = c.objects.player; window.fixtureSettings = c.objects.settings; window.fixtureReady = true; });")
     }
     function checkReady() {
         loader.item.runJavaScript("!!window.fixtureReady", function(value) { root.bridgeReady = !!value })
@@ -50,8 +55,7 @@ Item {
         loader.item.runJavaScript(code, function(value) { root.result = String(value) })
     }
     function loseRenderer() {
-        loader.item.webChannel = null
-        webClientFaultGuard.observeRendererLoss(0, 17)
+        RendererLoss.cutOff(loader.item, webClientFaultGuard, 0, 17)
     }
     function recreate() { loader.sourceComponent = null; loader.sourceComponent = webComponent }
 }

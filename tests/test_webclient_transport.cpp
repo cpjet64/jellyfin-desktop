@@ -4,6 +4,8 @@
 #include <QThread>
 #include <QWebChannel>
 #include <QWebChannelAbstractTransport>
+#include <atomic>
+#include <thread>
 
 class TestTransport : public QWebChannelAbstractTransport
 {
@@ -58,8 +60,14 @@ void TestWebClientTransport::cutoff()
   QCOMPARE(input.calls, 1);
   QCOMPARE(settings.value(), 7);
   QCOMPARE(input.actionThread, QThread::currentThread());
-  QMetaObject::invokeMethod(&transport, [&] { transport.receive(action); }, Qt::QueuedConnection);
-  QMetaObject::invokeMethod(&transport, [&] { transport.receive(setValue); }, Qt::QueuedConnection);
+  std::atomic<int> emitted{0};
+  QObject::connect(&transport, &QWebChannelAbstractTransport::messageReceived, &transport,
+                   [&emitted](const QJsonObject&, QWebChannelAbstractTransport*) { ++emitted; }, Qt::DirectConnection);
+  // Emit from a worker while the receiver's GUI thread is not pumping events.
+  // The signal deliveries are queued before the transport is disconnected.
+  std::thread worker([&] { transport.receive(action); transport.receive(setValue); });
+  worker.join();
+  QCOMPARE(emitted.load(), 2);
   channel.disconnectFrom(&transport);
   QCoreApplication::processEvents();
   QCOMPARE(input.calls, 1);
