@@ -31,7 +31,7 @@ class MirrorTests(unittest.TestCase):
             return self.releases["v1"]
         raise AssertionError((url, method))
 
-    def request(self, url, token=None, method="GET", payload=None, content_type=None):
+    def request(self, url, token=None, method="GET", payload=None, content_type=None, asset=False):
         if method == "GET":
             return b"binary"
         if self.fail_upload:
@@ -49,8 +49,20 @@ class MirrorTests(unittest.TestCase):
     def test_create_and_repeat_are_idempotent(self):
         self.sync()
         self.assertFalse(self.releases["v1"]["draft"])
-        self.sync()
+        with patch.object(mirror, "asset_bytes", side_effect=AssertionError("redownload")):
+            self.sync()
         self.assertEqual(len(self.assets), 1)
+
+    def test_same_host_redirect_and_unsafe_targets(self):
+        handler = mirror.GitLabRedirect()
+        request = mirror.urllib.request.Request("https://gitlab.curtpme.com/a")
+        redirected = handler.redirect_request(request, None, 302, "", {},
+                                               "https://gitlab.curtpme.com/b")
+        self.assertEqual(redirected.full_url, "https://gitlab.curtpme.com/b")
+        for url in ("https://example.com/", "http://gitlab.curtpme.com/",
+                    "https://user@gitlab.curtpme.com/"):
+            with self.assertRaises(ValueError):
+                handler.redirect_request(request, None, 302, "", {}, url)
 
     def test_interrupted_upload_remains_draft_and_retry_publishes(self):
         self.fail_upload = True
@@ -101,6 +113,16 @@ class MirrorTests(unittest.TestCase):
              patch.object(mirror, "sync_release") as sync:
             mirror.main()
             sync.assert_not_called()
+
+    def test_only_newest_release_is_latest(self):
+        old = dict(self.release, tag_name="v1", released_at="2020-01-01T00:00:00Z")
+        new = dict(self.release, tag_name="v2", released_at="2021-01-01T00:00:00Z")
+        with patch.dict(mirror.os.environ, {"GITHUB_TOKEN": "token"}), \
+             patch.object(mirror, "pages", side_effect=[[new, old], []]), \
+             patch.object(mirror, "sync_release") as sync:
+            mirror.main()
+            self.assertFalse(sync.call_args_list[0].args[3])
+            self.assertTrue(sync.call_args_list[1].args[3])
 
     def test_redirect_handler_refuses_redirects(self):
         self.assertIsNone(mirror.NoRedirect().redirect_request(

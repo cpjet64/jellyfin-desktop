@@ -16,14 +16,21 @@ digest; collisions or missing digests stop the run rather than overwrite data.
 Assets removed from GitLab are not deleted from GitHub. Rename or removal
 requires separate operator review.
 
-Asset links must use HTTPS on `gitlab.curtpme.com`; redirects are rejected,
-including redirects back to that host, and no GitLab credentials are sent.
-Each response is limited to 512 MiB. Off-host links, redirects, larger assets,
+Asset links and their bounded redirects must use HTTPS on `gitlab.curtpme.com`;
+no GitLab credentials are sent. GitHub API requests never follow redirects.
+The release notes contain an encoded asset manifest and a fingerprint of source
+link names and URLs. When those match and GitHub's asset sizes and digests still
+match, later runs skip downloading the bytes. This assumes an asset URL's bytes
+are immutable; publish changed bytes at a new URL or rename the asset. Changing
+bytes in place is not detected by the polling optimization.
+Each response is limited to 512 MiB. Off-host links or redirects, larger assets,
 missing tags, mismatches, API errors and partial uploads fail the run visibly.
 After resolving the cause, dispatch the workflow again; matching uploaded assets
 are reused. Check the GitHub Actions run and compare the release and asset
 hashes before considering a release mirrored. A failed run is not proof of a
 complete mirror.
+Only the most recently released GitLab release is marked GitHub's latest;
+earlier releases explicitly use `make_latest=false`. Future releases are skipped.
 
 API references: [GitLab releases](https://docs.gitlab.com/api/releases/),
 [GitLab release links](https://docs.gitlab.com/api/releases/links/), and
