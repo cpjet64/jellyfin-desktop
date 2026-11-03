@@ -5,10 +5,11 @@ import net from 'node:net';
 import path from 'node:path';
 import { once } from 'node:events';
 
-const [helper, build, qt] = process.argv.slice(2);
+const [helper, build, qt, mode] = process.argv.slice(2);
 if (![helper, build, qt].every(value => value && path.isAbsolute(value))) {
   throw new Error('Pass absolute paths to helper, integration build, and Qt root');
 }
+if (mode && !['--baseline', '--log-failure'].includes(mode)) throw new Error('Unknown mode');
 const marker = path.join(build, 'src', 'portable');
 const output = path.join(build, 'desktop-smoke-native');
 const profile = '0123456789abcdef0123456789abcdef';
@@ -75,6 +76,7 @@ async function runCase(spec) {
     await mkdir(path.join(dir, 'temp'), { recursive: true });
     await writeFile(path.join(data, 'profiles.json'), JSON.stringify({ defaultProfile: profile }));
     await writeFile(path.join(data, 'profiles', profile, 'profile.json'), JSON.stringify({ name: 'Smoke' }));
+    if (spec.logFailure) await writeFile(path.join(data, 'profiles', profile, 'logs'), 'block log directory');
     await writeFile(path.join(data, 'profiles', profile, 'jellyfin-desktop.conf'),
       JSON.stringify({ version: 7, sections: { main: { allowBrowserZoom: !spec.disablePinch } } }));
     const port = await portNumber();
@@ -92,7 +94,9 @@ async function runCase(spec) {
     try { observation = await observe(port, child); }
     catch (error) { observation = { error: String(error) }; }
     const [code] = child.exitCode === null ? await once(child, 'exit') : [child.exitCode];
-    return { case: spec.name, observation, helperExit: code, log };
+    const diagnostic = log.split(/\r?\n/).filter(line =>
+      /app pid|app wait|job active|Failed to create temporary log|ERROR:/.test(line)).join('\n');
+    return { case: spec.name, observation, helperExit: code, log: diagnostic };
 }
 
 async function main() {
@@ -103,7 +107,9 @@ async function main() {
     const cases = [{ name: 'normal' }, { name: 'cli-disable-gpu', arg: '--disable-gpu' },
       { name: 'env-disable-gpu-pinch', flags: '--disable-gpu', disablePinch: true },
       { name: 'quoted-flags', flags: '--user-agent="Desktop Smoke Test"' }];
-    for (const spec of cases) {
+    const selected = mode === '--baseline' ? cases.slice(0, 2) :
+      mode === '--log-failure' ? [{ name: 'log-failure', logFailure: true }] : cases;
+    for (const spec of selected) {
       const result = await runCase(spec);
       console.log(JSON.stringify(result));
       if (result.helperExit !== 0 || result.observation.error) process.exitCode = 1;
