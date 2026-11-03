@@ -82,3 +82,12 @@ target_link_libraries(test_renderer_loss_playback jmp_core Qt6::Test Qt6::Quick)
 target_include_directories(test_renderer_loss_playback PRIVATE ${TEST_INCLUDE_DIRS})
 target_compile_definitions(test_renderer_loss_playback PRIVATE ${TEST_COMPILE_DEFS})
 # Run each scenario in an isolated native desktop process with RECOVERY_* inputs.
+
+if(LINUX_DBUS)
+  add_executable(test_mpris_fault test_mpris_fault.cpp)
+  target_link_libraries(test_mpris_fault jmp_core Qt6::Test Qt6::DBus)
+  target_include_directories(test_mpris_fault PRIVATE ${TEST_INCLUDE_DIRS})
+  target_compile_definitions(test_mpris_fault PRIVATE ${TEST_COMPILE_DEFS})
+  add_test(NAME test_mpris_fault COMMAND test_mpris_fault)
+  set_tests_properties(test_mpris_fault PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
