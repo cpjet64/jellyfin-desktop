@@ -14,17 +14,15 @@ Item {
         id: channel
         Component.onCompleted: registerObject("input", fixtureInput)
     }
-    WebEngineScript {
-        id: channelScript
-        name: "fixture-channel"
-        sourceUrl: "qrc:///qtwebchannel/qwebchannel.js"
-        injectionPoint: WebEngineScript.DocumentCreation
-        worldId: WebEngineScript.MainWorld
-    }
     WebEngineProfile {
         id: fixtureProfile
         offTheRecord: true
-        userScripts.collection: [channelScript]
+        Component.onCompleted: userScripts.collection = [{
+            name: "fixture-channel",
+            sourceUrl: "qrc:///qtwebchannel/qwebchannel.js",
+            injectionPoint: WebEngineScript.DocumentCreation,
+            worldId: WebEngineScript.MainWorld
+        }]
     }
     Component {
         id: webComponent
