@@ -13,6 +13,8 @@
 #include "settings/SettingsComponent.h"
 #include "settings/SettingsSection.h"
 #include "shared/Paths.h"
+#include "mpv_test_bootstrap.h"
+#include "mpv_test_profile.h"
 
 namespace {
 class ObservableVideoSettings : public SettingsSection
@@ -39,9 +41,8 @@ void TestMpvQtPlayerBinding::rejectsSecondItemAndRebindsAfterRelease()
 {
   QTemporaryDir temp(QDir::currentPath() + "/mpvqt-binding-XXXXXX");
   QVERIFY(temp.isValid());
-  Paths::setConfigDir(temp.path() + "/config");
-  Paths::setCacheDir(temp.path() + "/cache");
-  QVERIFY(QDir().mkpath(temp.path() + "/config/profiles"));
+  QString error;
+  QVERIFY2(prepareMpvTestProfile(temp.path(), &error), qPrintable(error));
   Q_INIT_RESOURCE(resources);
   auto& settings = SettingsComponent::Get();
   QVERIFY(settings.componentInitialize());
@@ -90,8 +91,16 @@ void TestMpvQtPlayerBinding::rejectsSecondItemAndRebindsAfterRelease()
 
 int main(int argc, char** argv)
 {
+  QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
   QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
   QGuiApplication app(argc, argv);
+  QTemporaryDir scratch(QDir::currentPath() + "/mpv-bootstrap-XXXXXX");
+  QString error;
+  const QString root = qEnvironmentVariable("JELLYFIN_TEST_OWNED_ROOT", scratch.path());
+  if (!scratch.isValid() || !MpvTestBootstrap::prepareMpvTestEnvironment(root, &error)) {
+    qCritical().noquote() << "Mpv test bootstrap failed:" << error;
+    return 1;
+  }
   TestMpvQtPlayerBinding test;
   return QTest::qExec(&test, argc, argv);
 }

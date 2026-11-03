@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QTemporaryDir>
 #include <QThread>
+#include <QGuiApplication>
 #include <QQuickWindow>
 #include <QKeyEvent>
 #include <MpvController>
@@ -13,6 +14,8 @@
 #include "shared/Paths.h"
 #include "system/SystemComponent.h"
 #include "system/WebClientFaultGuard.h"
+#include "mpv_test_bootstrap.h"
+#include "mpv_test_profile.h"
 #include "ui/EventFilter.h"
 
 class TestFaultStop : public QObject
@@ -218,15 +221,16 @@ void TestFaultStop::routesAndNativeResult()
 {
   QTemporaryDir profile(QDir::currentPath() + "/fault-stop-profile-XXXXXX");
   QVERIFY(profile.isValid());
-  Paths::setConfigDir(profile.path());
-  QVERIFY(QDir().mkpath(profile.path() + "/profiles/inputmaps"));
+  QString error;
+  QVERIFY2(prepareMpvTestProfile(profile.path(), &error), qPrintable(error));
+  QVERIFY(QDir().mkpath(profile.path() + "/config/profiles/inputmaps"));
   const QString mapping = QFINDTESTDATA("../resources/inputmaps/LIRC.json");
   QVERIFY(!mapping.isEmpty());
-  QVERIFY(QFile::copy(mapping, profile.path() + "/profiles/inputmaps/LIRC.json"));
+  QVERIFY(QFile::copy(mapping, profile.path() + "/config/profiles/inputmaps/LIRC.json"));
   const QString appleMapping = QFINDTESTDATA("../resources/inputmaps/apple-media-keys.json");
   QVERIFY(!appleMapping.isEmpty());
-  QVERIFY(QFile::copy(appleMapping, profile.path() + "/profiles/inputmaps/apple-media-keys.json"));
-  QFile keyboard(profile.path() + "/profiles/inputmaps/keyboard-test.json");
+  QVERIFY(QFile::copy(appleMapping, profile.path() + "/config/profiles/inputmaps/apple-media-keys.json"));
+  QFile keyboard(profile.path() + "/config/profiles/inputmaps/keyboard-test.json");
   QVERIFY(keyboard.open(QIODevice::WriteOnly));
   QVERIFY(keyboard.write(R"({"name":"Keyboard Generic","idmatcher":"Keyboard.*","mapping":{"Back":"stop"}})") > 0);
   keyboard.close();
@@ -246,5 +250,18 @@ void TestFaultStop::routesAndNativeResult()
   nativeResult();
 }
 
-QTEST_MAIN(TestFaultStop)
+int main(int argc, char** argv)
+{
+  QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
+  QGuiApplication app(argc, argv);
+  QTemporaryDir scratch(QDir::currentPath() + "/mpv-bootstrap-XXXXXX");
+  QString error;
+  const QString root = qEnvironmentVariable("JELLYFIN_TEST_OWNED_ROOT", scratch.path());
+  if (!scratch.isValid() || !MpvTestBootstrap::prepareMpvTestEnvironment(root, &error)) {
+    qCritical().noquote() << "Mpv test bootstrap failed:" << error;
+    return 1;
+  }
+  TestFaultStop test;
+  return QTest::qExec(&test, argc, argv);
+}
 #include "test_fault_stop.moc"

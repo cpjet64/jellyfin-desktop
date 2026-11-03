@@ -23,6 +23,8 @@
 #include "settings/SettingsComponent.h"
 #include "shared/Paths.h"
 #include "system/WebClientFaultGuard.h"
+#include "mpv_test_bootstrap.h"
+#include "mpv_test_profile.h"
 
 class Hook
 {
@@ -256,9 +258,8 @@ void TestWebClientContainment::containment()
   QVERIFY(QFileInfo(evidence).isDir());
   QTemporaryDir profile(QDir::currentPath() + "/web-containment-XXXXXX");
   QVERIFY(profile.isValid());
-  Paths::setConfigDir(profile.path() + "/config");
-  Paths::setCacheDir(profile.path() + "/cache");
-  QVERIFY(QDir().mkpath(profile.path() + "/config/profiles"));
+  QString error;
+  QVERIFY2(prepareMpvTestProfile(profile.path(), &error), qPrintable(error));
   Q_INIT_RESOURCE(resources);
   auto& settings = SettingsComponent::Get();
   QVERIFY(settings.componentInitialize());
@@ -300,6 +301,13 @@ int main(int argc, char** argv)
   QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
   QtWebEngineQuick::initialize();
   QGuiApplication app(argc, argv);
+  QTemporaryDir scratch(QDir::currentPath() + "/mpv-bootstrap-XXXXXX");
+  QString error;
+  const QString root = qEnvironmentVariable("JELLYFIN_TEST_OWNED_ROOT", scratch.path());
+  if (!scratch.isValid() || !MpvTestBootstrap::prepareMpvTestEnvironment(root, &error)) {
+    qCritical().noquote() << "Mpv test bootstrap failed:" << error;
+    return 1;
+  }
   TestWebClientContainment test;
   return QTest::qExec(&test, argc, argv);
 }

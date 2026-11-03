@@ -1,6 +1,9 @@
 #include <QtTest/QtTest>
 #include <QElapsedTimer>
 #include <QSignalSpy>
+#include <QDir>
+#include <QTemporaryDir>
+#include "mpv_test_bootstrap.h"
 #include <MpvController>
 #include <atomic>
 #include <mpv/client.h>
@@ -93,5 +96,17 @@ void TestMpvQtEventOwnership::externalModeLeavesEventsForOwner()
   QCOMPARE(wakes.load(), afterDetach);
 }
 
-QTEST_GUILESS_MAIN(TestMpvQtEventOwnership)
+int main(int argc, char** argv)
+{
+  QCoreApplication app(argc, argv);
+  QTemporaryDir scratch(QDir::currentPath() + "/mpv-bootstrap-XXXXXX");
+  QString error;
+  const QString root = qEnvironmentVariable("JELLYFIN_TEST_OWNED_ROOT", scratch.path());
+  if (!scratch.isValid() || !MpvTestBootstrap::prepareMpvTestEnvironment(root, &error)) {
+    qCritical().noquote() << "Mpv test bootstrap failed:" << error;
+    return 1;
+  }
+  TestMpvQtEventOwnership test;
+  return QTest::qExec(&test, argc, argv);
+}
 #include "test_mpvqt_event_ownership.moc"
