@@ -45,7 +45,7 @@ Window
   }
 
   function toggleFullscreen() {
-    visibility = (visibility === Window.FullScreen) ? Window.Windowed : Window.FullScreen
+    components.window.toggleFullscreen()
   }
 
   function toggleDebug() {
@@ -53,7 +53,7 @@ Window
   }
 
   function setFullScreen(enable) {
-    visibility = enable ? Window.FullScreen : Window.Windowed
+    components.window.setFullScreen(enable)
   }
 
   function minimizeWindow() {
