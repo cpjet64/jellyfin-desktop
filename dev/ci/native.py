@@ -119,6 +119,7 @@ def configure(system, mode):
     command("ctest-report", report)
     command("input-plugin", ["node", "--test", "tests/test_inputPlugin.js"], timeout=120)
     command("bundle-paths", [sys.executable, "tests/test_bundle_paths.py"], timeout=120)
+    command("package-freshness", [sys.executable, "tests/test_windows_package_freshness.py"], timeout=300)
 
 
 def gui(system):
