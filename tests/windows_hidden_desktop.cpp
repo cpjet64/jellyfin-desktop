@@ -74,7 +74,28 @@ bool sendShortcut(HWND window, bool alt)
   return true;
 }
 
-bool checkWindowActions(HDESK desktop, DWORD pid)
+bool checkNormalShortcuts(HWND window)
+{
+  ShowWindow(window, SW_RESTORE);
+  if (!SetWindowPos(window, nullptr, 120, 120, 960, 680, SWP_NOZORDER | SWP_NOACTIVATE)) return false;
+  Sleep(500);
+  RECT original{};
+  if (!GetWindowRect(window, &original)) return false;
+  for (int shortcut = 0; shortcut < 2; ++shortcut) {
+    if (!sendShortcut(window, shortcut == 1) || !waitFullscreen(window) ||
+        !sendShortcut(window, shortcut == 1)) return false;
+    bool restored = false;
+    for (int i = 0; i < 50; ++i) {
+      RECT current{};
+      if (GetWindowRect(window, &current) && EqualRect(&original, &current)) { restored = true; break; }
+      Sleep(100);
+    }
+    if (!restored) return false;
+  }
+  return true;
+}
+
+bool checkWindowActions(HDESK desktop, DWORD pid, bool geometryOnly)
 {
   WindowSearch search{pid, nullptr};
   for (int i = 0; i < 100 && !search.window; ++i) {
@@ -85,6 +106,13 @@ bool checkWindowActions(HDESK desktop, DWORD pid)
   if (!search.window) { std::puts("window actions window not found"); return false; }
   if (!SetThreadDesktop(desktop)) {
     std::printf("window actions desktop failed %lu\n", GetLastError()); return false;
+  }
+  if (geometryOnly) {
+    RECT rect{};
+    bool ok = GetWindowRect(search.window, &rect) != FALSE;
+    if (ok) std::printf("window bounds %ld %ld %ld %ld\n", rect.left, rect.top, rect.right, rect.bottom);
+    std::fflush(stdout);
+    return SetThreadDesktop(previous) && ok;
   }
   ShowWindow(search.window, SW_MAXIMIZE);
   bool success = waitMaximized(search.window, true);
@@ -97,6 +125,14 @@ bool checkWindowActions(HDESK desktop, DWORD pid)
       success = sendShortcut(search.window, shortcut == 1) && waitMaximized(search.window, true);
       std::printf("window actions %s restore %s\n", name, success ? "passed" : "failed");
     }
+  }
+  if (success) {
+    success = checkNormalShortcuts(search.window);
+    std::printf("window actions normal bounds %s\n", success ? "passed" : "failed");
+    RECT rect{};
+    if (success && GetWindowRect(search.window, &rect))
+      std::printf("window bounds %ld %ld %ld %ld\n", rect.left, rect.top, rect.right, rect.bottom);
+    else success = false;
   }
   std::fflush(stdout);
   return SetThreadDesktop(previous) && success;
@@ -146,7 +182,8 @@ int wmain(int argc, wchar_t **argv)
     return 4;
   }
   std::wstring command = L"\"" + std::wstring(argv[1]) + L"\" --config-dir \"" + argv[2] + L"\"";
-  const bool windowActions = argc == 4 && std::wstring(argv[3]) == L"--window-actions";
+  const bool geometryOnly = argc == 4 && std::wstring(argv[3]) == L"--geometry-observe";
+  const bool windowActions = argc == 4 && (std::wstring(argv[3]) == L"--window-actions" || geometryOnly);
   if (argc == 4 && !windowActions) command += L" " + std::wstring(argv[3]);
   STARTUPINFOW startup{};
   startup.cb = sizeof(startup);
@@ -172,7 +209,7 @@ int wmain(int argc, wchar_t **argv)
   }
   bool actionsOk = true;
   if (windowActions) {
-    actionsOk = waitForReady() && checkWindowActions(desktop, process.dwProcessId);
+    actionsOk = waitForReady() && checkWindowActions(desktop, process.dwProcessId, geometryOnly);
     std::printf("window actions %s\n", actionsOk ? "passed" : "failed"); std::fflush(stdout);
   }
   const DWORD wait = WaitForSingleObject(process.hProcess, 12000);

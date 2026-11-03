@@ -1,6 +1,6 @@
 // Diagnostic: runs the real application on a non-input desktop for 25 seconds.
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, open, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, rm, writeFile, readFile } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { once } from 'node:events';
@@ -9,7 +9,7 @@ const [helper, build, qt, mode] = process.argv.slice(2);
 if (![helper, build, qt].every(value => value && path.isAbsolute(value))) {
   throw new Error('Pass absolute paths to helper, integration build, and Qt root');
 }
-if (mode && !['--baseline', '--log-failure', '--window-actions'].includes(mode)) throw new Error('Unknown mode');
+if (mode && !['--baseline', '--log-failure', '--window-actions', '--geometry'].includes(mode)) throw new Error('Unknown mode');
 const marker = path.join(build, 'src', 'portable');
 const outputRoot = path.join(build, 'desktop-smoke-native');
 let output;
@@ -74,14 +74,16 @@ async function observe(port, child, requestExit = true) {
 
 async function runCase(spec) {
     const dir = path.join(output, spec.name);
-    const data = path.join(dir, 'data');
+    const data = path.join(spec.sharedData ? path.join(output, 'geometry-profile') : dir, 'data');
     await mkdir(path.join(data, 'profiles', profile), { recursive: true });
     await mkdir(path.join(dir, 'temp'), { recursive: true });
-    await writeFile(path.join(data, 'profiles.json'), JSON.stringify({ defaultProfile: profile }));
-    await writeFile(path.join(data, 'profiles', profile, 'profile.json'), JSON.stringify({ name: 'Smoke' }));
+    if (!spec.reuseData) {
+      await writeFile(path.join(data, 'profiles.json'), JSON.stringify({ defaultProfile: profile }));
+      await writeFile(path.join(data, 'profiles', profile, 'profile.json'), JSON.stringify({ name: 'Smoke' }));
+      await writeFile(path.join(data, 'profiles', profile, 'jellyfin-desktop.conf'),
+        JSON.stringify({ version: 7, sections: { main: { allowBrowserZoom: !spec.disablePinch } } }));
+    }
     if (spec.logFailure) await writeFile(path.join(data, 'profiles', profile, 'logs'), 'block log directory');
-    await writeFile(path.join(data, 'profiles', profile, 'jellyfin-desktop.conf'),
-      JSON.stringify({ version: 7, sections: { main: { allowBrowserZoom: !spec.disablePinch } } }));
     const port = await portNumber();
     const env = { ...process.env, PATH: `${path.join(qt, 'bin')};${process.env.PATH}`,
       QT_PLUGIN_PATH: path.join(qt, 'plugins'), QML2_IMPORT_PATH: path.join(qt, 'qml'),
@@ -108,8 +110,13 @@ async function runCase(spec) {
     const [code] = child.exitCode === null ? await once(child, 'exit') : [child.exitCode];
     await writeFile(path.join(dir, 'console.log'), log);
     const diagnostic = log.split(/\r?\n/).filter(line =>
-      /app pid|app wait|job active|window actions|Failed to create temporary log|ERROR:/.test(line)).join('\n');
+      /app pid|app wait|job active|window actions|window bounds|Failed to create temporary log|ERROR:/.test(line)).join('\n');
     const result = { case: spec.name, observation, helperExit: code, log: diagnostic };
+    if (spec.sharedData) {
+      const storage = await readFile(path.join(data, 'profiles', profile, 'storage.json'), 'utf8');
+      await writeFile(path.join(dir, 'storage.json'), storage);
+      result.bounds = /window bounds (-?\d+ -?\d+ -?\d+ -?\d+)/.exec(log)?.[1];
+    }
     result.failures = checkCase(spec, result);
     await writeFile(path.join(dir, 'result.json'), JSON.stringify(result, null, 2));
     delete result.observation.raw;
@@ -151,9 +158,20 @@ async function main() {
       { name: 'quoted-flags', flags: '--user-agent="Desktop Smoke Test"' }];
     const selected = mode === '--baseline' ? cases.slice(0, 2) :
       mode === '--log-failure' ? [{ name: 'log-failure', logFailure: true }] :
+      mode === '--geometry' ? [
+        { name: 'geometry-1', arg: '--window-actions', windowActions: true, sharedData: true },
+        { name: 'geometry-2', arg: '--geometry-observe', windowActions: true, sharedData: true, reuseData: true },
+        { name: 'geometry-3', arg: '--geometry-observe', windowActions: true, sharedData: true, reuseData: true }
+      ] :
       mode === '--window-actions' ? [{ name: 'window-actions', arg: '--window-actions', windowActions: true }] : cases;
+    let firstBounds;
     for (const spec of selected) {
       const result = await runCase(spec);
+      if (spec.sharedData) {
+        if (!firstBounds) firstBounds = result.bounds;
+        if (!result.bounds || result.bounds !== firstBounds) result.failures.push('restored bounds differ');
+        await writeFile(path.join(output, spec.name, 'result.json'), JSON.stringify(result, null, 2));
+      }
       console.log(JSON.stringify(result));
       if (result.failures.length) process.exitCode = 1;
     }
