@@ -54,7 +54,7 @@ $vcvars = Join-Path $vs 'VC/Auxiliary/Build/vcvars64.bat'
 $inno = Find-Tool 'ISCC.exe' @("${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe", "$env:ProgramFiles/Inno Setup 6/ISCC.exe")
 $env:PATH = "$(Split-Path $inno);$env:PATH"
 foreach ($name in @('PATH', 'INCLUDE', 'LIB', 'LIBPATH')) {
-    $value = & cmd.exe /d /v:on /s /c "`"`"$vcvars`" >nul && echo !$name!`""
+    $value = & cmd.exe /d /v:on /c "call `"$vcvars`" >nul && echo !$name!"
     if ($LASTEXITCODE -ne 0 -or -not $value) { throw "MSVC environment setup failed for $name" }
     [Environment]::SetEnvironmentVariable($name, ($value -join "`n"), 'Process')
 }
@@ -84,6 +84,7 @@ Run-Native 'cmake.exe' @('-S', $root, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUIL
 Run-Native 'cmake.exe' @('--build', $build)
 Run-Native 'ctest.exe' @('--test-dir', $build, '--output-on-failure', '--timeout', '60', '--output-junit', "$results/ctest.xml")
 Run-Native $venvPython @('tests/windows_mpv_loader_integration.py')
+Run-Native $venvPython @('tests/windows_packaging_runtime_test.py')
 Run-Native 'cmake.exe' @('--build', $build, '--target', 'windows_all')
 $artifacts = @(Get-ChildItem -Path "$build/JellyfinDesktop-*.exe", "$build/JellyfinDesktop-*.zip")
 if (@($artifacts | Where-Object Extension -eq '.exe').Count -ne 1 -or @($artifacts | Where-Object Extension -eq '.zip').Count -ne 1) { throw 'Expected exactly one installer and one portable ZIP' }

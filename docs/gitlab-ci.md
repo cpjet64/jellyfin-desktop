@@ -3,7 +3,7 @@
 This pipeline validates the Windows x64 candidate using the shell executor on
 the `win203-unprotected` runner. It builds with MSVC, Qt 6.9.3 and the same
 primary and fallback mpv versions as the existing GitHub Windows workflow. It
-runs CTest and the Windows mpv loader harness, then creates the installer and
+runs CTest, the Windows mpv loader harness and packaging fixture, then creates the installer and
 portable ZIP. Artifacts include CTest's JUnit report, SHA-256 checksums and
 pipeline/job/commit provenance. The packages are unsigned and are not releases.
 
@@ -13,6 +13,28 @@ Protected refs, tags, schedules and other pipeline sources are excluded pending
 an explicit protected-resource policy. No caches, signing, deployment, package
 registry or release operations are configured. The GitHub workflows remain in
 place, including Linux and macOS; this is deliberately Windows-only coverage.
+
+## Migration scope and parity
+
+The requested replacement is the Windows candidate validation run. It is a
+deliberate exception to a full multi-platform CI migration: other GitHub
+workflows remain active and are not claimed to have been migrated or proven by
+this pipeline. No GitHub workflow is retired until the replacement has a green
+GitLab run for the delivered commit.
+
+| Behavior | Existing GitHub Windows workflow | GitLab candidate |
+| --- | --- | --- |
+| Admission | Reusable workflow, manual dispatch, or push to `master`; the parent build also calls it on pushes to `release`, `prerelease`, and `test` and manual dispatch | Unprotected branch pushes, merge requests, and web/API branch runs; duplicate branch push suppressed for an open MR |
+| Platform | Hosted Windows x64; ARM64 disabled | Shell executor on `win203-unprotected`, Windows x64 |
+| Inputs | Recursive submodules, MSVC, Qt 6.9.3, primary and fallback mpv, VC runtime and Inno | Same product inputs; host tools are prerequisites and dependencies are installed in the checkout |
+| Validation | Build, CTest and mpv loader harness, then package | Same validation plus the Windows packaging fixture before packaging |
+| Outputs | Installer and portable ZIP | Installer and portable ZIP, JUnit report, checksums and provenance |
+| Privileged actions | No signing or release in the Windows build workflow | No signing, release, deployment or registry writes |
+
+GitHub's separate Linux test/coverage workflow and Linux, macOS, AppImage,
+coverage-comment and aggregate build workflows remain outside this candidate's
+scope. Protected refs are intentionally excluded while the protected-resource
+policy is unresolved; they do not receive replacement validation from this file.
 
 The runner must have Python with venv, Visual Studio 2022 x64 C++ tools and
 redistributable, CMake with JUnit-capable CTest, Ninja, 7-Zip, and Inno Setup 6.
