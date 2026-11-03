@@ -41,26 +41,43 @@ def command(name, args, *, env=None, timeout=120):
 def preflight():
     system = platform.system()
     machine = platform.machine().lower()
+    free = shutil.disk_usage(ROOT).free
+    print(f"Runner OS={system} architecture={machine} free_bytes={free}", flush=True)
     if (system, machine) not in (("Linux", "x86_64"), ("Darwin", "x86_64")):
         raise RuntimeError(f"Unsupported native runner: {system}/{machine}")
     if os.environ.get("CI_JOB_IMAGE"):
         raise RuntimeError("BLOCKED: native shell runner required")
-    if shutil.disk_usage(ROOT).free < 10 * 1024**3:
-        raise RuntimeError("BLOCKED: at least 10 GiB free space required")
     tools = ["cmake", "ctest", "ninja", "pkg-config", "git", "c++", "node"]
     if system == "Linux":
         tools += ["xvfb-run", "xauth", "dbus-run-session", "glxinfo"]
-    elif os.environ.get("CI_DEDICATED_GUI_SESSION") != "1":
-        raise RuntimeError("BLOCKED: dedicated macOS GUI session not attested")
+    for tool in tools:
+        print(f"Tool {tool}: {shutil.which(tool) or 'MISSING'}", flush=True)
+    if free < 10 * 1024**3:
+        raise RuntimeError("BLOCKED: at least 10 GiB free space required")
     missing = [tool for tool in tools if not shutil.which(tool)]
     if missing:
         raise RuntimeError("BLOCKED: missing tools: " + ", ".join(missing))
     if system == "Darwin":
+        if os.environ.get("CI_DEDICATED_GUI_SESSION") != "1":
+            raise RuntimeError("BLOCKED: dedicated macOS GUI session not attested")
+        # MpvQt appends this name to Qt ConfigLocation (~/Library/Preferences on macOS).
+        # Inspect existence only: the contents belong to the session owner.
+        config = Path.home() / "Library/Preferences/mpvqt/mpvqt.conf"
+        print(f"MpvQt writable configuration candidate: {config}", flush=True)
+        try:
+            config.lstat()
+        except FileNotFoundError:
+            pass
+        else:
+            raise RuntimeError("BLOCKED: existing non-job-owned mpvqt configuration would be consumed")
         result = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}"],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
         if result.returncode:
             raise RuntimeError("BLOCKED: dedicated macOS GUI session is unavailable")
-        print(f"macOS GUI session available for uid {os.getuid()}", flush=True)
+        console = subprocess.check_output(["stat", "-f", "%u", "/dev/console"], text=True, timeout=15).strip()
+        if console != str(os.getuid()):
+            raise RuntimeError("BLOCKED: dedicated GUI session does not own the console")
+        print(f"Dedicated macOS GUI session and console uid: {os.getuid()}", flush=True)
     mode = os.environ.get("CI_MPVQT_MODE")
     if mode not in ("static", "system"):
         raise RuntimeError("CI_MPVQT_MODE must be static or system")
@@ -68,10 +85,17 @@ def preflight():
 
 
 def configure(system, mode):
+    command("report-gate-tests", [sys.executable, "tests/test_ci_results.py"])
     command("compiler-version", ["c++", "--version"])
     command("cmake-version", ["cmake", "--version"])
     command("mpv-version", ["pkg-config", "--modversion", "mpv"])
-    command("qt-versions", ["pkg-config", "--modversion", "Qt6Core", "Qt6WebEngineQuick", "Qt6WebChannel", "Qt6Positioning"])
+    if system == "Linux":
+        command("qt-versions", ["pkg-config", "--modversion", "Qt6Core", "Qt6WebEngineQuick", "Qt6WebChannel", "Qt6Positioning"])
+    elif shutil.which("qmake6"):
+        command("qt-version", ["qmake6", "-query", "QT_VERSION"])
+        command("qt-prefix", ["qmake6", "-query", "QT_INSTALL_PREFIX"])
+    else:
+        print("qmake6 unavailable; CMake configure records Qt version and modules", flush=True)
     command("mpvqt-source", ["git", "-C", "external/mpvqt", "rev-parse", "HEAD"])
     sha = subprocess.check_output(["git", "-C", "external/mpvqt", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     if sha != "2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e":

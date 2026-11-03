@@ -19,13 +19,18 @@ function Run-Native {
 }
 
 if (-not $env:CI_JOB_ID) { throw 'This script requires an isolated GitLab job checkout.' }
+$drive = Get-PSDrive -Name ([System.IO.Path]::GetPathRoot($root).Substring(0, 1))
+Write-Host "Runner OS=$([Environment]::OSVersion.VersionString) architecture=$env:PROCESSOR_ARCHITECTURE free_bytes=$($drive.Free)"
+foreach ($name in @('git.exe', 'python.exe', 'curl.exe', 'tar.exe', 'cmake.exe', 'ninja.exe', 'node.exe', '7z.exe', 'ISCC.exe')) {
+    $tool = Find-OptionalTool $name
+    if ($tool) { Write-Host "Tool ${name}: $tool" } else { Write-Host "Tool ${name}: not on PATH" }
+}
 if ($env:CI_JOB_IMAGE) { throw 'BLOCKED: native shell runner required' }
 if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'BLOCKED: Windows x64 runner required' }
 $mode = if ($env:CI_MPVQT_MODE) { $env:CI_MPVQT_MODE } else { 'static' }
 if ($mode -notin @('static', 'system')) { throw 'CI_MPVQT_MODE must be static or system' }
 $sourceSha = & git.exe -C external/mpvqt rev-parse HEAD
 if ($LASTEXITCODE -ne 0 -or $sourceSha -ne '2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e') { throw 'Unexpected mpvqt source revision' }
-$drive = Get-PSDrive -Name ([System.IO.Path]::GetPathRoot($root).Substring(0, 1))
 if ($drive.Free -lt 20GB) { throw 'At least 20 GiB free space is required before dependency downloads.' }
 $python = Find-OptionalTool 'python.exe'
 if (-not $python) { throw 'Python is required on the runner' }
@@ -79,6 +84,7 @@ Install-Mpv 'x86_64-v3' "$build/mpv" $sevenZip $ci $mpvVersion '49533E80D681672E
 Install-Mpv 'x86_64' "$build/mpv-fallback" $sevenZip $ci $mpvVersion 'D7F5621F42B6E161FE032DF914A10BDECE28A89DF3E57C6C3E16A5A250929B5E'
 Run-Native $python @('-m', 'venv', "$ci/venv")
 $venvPython = Join-Path $ci 'venv/Scripts/python.exe'
+Run-Native $venvPython @('tests/test_ci_results.py')
 Run-Native $venvPython @('-m', 'pip', 'install', 'aqtinstall==3.3.0')
 Run-Native $venvPython @('-m', 'aqt', 'install-qt', 'windows', 'desktop', $qtVersion, 'win64_msvc2022_64', '-m', 'qtwebengine', 'qtwebchannel', 'qtpositioning', '-O', "$ci/qt")
 $exports = & dumpbin.exe /exports "$build/mpv/libmpv-2.dll"
