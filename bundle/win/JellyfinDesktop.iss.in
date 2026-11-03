@@ -63,12 +63,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
+; Extracted during preparation; put it first to avoid decompressing the application first.
+Source: "{#DeployPath}/vc_redist.x64.exe"; Flags: dontcopy
 ; Main application files (exclude redist folder - handled separately)
 Source: "{#DeployPath}/*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "redist,redist/*,vc_redist.x64.exe"
 ; Bundled VC runtime DLLs - only copied if needed (see Code section)
 Source: "{#DeployPath}/redist/*.dll"; DestDir: "{app}"; Check: NeedsBundledRuntime
-; Bundled VCRedist installer - extracted to temp for potential system-wide install
-Source: "{#DeployPath}/vc_redist.x64.exe"; Flags: dontcopy
 
 [Icons]
 Name: "{autoprograms}\Jellyfin Desktop"; Filename: "{app}\{#MyAppExeName}"; Comment: "Jellyfin desktop client"; WorkingDir: "{app}"
@@ -82,6 +82,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch Jellyfin Desktop"; Flags
 var
   RemoveUserData: Boolean;
   VCRedistNeeded: Boolean;
+  VCRedistRestartRequired: Boolean;
   UseBundledRuntime: Boolean;
 
 function RuntimeFileCompatible(const FileName, RequiredVersion: String): Boolean;
@@ -148,7 +149,13 @@ function InitializeSetup(): Boolean;
 begin
   Result := True;
   VCRedistNeeded := False;
+  VCRedistRestartRequired := False;
   UseBundledRuntime := False;
+end;
+
+function NeedRestart: Boolean;
+begin
+  Result := VCRedistRestartRequired;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -187,7 +194,7 @@ begin
       if Exec(ExpandConstant('{tmp}\vc_redist.x64.exe'), '/install /passive /norestart', '', SW_HIDE, ewWaitUntilTerminated, ExitCode) then
       begin
         Log('VCRedist exited with code ' + IntToStr(ExitCode));
-        if ExitCode = 3010 then NeedsRestart := True;
+        if ExitCode = 3010 then VCRedistRestartRequired := True;
       end
       else Log('Could not start VCRedist');
       UseBundledRuntime := not HasSystemVCRuntime;
