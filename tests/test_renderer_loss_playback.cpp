@@ -36,11 +36,35 @@ bool readIdle(mpv_handle* mpv)
   return mpv_get_property(mpv, "idle-active", MPV_FORMAT_FLAG, &idle) >= 0 && idle;
 }
 
-mpv_event_hook* nextHook(mpv_handle* client)
+class HeldHook
 {
-  mpv_event* event = mpv_wait_event(client, 0);
-  return event && event->event_id == MPV_EVENT_HOOK ? static_cast<mpv_event_hook*>(event->data) : nullptr;
-}
+public:
+  explicit HeldHook(mpv_handle* primary) : client(mpv_create_client(primary, "recovery-test-hook")) {}
+  ~HeldHook()
+  {
+    if (client && active) mpv_hook_continue(client, id);
+    if (client) mpv_destroy(client);
+  }
+  bool poll()
+  {
+    if (active) return true;
+    mpv_event* event = mpv_wait_event(client, 0);
+    if (!event || event->event_id != MPV_EVENT_HOOK || !event->data) return false;
+    id = static_cast<mpv_event_hook*>(event->data)->id;
+    active = true;
+    return true;
+  }
+  int release()
+  {
+    const int result = mpv_hook_continue(client, id);
+    if (result >= 0) active = false;
+    return result;
+  }
+  mpv_handle* client;
+private:
+  uint64_t id = 0;
+  bool active = false;
+};
 }
 
 class TestRendererLossPlayback : public QObject
@@ -98,21 +122,18 @@ void TestRendererLossPlayback::actualPlayback()
 
 void TestRendererLossPlayback::heldHook(PlayerComponent& player, mpv_handle* primary, const QString& media)
 {
-  mpv_handle* hookClient = mpv_create_client(primary, "recovery-test-hook");
-  QVERIFY(hookClient);
-  QCOMPARE(mpv_hook_add(hookClient, 77, "on_load", -10), 0);
+  HeldHook hook(primary);
+  QVERIFY(hook.client);
+  QCOMPARE(mpv_hook_add(hook.client, 77, "on_load", -10), 0);
   QVERIFY(player.load(QUrl::fromLocalFile(media).toString(), {{"autoplay", true}}, {{"type", "video"}}));
-  mpv_event_hook* hook = nullptr;
-  QTRY_VERIFY_WITH_TIMEOUT((hook = nextHook(hookClient)) != nullptr, 10000);
-  const uint64_t hookId = hook->id;
+  QTRY_VERIFY_WITH_TIMEOUT(hook.poll(), 10000);
   WebClientFaultGuard::instance().observeRendererLoss(0, 17);
   const auto stopped = player.requestNativeStop();
   QCOMPARE(stopped.status, PlayerComponent::NativeStopResult::Status::Accepted);
-  QCOMPARE(mpv_hook_continue(hookClient, hookId), 0);
+  QCOMPARE(hook.release(), 0);
   QTRY_VERIFY_WITH_TIMEOUT(readIdle(primary), 10000);
   QTest::qWait(1000);
   QVERIFY(readIdle(primary));
-  mpv_destroy(hookClient);
 }
 
 void TestRendererLossPlayback::verifyPlayback(PlayerComponent& player, mpv_handle* primary,
