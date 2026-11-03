@@ -5,7 +5,13 @@ Inventory date: 2026-11-03. Baseline: upstream integration commit
 6.9.3 rollback, mpv 20261018 update, ready/locale changes, and volume and
 audio fixes. These facts do not establish that any particular report is fixed.
 
-This inventory covers every open upstream issue returned by a 1,000-item open
+The refreshed upstream listing returned 362 open issues, below the 1,000-item
+limit. This inventory covers every open upstream issue returned by that listing
+whose title or label meets the rule below, plus Windows environments identified
+in issue bodies. It does not treat template examples or Windows mentioned only
+as a working comparison as reports of Windows failures.
+
+The title and label inventory covers every open upstream issue returned by a 1,000-item open
 issue listing whose title explicitly mentions Windows, Win10 or Win11, or whose
 labels include `windows`. It also identifies selected reports with Windows
 environments that this mechanical rule misses. An issue being open is evidence
@@ -81,11 +87,35 @@ repeatedly, reboot, and test disconnected and rearranged monitors. For #1091,
 measure process memory after repeated fullscreen-setting changes and allow for
 normal allocation and reclamation before concluding that growth is a leak.
 
-Other open reports can describe Windows in their body, compare platforms, or use
-an issue template mentioning Windows. They are not automatically Windows-owned.
-Investigate cross-platform reports when their observed behavior overlaps a
-reproduced Windows defect; do not infer that this finite title/label inventory
-proves all such reports have been resolved.
+[#1196](https://github.com/jellyfin/jellyfin-desktop/issues/1196) reports that
+tone-mapping settings have no apparent effect on Windows 11 with a 2.0-dev build
+dated 2026-03-02. It needs a baseline test with controlled HDR media, display,
+and configuration; neither the report nor its screenshots establish the cause.
+[#1238](https://github.com/jellyfin/jellyfin-desktop/issues/1238) describes
+Windows Server library metadata retaining old drive paths after a library move.
+Its trigger concerns server indexing and the dashboard; compare with the browser
+and server before attributing it to this client.
+
+### Earlier Windows-environment reports
+
+The following body-reported Windows issues are open but are from earlier client
+generations or lack an established 2.x reproduction. Issue links identify the
+exact media, device, and configuration needed for reproduction. A reported
+workaround, upstream discussion, or related fix does not prove baseline behavior.
+
+| Area | Reports and acceptance direction |
+| --- | --- |
+| Startup and connection | [#1034](https://github.com/jellyfin/jellyfin-desktop/issues/1034) (1.12.0 internationalized server URL after restart), [#1015](https://github.com/jellyfin/jellyfin-desktop/issues/1015) (1.12.0 media DNS failure and misleading error), [#906](https://github.com/jellyfin/jellyfin-desktop/issues/906), [#831](https://github.com/jellyfin/jellyfin-desktop/issues/831), [#828](https://github.com/jellyfin/jellyfin-desktop/issues/828), [#772](https://github.com/jellyfin/jellyfin-desktop/issues/772), [#763](https://github.com/jellyfin/jellyfin-desktop/issues/763), [#724](https://github.com/jellyfin/jellyfin-desktop/issues/724), [#613](https://github.com/jellyfin/jellyfin-desktop/issues/613), [#451](https://github.com/jellyfin/jellyfin-desktop/issues/451), [#306](https://github.com/jellyfin/jellyfin-desktop/issues/306), [#295](https://github.com/jellyfin/jellyfin-desktop/issues/295). Reproduce with the reported server, display and GPU setup; distinguish client errors from server, DNS and configuration failures. |
+| Playback and HDR | [#985](https://github.com/jellyfin/jellyfin-desktop/issues/985) and [#953](https://github.com/jellyfin/jellyfin-desktop/issues/953) (1.12.0), [#899](https://github.com/jellyfin/jellyfin-desktop/issues/899), [#847](https://github.com/jellyfin/jellyfin-desktop/issues/847), [#843](https://github.com/jellyfin/jellyfin-desktop/issues/843) (1.11.1), [#792](https://github.com/jellyfin/jellyfin-desktop/issues/792), [#753](https://github.com/jellyfin/jellyfin-desktop/issues/753) (1.11.1 HDR), [#751](https://github.com/jellyfin/jellyfin-desktop/issues/751), [#594](https://github.com/jellyfin/jellyfin-desktop/issues/594), [#593](https://github.com/jellyfin/jellyfin-desktop/issues/593), [#566](https://github.com/jellyfin/jellyfin-desktop/issues/566), [#504](https://github.com/jellyfin/jellyfin-desktop/issues/504), [#437](https://github.com/jellyfin/jellyfin-desktop/issues/437) (1.9.1), [#385](https://github.com/jellyfin/jellyfin-desktop/issues/385), [#338](https://github.com/jellyfin/jellyfin-desktop/issues/338), [#331](https://github.com/jellyfin/jellyfin-desktop/issues/331) (1.7.1), [#140](https://github.com/jellyfin/jellyfin-desktop/issues/140) (1.6.1). Use representative source media and compare browser and native playback; HDR and device-specific cases require the relevant hardware. |
+| Audio and devices | [#910](https://github.com/jellyfin/jellyfin-desktop/issues/910) (1.12.0 normalization), [#715](https://github.com/jellyfin/jellyfin-desktop/issues/715) (KVM audio disconnect), [#663](https://github.com/jellyfin/jellyfin-desktop/issues/663), [#495](https://github.com/jellyfin/jellyfin-desktop/issues/495), [#428](https://github.com/jellyfin/jellyfin-desktop/issues/428) (1.9.1 passthrough). Verify continuity, device changes and expected audio level with the specified devices and media; later audio fixes need separate proof against each case. |
+| Subtitles | [#902](https://github.com/jellyfin/jellyfin-desktop/issues/902) (supplements #804), [#804](https://github.com/jellyfin/jellyfin-desktop/issues/804), [#679](https://github.com/jellyfin/jellyfin-desktop/issues/679), [#677](https://github.com/jellyfin/jellyfin-desktop/issues/677) (1.10.1), [#643](https://github.com/jellyfin/jellyfin-desktop/issues/643), [#568](https://github.com/jellyfin/jellyfin-desktop/issues/568), [#398](https://github.com/jellyfin/jellyfin-desktop/issues/398) (1.9.0), [#251](https://github.com/jellyfin/jellyfin-desktop/issues/251) and [#187](https://github.com/jellyfin/jellyfin-desktop/issues/187) (1.7 prereleases), [#249](https://github.com/jellyfin/jellyfin-desktop/issues/249). Reproduce selection, formatting, external tracks and edits with the reported files; separate client rendering from server delivery. |
+| UI and library | [#1069](https://github.com/jellyfin/jellyfin-desktop/issues/1069) (1.12.0 middle-click scrolling), [#845](https://github.com/jellyfin/jellyfin-desktop/issues/845) (1.11.1/1.12.0 ebooks), [#794](https://github.com/jellyfin/jellyfin-desktop/issues/794), [#791](https://github.com/jellyfin/jellyfin-desktop/issues/791) (1.11.1 drag-and-drop), [#718](https://github.com/jellyfin/jellyfin-desktop/issues/718) (1.11.0 refresh), [#704](https://github.com/jellyfin/jellyfin-desktop/issues/704), [#645](https://github.com/jellyfin/jellyfin-desktop/issues/645) (1.10.0), [#619](https://github.com/jellyfin/jellyfin-desktop/issues/619), [#520](https://github.com/jellyfin/jellyfin-desktop/issues/520) (multi-monitor fullscreen), [#404](https://github.com/jellyfin/jellyfin-desktop/issues/404), [#225](https://github.com/jellyfin/jellyfin-desktop/issues/225). Compare browser behavior where appropriate and test the specified interaction, screen layout or library state. |
+
+[#283](https://github.com/jellyfin/jellyfin-desktop/issues/283) requests gamepad
+track selection and is an enhancement, not a confirmed defect. Comments on
+some older reports suggest server behavior, custom CSS, or configuration as
+possible causes; those suggestions require verification. The inventory does
+not establish that any open issue is fixed.
 
 ## Work and proof boundaries
 
