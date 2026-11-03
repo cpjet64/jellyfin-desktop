@@ -46,6 +46,12 @@ class TestCTestReports(unittest.TestCase):
             with self.subTest(xml=xml), self.assertRaises(ValueError):
                 self.check(xml, ["test_mpris_fault"])
 
+    def test_every_required_case_must_be_present(self):
+        xml = '<testsuite><testcase name="test_fault_stop"/><testcase name="test_webclient_transport"/></testsuite>'
+        self.check(xml, ["test_fault_stop", "test_webclient_transport"])
+        with self.assertRaisesRegex(ValueError, "test_mpvqt_event_ownership"):
+            self.check(xml, ["test_fault_stop", "test_webclient_transport", "test_mpvqt_event_ownership"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -108,9 +108,14 @@ def configure(system, mode):
     prefix = ["dbus-run-session", "--"] if system == "Linux" else []
     command("ctest", prefix + ["ctest", "--test-dir", str(BUILD), "-LE", "gui", "--output-on-failure",
                                "--no-tests=error", "--timeout", "60", "--output-junit", str(RESULTS / "ctest.xml")], timeout=900)
-    report = [sys.executable, "dev/ci/check_results.py", "junit", str(RESULTS / "ctest.xml"), "--require", "test_webclient_fault_guard"]
+    report = [sys.executable, "dev/ci/check_results.py", "junit", str(RESULTS / "ctest.xml")]
+    required = ["test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard"]
+    if mode == "static":
+        required.append("test_mpvqt_event_ownership")
     if system == "Linux":
-        report += ["--require", "test_mpris_fault"]
+        required.append("test_mpris_fault")
+    for name in required:
+        report += ["--require", name]
     command("ctest-report", report)
     command("input-plugin", ["node", "--test", "tests/test_inputPlugin.js"], timeout=120)
     command("bundle-paths", [sys.executable, "tests/test_bundle_paths.py"], timeout=120)
@@ -148,6 +153,9 @@ def run_scenarios(fixture, prefix, env, media):
         if fixture == "test_renderer_loss_playback" and scenario != "held-hook":
             if any(not (evidence / name).is_file() for name in ("before.png", "after.png")):
                 raise RuntimeError(f"Missing {scenario} image evidence")
+        if fixture == "test_webclient_containment" and scenario != "held-hook":
+            if any(not (evidence / name).is_file() for name in ("containment-before.png", "containment-after.png")):
+                raise RuntimeError(f"Missing containment {scenario} image evidence")
 
 
 def main():

@@ -103,7 +103,11 @@ $static = if ($mode -eq 'static') { 'ON' } else { 'OFF' }
 Run-Native 'cmake.exe' @('-S', $root, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=RelWithDebInfo', "-DCMAKE_INSTALL_PREFIX=$build/output", "-DQTROOT=$qt", "-DMPV_INCLUDE_DIR=$build/mpv/include", "-DMPV_LIBRARY=$build/mpv/libmpv-2.dll.lib", '-DCHECK_FOR_UPDATES=ON', "-DUSE_STATIC_MPVQT=$static", "-DMPVQT_EXTERNAL_EVENTS=$static")
 Run-Native 'cmake.exe' @('--build', $build, '--parallel', '4')
 Run-Native 'ctest.exe' @('--test-dir', $build, '-LE', 'gui', '--no-tests=error', '--output-on-failure', '--timeout', '60', '--output-junit', "$results/ctest.xml")
-Run-Native $venvPython @('dev/ci/check_results.py', 'junit', "$results/ctest.xml", '--require', 'test_webclient_fault_guard')
+$reportArgs = @('dev/ci/check_results.py', 'junit', "$results/ctest.xml")
+$required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard')
+if ($mode -eq 'static') { $required += 'test_mpvqt_event_ownership' }
+foreach ($name in $required) { $reportArgs += @('--require', $name) }
+Run-Native $venvPython $reportArgs
 Invoke-NativeGuiTests $build $results $venvPython
 Run-Native $venvPython @('tests/windows_mpv_loader_integration.py')
 Run-Native $venvPython @('tests/windows_packaging_runtime_test.py')

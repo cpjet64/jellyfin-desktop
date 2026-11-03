@@ -48,6 +48,11 @@ function Invoke-NativeGuiSuite {
                     if (-not (Test-Path -LiteralPath "$evidence/$image" -PathType Leaf)) { throw "Missing $scenario image $image" }
                 }
             }
+            if ($fixture -eq 'test_webclient_containment' -and $scenario -ne 'held-hook') {
+                foreach ($image in @('containment-before.png', 'containment-after.png')) {
+                    if (-not (Test-Path -LiteralPath "$evidence/$image" -PathType Leaf)) { throw "Missing containment $scenario image $image" }
+                }
+            }
         }
     }
     Write-Host 'PASS: WebEngine and all 6 playback scenarios on hidden desktops'
