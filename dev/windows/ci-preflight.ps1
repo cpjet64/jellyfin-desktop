@@ -33,6 +33,6 @@ function Write-NativeInventory {
     }
     Write-Host "Qt expected job prefix=$Workspace/qt/6.9.3/msvc2022_64 modules=Core,Quick,WebEngine,WebChannel,Positioning"
     Write-Host "mpv expected job paths=$Root/build/mpv/include and $Root/build/mpv/libmpv-2.dll.lib"
-    Write-Host "MpvQt system mode: unmodified pinned source, job-local installed shared package; availability established after bootstrap"
+    Write-Host "MpvQt system mode: pinned source plus destructor compatibility patch, job-local shared package; availability established after bootstrap"
     Write-Host 'Display: hidden-desktop and real rendering capabilities must be proven by required GUI tests'
 }

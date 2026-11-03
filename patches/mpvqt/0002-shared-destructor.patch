@@ -1,0 +1,11 @@
+diff --git a/src/mpvcontroller.h b/src/mpvcontroller.h
+--- a/src/mpvcontroller.h
++++ b/src/mpvcontroller.h
+@@ -66,0 +67 @@
++    ~MpvController() override;
+diff --git a/src/mpvcontroller.cpp b/src/mpvcontroller.cpp
+--- a/src/mpvcontroller.cpp
++++ b/src/mpvcontroller.cpp
+@@ -170,0 +171,2 @@
++MpvController::~MpvController() = default;
++

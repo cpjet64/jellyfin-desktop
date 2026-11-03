@@ -19,3 +19,8 @@ endforeach()
 if(NOT _found)
   message(FATAL_ERROR "No installed MpvQt runtime found")
 endif()
+
+add_executable(mpvqt_public_consumer consumer.cpp "${CMAKE_CURRENT_LIST_DIR}/../../../tests/mpv_test_bootstrap.cpp")
+target_include_directories(mpvqt_public_consumer PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../../../tests")
+target_compile_features(mpvqt_public_consumer PRIVATE cxx_std_17)
+target_link_libraries(mpvqt_public_consumer PRIVATE MpvQt::MpvQt)

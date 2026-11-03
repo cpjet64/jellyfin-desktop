@@ -24,6 +24,8 @@ function Install-JobMpvQt {
     Run-Native 'git.exe' @('-C', 'external/mpvqt', 'archive', '--format=tar', "--output=$sourceArchive", 'HEAD')
     Run-Native $Python @('dev/ci/safe_extract.py', $sourceArchive, $source)
     if (Test-Path -LiteralPath "$source/.git") { throw 'Copied MpvQt source unexpectedly contains .git' }
+    Run-Native $Python @('tests/test_mpvqt_shared_patch.py')
+    Run-Native $Python @('dev/ci/patch_mpvqt_shared.py', $source)
     $install = Join-Path $tools 'mpvqt-install'
     $prefixes = "$Qt;$ecm"
     Run-Native 'cmake.exe' @('-S', $source, '-B', "$tools/mpvqt-build", '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=RelWithDebInfo', "-DCMAKE_PREFIX_PATH=$prefixes", "-DCMAKE_INSTALL_PREFIX=$install", "-DLibmpv_INCLUDE_DIRS=$MpvInclude", "-DLibmpv_LIBRARIES=$MpvLibrary", '-DBUILD_SHARED_LIBS=ON', '-DBUILD_EXAMPLES=OFF', '-DBUILD_TESTING=OFF')
@@ -34,6 +36,16 @@ function Install-JobMpvQt {
     $env:PATH = "$($libraries[0].DirectoryName);$(Split-Path $MpvLibrary);$env:PATH"
     $script:JobMpvQtConfigDirectory = $configs[0].DirectoryName
     $script:JobMpvQtRuntime = $libraries[0].FullName
-    Write-Host "Unmodified MpvQt 1.1.1 installed to job-local prefix: $install"
+    $dllHash = (Get-FileHash -LiteralPath $libraries[0].FullName -Algorithm SHA256).Hash
+    Write-Host "MpvQt 2ebbd38 + destructor compatibility patch installed: $install; DLL SHA256=$dllHash"
+    $imports = & dumpbin.exe /imports $libraries[0].FullName
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect shared MpvQt imports' }
+    $mpvImport = @($imports | Select-String -Pattern 'libmpv-2\.dll')
+    if ($mpvImport.Count -eq 0) { throw 'Shared MpvQt libmpv import missing' }
+    $normalImports = (($imports -join "`n") -split '(?i)Section contains the following delay load imports:')[0]
+    if ($normalImports -notmatch '(?im)^\s*libmpv-2\.dll\s*$') { throw 'Expected eager libmpv import not found' }
+    Write-Host 'Shared MpvQt imports libmpv eagerly; bundled static non-AVX2 fallback is not established for shared mode.'
     Run-Native 'cmake.exe' @('-S', 'dev/windows/ci-mpvqt-check', '-B', "$tools/check-build", '-G', 'Ninja', "-DCMAKE_PREFIX_PATH=$Qt;$install", "-DMpvQt_DIR=$($configs[0].DirectoryName)", "-DEXPECTED_MPVQT_PREFIX=$install", "-DLibmpv_INCLUDE_DIRS=$MpvInclude", "-DLibmpv_LIBRARIES=$MpvLibrary")
+    Run-Native 'cmake.exe' @('--build', "$tools/check-build", '--parallel', '4')
+    Run-Native "$tools/check-build/mpvqt_public_consumer.exe" @($tools)
 }
