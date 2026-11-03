@@ -21,12 +21,33 @@ QHash<QtMsgType, int> messageLevelValue({{QtDebugMsg, 0}, {QtInfoMsg, 1}, {QtWar
 static QMutex logMutex;
 static QFile* logFile = nullptr;
 static QString tempLogPath;
+static thread_local bool inLogOperation = false;
+
+// Qt file operations can themselves emit messages. Do not re-enter the mutex
+// in that case; diagnostics still reach the terminal.
+class LogOperation
+{
+public:
+  LogOperation() : lock(&logMutex) { inLogOperation = true; }
+  ~LogOperation() { inLogOperation = false; }
+private:
+  QMutexLocker<QMutex> lock;
+};
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // adapted from https://stackoverflow.com/a/62390212
 static void qtMessageOutput(QtMsgType type, const QMessageLogContext& context, const QString& msg)
 {
-  QMutexLocker lock(&logMutex);
+  if (inLogOperation)
+  {
+    QString safeMessage = msg;
+    Log::CensorAuthTokens(safeMessage);
+    std::cerr << qPrintable(safeMessage) << std::endl;
+    if (type == QtFatalMsg)
+      abort();
+    return;
+  }
+  LogOperation lock;
 
   // Check if message meets any output threshold
   bool shouldOutputToTerminal = messageLevelValue[type] >= terminalLogLevel;
@@ -99,17 +120,21 @@ void Log::Init()
 
   // Create unique log file for this instance
   QString logDir = getLogDir();
-  QTemporaryFile tempFile(logDir + "/jellyfin-desktop-XXXXXX.log");
-  tempFile.setAutoRemove(false);
-  if (!tempFile.open())
+  auto* tempFile = new QTemporaryFile(logDir + "/jellyfin-desktop-XXXXXX.log");
+  tempFile->setAutoRemove(false);
+  if (!tempFile->open())
   {
     qFatal("Failed to create temporary log file");
   }
-  tempLogPath = tempFile.fileName();
-  tempFile.close();
-
-  logFile = new QFile(tempLogPath);
-  logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate);
+  QString path = tempFile->fileName();
+  {
+    LogOperation lock;
+    delete logFile;
+    logFile = tempFile;
+    tempLogPath = path;
+  }
+  if (path.isEmpty())
+    qWarning("Temporary log file has no name; keeping it open without rotation");
 
   qInfo() << "Starting Jellyfin version:" << qPrintable(Version::GetVersionString()) << "build date:" << qPrintable(Version::GetBuildDate());
   qInfo() << qPrintable(QString("  Running on: %1 [%2] arch %3").arg(QSysInfo::prettyProductName()).arg(QSysInfo::kernelVersion()).arg(QSysInfo::currentCpuArchitecture()));
@@ -121,14 +146,10 @@ void Log::Init()
 /////////////////////////////////////////////////////////////////////////////////////////
 void Log::RotateLog()
 {
-  QMutexLocker lock(&logMutex);
+  LogOperation lock;
 
-  // Flush and close current unique log file
-  if (logFile && logFile->isOpen())
-  {
-    logFile->flush();
-    logFile->close();
-  }
+  if (!logFile || !logFile->isOpen() || tempLogPath.isEmpty())
+    return;
 
   QString baseName = Names::DataName() + ".log";
   QString mainLog = getLogDir() + "/" + baseName;
@@ -141,31 +162,47 @@ void Log::RotateLog()
     QString to = mainLog + "." + QString::number(i + 1);
     if (QFile::exists(from))
     {
-      QFile::remove(to);
-      QFile::rename(from, to);
+      if ((QFile::exists(to) && !QFile::remove(to)) || !QFile::rename(from, to))
+      {
+        std::cerr << "Failed to rotate log archive" << std::endl;
+        return;
+      }
     }
   }
 
   // Rotate main log to .log.1
   if (QFile::exists(mainLog))
   {
-    QFile::remove(mainLog + ".1");
-    QFile::rename(mainLog, mainLog + ".1");
+    if (!QFile::rename(mainLog, mainLog + ".1"))
+    {
+      std::cerr << "Failed to rotate main log" << std::endl;
+      return;
+    }
   }
 
   // Rename unique log to main log
-  QFile::rename(tempLogPath, mainLog);
+  logFile->flush();
+  logFile->close();
+  if (!QFile::rename(tempLogPath, mainLog))
+  {
+    if (!logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append))
+      std::cerr << "Failed to reopen temporary log" << std::endl;
+    std::cerr << "Failed to promote temporary log" << std::endl;
+    return;
+  }
 
   // Reopen as main log and continue writing
   delete logFile;
   logFile = new QFile(mainLog);
-  logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append);
+  if (!logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append))
+    std::cerr << "Failed to open main log" << std::endl;
+  tempLogPath.clear();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 void Log::Cleanup()
 {
-  QMutexLocker lock(&logMutex);
+  LogOperation lock;
 
   // Close and delete temp log file
   if (logFile && logFile->isOpen())
@@ -174,11 +211,7 @@ void Log::Cleanup()
   delete logFile;
   logFile = nullptr;
 
-  if (!tempLogPath.isEmpty())
-  {
-    QFile::remove(tempLogPath);
-    tempLogPath.clear();
-  }
+  tempLogPath.clear();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
