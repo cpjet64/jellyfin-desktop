@@ -4,6 +4,13 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+# This probe is diagnostic only; the failing playback result remains authoritative.
+add_executable(native_gl_probe native_gl_probe.cpp)
+target_link_libraries(native_gl_probe PRIVATE Qt6::Gui)
+if(WIN32)
+  target_link_libraries(native_gl_probe PRIVATE user32)
+endif()
+
 if(MPVQT_EXTERNAL_EVENTS)
   add_executable(test_mpvqt_event_ownership test_mpvqt_event_ownership.cpp)
   target_link_libraries(test_mpvqt_event_ownership MpvQt Qt6::Test)
