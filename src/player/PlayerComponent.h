@@ -230,7 +230,9 @@ Q_SIGNALS:
   void bufferedRangesUpdated(const QVariantList& ranges);
 
 private:
+  friend class TestFaultStop;
   NativeStopResult stopMpv();
+  static NativeStopResult checkedStop(mpv_handle* handle, int (*command)(mpv_handle*, const char**));
   // this is the function actually implemented in the backends. the variantmap contains
   // a few known keys:
   // * subtitleStreamIndex

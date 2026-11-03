@@ -833,8 +833,13 @@ PlayerComponent::NativeStopResult PlayerComponent::requestNativeStop()
 PlayerComponent::NativeStopResult PlayerComponent::stopMpv()
 {
   if (!m_mpv || !m_mpv->mpv()) return {NativeStopResult::Status::Unavailable, 0};
+  return checkedStop(m_mpv->mpv(), mpv_command);
+}
+
+PlayerComponent::NativeStopResult PlayerComponent::checkedStop(mpv_handle* handle, int (*command)(mpv_handle*, const char**))
+{
   const char* args[] = {"stop", nullptr};
-  const int error = mpv_command(m_mpv->mpv(), args);
+  const int error = command(handle, args);
   return {error < 0 ? NativeStopResult::Status::Error : NativeStopResult::Status::Accepted, error};
 }
 

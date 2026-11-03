@@ -156,13 +156,20 @@ void InputComponent::handleAction(const QString& action)
   }
 }
 
+static QString heldStopKey(const QString& source, QString keycode, InputBase::InputkeyState state)
+{
+  if (source == "LIRC" && state == InputBase::KeyUp && keycode.endsWith("_LIRCUP"))
+    keycode.chop(7);
+  return source + QChar(0) + keycode;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void InputComponent::remapInput(const QString &source, const QString &keycode, InputBase::InputkeyState keyState)
 {
   qDebug() << "Input received: source:" << source << "keycode:" << keycode << ":" << keyState;
 
   emit receivedInput();
-  const QString heldKey = source + QChar(0) + keycode;
+  const QString heldKey = heldStopKey(source, keycode, keyState);
 
   if (keyState == InputBase::KeyUp)
   {
