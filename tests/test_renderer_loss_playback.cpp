@@ -7,6 +7,7 @@
 #include <QGuiApplication>
 #include <QFileInfo>
 #include <QImage>
+#include <QDir>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QUrl>
@@ -16,6 +17,7 @@
 #include "player/MpvVideoItem.h"
 #include "player/PlayerComponent.h"
 #include "system/WebClientFaultGuard.h"
+#include "shared/Paths.h"
 
 namespace {
 int brightPixels(const QImage& image)
@@ -59,6 +61,8 @@ void TestRendererLossPlayback::actualPlayback()
   QVERIFY(scenario == "playing" || scenario == "paused" || scenario == "held-hook");
   QVERIFY(QFileInfo::exists(media));
   QVERIFY(QFileInfo(evidence).isDir());
+  Paths::setConfigDir(QDir(evidence).absoluteFilePath("config"));
+  Paths::setCacheDir(QDir(evidence).absoluteFilePath("cache"));
 
   QQuickWindow window;
   window.resize(640, 360);
@@ -75,6 +79,10 @@ void TestRendererLossPlayback::actualPlayback()
   QVERIFY(video->controller());
   mpv_handle* primary = video->controller()->mpv();
   QVERIFY(primary);
+  // This setup-only stop is an observable readiness check before media loads.
+  // The queued ready signal alone can precede PlayerComponent initialization.
+  QTRY_COMPARE_WITH_TIMEOUT(player.requestNativeStop().status,
+                            PlayerComponent::NativeStopResult::Status::Accepted, 15000);
 
   if (scenario == "held-hook") {
     heldHook(player, primary, media);
