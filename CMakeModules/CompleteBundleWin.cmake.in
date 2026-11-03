@@ -1,4 +1,4 @@
-set(PROJECT_SOURCE_DIR @PROJECT_SOURCE_DIR@)
+set(PROJECT_SOURCE_DIR "@PROJECT_SOURCE_DIR@")
 set(QTROOT "@QTROOT@")
 include("@CMAKE_BINARY_DIR@/ValidateWindowsRuntime.cmake")
 
@@ -6,7 +6,7 @@ message(STATUS "Running windeployqt from: ${QTROOT}/bin/windeployqt.exe")
 message(STATUS "Target: ${CMAKE_INSTALL_PREFIX}/Jellyfin Desktop.exe")
 
 execute_process(
-  COMMAND "${QTROOT}/bin/windeployqt.exe" --verbose 9 --qmldir @SOURCE_ROOT@/src/ui "${CMAKE_INSTALL_PREFIX}/Jellyfin Desktop.exe"
+  COMMAND "${QTROOT}/bin/windeployqt.exe" --verbose 9 --qmldir "@SOURCE_ROOT@/src/ui" "${CMAKE_INSTALL_PREFIX}/Jellyfin Desktop.exe"
   RESULT_VARIABLE WINDEPLOYQT_RESULT
 )
 
@@ -25,14 +25,14 @@ foreach(d @CMAKE_FIND_ROOT_PATH@)
   list(APPEND SEARCHDIRS ${d}/lib)
 endforeach()
 
-get_filename_component(CEC_DIR @CEC_LIBRARY@ DIRECTORY)
+get_filename_component(CEC_DIR "@BUNDLE_CEC_LIBRARY@" DIRECTORY)
 list(APPEND SEARCHDIRS ${CEC_DIR})
 
 # fixup_bundle("${CMAKE_INSTALL_PREFIX}/Jellyfin Desktop.exe" "" "${SEARCHDIRS}")
 #install(PROGRAMS ${VCREDIST_DIR}/vcredist_msvc2017_x64.exe DESTINATION .)
 
 # Install MPV DLL (MPV_LIBRARY points to .lib, we need the .dll)
-get_filename_component(MPV_DIR "@MPV_LIBRARY@" DIRECTORY)
+get_filename_component(MPV_DIR "@BUNDLE_MPV_LIBRARY@" DIRECTORY)
 file(INSTALL "${MPV_DIR}/libmpv-2.dll" DESTINATION "${CMAKE_INSTALL_PREFIX}")
 
 # Install fallback libmpv if present
@@ -44,7 +44,7 @@ endif()
 
 if(@DO_ENABLE_ANGLE_DEP@)
   message(STATUS "Deploying separate ANGLE deps")
-  file(INSTALL @DEPENDENCY_CACHE_DIR@/libEGL.dll @DEPENDENCY_CACHE_DIR@/libGLESv2.dll @DEPENDENCY_CACHE_DIR@/d3dcompiler_47.dll DESTINATION ${CMAKE_INSTALL_PREFIX})
+  file(INSTALL "@DEPENDENCY_CACHE_DIR@/libEGL.dll" "@DEPENDENCY_CACHE_DIR@/libGLESv2.dll" "@DEPENDENCY_CACHE_DIR@/d3dcompiler_47.dll" DESTINATION "${CMAKE_INSTALL_PREFIX}")
 else()
   message(STATUS "Not using separate ANGLE deps")
 endif()
@@ -62,10 +62,10 @@ file(INSTALL "${VCREDIST_EXE}" DESTINATION "${CMAKE_INSTALL_PREFIX}" RENAME "vc_
 message(STATUS "Bundled VCRedist installer: vc_redist.x64.exe")
 
 if(@DO_SIGN@)
-  file(GLOB_RECURSE EXES ${CMAKE_INSTALL_PREFIX}/*.exe ${CMAKE_INSTALL_PREFIX}/*.dll)
+  file(GLOB_RECURSE EXES "${CMAKE_INSTALL_PREFIX}/*.exe" "${CMAKE_INSTALL_PREFIX}/*.dll")
   set(ENV{errorlevel} 1)
   foreach(e ${EXES})
     message("-- Signing: ${PROJECT_SOURCE_DIR}/scripts/WindowsSign.cmd ${e}")
-    execute_process(COMMAND ${PROJECT_SOURCE_DIR}/scripts/WindowsSign.cmd "${e}" RESULT_VARIABLE RES)
+    execute_process(COMMAND "${PROJECT_SOURCE_DIR}/scripts/WindowsSign.cmd" "${e}" RESULT_VARIABLE RES)
   endforeach()
 endif()
