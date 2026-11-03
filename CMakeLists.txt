@@ -101,6 +101,7 @@ if(WIN32 AND MSVC)
   include(WindowsMpvRuntime)
   if(TARGET test_mpvqt_event_ownership)
     add_dependencies(test_mpvqt_event_ownership windows_mpv_runtime)
+    add_dependencies(test_mpvqt_player_binding windows_mpv_runtime)
   endif()
 endif()
 

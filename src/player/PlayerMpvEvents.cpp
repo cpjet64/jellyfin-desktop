@@ -35,6 +35,16 @@ void PlayerComponent::finishMpvEventSetup()
 }
 
 #ifdef MPVQT_EXTERNAL_EVENTS
+bool PlayerComponent::tryBindMpvController(MpvController* controller)
+{
+  if (QThread::currentThread() != thread())
+    qFatal("MpvQt event consumer must be bound on the PlayerComponent thread");
+  if (!controller || m_mpv) return false;
+  m_mpv = controller;
+  ++m_mpvGeneration;
+  return true;
+}
+
 void PlayerComponent::releaseMpvController(MpvController* controller)
 {
   if (QThread::currentThread() != thread())

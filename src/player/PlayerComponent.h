@@ -143,14 +143,16 @@ public:
   AlbumArtProvider* albumArtProvider() const { return m_albumArtProvider; }
 
   void setMpvController(MpvController* controller) {
+#ifdef MPVQT_EXTERNAL_EVENTS
+    (void)tryBindMpvController(controller);
+#else
     if (!m_mpv) {
       m_mpv = controller;
-#ifdef MPVQT_EXTERNAL_EVENTS
-      ++m_mpvGeneration;
-#endif
     }
+#endif
   }
 #ifdef MPVQT_EXTERNAL_EVENTS
+  bool tryBindMpvController(MpvController* controller);
   void releaseMpvController(MpvController* controller);
 #endif
   void initializeMpv();

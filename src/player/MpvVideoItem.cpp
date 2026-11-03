@@ -60,9 +60,15 @@ void MpvVideoItem::initialize() {
         return;
     }
 
-    m_initialized = true;
-
-    qDebug() << "MpvVideoItem ready, initializing now";
+#ifdef MPVQT_EXTERNAL_EVENTS
+    if (!m_player->tryBindMpvController(mpvController())) {
+        qWarning() << "MpvVideoItem cannot bind a second player controller";
+        return;
+    }
+#else
     m_player->setMpvController(mpvController());
+#endif
+    m_initialized = true;
+    qDebug() << "MpvVideoItem ready, initializing now";
     m_player->initializeMpv();
 }
