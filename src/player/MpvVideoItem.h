@@ -21,6 +21,9 @@ public:
     MpvController* controller() { return mpvController(); }
 
 private:
+#ifdef MPVQT_EXTERNAL_EVENTS
+    friend class TestPlayerReleasedState;
+#endif
     void initialize();
 
 #ifdef MPVQT_EXTERNAL_EVENTS

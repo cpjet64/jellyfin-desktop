@@ -246,6 +246,7 @@ Q_SIGNALS:
 
 private:
   friend class TestFaultStop;
+  friend class TestPlayerReleasedState;
   NativeStopResult stopMpv();
   static NativeStopResult checkedStop(mpv_handle* handle, int (*command)(mpv_handle*, const char**));
   static NativeSeekResult checkedSeek(mpv_handle* handle, qint64 milliseconds,
@@ -265,6 +266,7 @@ private:
   void setupMpvEvents();
   void finishMpvEventSetup();
   void subscribeMpvSettings();
+  QString configureAudioPassthrough(const QString& deviceType);
   void scheduleMpvHook(const std::function<void()>& resume);
   void scheduleMpvHook(const QString& resumeId);
 #if MPV_CLIENT_API_VERSION >= MPV_MAKE_VERSION(1, 100)
@@ -300,6 +302,7 @@ private:
   float m_mediaFrameRate;
   QTimer m_restoreDisplayTimer;
   QTimer m_reloadAudioTimer;
+  std::function<void()> m_restoreDisplayAction;
   QSet<QString> m_audioDevices;
   bool m_streamSwitchImminent;
   bool m_doAc3Transcoding;

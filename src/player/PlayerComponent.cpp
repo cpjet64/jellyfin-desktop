@@ -58,6 +58,7 @@ PlayerComponent::PlayerComponent(QObject* parent)
 
   m_reloadAudioTimer.setSingleShot(true);
   connect(&m_reloadAudioTimer, &QTimer::timeout, this, &PlayerComponent::updateAudioDevice);
+  m_restoreDisplayAction = [] { DisplayComponent::Get().restorePreviousVideoMode(); };
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -394,8 +395,8 @@ bool PlayerComponent::switchDisplayFrameRate()
 void PlayerComponent::onRestoreDisplay()
 {
   // If the player will in fact start another file (or is playing one), don't restore.
-  if (m_mpv->getProperty( "idle-active").toBool())
-    DisplayComponent::Get().restorePreviousVideoMode();
+  if (!m_mpv || m_mpv->getProperty( "idle-active").toBool())
+    m_restoreDisplayAction();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1060,23 +1061,6 @@ void PlayerComponent::setAudioStream(const QVariant &audioStream)
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::setAudioDelay(qint64 milliseconds)
-{
-  m_playbackAudioDelay = milliseconds;
-
-  double displayFps = DisplayComponent::Get().currentRefreshRate();
-  const char *audioDelaySetting = "audio_delay.normal";
-  if (fabs(displayFps - 24) < 0.5) // cover 24Hz, 23.976Hz, and values very close
-    audioDelaySetting = "audio_delay.24hz";
-  else if (fabs(displayFps - 25) < 0.5)
-    audioDelaySetting = "audio_delay.25hz";
-  else if (fabs(displayFps - 50) < 0.5)
-    audioDelaySetting = "audio_delay.50hz";
-
-  double fixedDelay = SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, audioDelaySetting).toFloat();
-  m_mpv->setProperty( "audio-delay", (fixedDelay + m_playbackAudioDelay) / 1000.0);
-}
-
 /////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::setSubtitleDelay(qint64 milliseconds)
 {
@@ -1198,19 +1182,6 @@ void PlayerComponent::updateAudioDeviceList()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::updateAudioDevice()
-{
-  QString device = SettingsComponent::Get().value(SETTINGS_SECTION_AUDIO, "device").toString();
-
-  if (!m_audioDevices.contains(device))
-  {
-    qWarning() << "Not using audio device" << device << "because it's not present.";
-    device = "auto";
-  }
-
-  m_mpv->setProperty( "audio-device", device);
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::updateAudioConfiguration()
 {
@@ -1221,6 +1192,7 @@ void PlayerComponent::updateAudioConfiguration()
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::setAudioConfiguration()
 {
+  if (!m_mpv) return;
   QString deviceType = SettingsComponent::Get().value(SETTINGS_SECTION_AUDIO, "devicetype").toString();
 
   m_mpv->setProperty( "audio-exclusive", SettingsComponent::Get().value(SETTINGS_SECTION_AUDIO, "exclusive").toBool());
@@ -1233,32 +1205,7 @@ void PlayerComponent::setAudioConfiguration()
   // Make downmix more similar to PHT.
   m_mpv->setProperty( "audio-swresample-o", "surround_mix_level=1");
 
-  m_passthroughCodecs.clear();
-
-  // passthrough doesn't make sense with basic type
-  if (deviceType != AUDIO_DEVICE_TYPE_BASIC)
-  {
-    SettingsSection* audioSection = SettingsComponent::Get().getSection(SETTINGS_SECTION_AUDIO);
-
-    QStringList codecs;
-    if (deviceType == AUDIO_DEVICE_TYPE_SPDIF)
-      codecs = AudioCodecsSPDIF();
-    else if (deviceType == AUDIO_DEVICE_TYPE_HDMI)
-      codecs = AudioCodecsAll();
-
-    for(const QString& key : codecs)
-    {
-      if (audioSection->value("passthrough." + key).toBool())
-        m_passthroughCodecs << key;
-    }
-
-    // dts-hd includes dts, but listing dts before dts-hd may disable dts-hd.
-    if (m_passthroughCodecs.indexOf("dts-hd") != -1)
-      m_passthroughCodecs.removeAll("dts");
-  }
-
-  QString passthroughCodecs = m_passthroughCodecs.join(",");
-  m_mpv->setProperty( "audio-spdif", passthroughCodecs);
+  const QString passthroughCodecs = configureAudioPassthrough(deviceType);
 
   // set the channel layout
   QVariant layout = SettingsComponent::Get().value(SETTINGS_SECTION_AUDIO, "channels");
@@ -1311,6 +1258,7 @@ void PlayerComponent::updateSubtitleConfiguration()
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::setSubtitleConfiguration()
 {
+  if (!m_mpv) return;
   bool assScaleBorderAndShadow = SettingsComponent::Get().value(SETTINGS_SECTION_SUBTITLES, "ass_scale_border_and_shadow").toBool();
   m_mpv->setProperty( "sub-ass-style-overrides", assScaleBorderAndShadow ? "ScaledBorderAndShadow=yes" : "ScaledBorderAndShadow=no");
 
@@ -1498,12 +1446,6 @@ void PlayerComponent::updateConfiguration()
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::userCommand(QString command)
-{
-  QByteArray cmdUtf8 = command.toUtf8();
-  mpv_command_string(m_mpv->mpv(), cmdUtf8.data());
-}
-
 /////////////////////////////////////////////////////////////////////////////////////////
 static QString get_mpv_osd(mpv_handle *ctx, const QString& property)
 {
@@ -1548,7 +1490,7 @@ QString PlayerComponent::videoInformation() const
   QTextStream info(&infoStr);
 
   // check if video is playing
-  if (m_mpv->getProperty( "idle-active").toBool())
+  if (!m_mpv || m_mpv->getProperty( "idle-active").toBool())
     return "";
 
   info << "File:\n";

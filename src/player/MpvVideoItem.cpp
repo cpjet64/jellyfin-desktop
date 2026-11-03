@@ -37,6 +37,12 @@ MpvVideoItem::~MpvVideoItem()
 
 void MpvVideoItem::setPlayerComponent(PlayerComponent* player)
 {
+#ifdef MPVQT_EXTERNAL_EVENTS
+    if (m_initialized && m_player != player) {
+        qWarning() << "MpvVideoItem cannot change its initialized player owner";
+        return;
+    }
+#endif
     qDebug() << "MpvVideoItem::setPlayerComponent called, mpvController():" << mpvController();
     m_player = player;
     initialize();

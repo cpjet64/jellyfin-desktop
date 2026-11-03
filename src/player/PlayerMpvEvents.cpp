@@ -67,6 +67,7 @@ void PlayerComponent::releaseMpvController(MpvController* controller)
   if (QThread::currentThread() != thread())
     qFatal("MpvQt event consumer must be released on the PlayerComponent thread");
   if (m_mpv != controller) return;
+  m_reloadAudioTimer.stop();
   mpv_set_wakeup_callback(controller->mpv(), nullptr, nullptr);
   m_mpv = nullptr;
   ++m_mpvGeneration;
