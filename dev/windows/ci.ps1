@@ -128,7 +128,7 @@ $env:LOCALAPPDATA = "$testHome/local"
 $env:JELLYFIN_TEST_OWNED_ROOT = $build
 Run-Native 'ctest.exe' @('--test-dir', $build, '-LE', 'gui', '--no-tests=error', '--output-on-failure', '--timeout', '60', '--output-junit', "$results/ctest.xml")
 $reportArgs = @('dev/ci/check_results.py', 'junit', "$results/ctest.xml")
-$required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard')
+$required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard', 'test_mpv_test_bootstrap')
 if ($mode -eq 'static') { $required += @('test_mpvqt_event_ownership', 'test_mpvqt_player_binding', 'test_player_released_state') }
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs

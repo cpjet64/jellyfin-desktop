@@ -146,7 +146,7 @@ def configure(system, mode):
     command("ctest", prefix + ["ctest", "--test-dir", str(BUILD), "-LE", "gui", "--output-on-failure",
                                "--no-tests=error", "--timeout", "60", "--output-junit", str(RESULTS / "ctest.xml")], timeout=900)
     report = [sys.executable, "dev/ci/check_results.py", "junit", str(RESULTS / "ctest.xml")]
-    required = ["test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard"]
+    required = ["test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard", "test_mpv_test_bootstrap"]
     if mode == "static":
         required.extend(["test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state"])
     if system == "Linux":
