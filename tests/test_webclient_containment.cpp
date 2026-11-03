@@ -1,5 +1,6 @@
 #include <QtTest/QtTest>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
@@ -67,7 +68,23 @@ static bool visibleVideo(const QImage& image)
   if (image.isNull()) return false;
   const int samples = ((image.width() + 3) / 4) * ((image.height() + 3) / 4);
   const int bright = brightPixels(image);
-  return bright > 100 && bright < samples * 3 / 4;
+  // The generated clip starts with one 20x20 bright square and no lit counter
+  // bits; its first frame occupies about 2% of the video area.
+  return bright > samples / 70 && bright < samples * 3 / 4;
+}
+
+static QImage waitForVideo(QQuickView& view, const QString& path)
+{
+  QElapsedTimer timer;
+  timer.start();
+  QImage frame;
+  do {
+    frame = view.grabWindow();
+    if (visibleVideo(frame)) break;
+    QTest::qWait(100);
+  } while (timer.elapsed() < 10000);
+  if (!frame.isNull()) frame.save(path);
+  return frame;
 }
 
 static bool mediaReady(mpv_handle* mpv, bool paused)
@@ -205,11 +222,10 @@ void TestWebClientContainment::exercisePlayback(QObject* root, QQuickView& view,
   else {
     QTRY_VERIFY_WITH_TIMEOUT(mediaReady(primary, scenario == "paused"), 10000);
     if (scenario == "playing") QTRY_VERIFY_WITH_TIMEOUT(player.getPosition() > 500, 10000);
-    QTRY_VERIFY_WITH_TIMEOUT(visibleVideo(view.grabWindow()), 10000);
   }
   if (scenario != "held-hook") QCOMPARE(mpv_hook_add(hook.client, 77, "on_load", -10), 0);
+  const QImage frame = scenario == "held-hook" ? QImage() : waitForVideo(view, evidence + "/containment-before.png");
   const qint64 before = player.getPosition();
-  const QImage frame = scenario == "held-hook" ? QImage() : view.grabWindow();
   if (scenario != "held-hook") {
     QVERIFY(!frame.isNull());
     QVERIFY(visibleVideo(frame));
@@ -242,6 +258,7 @@ void TestWebClientContainment::containment()
   QVERIFY(profile.isValid());
   Paths::setConfigDir(profile.path() + "/config");
   Paths::setCacheDir(profile.path() + "/cache");
+  QVERIFY(QDir().mkpath(profile.path() + "/config/profiles"));
   Q_INIT_RESOURCE(resources);
   auto& settings = SettingsComponent::Get();
   QVERIFY(settings.componentInitialize());
@@ -279,6 +296,7 @@ void TestWebClientContainment::containment()
 
 int main(int argc, char** argv)
 {
+  QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
   QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
   QtWebEngineQuick::initialize();
   QGuiApplication app(argc, argv);

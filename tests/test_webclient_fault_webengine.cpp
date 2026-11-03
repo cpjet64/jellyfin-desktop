@@ -73,6 +73,7 @@ void TestWebClientFaultWebEngine::channelCannotReattach()
 
 int main(int argc, char** argv)
 {
+  QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
   QtWebEngineQuick::initialize();
   QGuiApplication app(argc, argv);
   TestWebClientFaultWebEngine test;
