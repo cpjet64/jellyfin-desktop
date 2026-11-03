@@ -1,5 +1,10 @@
 # GitLab Windows candidate pipeline
 
+The public primary is [GitLab project 314](https://gitlab.curtpme.com/cpjet64/jellyfin-desktop).
+Pushes go to the `gitlab` remote. GitLab's SSH push mirror copies all branches
+and tags to GitHub while retaining divergent refs. Release notes and uploaded
+assets use the separate [release synchronization workflow](release-mirroring.md).
+
 This pipeline validates the Windows x64 candidate using the shell executor on
 the `win203-unprotected` runner. It builds with MSVC, Qt 6.9.3 and the same
 primary and fallback mpv versions as the existing GitHub Windows workflow. It
@@ -20,8 +25,8 @@ place, including Linux and macOS; this is deliberately Windows-only coverage.
 The requested replacement is the Windows candidate validation run. It is a
 deliberate exception to a full multi-platform CI migration: other GitHub
 workflows remain active and are not claimed to have been migrated or proven by
-this pipeline. No GitHub workflow is retired until the replacement has a green
-GitLab run for the delivered commit.
+this pipeline. Retirement of the legacy GitHub build workflows is a separate
+repository setting; the release-copy workflow is distinct from those builds.
 
 | Behavior | Existing GitHub Windows workflow | GitLab candidate |
 | --- | --- | --- |

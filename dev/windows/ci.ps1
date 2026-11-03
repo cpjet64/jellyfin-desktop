@@ -46,6 +46,12 @@ $found = @{
     Node = Find-OptionalTool 'node.exe'
     Inno = Find-OptionalTool 'ISCC.exe' @("${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe", "$env:ProgramFiles/Inno Setup 6/ISCC.exe")
 }
+if ($found.Inno) {
+    # ISCC's file-version metadata can be 0.0.0.0. Reuse only the tested compiler.
+    if ((Get-FileHash -LiteralPath $found.Inno -Algorithm SHA256).Hash -ne '0A8757031B33777E4C9CBFFEE40F11A5062B36D25CBE144C1DB73B6102B80AD7') {
+        $found.Inno = $null
+    }
+}
 if ($found.Node) {
     $nodeVersion = & $found.Node --version
     if ($LASTEXITCODE -ne 0 -or $nodeVersion -notmatch '^v(\d+)\.' -or [int]$Matches[1] -lt 20) {

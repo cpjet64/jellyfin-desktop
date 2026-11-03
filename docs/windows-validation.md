@@ -130,8 +130,8 @@ These tests belong on the local desktop workstation, not headless CI runners.
 - Reboot persistence, display rearrangement, HDR/capture and mixed-GPU cases,
   sustained memory growth, and affected non-AVX2 CPU compatibility remain open.
 - No upstream issue was closed, and no release, signing, or deployment was performed.
-- At the user's request, Windows CI is being moved to GitLab while the public
-  GitHub fork remains the review source. The exact GitLab pipeline and artifacts
+- At the user's request, GitLab is now primary and the public GitHub fork is a
+  downstream review mirror. The exact GitLab pipeline and artifacts
   must be verified separately; local success is not remote CI proof.
 
 See [the issue inventory](windows-issue-triage.md) for report-specific acceptance.
@@ -164,8 +164,8 @@ missing-input failure before staging.
 `cmake --build build --target windows_all --parallel 4` completed successfully
 using project-local Inno Setup 6.7.3 and Microsoft's signed VC redistributable.
 Explicit runtime inputs pointed to the shared project-local DLLs and installer.
-The source was `04a2c63228ae681a5f9c9dcb27471fa93d9708bf`; subsequent changes
-only add diagnostic tooling and evidence. The seven native suites passed again.
+The source was `04a2c63228ae681a5f9c9dcb27471fa93d9708bf`; changes through
+`1e029623` only added diagnostic tooling and evidence. The seven native suites passed again.
 
 | Artifact | SHA-256 |
 | --- | --- |
@@ -176,9 +176,53 @@ only add diagnostic tooling and evidence. The seven native suites passed again.
 The actual ZIP was extracted into a fresh task-owned fixture. The packaged-mode
 diagnostic launched it with PATH restricted to Windows system directories and
 development Qt/QML environment overrides removed. Its initial server-selection
-page rendered using bundled QtWebEngineProcess and ANGLE D3D11; native exit was
+page loaded using bundled QtWebEngineProcess and ANGLE D3D11; native exit was
 zero, with no forced cleanup or remaining job processes. Full DLL hashes and
-observations were preserved locally. The empty portable marker was temporarily
-replaced by the harness's isolated cache marker; shipped executables/DLLs were
+observations were preserved locally. The shipped empty portable marker was
+temporarily removed and recreated by the harness; it only selects portable mode
+and does not encode a cache path. Shipped executables/DLLs were
 not changed. No installer execution, clean-machine proof, signing, release,
 server connection, or playback is implied by this local portable launch.
+
+## Second source review and corrected diagnostics
+
+The input plugin now retains and removes its own event callbacks and native
+signal connections, clears its timers and handles destruction before API setup.
+Two Node regressions passed using the actual dispatcher semantics: callbackless
+`Events.off` does not remove ordinary callbacks. Actual connected-web playback
+and QWebChannel lifecycle behavior remain acceptance gaps.
+
+The installer checks registered x64 runtime state and core DLL versions against
+the bundled versions, handles existing app-local runtime files and checks the
+result of an opted-in central install. Its two compilation fixtures passed with
+real versioned inputs and unversioned-input rejection. These tests do not execute
+installer decisions; incomplete/older/newer runtime and upgrade scenarios still
+need an isolated Windows environment, without altering this workstation's runtime.
+
+The corrected native harness gives independent cases fresh profile/cache IDs,
+shares one new ID only within each three-launch geometry sequence, handles helper
+errors and completion with bounded waits, and preserves owned-marker boundaries.
+Missing-helper and early-exit fixtures passed. Four GPU/quoted-argument cases,
+three geometry launches and obstructed logging passed again with clean native
+exit and zero job processes. It now captures actual page screenshots; inspected
+normal and CLI-GPU-disable captures show the expected initial selection form.
+The package mode sets its working directory to the extracted app directory and
+reuses the shipped empty marker without claiming that marker isolates caches.
+
+Initial GitLab pipeline `32054` at `1e029623` failed because the runner lacked
+7-Zip. Verified job-local tool fallbacks and regression commands were prepared
+and exercised locally; the correction needs a new exact-SHA pipeline result.
+
+The second cumulative package build also passed (`windows_all`, source
+`cf1c3e4d1dd8886248f957df6f607335d27e0985`). Its portable package passed the
+corrected readiness and screenshot check with the shipped marker preserved,
+application-directory working directory and system-only PATH. The screenshot
+was inspected, and native exit drained all job processes without forced cleanup.
+This supersedes the earlier package startup observation, while installer decision
+execution and connected playback remain untested.
+
+| Second-batch artifact | SHA-256 |
+| --- | --- |
+| Installer | `f1ce89f3dc06ce07725a41e8e75319adb0430032083c3b71cfaa59c50a0af6bd` |
+| Portable ZIP | `41dd2b22ec301541978b918bd48486fe0c14fed85c3889f60b2d0a97a34a8b65` |
+| Packaged executable | `df194f34afdde872eee7ee3db7b7410a88864178a05699005f6e4df1a77c92b2` |
