@@ -130,7 +130,7 @@ $env:LOCALAPPDATA = "$testHome/local"
 $env:JELLYFIN_TEST_OWNED_ROOT = $build
 Run-Native 'ctest.exe' @('--test-dir', $build, '-LE', 'gui', '--no-tests=error', '--output-on-failure', '--timeout', '60', '--output-junit', "$results/ctest.xml")
 $reportArgs = @('dev/ci/check_results.py', 'junit', "$results/ctest.xml")
-$required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard', 'test_mpv_test_bootstrap')
+$required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard', 'test_mpv_test_bootstrap', 'test_mpv_test_bootstrap_pure')
 if ($mode -eq 'static') { $required += @('test_mpvqt_event_ownership', 'test_mpvqt_player_binding', 'test_player_released_state') }
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs
@@ -143,6 +143,7 @@ $env:WINDOWS_VCREDIST_EXE = "$deps/vc_redist.x64.exe"
 Run-Native $venvPython @('tests/windows_installer_compile_test.py')
 Run-Native $venvPython @('tests/test_bundle_paths.py')
 Run-Native $venvPython @('tests/test_windows_package_freshness.py')
+Run-Native $venvPython @('tests/test_mpvqt_shared_patch.py')
 Run-Native $found.Node @('--test', 'tests/test_inputPlugin.js')
 Run-Native $found.Node @('tests/windows_hidden_desktop_fixture.mjs')
 } finally {

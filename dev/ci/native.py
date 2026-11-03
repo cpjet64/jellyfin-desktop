@@ -115,6 +115,7 @@ def portable_checks():
     command("inventory-tests", [sys.executable, "dev/ci/test_native_inventory.py"])
     command("mac-session-tests", [sys.executable, "dev/ci/test_macos_session.py"])
     command("headless-routing-tests", [sys.executable, "dev/ci/test_headless_routing.py"])
+    command("shared-patch-tests", [sys.executable, "tests/test_mpvqt_shared_patch.py"])
 
 
 def configure(system, mode):
