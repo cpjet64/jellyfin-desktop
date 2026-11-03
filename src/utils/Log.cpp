@@ -52,6 +52,8 @@ static void qtMessageOutput(QtMsgType type, const QMessageLogContext& context, c
   // Check if message meets any output threshold
   bool shouldOutputToTerminal = messageLevelValue[type] >= terminalLogLevel;
   bool shouldOutputToFile = messageLevelValue[type] >= fileLogLevel;
+  if ((!logFile || !logFile->isOpen()) && shouldOutputToFile)
+    shouldOutputToTerminal = true;
 
   if (!shouldOutputToTerminal && !shouldOutputToFile && type != QtFatalMsg)
     return;
@@ -124,7 +126,9 @@ void Log::Init()
   tempFile->setAutoRemove(false);
   if (!tempFile->open())
   {
-    qFatal("Failed to create temporary log file");
+    std::cerr << "Failed to create temporary log file: " << qPrintable(tempFile->errorString()) << std::endl;
+    delete tempFile;
+    return;
   }
   QString path = tempFile->fileName();
   QFile* activeFile = tempFile;
@@ -135,7 +139,11 @@ void Log::Init()
     delete tempFile;
     activeFile = new QFile(path);
     if (!activeFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append))
-      qFatal("Failed to reopen temporary log file");
+    {
+      std::cerr << "Failed to reopen temporary log file: " << qPrintable(activeFile->errorString()) << std::endl;
+      delete activeFile;
+      return;
+    }
   }
   {
     LogOperation lock;
@@ -160,12 +168,14 @@ static bool rotateArchive(const QString& from, const QString& to)
     return QFile::rename(from, to);
 
   // Keep the destination until its replacement has been moved successfully.
-  QTemporaryFile backup(to + ".backup-XXXXXX");
-  backup.setAutoRemove(false);
-  if (!backup.open())
-    return false;
-  const QString backupPath = backup.fileName();
-  backup.close();
+  QString backupPath;
+  {
+    QTemporaryFile backup(to + ".backup-XXXXXX");
+    backup.setAutoRemove(false);
+    if (!backup.open())
+      return false;
+    backupPath = backup.fileName();
+  }
   if (backupPath.isEmpty() || !QFile::remove(backupPath))
     return false;
   if (!QFile::rename(to, backupPath))

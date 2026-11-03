@@ -1,6 +1,7 @@
 #include <QtTest/QtTest>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <thread>
 #include <vector>
@@ -25,6 +26,7 @@ private slots:
   void repeatedStartupAndConcurrentMessages();
   void rotateAfterCleanup();
   void lockedArchiveKeepsDestination();
+  void failedStartupKeepsPreviousSink();
 private:
   QtMessageHandler previousHandler = nullptr;
 };
@@ -177,6 +179,35 @@ void TestLogRotation::lockedArchiveKeepsDestination()
 #else
   QSKIP("Windows sharing semantics required");
 #endif
+}
+
+void TestLogRotation::failedStartupKeepsPreviousSink()
+{
+  QTemporaryDir dir(QDir::currentPath() + "/log-rotation-XXXXXX");
+  QVERIFY(dir.isValid());
+  useTestDirectory(dir.path() + "/blocked");
+  const QString blockedLogDir = ProfileManager::activeProfile().logDir();
+  QVERIFY(QDir().mkpath(QFileInfo(blockedLogDir).absolutePath()));
+  QFile obstruction(blockedLogDir);
+  QVERIFY(obstruction.open(QIODevice::WriteOnly));
+  obstruction.close();
+  Log::Init();
+  qWarning("terminal logging after failed startup");
+
+  useTestDirectory(dir.path() + "/working");
+  const QString workingLogDir = ProfileManager::activeProfile().logDir();
+  QVERIFY(QDir().mkpath(workingLogDir));
+  Log::Init();
+  qWarning("before failed restart");
+  useTestDirectory(dir.path() + "/blocked");
+  Log::Init();
+  qWarning("after failed restart");
+  Log::Cleanup();
+  const auto files = QDir(workingLogDir).entryList({"jellyfin-desktop-*.log"}, QDir::Files);
+  QCOMPARE(files.size(), 1);
+  const QByteArray contents = readFile(workingLogDir + "/" + files.first());
+  QVERIFY(contents.contains("before failed restart"));
+  QVERIFY(contents.contains("after failed restart"));
 }
 
 QTEST_GUILESS_MAIN(TestLogRotation)
