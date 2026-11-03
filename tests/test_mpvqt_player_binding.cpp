@@ -18,21 +18,14 @@ namespace {
 class ObservableVideoSettings : public SettingsSection
 {
 public:
-  explicit ObservableVideoSettings(QObject* parent) : SettingsSection(SETTINGS_SECTION_VIDEO, PLATFORM_ANY, -1, parent)
+  ObservableVideoSettings(const QVariantMap& defaults, QObject* parent)
+      : SettingsSection(SETTINGS_SECTION_VIDEO, PLATFORM_ANY, -1, parent)
   {
-    registerSetting(new SettingsValue("cache", 75));
-    registerSetting(new SettingsValue("sync_mode", QStringLiteral("audio")));
+    for (auto it = defaults.cbegin(); it != defaults.cend(); ++it)
+      registerSetting(new SettingsValue(it.key(), it.value()));
   }
   int updateReceiverCount() const { return receivers(SIGNAL(valuesUpdated(QVariantMap))); }
 };
-
-QString forceWindow(mpv_handle* handle)
-{
-  char* value = mpv_get_property_string(handle, "force-window");
-  const QString result = value ? QString::fromUtf8(value) : QString();
-  if (value) mpv_free(value);
-  return result;
-}
 }
 
 class TestMpvQtPlayerBinding : public QObject
@@ -48,10 +41,15 @@ void TestMpvQtPlayerBinding::rejectsSecondItemAndRebindsAfterRelease()
   QVERIFY(temp.isValid());
   Paths::setConfigDir(temp.path() + "/config");
   Paths::setCacheDir(temp.path() + "/cache");
+  QVERIFY(QDir().mkpath(temp.path() + "/config/profiles"));
   Q_INIT_RESOURCE(resources);
   auto& settings = SettingsComponent::Get();
   QVERIFY(settings.componentInitialize());
-  auto* videoSettings = new ObservableVideoSettings(&settings);
+  auto* originalVideoSettings = settings.getSection(SETTINGS_SECTION_VIDEO);
+  QVERIFY(originalVideoSettings);
+  const QVariantMap defaults = originalVideoSettings->allValues();
+  auto* videoSettings = new ObservableVideoSettings(defaults, &settings);
+  QCOMPARE(videoSettings->allValues(), defaults);
   settings.registerSection(videoSettings);
   QCOMPARE(videoSettings->updateReceiverCount(), 0);
   auto& player = PlayerComponent::Get();
@@ -59,25 +57,30 @@ void TestMpvQtPlayerBinding::rejectsSecondItemAndRebindsAfterRelease()
   auto second = std::make_unique<MpvVideoItem>();
   mpv_handle* secondHandle = second->controller()->mpv();
   QVERIFY(secondHandle);
-  QCOMPARE(mpv_set_property_string(secondHandle, "force-window", "no"), 0);
+  int64_t cacheBytes = 1024 * 1024;
+  QCOMPARE(mpv_set_property(secondHandle, "demuxer-max-bytes", MPV_FORMAT_INT64, &cacheBytes), 0);
   first->setPlayerComponent(&player);
   QCOMPARE(videoSettings->updateReceiverCount(), 1);
   QCOMPARE(player.requestNativeStop().status, PlayerComponent::NativeStopResult::Status::Accepted);
   second->setPlayerComponent(&player);
-  QCOMPARE(forceWindow(secondHandle), QStringLiteral("no"));
+  QCOMPARE(mpv_get_property(secondHandle, "demuxer-max-bytes", MPV_FORMAT_INT64, &cacheBytes), 0);
+  QCOMPARE(cacheBytes, int64_t(1024 * 1024));
   QVERIFY(!player.tryBindMpvController(second->controller()));
   first.reset();
   QCOMPARE(player.requestNativeStop().status, PlayerComponent::NativeStopResult::Status::Unavailable);
   emit player.onMpvEvents();
   QCoreApplication::processEvents();
   second->setPlayerComponent(&player);
-  QCOMPARE(forceWindow(secondHandle), QStringLiteral("yes"));
+  const int64_t expectedCache = int64_t(videoSettings->value("cache").toInt()) * 1024 * 1024;
+  QVERIFY(expectedCache > 1024 * 1024);
+  QCOMPARE(mpv_get_property(secondHandle, "demuxer-max-bytes", MPV_FORMAT_INT64, &cacheBytes), 0);
+  QCOMPARE(cacheBytes, expectedCache);
   QCOMPARE(videoSettings->updateReceiverCount(), 1);
-  int64_t cacheBytes = 1024 * 1024;
+  cacheBytes = 1024 * 1024;
   QCOMPARE(mpv_set_property(secondHandle, "demuxer-max-bytes", MPV_FORMAT_INT64, &cacheBytes), 0);
   emit videoSettings->valuesUpdated({});
   QCOMPARE(mpv_get_property(secondHandle, "demuxer-max-bytes", MPV_FORMAT_INT64, &cacheBytes), 0);
-  QCOMPARE(cacheBytes, int64_t(75 * 1024 * 1024));
+  QCOMPARE(cacheBytes, expectedCache);
   QCOMPARE(player.requestNativeStop().status, PlayerComponent::NativeStopResult::Status::Accepted);
   second.reset();
   emit player.onMpvEvents();
