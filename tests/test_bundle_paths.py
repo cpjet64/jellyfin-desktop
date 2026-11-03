@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
 
 PROJECT = r'''cmake_minimum_required(VERSION 3.16)
 project(BundlePathFixture C)
+set(APPLE FALSE)
 set(WIN32 TRUE)
 set(SOURCE_ROOT "${CMAKE_SOURCE_DIR}")
 set(QTROOT "${CMAKE_SOURCE_DIR}/mock Qt")
@@ -74,6 +75,10 @@ class BundlePathsTest(unittest.TestCase):
         env["BUNDLE_ARGS"] = str(self.args_log)
         self.run_cmake(["-S", str(self.source), "-B", str(self.binary),
                         "-DMPV_LIBRARY=" + mpv_path], env)
+        cache = (self.binary / "CMakeCache.txt").read_text().splitlines()
+        library = next(line.split("=", 1)[1] for line in cache
+                       if line.startswith("MPV_LIBRARY:"))
+        self.assertEqual(library, mpv_path)
         self.run_cmake(["--build", str(self.binary), "--config", "Debug"], env)
         self.run_cmake(["-DCMAKE_INSTALL_PREFIX=" + str(self.install), "-P",
                         str(self.binary / "CompleteBundleWin.cmake")], env)
@@ -83,7 +88,9 @@ class BundlePathsTest(unittest.TestCase):
         self.assertEqual(Path(args[args.index("--qmldir") + 1]), self.source / "src/ui")
 
     def run_cmake(self, args, env):
-        result = subprocess.run(["cmake", *args], capture_output=True, text=True, env=env)
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        result = subprocess.run(["cmake", *args], capture_output=True, text=True, env=env,
+                                creationflags=flags, timeout=120)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_backslashes_and_spaces(self):
