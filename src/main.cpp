@@ -29,6 +29,7 @@
 #include "ui/ErrorMessage.h"
 #include "UniqueApplication.h"
 #include "utils/Log.h"
+#include "utils/ChromiumFlags.h"
 
 #ifdef Q_OS_MAC
 #include "PFMoveApplication.h"
@@ -53,20 +54,6 @@ static void preinitQt()
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
-char** appendCommandLineArguments(int argc, char **argv, const QStringList& args)
-{
-  size_t newSize = static_cast<size_t>(argc + args.length() + 1) * sizeof(char*);
-  char** newArgv = static_cast<char**>(calloc(1, newSize));
-  memcpy(newArgv, argv, static_cast<size_t>(argc) * sizeof(char*));
-
-  int pos = argc;
-  for(const QString& str : args)
-    newArgv[pos++] = qstrdup(str.toUtf8().data());
-
-  return newArgv;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
 void ShowLicenseInfo()
 {
   QFile licenses(":/misc/licenses.txt");
@@ -78,12 +65,6 @@ void ShowLicenseInfo()
   QByteArray contents = licenses.readAll();
   printf("%.*s\n", static_cast<int>(contents.size()), contents.data());
 }
-
-/////////////////////////////////////////////////////////////////////////////////////////
-QStringList g_qtFlags = {
-  "--enable-gpu-rasterization",
-  "--disable-features=MediaSessionService"
-};
 
 /////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[])
@@ -145,9 +126,6 @@ int main(int argc, char *argv[])
     parser.addOption(deleteProfileOption);
     parser.addOption(createProfileOption);
 
-    char **newArgv = appendCommandLineArguments(argc, argv, g_qtFlags);
-    int newArgc = argc + static_cast<int>(g_qtFlags.size());
-
     preinitQt();
 
     QStringList arguments;
@@ -162,7 +140,7 @@ int main(int argc, char *argv[])
       // a small chicken-or-egg problem, which we "solve" by making
       // this temporary console app.
       //
-      QCoreApplication core(newArgc, newArgv);
+      QCoreApplication core(argc, argv);
 
       // Now parse the command line.
       parser.process(arguments);
@@ -369,27 +347,23 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    QStringList chromiumFlags;
+    bool linuxPlatform = false;
 #ifdef Q_OS_LINUX
-    // Disable QtWebEngine's automatic MPRIS registration - we handle it ourselves
-    chromiumFlags << "--disable-features=MediaSessionService,HardwareMediaKeyHandling";
+    linuxPlatform = true;
 #endif
     // Disable pinch-to-zoom if browser zoom is not allowed
     QVariant allowZoom = SettingsComponent::readPreinitValue(SETTINGS_SECTION_MAIN, "allowBrowserZoom");
-    if (allowZoom.isValid() && !allowZoom.toBool())
-      chromiumFlags << "--disable-pinch";
-
-    if (parser.isSet("ignore-certificate-errors"))
-      chromiumFlags << "--ignore-certificate-errors";
-
-    if (!chromiumFlags.isEmpty())
-      qputenv("QTWEBENGINE_CHROMIUM_FLAGS", chromiumFlags.join(" ").toUtf8());
+    QByteArray chromiumFlags = ChromiumFlags::compose(
+      qgetenv("QTWEBENGINE_CHROMIUM_FLAGS"), parser.isSet("disable-gpu"),
+      allowZoom.isValid() && !allowZoom.toBool(),
+      parser.isSet("ignore-certificate-errors"), linuxPlatform);
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", chromiumFlags);
 
     if (parser.isSet("remote-debugging-port"))
       qputenv("QTWEBENGINE_REMOTE_DEBUGGING", parser.value("remote-debugging-port").toUtf8());
 
     QtWebEngineQuick::initialize();
-    QApplication app(newArgc, newArgv);
+    QApplication app(argc, argv);
 
 #if defined(Q_OS_WIN) 
     // Setting window icon on OSX will break user ability to change it
