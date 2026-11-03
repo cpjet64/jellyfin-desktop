@@ -112,6 +112,7 @@ class inputPlugin {
             this.listen(manager, event, () => this.updateQueueState());
         }
         this.listen(manager, 'playbackstop', (e, info) => {
+            if (info && info.player === this.attachedPlayer) this.resetPlaybackTimers();
             this.updateQueueState();
             this.api.player.notifyPlaybackStop(!!(info && info.nextMediaType));
         });
@@ -160,9 +161,7 @@ class inputPlugin {
         this.listen(player, 'playing', () => this.onPlaying(), true);
         this.listen(player, 'pause', () => this.onPause(), true);
         this.listen(player, 'playbackstop', () => {
-            this.clearTimers();
-            this.lastDuration = 0;
-            this.lastReportedPosition = 0;
+            this.resetPlaybackTimers();
         }, true);
         this.listen(player, 'volumechange', () => {
             if (typeof player.getVolume === 'function') this.api.player.notifyVolumeChange(player.getVolume() / 100);
@@ -232,6 +231,12 @@ class inputPlugin {
         if (this.positionUpdateInterval) clearInterval(this.positionUpdateInterval);
         this.durationCheckInterval = null;
         this.positionUpdateInterval = null;
+    }
+
+    resetPlaybackTimers() {
+        this.clearTimers();
+        this.lastDuration = 0;
+        this.lastReportedPosition = 0;
     }
 
     destroy() {

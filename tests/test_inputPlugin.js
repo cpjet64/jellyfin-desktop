@@ -106,3 +106,35 @@ test('destroy before API resolves attaches no listeners or signals', async () =>
     assert.equal(h.calls.length, 0);
     assert.equal(Object.keys(h.manager._callbacks || {}).length, 0);
 });
+
+test('manager stop clears the attached player timers and keeps listeners reusable', async () => {
+    const h = harness();
+    h.resolveApi(h.api);
+    await new Promise(resolve => setImmediate(resolve));
+    const player = { getVolume: () => 50 };
+    h.manager._currentPlayer = player;
+    events.trigger(h.manager, 'playbackstart', [player]);
+    events.trigger(player, 'playing');
+    assert.equal(h.timers.size, 2);
+    events.trigger(h.manager, 'playbackstop', [{ player }]);
+    assert.equal(h.timers.size, 0);
+    h.calls.length = 0;
+    events.trigger(player, 'playing');
+    assert.equal(h.timers.size, 2);
+    assert.equal(h.calls.filter(call => call[0] === 'notifyDurationChange').length, 1);
+    h.plugin.destroy();
+});
+
+test('manager stop for another player leaves current timers running', async () => {
+    const h = harness();
+    h.resolveApi(h.api);
+    await new Promise(resolve => setImmediate(resolve));
+    const player = { getVolume: () => 50 };
+    h.manager._currentPlayer = player;
+    events.trigger(h.manager, 'playbackstart', [player]);
+    events.trigger(player, 'playing');
+    const timers = [...h.timers.keys()];
+    events.trigger(h.manager, 'playbackstop', [{ player: {} }]);
+    assert.deepEqual([...h.timers.keys()], timers);
+    h.plugin.destroy();
+});
