@@ -1,5 +1,6 @@
 """Run from an x64 MSVC developer environment: python tests/windows_mpv_loader_integration.py."""
 import hashlib
+import csv
 import os
 from pathlib import Path
 import shutil
@@ -21,6 +22,53 @@ def run(args, expected=0):
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def expect_denied(operation, description):
+    try:
+        operation()
+    except PermissionError:
+        return
+    raise RuntimeError(f"Fixture unexpectedly permits {description}")
+
+
+def verify_protected_install():
+    """Exercise the loader in a fixture that the current token cannot modify."""
+    protected = OUT / "protected-install"
+    protected.mkdir()
+    for name in ("primary.exe", "fallback.exe", "libmpv-2.dll", "libmpv-fallback.dll"):
+        shutil.copy2(OUT / name, protected / name)
+    sid = next(csv.reader([run(["whoami", "/user", "/fo", "csv", "/nh"]).strip()]))[-1]
+    if not sid.startswith("S-1-"):
+        raise RuntimeError("Could not determine current user SID")
+    acl_file = OUT / "protected-install.acl"
+    restored_acl = OUT / "protected-install-restored.acl"
+    pending = OUT / "acl-restore-pending"
+    run(["icacls", str(protected), "/save", str(acl_file), "/t"])
+    pending.touch()
+    try:
+        run(["icacls", str(protected), "/inheritance:r", "/grant:r", f"*{sid}:(OI)(CI)(RX)"])
+        primary = protected / "libmpv-2.dll"
+        fallback = protected / "libmpv-fallback.dll"
+        hashes = (digest(primary), digest(fallback))
+        replacement = OUT / "replacement.dll"
+        shutil.copy2(primary, replacement)
+        expect_denied(lambda: (protected / "new-file").write_bytes(b"probe"), "file creation")
+        expect_denied(lambda: os.replace(replacement, primary), "file replacement")
+        expect_denied(lambda: fallback.unlink(), "file deletion")
+        for _ in range(2):
+            run([str(protected / "primary.exe")], 11)
+            run([str(protected / "fallback.exe")], 22)
+        if (digest(primary), digest(fallback)) != hashes:
+            raise RuntimeError("Protected installation DLL contents changed")
+    finally:
+        # This freshly created tree inherits its ACLs. /restore requires a
+        # privilege unavailable to a standard user; reset restores inheritance.
+        run(["icacls", str(protected), "/reset", "/t"])
+        run(["icacls", str(protected), "/save", str(restored_acl), "/t"])
+        if acl_file.read_bytes() != restored_acl.read_bytes():
+            raise RuntimeError(f"Fixture ACL differs after reset; retained at {OUT}")
+        pending.unlink()
 
 
 def compile_fixtures():
@@ -45,6 +93,7 @@ def verify():
     imports = run(["dumpbin", "/imports", "fallback.exe"])
     if "libmpv-2.dll" not in imports or "delay load imports" not in imports.lower():
         raise RuntimeError("PE does not list libmpv as a delay import:\n" + imports)
+    verify_protected_install()
     for path in (primary, fallback):
         os.chmod(path, stat.S_IREAD)
     for _ in range(2):
@@ -62,7 +111,7 @@ def verify():
     if digest(primary) != before[0] or digest(fallback) != corrupt_hash:
         raise RuntimeError("DLL contents changed during failure")
     verify_incompatible(primary, fallback, before[0])
-    print("Delay import, repeated read-only loads, failure cases, and DLL hashes passed.")
+    print("Delay import, ACL-protected loads, failure cases, and DLL hashes passed.")
 
 
 def verify_incompatible(primary, fallback, primary_hash):
@@ -106,10 +155,13 @@ def main():
         compile_fixtures()
         verify()
     finally:
-        for path in OUT.iterdir():
-            if path.is_file():
-                os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
-        shutil.rmtree(OUT)
+        if (OUT / "acl-restore-pending").exists():
+            print(f"Fixture retained for ACL recovery: {OUT}")
+        else:
+            for path in OUT.iterdir():
+                if path.is_file():
+                    os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+            shutil.rmtree(OUT)
 
 
 if __name__ == "__main__":
