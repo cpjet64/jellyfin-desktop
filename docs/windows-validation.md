@@ -47,7 +47,11 @@ reboot, multi-monitor, playback-end, or queued-episode behavior.
 The native loader harness passed real delay-import dispatch to distinct fixture
 DLLs, repeated loads, unchanged hashes, missing/corrupt DLLs, missing dependency,
 missing export, and rejection of a primary DLL found only on PATH. Read-only file
-attributes are tested; protected-directory ACL behavior and an affected CPU are not.
+attributes were initially tested. The subsequent ACL fixture denies actual file
+creation, replacement and deletion to the executing Windows token while both
+loader variants execute twice with unchanged DLL hashes. Original inherited ACLs
+are saved and compared after restoration before cleanup. The integrated fixture
+passed locally; an affected non-AVX2 CPU remains untested.
 The final application lists mpv only as a delay-load dependency and no shared
 mpvqt dependency. Inspection of the provisioned 138 Qt DLLs found no mpv imports;
 this is not a complete recursive system/plugin dependency audit.
