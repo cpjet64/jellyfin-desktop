@@ -168,6 +168,7 @@ void TestRendererLossPlayback::verifyPlayback(PlayerComponent& player, mpv_handl
 
 int main(int argc, char** argv)
 {
+  QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
   QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
   QGuiApplication app(argc, argv);
   TestRendererLossPlayback test;
