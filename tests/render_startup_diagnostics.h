@@ -3,6 +3,7 @@
 
 #include <QEvent>
 #include <QFile>
+#include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMutex>
@@ -87,6 +88,7 @@ private:
     if (m_glCaptured.exchange(true)) return;
     if (!m_mutex.tryLock()) { m_glCaptured.store(false); return; }
     auto* context = QOpenGLContext::currentContext();
+    m_glPresent = context != nullptr;
     m_glValid = context && context->isValid();
     if (!m_glValid) { m_mutex.unlock(); return; }
     const auto format = context->format();
@@ -120,9 +122,16 @@ private:
     QJsonObject itemInfo{{"visible", item.isVisible()}, {"opacity", item.opacity()},
       {"width", item.width()}, {"height", item.height()}, {"hasWindow", item.window() == &window}};
     QMutexLocker lock(&m_mutex);
-    QJsonObject gl{{"captured", m_glCaptured.load()}, {"valid", m_glValid}, {"format", m_glFormat},
+    QJsonObject gl{{"captured", m_glCaptured.load()}, {"contextPresent", m_glPresent},
+      {"valid", m_glValid}, {"format", m_glFormat},
       {"vendor", m_vendor}, {"renderer", m_renderer}, {"version", m_version}};
+    QJsonObject environment{{"QSG_RENDER_LOOP", qEnvironmentVariable("QSG_RENDER_LOOP")},
+      {"QT_QUICK_BACKEND", qEnvironmentVariable("QT_QUICK_BACKEND")},
+      {"QT_OPENGL", qEnvironmentVariable("QT_OPENGL")},
+      {"QSG_RHI_BACKEND", qEnvironmentVariable("QSG_RHI_BACKEND")}};
     return {{"timesMs", times}, {"window", windowInfo}, {"item", itemInfo}, {"gl", gl},
+      {"qtVersion", QString::fromLatin1(qVersion())}, {"platformPlugin", QGuiApplication::platformName()},
+      {"requestedGraphicsApi", static_cast<int>(QQuickWindow::graphicsApi())}, {"graphicsEnvironment", environment},
       {"sceneGraphFailed", m_failed.load()}, {"sceneGraphErrorCode", m_errorCode.load()}, {"sceneGraphError", m_error},
       {"desktop", windowsDesktopMetadata()}};
   }
@@ -134,6 +143,7 @@ private:
   std::atomic<bool> m_failed{false}, m_glCaptured{false};
   QMutex m_mutex;
   bool m_glValid = false;
+  bool m_glPresent = false;
   std::atomic<int> m_errorCode{-1};
   QString m_error, m_glFormat, m_vendor, m_renderer, m_version;
 };

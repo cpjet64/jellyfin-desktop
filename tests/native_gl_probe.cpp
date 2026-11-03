@@ -52,11 +52,13 @@ static QJsonObject probe()
 
 int main(int argc, char** argv)
 {
+  QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
   QGuiApplication app(argc, argv);
   if (argc != 2 || !QFileInfo(QString::fromLocal8Bit(argv[1])).isAbsolute()) return 2;
   const QJsonObject result = probe();
   QFile output(QString::fromLocal8Bit(argv[1]));
   if (!output.open(QIODevice::WriteOnly | QIODevice::Truncate)) return 3;
-  if (output.write(QJsonDocument(result).toJson()) < 0) return 3;
+  const QByteArray data = QJsonDocument(result).toJson();
+  if (output.write(data) != data.size()) return 3;
   return result.value("makeCurrent").toBool() ? 0 : 1;
 }
