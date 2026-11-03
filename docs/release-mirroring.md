@@ -1,5 +1,13 @@
 # Release mirroring
 
+The public primary repository is
+[GitLab](https://gitlab.curtpme.com/cpjet64/jellyfin-desktop).
+[GitHub](https://github.com/cpjet64/jellyfin-desktop) receives branches, tags and
+commits through GitLab's SSH push mirror. Push to GitLab; divergent GitHub refs
+are retained and reported as mirror errors instead of being overwritten.
+The repository's default push destination is the existing `gitlab` remote;
+the `origin` GitHub remote and upstream reference are preserved.
+
 GitLab project 314 is the release source. GitHub polls its public release API
 every ten minutes, on manual dispatch, and after relevant pushes to `master`.
 Scheduled runs can be delayed by GitHub; this is not immediate synchronization.
