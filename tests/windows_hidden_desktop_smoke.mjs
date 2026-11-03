@@ -83,7 +83,9 @@ async function observe(port, child, dir, requestExit = true) {
       if (!target) throw new Error('No page target');
       const page = await cdp(target.webSocketDebuggerUrl, 'Runtime.evaluate',
         { expression: '({url:location.href,title:document.title,text:document.body?.innerText?.slice(0,1000),exitType:typeof window.api?.system?.exit})', returnByValue: true });
-      if (page.result.value.url === 'about:blank') throw new Error('Page still loading');
+      const state = page.result.value;
+      if (state.title !== 'Jellyfin' || !state.text?.includes('Server Address') ||
+          !state.text.includes('CONNECT') || state.exitType !== 'function') throw new Error('Page still loading');
       const gpu = await cdp(version.webSocketDebuggerUrl, 'SystemInfo.getInfo');
       if (requestExit) {
         const screenshot = await cdp(target.webSocketDebuggerUrl, 'Page.captureScreenshot');
