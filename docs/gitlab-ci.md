@@ -12,8 +12,8 @@ macOS Intel, each with a bundled static mpvqt configuration and a separately
 installed system mpvqt compatibility configuration. The static jobs require
 the pinned mpvqt submodule and set `USE_STATIC_MPVQT=ON` and
 `MPVQT_EXTERNAL_EVENTS=ON`. System jobs use `USE_STATIC_MPVQT=OFF` and
-`MPVQT_EXTERNAL_EVENTS=OFF`. Each job builds and verifies its own dependencies;
-one runner's artifacts do not establish another runner's prerequisites.
+`MPVQT_EXTERNAL_EVENTS=OFF`. Each job verifies its own prerequisites and builds
+the candidate; one runner's artifacts do not establish another runner's prerequisites.
 
 Branch pushes, merge requests, and web/API branch pipelines are admitted.
 Push pipelines are suppressed when an MR pipeline covers the same branch.
