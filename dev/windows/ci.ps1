@@ -43,7 +43,14 @@ $found = @{
     SevenZip = Find-OptionalTool '7z.exe' @("$env:ProgramFiles/7-Zip/7z.exe")
     CMake = Find-OptionalTool 'cmake.exe'
     Ninja = Find-OptionalTool 'ninja.exe'
+    Node = Find-OptionalTool 'node.exe'
     Inno = Find-OptionalTool 'ISCC.exe' @("${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe", "$env:ProgramFiles/Inno Setup 6/ISCC.exe")
+}
+if ($found.Node) {
+    $nodeVersion = & $found.Node --version
+    if ($LASTEXITCODE -ne 0 -or $nodeVersion -notmatch '^v(\d+)\.' -or [int]$Matches[1] -lt 20) {
+        $found.Node = $null
+    }
 }
 if ($found.CMake) {
     $ctest = Join-Path (Split-Path $found.CMake) 'ctest.exe'
@@ -90,11 +97,17 @@ $qt = "$ci/qt/$qtVersion/msvc2022_64"
 $env:PATH = "$qt/bin;$env:PATH"
 $env:QT_PLUGIN_PATH = "$qt/plugins"
 Run-Native 'cmake.exe' @('-S', $root, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=RelWithDebInfo', "-DCMAKE_INSTALL_PREFIX=$build/output", "-DQTROOT=$qt", "-DMPV_INCLUDE_DIR=$build/mpv/include", "-DMPV_LIBRARY=$build/mpv/libmpv-2.dll.lib", '-DCHECK_FOR_UPDATES=ON', '-DUSE_STATIC_MPVQT=ON')
-Run-Native 'cmake.exe' @('--build', $build)
+Run-Native 'cmake.exe' @('--build', $build, '--parallel', '4')
 Run-Native 'ctest.exe' @('--test-dir', $build, '--output-on-failure', '--timeout', '60', '--output-junit', "$results/ctest.xml")
 Run-Native $venvPython @('tests/windows_mpv_loader_integration.py')
 Run-Native $venvPython @('tests/windows_packaging_runtime_test.py')
-Run-Native 'cmake.exe' @('--build', $build, '--target', 'windows_all')
+$env:ISCC = $found.Inno
+$env:WINDOWS_VCRUNTIME_DIR = "$deps/vcruntime"
+$env:WINDOWS_VCREDIST_EXE = "$deps/vc_redist.x64.exe"
+Run-Native $venvPython @('tests/windows_installer_compile_test.py')
+Run-Native $found.Node @('--test', 'tests/test_inputPlugin.js')
+Run-Native $found.Node @('tests/windows_hidden_desktop_fixture.mjs')
+Run-Native 'cmake.exe' @('--build', $build, '--target', 'windows_all', '--parallel', '4')
 $artifacts = @(Get-ChildItem -Path "$build/JellyfinDesktop-*.exe", "$build/JellyfinDesktop-*.zip")
 if (@($artifacts | Where-Object Extension -eq '.exe').Count -ne 1 -or @($artifacts | Where-Object Extension -eq '.zip').Count -ne 1) { throw 'Expected exactly one installer and one portable ZIP' }
 $artifacts | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $($_.Path | Split-Path -Leaf)" } | Set-Content "$results/SHA256SUMS.txt"

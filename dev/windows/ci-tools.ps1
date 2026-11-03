@@ -44,8 +44,14 @@ function Install-CiTools {
         Expand-ToolArchive $archive "$Directory/ninja"
         $Found.Ninja = Join-Path $Directory 'ninja/ninja.exe'
     }
+    if (-not $Found.Node) {
+        $archive = Join-Path $Directory 'node.zip'
+        Get-VerifiedDownload 'https://nodejs.org/dist/v22.21.1/node-v22.21.1-win-x64.zip' $archive '3C624E9FBE07E3217552EC52A0F84E2BDC2E6FFA7348F3FDFB9FBF8F42E23FCF'
+        Expand-ToolArchive $archive "$Directory/node"
+        $Found.Node = Join-Path $Directory 'node/node-v22.21.1-win-x64/node.exe'
+    }
     if (-not $Found.Inno) { Install-CiInno $Directory $Found }
-    foreach ($tool in @('SevenZip', 'CMake', 'Ninja', 'Inno')) {
+    foreach ($tool in @('SevenZip', 'CMake', 'Ninja', 'Node', 'Inno')) {
         if (-not (Test-Path -LiteralPath $Found[$tool] -PathType Leaf)) { throw "Missing $tool executable after bootstrap" }
         $env:PATH = "$(Split-Path $Found[$tool]);$env:PATH"
     }

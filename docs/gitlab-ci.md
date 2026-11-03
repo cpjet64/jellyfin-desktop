@@ -3,7 +3,8 @@
 This pipeline validates the Windows x64 candidate using the shell executor on
 the `win203-unprotected` runner. It builds with MSVC, Qt 6.9.3 and the same
 primary and fallback mpv versions as the existing GitHub Windows workflow. It
-runs CTest, the Windows mpv loader harness and packaging fixture, then creates the installer and
+runs CTest, the Windows mpv loader, input-listener, hidden-harness fixture and
+packaging and installer-compilation checks, then creates the installer and
 portable ZIP. Artifacts include CTest's JUnit report, SHA-256 checksums and
 pipeline/job/commit provenance. The packages are unsigned and are not releases.
 
@@ -39,7 +40,7 @@ policy is unresolved; they do not receive replacement validation from this file.
 The runner must have Python with venv, Windows tar, Visual Studio 2022 x64 C++
 tools and redistributable. Existing CMake, Ninja, 7-Zip and Inno Setup are used
 when available. Missing tools are downloaded into the job checkout: 7-Zip
-26.00, CMake 4.1.2, Ninja 1.13.2, and Inno Setup 6.7.3. Downloads are pinned
+26.00, CMake 4.1.2, Ninja 1.13.2, Node.js 22.21.1, and Inno Setup 6.7.3. Downloads are pinned
 to SHA-256 hashes; the Inno installer additionally requires a valid Pyrsys
 signature and the extracted compiler is checked against its pinned hash.
 Inno is extracted with pinned innoextract 670, not installed on the host.
