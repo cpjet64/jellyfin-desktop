@@ -164,6 +164,8 @@ void Log::Init()
 /////////////////////////////////////////////////////////////////////////////////////////
 static bool rotateArchive(const QString& from, const QString& to)
 {
+  if (!QFileInfo(from).isFile() || (QFile::exists(to) && !QFileInfo(to).isFile()))
+    return false;
   if (!QFile::exists(to))
     return QFile::rename(from, to);
 
@@ -221,7 +223,7 @@ void Log::RotateLog()
   // Rotate main log to .log.1
   if (QFile::exists(mainLog))
   {
-    if (!QFile::rename(mainLog, mainLog + ".1"))
+    if (!QFileInfo(mainLog).isFile() || !QFile::rename(mainLog, mainLog + ".1"))
     {
       std::cerr << "Failed to rotate main log" << std::endl;
       return;
