@@ -8,7 +8,7 @@ Item {
     property int loads: 0
     property bool bridgeReady: false
     property string result: ""
-    property bool channelPresent: loader.item ? loader.item.webChannel !== null : false
+    property QtObject webChannel: webClientFaultGuard.rendererLost ? null : (loader.item ? loader.item.webChannel : null)
 
     WebChannel {
         id: channel
@@ -37,6 +37,7 @@ Item {
     Loader { id: loader; anchors.fill: parent; sourceComponent: webComponent }
 
     function loadPage() { loader.item.url = "data:text/html,<html><body>fixture</body></html>" }
+    function transportCount() { return channel.transports.length }
     function reloadPage() { loader.item.reload() }
     function connectBridge() {
         loader.item.runJavaScript("new QWebChannel(qt.webChannelTransport, function(c) { window.fixtureInput = c.objects.input; window.fixtureReady = true; });")

@@ -2,9 +2,11 @@
 
 #include <QDebug>
 #include <QThread>
+#include <QWebChannel>
 
 #include "core/ComponentManager.h"
 #include "core/Globals.h"
+#include "utils/Utils.h"
 
 WebClientFaultGuard& WebClientFaultGuard::instance()
 {
@@ -16,6 +18,15 @@ void WebClientFaultGuard::installContextProperties()
 {
   Globals::SetContextProperty("components", &ComponentManager::Get().getQmlPropertyMap());
   Globals::SetContextProperty("webClientFaultGuard", &instance());
+}
+
+void WebClientFaultGuard::registerChannelForWindow(QObject* window)
+{
+  if (instance().rendererLost()) return;
+  auto* object = qvariant_cast<QObject*>(window->property("webChannel"));
+  auto* channel = qobject_cast<QWebChannel*>(object);
+  if (!channel) throw FatalException(QObject::tr("Web channel is unavailable"));
+  ComponentManager::Get().setWebChannel(channel);
 }
 
 void WebClientFaultGuard::observeRendererLoss(int status, int exitCode)

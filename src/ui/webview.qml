@@ -423,7 +423,7 @@ Window
     }
   }
 
-  property QtObject webChannel: web.webChannel
+  property QtObject webChannel: webClientFaultGuard.rendererLost ? null : web.webChannel
 
   Labs.SystemTrayIcon {
     visible: showSystemTrayIcon

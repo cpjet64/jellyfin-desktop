@@ -16,6 +16,8 @@ void TestWebClientFaultGuard::rendererLossIsOneWay()
   QSignalSpy changed(&guard, &WebClientFaultGuard::rendererLostChanged);
   QVERIFY(!guard.rendererLost());
   QVERIFY(!system.isWebClientConnected());
+  QObject missingChannel;
+  QVERIFY_EXCEPTION_THROWN(WebClientFaultGuard::registerChannelForWindow(&missingChannel), FatalException);
   system.hello("first");
   QVERIFY(system.isWebClientConnected());
   guard.observeRendererLoss(0, 17);
@@ -23,6 +25,7 @@ void TestWebClientFaultGuard::rendererLossIsOneWay()
   QCOMPARE(guard.terminationStatus(), 0);
   QCOMPARE(guard.terminationExitCode(), 17);
   QVERIFY(!system.isWebClientConnected());
+  WebClientFaultGuard::registerChannelForWindow(&missingChannel);
   QCOMPARE(changed.count(), 1);
   guard.observeRendererLoss(2, 99);
   QCOMPARE(guard.terminationStatus(), 0);

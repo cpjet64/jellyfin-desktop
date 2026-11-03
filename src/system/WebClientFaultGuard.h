@@ -10,6 +10,7 @@ class WebClientFaultGuard final : public QObject
 public:
   static WebClientFaultGuard& instance();
   static void installContextProperties();
+  static void registerChannelForWindow(QObject* window);
   bool rendererLost() const { return m_rendererLost; }
   int terminationStatus() const { return m_status; }
   int terminationExitCode() const { return m_exitCode; }

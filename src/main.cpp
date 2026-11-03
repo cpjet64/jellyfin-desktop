@@ -489,9 +489,7 @@ int main(int argc, char *argv[])
       };
       app.installEventFilter(new PopupFixer(window));
 
-      QObject* webChannel = qvariant_cast<QObject*>(window->property("webChannel"));
-      Q_ASSERT(webChannel);
-      ComponentManager::Get().setWebChannel(qobject_cast<QWebChannel*>(webChannel));
+      WebClientFaultGuard::registerChannelForWindow(window);
 
       // Initialize WindowManager with window reference
       WindowManager::Get().initializeWindow(window);
