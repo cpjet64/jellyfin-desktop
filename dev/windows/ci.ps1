@@ -85,6 +85,7 @@ Run-Native $python @('-m', 'venv', "$ci/venv")
 $venvPython = Join-Path $ci 'venv/Scripts/python.exe'
 Run-Native $venvPython @('tests/test_ci_results.py')
 Run-Native $venvPython @('dev/ci/test_safe_extract.py')
+Run-Native $venvPython @('dev/ci/test_macos_session.py')
 Run-Native 'powershell.exe' @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', 'dev/windows/test_ci_gui.ps1')
 Run-Native $venvPython @('-m', 'pip', 'install', 'aqtinstall==3.3.0')
 Run-Native $venvPython @('-m', 'aqt', 'install-qt', 'windows', 'desktop', $qtVersion, 'win64_msvc2022_64', '-m', 'qtwebengine', 'qtwebchannel', 'qtpositioning', '-O', "$ci/qt")

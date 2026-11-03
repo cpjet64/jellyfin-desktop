@@ -32,9 +32,12 @@ bus. Failure or absence of a prerequisite or required result fails the job.
 
 Windows runs GUI fixtures through a task-owned hidden desktop and job object;
 Linux uses job-owned Xvfb and private D-Bus sessions and records the rendering
-backend. macOS requires a dedicated, authorized GUI session, an available GUI
-domain owned by the runner's console user, and the dedicated-session assertion.
-It refuses an existing user mpvqt configuration that would otherwise be read.
+backend. macOS requires the explicitly authorized `runner` account on
+`tahoe-runner-114` (GitLab runner 12), a pre-existing GUI domain and matching
+console ownership. The job checks `CI_ALLOWED_GUI_ACCOUNT` and
+`CI_ALLOWED_GUI_HOST` against that identity before internally enabling the test
+session guard. It never creates a session, logs in, or changes an account. It
+refuses an existing user mpvqt configuration that would otherwise be read.
 The runner must already have the required GUI/session facilities; the jobs do
 not install host packages or change runner settings. Resource groups serialize
 each platform's project jobs; they do not establish host-wide isolation.

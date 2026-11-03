@@ -12,6 +12,7 @@ import tempfile
 sys.dont_write_bytecode = True
 from native_bootstrap import bootstrap
 from native_inventory import incompatible_tools, inventory, prepare_process_paths, unavailable_compilers
+from macos_session import verify_existing_session
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
@@ -45,6 +46,8 @@ def command(name, args, *, env=None, timeout=120):
 def preflight():
     system = platform.system()
     machine = platform.machine().lower()
+    if system == "Darwin":
+        os.environ.pop("CI_DEDICATED_GUI_SESSION", None)
     free = shutil.disk_usage(ROOT).free
     print(f"Runner OS={system} architecture={machine} free_bytes={free}", flush=True)
     print(f"CI job={os.environ.get('CI_JOB_ID', 'unknown')} runner={os.environ.get('CI_RUNNER_ID', 'unknown')} runner_arch={os.environ.get('CI_RUNNER_EXECUTABLE_ARCH', 'unknown')}", flush=True)
@@ -89,9 +92,9 @@ def preflight():
         for name in missing:
             if not shutil.which(name):
                 raise RuntimeError(f"BLOCKED: bootstrapped tool unavailable: {name}")
+    if mode not in ("static", "system"):
+        raise RuntimeError("CI_MPVQT_MODE must be static or system")
     if system == "Darwin":
-        if os.environ.get("CI_DEDICATED_GUI_SESSION") != "1":
-            raise RuntimeError("BLOCKED: dedicated macOS GUI session not attested")
         # MpvQt appends this name to Qt ConfigLocation (~/Library/Preferences on macOS).
         # Inspect existence only: the contents belong to the session owner.
         config = Path.home() / "Library/Preferences/mpvqt/mpvqt.conf"
@@ -102,16 +105,7 @@ def preflight():
             pass
         else:
             raise RuntimeError("BLOCKED: existing non-job-owned mpvqt configuration would be consumed")
-        result = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}"],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
-        if result.returncode:
-            raise RuntimeError("BLOCKED: dedicated macOS GUI session is unavailable")
-        console = subprocess.check_output(["stat", "-f", "%u", "/dev/console"], text=True, timeout=15).strip()
-        if console != str(os.getuid()):
-            raise RuntimeError("BLOCKED: dedicated GUI session does not own the console")
-        print(f"Dedicated macOS GUI session and console uid: {os.getuid()}", flush=True)
-    if mode not in ("static", "system"):
-        raise RuntimeError("CI_MPVQT_MODE must be static or system")
+        verify_existing_session(os.environ)
     return system, mode
 
 
@@ -119,6 +113,7 @@ def configure(system, mode):
     command("report-gate-tests", [sys.executable, "tests/test_ci_results.py"])
     command("archive-safety-tests", [sys.executable, "dev/ci/test_safe_extract.py"])
     command("inventory-tests", [sys.executable, "dev/ci/test_native_inventory.py"])
+    command("mac-session-tests", [sys.executable, "dev/ci/test_macos_session.py"])
     command("compiler-version", ["c++", "--version"])
     command("cmake-version", ["cmake", "--version"])
     command("mpv-version", ["pkg-config", "--modversion", "mpv"])
