@@ -213,18 +213,7 @@ void PlayerComponent::initializeMpv()
   setSubtitleConfiguration();
   setOtherConfiguration();
 
-  if (auto* s = SettingsComponent::Get().getSection(SETTINGS_SECTION_AUDIO))
-    connect(s, &SettingsSection::valuesUpdated, this, &PlayerComponent::updateAudioConfiguration);
-
-  if (auto* s = SettingsComponent::Get().getSection(SETTINGS_SECTION_VIDEO))
-    connect(s, &SettingsSection::valuesUpdated, this, &PlayerComponent::updateVideoConfiguration);
-
-  if (auto* s = SettingsComponent::Get().getSection(SETTINGS_SECTION_SUBTITLES))
-    connect(s, &SettingsSection::valuesUpdated, this, &PlayerComponent::updateSubtitleConfiguration);
-
-  if (auto* s = SettingsComponent::Get().getSection(SETTINGS_SECTION_OTHER))
-    connect(s, &SettingsSection::valuesUpdated, this, &PlayerComponent::updateConfiguration);
-
+  subscribeMpvSettings();
   finishMpvEventSetup();
 }
 

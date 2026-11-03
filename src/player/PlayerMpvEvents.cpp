@@ -34,6 +34,23 @@ void PlayerComponent::finishMpvEventSetup()
   emit onMpvEvents();
 }
 
+void PlayerComponent::subscribeMpvSettings()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  constexpr auto connection = Qt::UniqueConnection;
+#else
+  constexpr auto connection = Qt::AutoConnection;
+#endif
+  if (auto* section = SettingsComponent::Get().getSection(SETTINGS_SECTION_AUDIO))
+    connect(section, &SettingsSection::valuesUpdated, this, &PlayerComponent::updateAudioConfiguration, connection);
+  if (auto* section = SettingsComponent::Get().getSection(SETTINGS_SECTION_VIDEO))
+    connect(section, &SettingsSection::valuesUpdated, this, &PlayerComponent::updateVideoConfiguration, connection);
+  if (auto* section = SettingsComponent::Get().getSection(SETTINGS_SECTION_SUBTITLES))
+    connect(section, &SettingsSection::valuesUpdated, this, &PlayerComponent::updateSubtitleConfiguration, connection);
+  if (auto* section = SettingsComponent::Get().getSection(SETTINGS_SECTION_OTHER))
+    connect(section, &SettingsSection::valuesUpdated, this, &PlayerComponent::updateConfiguration, connection);
+}
+
 #ifdef MPVQT_EXTERNAL_EVENTS
 bool PlayerComponent::tryBindMpvController(MpvController* controller)
 {

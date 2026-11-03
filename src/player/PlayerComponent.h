@@ -264,6 +264,7 @@ private:
   void handleMpvEvent(mpv_event *event);
   void setupMpvEvents();
   void finishMpvEventSetup();
+  void subscribeMpvSettings();
   void scheduleMpvHook(const std::function<void()>& resume);
   void scheduleMpvHook(const QString& resumeId);
 #if MPV_CLIENT_API_VERSION >= MPV_MAKE_VERSION(1, 100)
