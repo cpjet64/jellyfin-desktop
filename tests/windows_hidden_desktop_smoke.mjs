@@ -9,7 +9,7 @@ const [helper, build, qt, mode] = process.argv.slice(2);
 if (![helper, build, qt].every(value => value && path.isAbsolute(value))) {
   throw new Error('Pass absolute paths to helper, integration build, and Qt root');
 }
-if (mode && !['--baseline', '--log-failure'].includes(mode)) throw new Error('Unknown mode');
+if (mode && !['--baseline', '--log-failure', '--window-actions'].includes(mode)) throw new Error('Unknown mode');
 const marker = path.join(build, 'src', 'portable');
 const outputRoot = path.join(build, 'desktop-smoke-native');
 let output;
@@ -94,12 +94,18 @@ async function runCase(spec) {
     child.stdout.on('data', chunk => { log += chunk; });
     child.stderr.on('data', chunk => { log += chunk; });
     let observation;
-    try { observation = await observe(port, child); }
+    try {
+      if (spec.windowActions) {
+        for (let i = 0; i < 240 && !log.includes('window actions ') && child.exitCode === null; i++) await delay(250);
+        if (!log.includes('window actions passed')) throw new Error('Window actions failed or timed out');
+      }
+      observation = await observe(port, child);
+    }
     catch (error) { observation = { error: String(error) }; }
     const [code] = child.exitCode === null ? await once(child, 'exit') : [child.exitCode];
     await writeFile(path.join(dir, 'console.log'), log);
     const diagnostic = log.split(/\r?\n/).filter(line =>
-      /app pid|app wait|job active|Failed to create temporary log|ERROR:/.test(line)).join('\n');
+      /app pid|app wait|job active|window actions|Failed to create temporary log|ERROR:/.test(line)).join('\n');
     const result = { case: spec.name, observation, helperExit: code, log: diagnostic };
     result.failures = checkCase(spec, result);
     await writeFile(path.join(dir, 'result.json'), JSON.stringify(result, null, 2));
@@ -140,7 +146,8 @@ async function main() {
       { name: 'env-disable-gpu-pinch', flags: '--disable-gpu', disablePinch: true },
       { name: 'quoted-flags', flags: '--user-agent="Desktop Smoke Test"' }];
     const selected = mode === '--baseline' ? cases.slice(0, 2) :
-      mode === '--log-failure' ? [{ name: 'log-failure', logFailure: true }] : cases;
+      mode === '--log-failure' ? [{ name: 'log-failure', logFailure: true }] :
+      mode === '--window-actions' ? [{ name: 'window-actions', arg: '--window-actions', windowActions: true }] : cases;
     for (const spec of selected) {
       const result = await runCase(spec);
       console.log(JSON.stringify(result));
