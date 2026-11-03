@@ -50,6 +50,14 @@ paths `WINDOWS_VCRUNTIME_DIR` and `WINDOWS_VCREDIST_EXE`; their defaults are
 Packaging fails if these inputs are missing. Compilation and tests do not
 require them or Inno Setup.
 
+The installer checks the registered x64 runtime and the versions of the three
+core DLLs against the packaged runtime. An incomplete or older central runtime
+uses the bundled DLLs unless an administrator chooses to update it. Existing
+app-local runtime DLLs are refreshed on upgrade because Windows loads them before
+the central runtime. A failed or incomplete central update falls back to the
+bundled DLLs. The installer will not run an equal or older redistributable over
+an installed newer one.
+
 ## Clean Build
 
 ```cmd

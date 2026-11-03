@@ -12,6 +12,13 @@
 #define MyAppExeName "Jellyfin Desktop.exe"
 #define MyAppGUID "{{a78bea4a-5bd0-4aa3-bdf3-579b4f58a921}"
 #define DeployPath "@CMAKE_INSTALL_PREFIX@"
+#define VCRuntimeVersion GetVersionNumbersString(DeployPath + "/redist/vcruntime140.dll")
+#define VCRuntime1Version GetVersionNumbersString(DeployPath + "/redist/vcruntime140_1.dll")
+#define MSVCPVersion GetVersionNumbersString(DeployPath + "/redist/msvcp140.dll")
+#define VCRedistVersion GetVersionNumbersString(DeployPath + "/vc_redist.x64.exe")
+#if VCRuntimeVersion == "" || VCRuntime1Version == "" || MSVCPVersion == "" || VCRedistVersion == ""
+  #error Windows runtime inputs must have file versions
+#endif
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application.
@@ -59,17 +66,15 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; Main application files (exclude redist folder - handled separately)
 Source: "{#DeployPath}/*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "redist,redist/*,vc_redist.x64.exe"
 ; Bundled VC runtime DLLs - only copied if needed (see Code section)
-Source: "{#DeployPath}/redist/*.dll"; DestDir: "{app}"; Flags: ignoreversion; Check: NeedsBundledRuntime
+Source: "{#DeployPath}/redist/*.dll"; DestDir: "{app}"; Check: NeedsBundledRuntime
 ; Bundled VCRedist installer - extracted to temp for potential system-wide install
-Source: "{#DeployPath}/vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall; Check: ShouldExtractVCRedist
+Source: "{#DeployPath}/vc_redist.x64.exe"; Flags: dontcopy
 
 [Icons]
 Name: "{autoprograms}\Jellyfin Desktop"; Filename: "{app}\{#MyAppExeName}"; Comment: "Jellyfin desktop client"; WorkingDir: "{app}"
 Name: "{autodesktop}\Jellyfin Desktop"; Filename: "{app}\{#MyAppExeName}"; Comment: "Jellyfin desktop client"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-; Install VCRedist if downloaded
-Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /passive /norestart"; StatusMsg: "Installing Visual C++ Redistributable..."; Flags: waituntilterminated; Check: ShouldInstallVCRedist
 ; Launch app after install
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Jellyfin Desktop"; Flags: nowait postinstall skipifsilent
 
@@ -77,12 +82,60 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch Jellyfin Desktop"; Flags
 var
   RemoveUserData: Boolean;
   VCRedistNeeded: Boolean;
-  InstallVCRedist: Boolean;
   UseBundledRuntime: Boolean;
 
-function HasSystemVCRuntime: Boolean;
+function RuntimeFileCompatible(const FileName, RequiredVersion: String): Boolean;
+var
+  Actual, Required: Int64;
+  Major, Minor, Revision, Build: Word;
 begin
-  Result := FileExists(ExpandConstant('{sys}\vcruntime140.dll'));
+  Result := GetVersionComponents(FileName, Major, Minor, Revision, Build) and
+    (Major = 14) and GetPackedVersion(FileName, Actual) and
+    StrToVersion(RequiredVersion, Required) and (ComparePackedVersion(Actual, Required) >= 0);
+end;
+
+function HasSystemVCRuntime: Boolean;
+var
+  Installed: Cardinal;
+  Root: String;
+begin
+  Root := ExpandConstant('{sys}\');
+  Result := RegQueryDWordValue(HKLM32, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64', 'Installed', Installed) and
+    (Installed = 1) and
+    RuntimeFileCompatible(Root + 'vcruntime140.dll', '{#VCRuntimeVersion}') and
+    RuntimeFileCompatible(Root + 'vcruntime140_1.dll', '{#VCRuntime1Version}') and
+    RuntimeFileCompatible(Root + 'msvcp140.dll', '{#MSVCPVersion}');
+end;
+
+function HasLocalVCRuntime: Boolean;
+var
+  Root: String;
+begin
+  Root := ExpandConstant('{app}\');
+  Result := FileExists(Root + 'vcruntime140.dll') or
+    FileExists(Root + 'vcruntime140_1.dll') or FileExists(Root + 'vcruntime140_threads.dll') or
+    FileExists(Root + 'msvcp140.dll') or FileExists(Root + 'msvcp140_1.dll') or
+    FileExists(Root + 'msvcp140_2.dll') or FileExists(Root + 'msvcp140_atomic_wait.dll') or
+    FileExists(Root + 'msvcp140_codecvt_ids.dll') or FileExists(Root + 'concrt140.dll') or
+    FileExists(Root + 'vccorlib140.dll');
+end;
+
+function CanInstallVCRedist: Boolean;
+var
+  Installed: Cardinal;
+  Version: String;
+  Current, Bundled: Int64;
+begin
+  if not RegQueryDWordValue(HKLM32, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64', 'Installed', Installed) or (Installed <> 1) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  Result := False;
+  if not RegQueryStringValue(HKLM32, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64', 'Version', Version) then Exit;
+  if (Length(Version) > 0) and ((Version[1] = 'v') or (Version[1] = 'V')) then Delete(Version, 1, 1);
+  if StrToVersion(Version, Current) and StrToVersion('{#VCRedistVersion}', Bundled) then
+    Result := ComparePackedVersion(Current, Bundled) < 0;
 end;
 
 function NeedsBundledRuntime: Boolean;
@@ -91,30 +144,28 @@ begin
   Result := UseBundledRuntime;
 end;
 
-function ShouldExtractVCRedist: Boolean;
-begin
-  // Extract bundled VCRedist to temp if: admin install AND system missing VCRedist AND user wants to install it
-  Result := InstallVCRedist;
-end;
-
-function ShouldInstallVCRedist: Boolean;
-begin
-  // Run VCRedist installer if user chose to install it
-  Result := InstallVCRedist;
-end;
-
 function InitializeSetup(): Boolean;
 begin
   Result := True;
-  VCRedistNeeded := not HasSystemVCRuntime;
-  InstallVCRedist := False;
+  VCRedistNeeded := False;
   UseBundledRuntime := False;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ExitCode: Integer;
 begin
   Result := '';
   NeedsRestart := False;
+
+  // Existing app-local DLLs take precedence over the system copy on upgrade.
+  if HasLocalVCRuntime then
+  begin
+    UseBundledRuntime := True;
+    Log('Refreshing existing app-local VC runtime');
+    Exit;
+  end;
+  VCRedistNeeded := not HasSystemVCRuntime;
 
   if not VCRedistNeeded then
   begin
@@ -123,17 +174,24 @@ begin
   end;
 
   // Check if running as admin
-  if IsAdmin then
+  if IsAdmin and CanInstallVCRedist then
   begin
     // Offer to install VCRedist system-wide
-    if MsgBox('Visual C++ Redistributable is not installed.' + #13#10 + #13#10 +
+    if MsgBox('A compatible Visual C++ Redistributable was not detected.' + #13#10 + #13#10 +
               'Would you like to install it system-wide?' + #13#10 +
               '(Recommended - receives security updates via Windows Update)' + #13#10 + #13#10 +
               'If you choose No, bundled runtime libraries will be used instead.',
               mbConfirmation, MB_YESNO) = IDYES then
     begin
-      InstallVCRedist := True;
-      Log('Will install VCRedist system-wide');
+      ExtractTemporaryFile('vc_redist.x64.exe');
+      if Exec(ExpandConstant('{tmp}\vc_redist.x64.exe'), '/install /passive /norestart', '', SW_HIDE, ewWaitUntilTerminated, ExitCode) then
+      begin
+        Log('VCRedist exited with code ' + IntToStr(ExitCode));
+        if ExitCode = 3010 then NeedsRestart := True;
+      end
+      else Log('Could not start VCRedist');
+      UseBundledRuntime := not HasSystemVCRuntime;
+      if UseBundledRuntime then Log('Central runtime unavailable; using bundled runtime');
     end
     else
     begin
@@ -145,7 +203,7 @@ begin
   else
   begin
     // Non-admin install, use bundled
-    Log('Non-admin install, using bundled runtime');
+    Log('Using bundled runtime; central install unavailable or already as new');
     UseBundledRuntime := True;
   end;
 end;
