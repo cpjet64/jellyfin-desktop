@@ -142,6 +142,9 @@ void TestFaultStop::nativeResult()
   QCOMPARE(failedCommands, 1);
   mpv_set_wakeup_callback(controller->mpv(), nullptr, nullptr);
   QCoreApplication::processEvents();
+#ifdef MPVQT_EXTERNAL_EVENTS
+  player.releaseMpvController(controller);
+#endif
   mpv_terminate_destroy(controller->mpv());
 }
 
@@ -171,6 +174,9 @@ void TestFaultStop::nativeSeekHealthy()
   QCOMPARE(offThread.status, PlayerComponent::NativeSeekResult::Status::Unavailable);
   mpv_set_wakeup_callback(controller->mpv(), nullptr, nullptr);
   QCoreApplication::processEvents();
+#ifdef MPVQT_EXTERNAL_EVENTS
+  player.releaseMpvController(controller);
+#endif
   mpv_terminate_destroy(controller->mpv());
 }
 
