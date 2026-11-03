@@ -235,7 +235,7 @@ Window
     // or resumsing from suspend (linux/{x11/wayland}, possibly others).
     layer.enabled: true
 
-    webChannel: webChannelObject
+    webChannel: webClientFaultGuard.rendererLost ? null : webChannelObject
     settings.errorPageEnabled: false
     settings.localContentCanAccessRemoteUrls: true
     settings.localContentCanAccessFileUrls: true
@@ -301,6 +301,12 @@ Window
                           loadingInfo.errorString + " [" + loadingInfo.errorCode + "]</pre><br><br>" +
                           "Provide the <a target='_blank' href='file://"+ components.system.logFilePath + "'>logfile</a> as well."
       }
+    }
+
+    onRenderProcessTerminated: function(status, exitCode)
+    {
+      web.webChannel = null;
+      webClientFaultGuard.observeRendererLoss(status, exitCode);
     }
 
     onNewWindowRequested:

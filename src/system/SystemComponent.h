@@ -6,6 +6,7 @@
 #include <QNetworkReply>
 #include <QNetworkAccessManager>
 #include <QJSValue>
+#include "WebClientFaultGuard.h"
 #include "utils/Utils.h"
 #include "Paths.h"
 #include "Names.h"
@@ -100,7 +101,7 @@ public:
   QString getPlatformArchString() const;
 
   inline bool isOpenELEC() const { return m_platformType == platformTypeOpenELEC; }
-  bool isWebClientConnected() const { return !m_webClientVersion.isEmpty(); }
+  bool isWebClientConnected() const { return !WebClientFaultGuard::instance().rendererLost() && !m_webClientVersion.isEmpty(); }
 
   inline QString authenticationToken() { return m_authenticationToken; }
 

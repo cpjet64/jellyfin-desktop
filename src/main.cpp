@@ -1,4 +1,3 @@
-#include <QGuiApplication>
 #include <QApplication>
 #include <QFileInfo>
 #include <QIcon>
@@ -8,7 +7,7 @@
 #include <QtWebEngineQuick>
 #include <qtwebenginecoreglobal.h>
 #include <QtWebEngineCore/QWebEngineProfile>
-#include <QtWebEngineCore/QWebEngineScript>
+#include "system/WebClientFaultGuard.h"
 #include <QCommandLineOption>
 #include <QDebug>
 #include <QSettings>
@@ -423,7 +422,7 @@ int main(int argc, char *argv[])
     // load QtWebChannel so that we can register our components with it.
     QQmlApplicationEngine *engine = Globals::Engine();
 
-    Globals::SetContextProperty("components", &ComponentManager::Get().getQmlPropertyMap());
+    WebClientFaultGuard::installContextProperties();
 
     // the only way to detect if QML parsing fails is to hook to this signal and then see
     // if we get a valid object passed to it. Any error messages will be reported on stderr
