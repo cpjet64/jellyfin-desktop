@@ -8,6 +8,7 @@
 #include <QQuickWindow>
 #include <QTimer>
 #include <QTextStream>
+#include <QPointer>
 
 #include <functional>
 
@@ -284,6 +285,7 @@ private:
   MpvController* m_mpv = nullptr;
 #ifdef MPVQT_EXTERNAL_EVENTS
   quint64 m_mpvGeneration = 0;
+  QPointer<MpvController> m_lastMpvController;
 #endif
 
   State m_state;

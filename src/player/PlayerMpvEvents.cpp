@@ -57,6 +57,8 @@ bool PlayerComponent::tryBindMpvController(MpvController* controller)
   if (QThread::currentThread() != thread())
     qFatal("MpvQt event consumer must be bound on the PlayerComponent thread");
   if (!controller || m_mpv) return false;
+  if (m_lastMpvController != controller) m_doAc3Transcoding = false;
+  m_lastMpvController = controller;
   m_mpv = controller;
   ++m_mpvGeneration;
   return true;

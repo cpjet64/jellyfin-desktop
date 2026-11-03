@@ -33,10 +33,63 @@ class TestPlayerReleasedState : public QObject
   Q_OBJECT
 private slots:
   void releasedStateAndExplicitRebind();
+  void ac3FilterFollowsFreshController();
 private:
   void changeReleasedSettings(PlayerComponent& player, SettingsSection* audio,
                               SettingsSection* subtitles, SettingsSection* other, mpv_handle* oldCore);
 };
+
+static int ac3FilterCount(mpv_handle* core)
+{
+  mpv_node filters{};
+  if (mpv_get_property(core, "af", MPV_FORMAT_NODE, &filters) < 0) return -1;
+  int count = 0;
+  if (filters.format == MPV_FORMAT_NODE_ARRAY) {
+    for (int i = 0; i < filters.u.list->num; ++i) {
+      const mpv_node& filter = filters.u.list->values[i];
+      if (filter.format != MPV_FORMAT_NODE_MAP) continue;
+      QString label, name;
+      for (int j = 0; j < filter.u.list->num; ++j) {
+        const mpv_node& value = filter.u.list->values[j];
+        if (value.format != MPV_FORMAT_STRING) continue;
+        const QByteArray key(filter.u.list->keys[j]);
+        if (key == "label") label = QString::fromUtf8(value.u.string);
+        if (key == "name") name = QString::fromUtf8(value.u.string);
+      }
+      if (label == "ac3") count = name == "lavcac3enc" ? count + 1 : -1000;
+    }
+  } else count = -1;
+  mpv_free_node_contents(&filters);
+  return count;
+}
+
+void TestPlayerReleasedState::ac3FilterFollowsFreshController()
+{
+  QTemporaryDir temp(QDir::currentPath() + "/player-ac3-XXXXXX");
+  QVERIFY(temp.isValid());
+  QString error;
+  QVERIFY2(prepareMpvTestProfile(temp.path(), &error), qPrintable(error));
+  auto* audio = SettingsComponent::Get().getSection(SETTINGS_SECTION_AUDIO);
+  QVERIFY(audio);
+  audio->setValueNoSave("devicetype", QStringLiteral("spdif"));
+  audio->setValueNoSave("passthrough.ac3", true);
+  PlayerComponent player;
+  auto first = std::make_unique<MpvVideoItem>();
+  first->setPlayerComponent(&player);
+  mpv_handle* oldCore = first->controller()->mpv();
+  QCOMPARE(ac3FilterCount(oldCore), 1);
+  player.releaseMpvController(first->controller());
+  auto second = std::make_unique<MpvVideoItem>();
+  second->setPlayerComponent(&player);
+  mpv_handle* newCore = second->controller()->mpv();
+  QCOMPARE(ac3FilterCount(newCore), 1);
+  player.setAudioConfiguration();
+  player.setAudioConfiguration();
+  QCOMPARE(ac3FilterCount(newCore), 1);
+  audio->setValueNoSave("passthrough.ac3", false);
+  QCOMPARE(ac3FilterCount(newCore), 0);
+  QCOMPARE(ac3FilterCount(oldCore), 1);
+}
 
 void TestPlayerReleasedState::releasedStateAndExplicitRebind()
 {
