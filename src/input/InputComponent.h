@@ -8,6 +8,7 @@
 #include <QVariantMap>
 #include <QTimer>
 #include <QElapsedTimer>
+#include <QSet>
 
 #include <functional>
 
@@ -118,6 +119,8 @@ signals:
   // Emitted when new input arrives. Each entry is an action that matches
   // in the keymap, such as "host:fullscreen".
   void hostInput(const QStringList& actions);
+  void hostActionUnavailable();
+  void nativeStopResult(int status, int error);
 
   // Emitted when volume should be changed (0-100)
   void volumeChanged(int volume);
@@ -132,6 +135,7 @@ private Q_SLOTS:
   void remapInput(const QString& source, const QString& keycode, InputBase::InputkeyState keyState);
 
 private:
+  friend class TestFaultStop;
   explicit InputComponent(QObject *parent = nullptr);
   bool addInput(InputBase* base);
   void handleAction(const QString& action);
@@ -146,6 +150,7 @@ private:
 
   QVariantMap m_currentLongPressAction;
   QElapsedTimer m_longHoldTimer;
+  QSet<QString> m_heldStopKeys;
 };
 
 #endif // INPUTADAPTER_H

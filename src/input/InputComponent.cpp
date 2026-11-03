@@ -162,9 +162,11 @@ void InputComponent::remapInput(const QString &source, const QString &keycode, I
   qDebug() << "Input received: source:" << source << "keycode:" << keycode << ":" << keyState;
 
   emit receivedInput();
+  const QString heldKey = source + QChar(0) + keycode;
 
   if (keyState == InputBase::KeyUp)
   {
+    m_heldStopKeys.remove(heldKey);
     cancelAutoRepeat();
 
     if (!m_currentLongPressAction.isEmpty())
@@ -195,7 +197,7 @@ void InputComponent::remapInput(const QString &source, const QString &keycode, I
     if (action.typeId() == QMetaType::QString)
     {
       queuedActions.append(action.toString());
-      if (action.toString() != "stop") m_autoRepeatActions.append(action.toString());
+      m_autoRepeatActions.append(action.toString());
     }
     else if (action.typeId() == QMetaType::QVariantMap)
     {
@@ -221,6 +223,12 @@ void InputComponent::remapInput(const QString &source, const QString &keycode, I
     }
   }
 
+  if (keyState == InputBase::KeyDown && queuedActions.contains("stop")) {
+    const bool alreadyHeld = m_heldStopKeys.contains(heldKey);
+    m_heldStopKeys.insert(heldKey);
+    if (alreadyHeld && WebClientFaultGuard::instance().rendererLost()) queuedActions.removeAll("stop");
+  }
+  if (WebClientFaultGuard::instance().rendererLost()) m_autoRepeatActions.removeAll("stop");
   if (!m_autoRepeatActions.isEmpty() && keyState != InputBase::KeyPressed
       && SettingsComponent::Get().value(SETTINGS_SECTION_MAIN, "enableInputRepeat").toBool())
     m_autoRepeatTimer->start(INITAL_AUTOREPEAT_MSEC);
@@ -250,6 +258,10 @@ void InputComponent::sendAction(const QString action)
 
 void InputComponent::dispatchHostActions(const QStringList& actions)
 {
+  if (QThread::currentThread() != thread()) {
+    QMetaObject::invokeMethod(this, [this, actions]() { dispatchHostActions(actions); }, Qt::QueuedConnection);
+    return;
+  }
   QStringList webActions;
   const bool lost = WebClientFaultGuard::instance().rendererLost();
   const bool ready = SystemComponent::Get().isWebClientConnected();
@@ -258,8 +270,13 @@ void InputComponent::dispatchHostActions(const QStringList& actions)
     else if (action.startsWith("host:")) handleAction(action);
     else if (lost && action == "stop") {
       auto result = PlayerComponent::Get().requestNativeStop();
+      emit nativeStopResult(static_cast<int>(result.status), result.error);
       if (result.status != PlayerComponent::NativeStopResult::Status::Accepted)
         qWarning() << "Native stop not accepted:" << result.error;
+    }
+    else if (lost) {
+      qWarning() << "Playback action unavailable after renderer loss";
+      emit hostActionUnavailable();
     }
   }
   if (!webActions.isEmpty()) emit hostInput(webActions);
