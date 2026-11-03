@@ -120,6 +120,12 @@ target_link_libraries(test_renderer_loss_playback jmp_core Qt6::Test Qt6::Quick)
 target_include_directories(test_renderer_loss_playback PRIVATE ${TEST_INCLUDE_DIRS})
 target_compile_definitions(test_renderer_loss_playback PRIVATE ${TEST_COMPILE_DEFS})
 # Run each scenario in an isolated native desktop process with RECOVERY_* inputs.
+add_executable(test_renderer_loss_offscreen test_renderer_loss_offscreen.cpp
+  "${CMAKE_BINARY_DIR}/src/qrc_resources.cpp")
+add_dependencies(test_renderer_loss_offscreen generate_resources)
+target_link_libraries(test_renderer_loss_offscreen jmp_core Qt6::Test Qt6::Quick Qt6::OpenGL)
+target_include_directories(test_renderer_loss_offscreen PRIVATE ${TEST_INCLUDE_DIRS})
+target_compile_definitions(test_renderer_loss_offscreen PRIVATE ${TEST_COMPILE_DEFS})
 
 add_executable(test_webclient_containment test_webclient_containment.cpp
   "${CMAKE_BINARY_DIR}/src/qrc_resources.cpp")
@@ -139,7 +145,7 @@ if(LINUX_DBUS)
 endif()
 
 foreach(test_name test_fault_stop test_mpvqt_player_binding test_player_released_state
-                  test_renderer_loss_playback test_webclient_containment)
+                  test_renderer_loss_playback test_renderer_loss_offscreen test_webclient_containment)
   if(TARGET ${test_name})
     target_sources(${test_name} PRIVATE mpv_test_bootstrap.cpp mpv_test_profile.cpp)
   endif()
