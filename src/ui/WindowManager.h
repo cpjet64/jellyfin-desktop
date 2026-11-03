@@ -74,6 +74,7 @@ private slots:
   void updateOpenGLInfo();
 
 private:
+  friend class TestWindowManager;
   // Geometry (separate size/position)
   void loadGeometry();
   QRect loadGeometryRect();
@@ -114,12 +115,9 @@ private:
 
   // Window state
   QWindow::Visibility m_previousVisibility;  // State before fullscreen
+  bool m_isFullscreen;
   QRect m_windowedGeometry;                  // Geometry when in Windowed state
   QTimer* m_geometrySaveTimer;               // Debounced disk sync
-
-  // initial size tracking to detect if size changed from default
-  QSize m_initialSize;
-  QSize m_initialScreenSize;
 
   // debug info
   QString m_systemDebugInfo;

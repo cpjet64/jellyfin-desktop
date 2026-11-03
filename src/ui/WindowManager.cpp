@@ -37,9 +37,8 @@ WindowManager::WindowManager(QObject* parent)
     m_cursorVisible(true),
     m_cursorInsideWindow(true),
     m_previousVisibility(QWindow::Windowed),
-    m_geometrySaveTimer(nullptr),
-    m_initialSize(),
-    m_initialScreenSize()
+    m_isFullscreen(false),
+    m_geometrySaveTimer(nullptr)
 {
 }
 
@@ -99,6 +98,7 @@ void WindowManager::initializeWindow(QQuickWindow* window)
   });
 
   // Connect to window visibility changes (for fullscreen tracking)
+  m_isFullscreen = m_window->visibility() == QWindow::FullScreen;
   connect(m_window, &QQuickWindow::visibilityChanged,
           this, &WindowManager::onVisibilityChanged);
 
@@ -327,7 +327,7 @@ void WindowManager::onVisibilityChanged(QWindow::Visibility visibility)
            << "m_previousVisibility=" << m_previousVisibility;
 
   bool isFS = (visibility == QWindow::FullScreen);
-  bool wasFS = (m_previousVisibility == QWindow::FullScreen);
+  bool wasFS = m_isFullscreen;
 
   // Kiosk mode: force back to fullscreen if user tried to exit
   if (!isFS)
@@ -342,7 +342,8 @@ void WindowManager::onVisibilityChanged(QWindow::Visibility visibility)
 
   // Track previous visibility (only when NOT fullscreen or hidden)
   // Preserve pre-fullscreen state for restore
-  if (visibility != QWindow::FullScreen && visibility != QWindow::Hidden)
+  if (visibility != QWindow::FullScreen && visibility != QWindow::Hidden &&
+      visibility != QWindow::Minimized)
   {
     qDebug() << "onVisibilityChanged: updating m_previousVisibility from" << m_previousVisibility << "to" << visibility;
     m_previousVisibility = visibility;
@@ -355,6 +356,7 @@ void WindowManager::onVisibilityChanged(QWindow::Visibility visibility)
   // Update fullscreen setting (in-memory only) when state changes
   if (isFS != wasFS)
   {
+    m_isFullscreen = isFS;
     SettingsSection* section = SettingsComponent::Get().getSection(SETTINGS_SECTION_MAIN);
     if (section)
       section->setValueNoSave("fullscreen", isFS);
@@ -555,12 +557,6 @@ void WindowManager::loadGeometry()
   m_window->resize(rect.size());
   m_windowedGeometry = rect;
 
-  // Store initial size for tracking if user changed it
-  m_initialSize = rect.size();
-  QScreen* primary = QGuiApplication::primaryScreen();
-  if (primary)
-    m_initialScreenSize = primary->geometry().size();
-
   // Restore to last screen (before position/maximize)
   QScreen* lastScreen = loadLastScreen();
   if (lastScreen)
@@ -619,6 +615,8 @@ void WindowManager::saveWindowSize()
 
   bool isMaximized = m_window->windowState() & Qt::WindowMaximized;
   bool isFullScreen = m_window->windowState() & Qt::WindowFullScreen;
+  if (m_window->windowState() & Qt::WindowMinimized)
+    return;
 
   qDebug() << "saveWindowSize: windowState=" << m_window->windowState()
            << "isMaximized=" << isMaximized << "isFullScreen=" << isFullScreen
@@ -631,30 +629,8 @@ void WindowManager::saveWindowSize()
     QSize size = m_window->size();
     m_windowedGeometry.setSize(size);
 
-    // Check if size changed from initial (revert if unchanged)
-    QScreen* primary = QGuiApplication::primaryScreen();
-    QSize currentScreenSize = primary ? primary->geometry().size() : QSize();
-    bool sizeUnchanged = (size == m_initialSize && currentScreenSize == m_initialScreenSize);
-
-    qDebug() << "saveWindowSize: NOT maximized, saving size=" << size
-             << "sizeUnchanged=" << sizeUnchanged
-             << "m_initialSize=" << m_initialSize;
-
-    if (sizeUnchanged)
-    {
-      // Revert to default (remove keys)
-      qDebug() << "saveWindowSize: reverting to default (size unchanged)";
-      section->resetValue(sizeWidthKey());
-      section->resetValue(sizeHeightKey());
-    }
-    else
-    {
-      // Write to memory (disk sync happens on timer)
-      qDebug() << "saveWindowSize: writing" << sizeWidthKey() << "=" << size.width()
-               << sizeHeightKey() << "=" << size.height();
-      section->setValue(sizeWidthKey(), size.width());
-      section->setValue(sizeHeightKey(), size.height());
-    }
+    section->setValue(sizeWidthKey(), size.width());
+    section->setValue(sizeHeightKey(), size.height());
   }
   else
   {
@@ -692,8 +668,8 @@ void WindowManager::saveWindowPosition()
   if (isWayland())
     return;
 
-  // Skip if maximized
-  if (m_window->windowState() & Qt::WindowMaximized)
+  // Only windowed geometry is suitable for restoration.
+  if (m_window->windowState() & (Qt::WindowMaximized | Qt::WindowFullScreen | Qt::WindowMinimized))
     return;
 
   SettingsSection* section = SettingsComponent::Get().getSection(SETTINGS_SECTION_STATE);
