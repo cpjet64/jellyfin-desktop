@@ -11,7 +11,7 @@ import tempfile
 
 sys.dont_write_bytecode = True
 from native_bootstrap import bootstrap
-from native_inventory import incompatible_tools, inventory
+from native_inventory import incompatible_tools, inventory, prepare_process_paths, unavailable_compilers
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
@@ -55,11 +55,9 @@ def preflight():
     standard_bins = ["/usr/local/bin", "/usr/bin", "/bin"]
     if system == "Darwin":
         standard_bins = ["/opt/homebrew/bin"] + standard_bins + ["/usr/sbin", "/sbin"]
-    os.environ["PATH"] = os.pathsep.join([str(Path(prefix) / "bin") for prefix in valid_prefixes] + standard_bins)
-    os.environ["PKG_CONFIG_PATH"] = os.pathsep.join(str(Path(prefix) / "lib/pkgconfig") for prefix in valid_prefixes)
-    for key in ("PKG_CONFIG_LIBDIR", "CMAKE_PREFIX_PATH", "CC", "CXX", "CPATH", "LIBRARY_PATH"):
-        os.environ.pop(key, None)
+    prepare_process_paths(os.environ, valid_prefixes, standard_bins)
     found = inventory(system, mode)
+    unavailable = unavailable_compilers(os.environ)
     if (system, machine) not in (("Linux", "x86_64"), ("Darwin", "x86_64")):
         raise RuntimeError(f"Unsupported native runner: {system}/{machine}")
     if os.environ.get("CI_JOB_IMAGE"):
@@ -68,6 +66,8 @@ def preflight():
         raise RuntimeError("BLOCKED: at least 10 GiB free space required")
     if invalid_prefixes:
         raise RuntimeError("BLOCKED: explicit native prefixes must be existing absolute directories")
+    if unavailable:
+        raise RuntimeError("BLOCKED: configured compiler unavailable: " + ", ".join(unavailable))
     missing = [tool for tool, path in found.items() if not path]
     for tool in incompatible_tools(found):
         print(f"Tool {tool}: incompatible version", flush=True)
@@ -135,9 +135,9 @@ def configure(system, mode):
         raise RuntimeError("Unexpected mpvqt source revision")
     options = ["cmake", "-S", str(ROOT), "-B", str(BUILD), "-G", "Ninja",
                "-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-DUSE_STATIC_MPVQT=" + ("ON" if mode == "static" else "OFF"),
-               "-DMPVQT_EXTERNAL_EVENTS=" + ("ON" if mode == "static" else "OFF"),
-               "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF", "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF"]
+               "-DMPVQT_EXTERNAL_EVENTS=" + ("ON" if mode == "static" else "OFF")]
     prefixes = [os.environ[key] for key in ("CI_QT_PREFIX", "CI_MPV_PREFIX") if os.environ.get(key)]
+    prefixes += [prefix for prefix in os.environ.get("CMAKE_PREFIX_PATH", "").split(os.pathsep) if prefix]
     if prefixes:
         options.append("-DCMAKE_PREFIX_PATH=" + ";".join(prefixes))
     command("configure", options, timeout=300)

@@ -1,5 +1,9 @@
 function Install-JobMpvQt {
     param([string]$Workspace, [string]$Qt, [string]$MpvInclude, [string]$MpvLibrary, [string]$Python)
+    $revision = & git.exe -C external/mpvqt rev-parse HEAD
+    if ($LASTEXITCODE -ne 0 -or $revision -ne '2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e') {
+        throw 'Job-local MpvQt source is not the required pinned revision'
+    }
     $tools = Join-Path $Workspace 'system-mpvqt'
     New-Item -ItemType Directory -Path $tools | Out-Null
     $archive = Join-Path $tools 'extra-cmake-modules-6.18.0.tar.xz'

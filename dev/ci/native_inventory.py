@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 
@@ -35,6 +36,34 @@ def incompatible_tools(found):
         except (OSError, subprocess.TimeoutExpired):
             incompatible.append(name)
     return incompatible
+
+
+def prepare_process_paths(environment, prefixes, standard_bins):
+    existing = environment.get("PATH", "").split(os.pathsep)
+    additions = [str(Path(prefix) / "bin") for prefix in prefixes]
+    suffix = [path for path in standard_bins if path not in existing and path not in additions]
+    environment["PATH"] = os.pathsep.join(additions + existing + suffix)
+    if prefixes:
+        pkg = [str(Path(prefix) / "lib/pkgconfig") for prefix in prefixes]
+        existing_pkg = environment.get("PKG_CONFIG_PATH", "")
+        environment["PKG_CONFIG_PATH"] = os.pathsep.join(pkg + ([existing_pkg] if existing_pkg else []))
+
+
+def unavailable_compilers(environment):
+    missing = []
+    for name in ("CC", "CXX"):
+        value = environment.get(name)
+        if not value:
+            continue
+        try:
+            words = shlex.split(value)
+        except ValueError:
+            words = []
+        resolved = shutil.which(words[0]) if words else None
+        print(f"Configured compiler {name}: {resolved or 'unavailable'}", flush=True)
+        if not resolved:
+            missing.append(name)
+    return missing
 
 
 def package_versions():
