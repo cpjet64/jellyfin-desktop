@@ -127,10 +127,20 @@ void Log::Init()
     qFatal("Failed to create temporary log file");
   }
   QString path = tempFile->fileName();
+  QFile* activeFile = tempFile;
+  if (!path.isEmpty())
+  {
+    // QTemporaryFile can retain a native handle after close, preventing a
+    // separate QFile::rename on Windows. Destroy it before reopening by name.
+    delete tempFile;
+    activeFile = new QFile(path);
+    if (!activeFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append))
+      qFatal("Failed to reopen temporary log file");
+  }
   {
     LogOperation lock;
     delete logFile;
-    logFile = tempFile;
+    logFile = activeFile;
     tempLogPath = path;
   }
   if (path.isEmpty())
@@ -211,11 +221,12 @@ void Log::RotateLog()
   // Rename unique log to main log
   logFile->flush();
   logFile->close();
-  if (!QFile::rename(tempLogPath, mainLog))
+  QFile temporaryLog(tempLogPath);
+  if (!temporaryLog.rename(mainLog))
   {
     if (!logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append))
       std::cerr << "Failed to reopen temporary log" << std::endl;
-    std::cerr << "Failed to promote temporary log" << std::endl;
+    std::cerr << "Failed to promote temporary log: " << qPrintable(temporaryLog.errorString()) << std::endl;
     return;
   }
 
