@@ -4,6 +4,11 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+add_executable(test_mpv_test_bootstrap test_mpv_test_bootstrap.cpp mpv_test_bootstrap.cpp)
+target_link_libraries(test_mpv_test_bootstrap PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME test_mpv_test_bootstrap COMMAND test_mpv_test_bootstrap)
+set_tests_properties(test_mpv_test_bootstrap PROPERTIES TIMEOUT 60)
+
 # This probe is diagnostic only; the failing playback result remains authoritative.
 add_executable(native_gl_probe native_gl_probe.cpp)
 target_link_libraries(native_gl_probe PRIVATE Qt6::Gui)
@@ -126,4 +131,14 @@ if(LINUX_DBUS)
   target_compile_definitions(test_mpris_fault PRIVATE ${TEST_COMPILE_DEFS})
   add_test(NAME test_mpris_fault COMMAND test_mpris_fault)
   set_tests_properties(test_mpris_fault PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
+
+foreach(test_name test_fault_stop test_mpvqt_player_binding test_player_released_state
+                  test_renderer_loss_playback test_webclient_containment)
+  if(TARGET ${test_name})
+    target_sources(${test_name} PRIVATE mpv_test_bootstrap.cpp mpv_test_profile.cpp)
+  endif()
+endforeach()
+if(TARGET test_mpvqt_event_ownership)
+  target_sources(test_mpvqt_event_ownership PRIVATE mpv_test_bootstrap.cpp)
 endif()
