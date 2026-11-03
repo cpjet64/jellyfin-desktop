@@ -101,9 +101,14 @@ def asset_bytes(url, etag=None):
     req = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.build_opener(GitLabRedirect()).open(req, timeout=120) as response:
+            length = response.headers.get("Content-Length")
+            if length is not None and int(length) > MAX_ASSET:
+                raise ValueError("Response exceeds maximum asset size")
             data = response.read(MAX_ASSET + 1)
             if len(data) > MAX_ASSET:
                 raise ValueError("Response exceeds maximum asset size")
+            if length is not None and len(data) != int(length):
+                raise ValueError("Release asset response is incomplete")
             new_etag = response.headers.get("ETag")
             if not new_etag or new_etag.startswith("W/") or not new_etag.startswith('"') or not new_etag.endswith('"'):
                 new_etag = None

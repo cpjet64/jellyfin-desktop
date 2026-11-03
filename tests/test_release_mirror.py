@@ -1,5 +1,7 @@
 import hashlib
+import http.client
 import importlib.util
+import io
 import json
 from pathlib import Path
 import unittest
@@ -124,6 +126,48 @@ class MirrorTests(unittest.TestCase):
             with self.assertRaises(HTTPError):
                 mirror.asset_bytes("https://gitlab.curtpme.com/file", 'W/"v1"')
             self.assertIsNone(opener.open.call_args.args[0].get_header("If-none-match"))
+
+    def test_real_http_response_rejects_truncation_before_mutation(self):
+        from unittest.mock import MagicMock
+
+        class Socket:
+            def __init__(self, length):
+                self.stream = io.BytesIO(
+                    f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\n\r\n".encode() + b"abc")
+
+            def makefile(self, *args, **kwargs):
+                return self.stream
+
+        def response(length):
+            result = http.client.HTTPResponse(Socket(length))
+            result.begin()
+            return result
+
+        opener = MagicMock()
+        opener.open.side_effect = lambda *args, **kwargs: response(10)
+        with patch.object(mirror.urllib.request, "build_opener", return_value=opener), \
+             patch.object(mirror, "api", side_effect=self.api), \
+             patch.object(mirror, "request", side_effect=self.request) as request, \
+             patch.object(mirror, "pages", return_value=[]):
+            with self.assertRaisesRegex(ValueError, "incomplete"):
+                mirror.sync_release(self.release, self.releases, "token")
+            request.assert_not_called()
+            self.assertEqual(self.releases, {})
+            self.assertEqual(self.patches, [])
+        self.releases["v1"] = {"id": 7, "body": mirror.MARKER, "draft": False}
+        starter = {"name": "app.zip", "state": "starter", "size": 0,
+                   "digest": None, "id": 91}
+        with patch.object(mirror.urllib.request, "build_opener", return_value=opener), \
+             patch.object(mirror, "api", side_effect=self.api), \
+             patch.object(mirror, "request") as request, \
+             patch.object(mirror, "pages", return_value=[starter]):
+            with self.assertRaisesRegex(ValueError, "incomplete"):
+                mirror.sync_release(self.release, self.releases, "token")
+            request.assert_not_called()
+            self.assertEqual(self.patches, [])
+        opener.open.side_effect = lambda *args, **kwargs: response(3)
+        with patch.object(mirror.urllib.request, "build_opener", return_value=opener):
+            self.assertEqual(mirror.asset_bytes("https://gitlab.curtpme.com/file"), (b"abc", None))
 
     def test_removed_asset_fails_without_writes(self):
         self.sync()
