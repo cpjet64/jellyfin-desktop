@@ -46,7 +46,7 @@ async function cdp(url, method, params = {}) {
   } finally { socket.close(); }
 }
 
-async function observe(port, child) {
+async function observe(port, child, requestExit = true) {
   const url = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 35; i++) {
     if (child.exitCode !== null) throw new Error(`helper exited ${child.exitCode}`);
@@ -59,7 +59,7 @@ async function observe(port, child) {
         { expression: '({url:location.href,title:document.title,text:document.body?.innerText?.slice(0,1000),exitType:typeof window.api?.system?.exit})', returnByValue: true });
       if (page.result.value.url === 'about:blank') throw new Error('Page still loading');
       const gpu = await cdp(version.webSocketDebuggerUrl, 'SystemInfo.getInfo');
-      if (page.result.value.exitType === 'function') {
+      if (requestExit && page.result.value.exitType === 'function') {
         await cdp(target.webSocketDebuggerUrl, 'Runtime.evaluate',
           { expression: "setTimeout(() => window.api.system.exit(), 250); 'requested'", returnByValue: true });
       }
@@ -89,17 +89,20 @@ async function runCase(spec) {
       QTWEBENGINE_CHROMIUM_FLAGS: spec.flags || '', QT_LOGGING_RULES: 'qt.webenginecontext.debug=true', LOCALAPPDATA: dir, APPDATA: dir,
       TEMP: path.join(dir, 'temp'), TMP: path.join(dir, 'temp') };
     const child = spawn(helper, [path.join(build, 'src', 'Jellyfin Desktop.exe'), data, ...(spec.arg ? [spec.arg] : [])],
-      { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      { env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     let log = '';
     child.stdout.on('data', chunk => { log += chunk; });
     child.stderr.on('data', chunk => { log += chunk; });
     let observation;
     try {
       if (spec.windowActions) {
-        for (let i = 0; i < 240 && !log.includes('window actions ') && child.exitCode === null; i++) await delay(250);
-        if (!log.includes('window actions passed')) throw new Error('Window actions failed or timed out');
+        await observe(port, child, false);
+        child.stdin.end('x');
+        for (let i = 0; i < 240 && !/window actions (passed|failed)/.test(log) && child.exitCode === null; i++) await delay(250);
       }
       observation = await observe(port, child);
+      if (spec.windowActions && !log.includes('window actions passed'))
+        observation.actionError = 'Window actions failed or timed out';
     }
     catch (error) { observation = { error: String(error) }; }
     const [code] = child.exitCode === null ? await once(child, 'exit') : [child.exitCode];
@@ -116,9 +119,10 @@ async function runCase(spec) {
 function checkCase(spec, result) {
   const failures = [];
   const { observation, log, helperExit } = result;
-  if (helperExit !== 0 || !log.includes('app wait 0 exit 0') ||
+  if ((helperExit !== 0 && !(spec.windowActions && helperExit === 7)) || !log.includes('app wait 0 exit 0') ||
       !log.includes('forcedCleanup false; job active processes 0')) failures.push('unclean exit');
   if (observation.error) return [...failures, observation.error];
+  if (observation.actionError) failures.push(observation.actionError);
   const { page, gpu, exitRequested } = observation;
   if (page.title !== 'Jellyfin' || !page.text.includes('Server Address') ||
       !page.text.includes('CONNECT') || !exitRequested) failures.push('initial page or native exit');

@@ -40,16 +40,24 @@ bool waitFullscreen(HWND window)
   return false;
 }
 
-void sendShortcut(HWND window, bool alt)
+bool sendShortcut(HWND window, bool alt)
 {
   const DWORD targetThread = GetWindowThreadProcessId(window, nullptr);
   const DWORD ownThread = GetCurrentThreadId();
   const bool attached = AttachThreadInput(ownThread, targetThread, TRUE) != FALSE;
+  if (!attached) {
+    std::printf("window actions attach failed %lu\n", GetLastError()); std::fflush(stdout);
+    return false;
+  }
+  SetFocus(window);
   BYTE state[256]{};
   if (attached && alt) {
     GetKeyboardState(state);
     state[VK_MENU] |= 0x80;
+    state[VK_LMENU] |= 0x80;
     SetKeyboardState(state);
+    PostMessageW(window, WM_SYSKEYDOWN, VK_MENU, 0x20380001);
+    Sleep(100);
   }
   const WPARAM key = alt ? VK_RETURN : VK_F11;
   PostMessageW(window, alt ? WM_SYSKEYDOWN : WM_KEYDOWN, key, alt ? 0x20000001 : 1);
@@ -57,10 +65,13 @@ void sendShortcut(HWND window, bool alt)
   PostMessageW(window, alt ? WM_SYSKEYUP : WM_KEYUP, key, alt ? 0xE0000001 : 0xC0000001);
   Sleep(250);
   if (attached && alt) {
+    PostMessageW(window, WM_SYSKEYUP, VK_MENU, 0xE0380001);
     state[VK_MENU] &= 0x7f;
+    state[VK_LMENU] &= 0x7f;
     SetKeyboardState(state);
   }
-  if (attached) AttachThreadInput(ownThread, targetThread, FALSE);
+  AttachThreadInput(ownThread, targetThread, FALSE);
+  return true;
 }
 
 bool checkWindowActions(HDESK desktop, DWORD pid)
@@ -71,18 +82,40 @@ bool checkWindowActions(HDESK desktop, DWORD pid)
     if (!search.window) Sleep(100);
   }
   HDESK previous = GetThreadDesktop(GetCurrentThreadId());
-  if (!search.window || !SetThreadDesktop(desktop)) return false;
+  if (!search.window) { std::puts("window actions window not found"); return false; }
+  if (!SetThreadDesktop(desktop)) {
+    std::printf("window actions desktop failed %lu\n", GetLastError()); return false;
+  }
   ShowWindow(search.window, SW_MAXIMIZE);
   bool success = waitMaximized(search.window, true);
+  if (!success) std::puts("window actions maximize failed");
   for (int shortcut = 0; shortcut < 2 && success; ++shortcut) {
-    sendShortcut(search.window, shortcut == 1);
-    success = waitFullscreen(search.window);
+    const char* name = shortcut ? "Alt+Return" : "F11";
+    success = sendShortcut(search.window, shortcut == 1) && waitFullscreen(search.window);
+    std::printf("window actions %s enter %s\n", name, success ? "passed" : "failed");
     if (success) {
-      sendShortcut(search.window, shortcut == 1);
-      success = waitMaximized(search.window, true);
+      success = sendShortcut(search.window, shortcut == 1) && waitMaximized(search.window, true);
+      std::printf("window actions %s restore %s\n", name, success ? "passed" : "failed");
     }
   }
+  std::fflush(stdout);
   return SetThreadDesktop(previous) && success;
+}
+
+bool waitForReady()
+{
+  HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+  for (int i = 0; i < 300; ++i) {
+    DWORD available = 0;
+    if (!PeekNamedPipe(input, nullptr, 0, nullptr, &available, nullptr)) return false;
+    if (available) {
+      char byte;
+      DWORD read = 0;
+      return ReadFile(input, &byte, 1, &read, nullptr) && read == 1;
+    }
+    Sleep(100);
+  }
+  return false;
 }
 
 DWORD waitForJob(HANDLE job)
@@ -139,7 +172,7 @@ int wmain(int argc, wchar_t **argv)
   }
   bool actionsOk = true;
   if (windowActions) {
-    actionsOk = checkWindowActions(desktop, process.dwProcessId);
+    actionsOk = waitForReady() && checkWindowActions(desktop, process.dwProcessId);
     std::printf("window actions %s\n", actionsOk ? "passed" : "failed"); std::fflush(stdout);
   }
   const DWORD wait = WaitForSingleObject(process.hProcess, 12000);
