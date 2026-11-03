@@ -36,14 +36,19 @@ coverage-comment and aggregate build workflows remain outside this candidate's
 scope. Protected refs are intentionally excluded while the protected-resource
 policy is unresolved; they do not receive replacement validation from this file.
 
-The runner must have Python with venv, Visual Studio 2022 x64 C++ tools and
-redistributable, CMake with JUnit-capable CTest, Ninja, 7-Zip, and Inno Setup 6.
+The runner must have Python with venv, Windows tar, Visual Studio 2022 x64 C++
+tools and redistributable. Existing CMake, Ninja, 7-Zip and Inno Setup are used
+when available. Missing tools are downloaded into the job checkout: 7-Zip
+26.00, CMake 4.1.2, Ninja 1.13.2, and Inno Setup 6.7.3. Downloads are pinned
+to SHA-256 hashes; the Inno installer additionally requires a valid Pyrsys
+signature and the extracted compiler is checked against its pinned hash.
+Inno is extracted with pinned innoextract 670, not installed on the host.
 It needs network access for the recursive submodule, pinned aqtinstall 3.3.0,
 Qt modules, the existing SourceForge mpv archives, and Microsoft's VC runtime
 installer. Dependencies are installed under the job checkout and require at
 least 20 GiB free on its volume before download. This threshold is a preflight,
-not a guarantee against concurrent disk use. Inno and other runner tools must
-already be installed; the job does not modify the host installation.
+not a guarantee against concurrent disk use. The job does not modify the host
+installation.
 
 Desktop end-to-end tests require an interactive desktop and are intentionally
 not run on the headless runner. A green job does not prove interactive playback,
