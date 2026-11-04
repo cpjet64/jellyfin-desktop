@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QQuickWindow>
+#include <QSGRendererInterface>
 #include <QSignalSpy>
 #include <QThread>
 #include <QUrl>
@@ -11,6 +12,8 @@
 #include <mpv/client.h>
 #include <cmath>
 #include <limits>
+#include <atomic>
+#include <memory>
 
 #include "input/InputComponent.h"
 #include "input/InputMapping.h"
@@ -27,9 +30,33 @@
 // Test-only declaration of the actual delegate class and its shared methods.
 @interface MediaKeysDelegate : NSObject
 -(instancetype)initWithInput:(InputAppleMediaKeys*)input;
+-(MPRemoteCommandHandlerStatus)gotCommand:(MPRemoteCommandEvent*)event;
+-(MPRemoteCommandHandlerStatus)gotPlaybackPosition:(MPChangePlaybackPositionCommandEvent*)event;
 -(MPRemoteCommandHandlerStatus)handleCommand:(MPRemoteCommand*)command;
 -(MPRemoteCommandHandlerStatus)handlePlaybackPosition:(double)seconds;
 @end
+
+class DelegateRegistration
+{
+public:
+  explicit DelegateRegistration(MediaKeysDelegate* delegate)
+      : delegate(delegate), oldEnabled([MPRemoteCommandCenter sharedCommandCenter].changePlaybackPositionCommand.enabled) {}
+  ~DelegateRegistration()
+  {
+    MPRemoteCommandCenter* center = [MPRemoteCommandCenter sharedCommandCenter];
+#define REMOVE_COMMAND(name) [center.name ## Command removeTarget:delegate action:@selector(gotCommand:)]
+    REMOVE_COMMAND(play); REMOVE_COMMAND(pause); REMOVE_COMMAND(togglePlayPause);
+    REMOVE_COMMAND(stop); REMOVE_COMMAND(nextTrack); REMOVE_COMMAND(previousTrack);
+    REMOVE_COMMAND(seekForward); REMOVE_COMMAND(seekBackward);
+    REMOVE_COMMAND(skipForward); REMOVE_COMMAND(skipBackward);
+#undef REMOVE_COMMAND
+    [center.changePlaybackPositionCommand removeTarget:delegate action:@selector(gotPlaybackPosition:)];
+    center.changePlaybackPositionCommand.enabled = oldEnabled;
+  }
+private:
+  MediaKeysDelegate* delegate;
+  BOOL oldEnabled;
+};
 
 static double position(mpv_handle* handle)
 {
@@ -62,12 +89,12 @@ void AppleNativeControls::invalidSeeks(MediaKeysDelegate* delegate, mpv_handle* 
                             static_cast<double>(std::numeric_limits<qint64>::max())};
   for (double value : invalid)
     QCOMPARE([delegate handlePlaybackPosition:value], MPRemoteCommandHandlerStatusCommandFailed);
-  MPRemoteCommandHandlerStatus status = MPRemoteCommandHandlerStatusSuccess;
-  auto* worker = QThread::create([&]() { status = [delegate handlePlaybackPosition:1.0]; });
+  auto status = std::make_shared<std::atomic<int>>(MPRemoteCommandHandlerStatusSuccess);
+  auto* worker = QThread::create([delegate, status]() { *status = [delegate handlePlaybackPosition:1.0]; });
   worker->start();
-  QVERIFY(worker->wait(5000));
+  if (!worker->wait(5000)) qFatal("Off-thread delegate test did not exit within five seconds");
   delete worker;
-  QCOMPARE(status, MPRemoteCommandHandlerStatusCommandFailed);
+  QCOMPARE(status->load(), static_cast<int>(MPRemoteCommandHandlerStatusCommandFailed));
   QTest::qWait(500);
   QVERIFY(qAbs(position(handle) - before) < 0.1);
 }
@@ -114,14 +141,15 @@ void AppleNativeControls::delegatePath()
   QVERIFY(mapping && mapping->loadMappings());
   InputAppleMediaKeys source;
   QVERIFY(source.initInput());
+  MediaKeysDelegate* delegate = (__bridge MediaKeysDelegate*)source.m_delegate;
+  QVERIFY(delegate);
+  DelegateRegistration registration(delegate);
   bool dispatched = false;
   QObject::connect(&source, &InputBase::receivedInput, &input,
                    [&](const QString& name, const QString& key, InputBase::InputkeyState state) {
     dispatched = QMetaObject::invokeMethod(&input, "remapInput", Qt::DirectConnection,
         Q_ARG(QString, name), Q_ARG(QString, key), Q_ARG(InputBase::InputkeyState, state));
   });
-  MediaKeysDelegate* delegate = (__bridge MediaKeysDelegate*)source.m_delegate;
-  QVERIFY(delegate);
   QQuickWindow window;
   window.resize(640, 360);
   auto* video = new MpvVideoItem(window.contentItem());
@@ -146,13 +174,16 @@ void AppleNativeControls::delegatePath()
   QCOMPARE([delegate handlePlaybackPosition:4.0], MPRemoteCommandHandlerStatusSuccess);
   QTRY_VERIFY_WITH_TIMEOUT(qAbs(position(handle) - 4.0) < 0.25, 10000);
   invalidSeeks(delegate, handle);
+  if (QTest::currentTestFailed()) return;
   detachedStop(delegate, handle, input);
+  if (QTest::currentTestFailed()) return;
   QVERIFY(dispatched);
 }
 
 int main(int argc, char** argv)
 {
   QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
+  QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
   QGuiApplication app(argc, argv);
   AppleNativeControls test;
   return QTest::qExec(&test, argc, argv);

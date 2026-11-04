@@ -81,6 +81,7 @@
 
 -(MPRemoteCommandHandlerStatus)gotPlaybackPosition:(MPChangePlaybackPositionCommandEvent *)event
 {
+  if (QThread::currentThread() != input->thread()) return MPRemoteCommandHandlerStatusCommandFailed;
   return [self handlePlaybackPosition:event.positionTime];
 }
 
