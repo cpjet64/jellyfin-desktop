@@ -28,10 +28,10 @@ if(MPVQT_C2_DIAGNOSTIC_ONLY)
     message(FATAL_ERROR "Unable to apply C2 diagnostic patch: ${_patch_error}")
   endif()
   set(_c2_output_hashes
-    "mpvabstractitem.cpp|c0f44b7ef62ffda11bab719a75847c6b8d039f3209c37b669dcd4b96e5638b72"
+    "mpvabstractitem.cpp|e9c06e843f7fd9fb999960bb4e471a1501ce2550c730da6d12bbd336c60060f8"
     "mpvabstractitem.h|f0d7c9d50019aff85ecf75c680150291d9d32b5dd4a2e04cc6f83886c1f372d3"
     "mpvabstractitem_p.h|8de8db81c9e00c6588262276d77557e6336ace69ffc84041dfdbd2cf4beeae98"
-    "mpvrenderer.cpp|9d82a7b65cd1bb6c9fd9154245e99571e90798b6d2112b3efdf06db805f0893e")
+    "mpvrenderer.cpp|cdecd1cc416a1af74a670e3dc1ebeecea30d06efba7f5fae4e6ccfcfc39055d3")
   foreach(_entry IN LISTS _c2_output_hashes)
     string(REPLACE "|" ";" _pair "${_entry}")
     list(GET _pair 0 _name)
