@@ -40,6 +40,10 @@ closure **only for this helper**. It does not resolve the media source graph,
 SDK/Xcode requirement, or the source-lock and storage gaps for other components.
 No artifacts have been downloaded or installed.
 
+The [candidate media graph with the helper substitution](macos-media-binary-helper-graph.md)
+shows the remaining formula declarations and dependency-first candidate order.
+It is a static overapproximation, not a verified minimal or executable build.
+
 For scale, GitHub release metadata reports the reference Deno source archive
 at 37,035,922 bytes and LLVM 23.1.4 source archive at 179,272,572 bytes. These
 are only two source archives, not the size of their build closure or peak.
