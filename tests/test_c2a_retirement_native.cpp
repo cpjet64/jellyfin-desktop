@@ -87,6 +87,7 @@ private slots:
   void activeRetirement();
   void terminalRetirement();
   void stopWithPendingHook();
+  void terminalRecreation();
 private:
   void verifyRenderFailure(C2aFixture&, PlayerComponent&, const QString&, const QString&);
   void injectRenderFailure(C2aFixture&, PlayerComponent&, C2aRenderState&, const QString&);
@@ -102,6 +103,7 @@ private:
 #include "c2a_active_case.h"
 #include "c2a_terminal_case.h"
 #include "c2a_hook_case.h"
+#include "c2_terminal_recreation_case.h"
 
 void TestC2RetirementNative::init()
 {
@@ -211,7 +213,7 @@ int main(int argc, char** argv)
   const QHash<QByteArray, QByteArray> scenarios{{"create-failure", "createFailure"},
     {"render-failure", "renderFailure"}, {"active-retirement", "activeRetirement"},
     {"terminal-retirement", "terminalRetirement"}, {"stop-hook", "stopWithPendingHook"},
-    {"guard-sentinel", "guardSentinel"}};
+    {"guard-sentinel", "guardSentinel"}, {"terminal-recreation", "terminalRecreation"}};
   if (!scenarios.contains(scenario)) { qCritical("C2A_SCENARIO must select exactly one known case"); return 2; }
   if (argc != 3 || QByteArray(argv[1]) != "-o") { qCritical("Expected one QTest output argument"); return 2; }
   QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
