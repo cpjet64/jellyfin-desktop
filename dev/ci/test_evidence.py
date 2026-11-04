@@ -53,8 +53,42 @@ class EvidenceTest(unittest.TestCase):
             evidence.update(directory, "offscreen", "blocked", "Xvfb absent")
             return 1
         code, report = self.run_job(child)
-        self.assertEqual((code, report["build_core"], report["offscreen"]), (1, "passed", "blocked"))
+        self.assertEqual((code, report["build_core"], report["offscreen"]), (1, "failed", "blocked"))
         self.assertEqual(report["offscreen_reason"], "Xvfb absent")
+
+    def test_late_packaging_failure_is_not_hidden_by_blocked_render(self):
+        def child(args, cwd, env):
+            directory = Path(env["CI_EVIDENCE_DIR"])
+            evidence.update(directory, "build_core", "passed", "core passed")
+            evidence.update(directory, "offscreen", "blocked", "render-thread contract unresolved")
+            return 17
+        code, report = self.run_job(child)
+        self.assertEqual((code, report["build_core"], report["offscreen"]), (17, "failed", "blocked"))
+        self.assertIn("17", report["build_core_reason"])
+
+    def test_legacy_offscreen_producer_creates_no_receipt(self):
+        with self.assertRaisesRegex(RuntimeError, "legacy offscreen-render-v1 evidence is invalidated"):
+            evidence.record_case(self.root, self.root / "executable", "playing")
+        self.assertFalse((self.root / "case.json").exists())
+
+    def test_historical_render_receipts_are_not_republished(self):
+        def child(args, cwd, env):
+            results = self.root / "build/ci-results"
+            for name in ("offscreen", "test_renderer_loss_offscreen", "linux-mpris-active-stop", "test_c2_retirement_native"):
+                path = results / name
+                path.mkdir(parents=True, exist_ok=True)
+                (path / "case.json").write_text("historical")
+            (results / "portable-result.txt").write_text("valid")
+            directory = Path(env["CI_EVIDENCE_DIR"])
+            evidence.update(directory, "build_core", "passed", "core passed")
+            evidence.update(directory, "offscreen", "blocked", "render-thread contract unresolved")
+            return 0
+        code, _report = self.run_job(child)
+        result = self.root / "build/ci-evidence/linux-static"
+        self.assertEqual(code, 0)
+        self.assertTrue((result / "portable-result.txt").is_file())
+        self.assertFalse(any((result / name).exists() for name in ("offscreen", "test_renderer_loss_offscreen",
+                                                                   "linux-mpris-active-stop", "test_c2_retirement_native")))
 
     def test_source_identity_and_cleanliness(self):
         def probe(outputs):

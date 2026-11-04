@@ -15,7 +15,7 @@ from native_inventory import incompatible_tools, inventory, prepare_process_path
 from macos_session import verify_existing_session
 from headless_requirements import missing_build_inputs
 from linux_mpris_receipt import run_active_stop, update_obligation
-from evidence import record_case, update
+from evidence import update
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
@@ -29,6 +29,9 @@ LINUX_DESKTOP_TOOLS = frozenset(("xvfb-run", "xauth", "dbus-run-session", "glxin
 
 
 def command(name, args, *, env=None, timeout=120):
+    held = {"test_renderer_loss_offscreen", "test_mpris_active_stop", "test_c2_retirement_native"}
+    if any(Path(str(arg)).name.removesuffix(".exe") in held for arg in args):
+        raise RuntimeError("BLOCKED: native render fixture violates the render-thread contract")
     print(f"Running {name}", flush=True)
     log = RESULTS / f"{name}.log"
     with log.open("w", encoding="utf-8") as output:
@@ -217,16 +220,12 @@ def gui(system):
 
 
 def offscreen(system):
-    env = os.environ.copy()
-    env.update({"QSG_INFO": "1", "QT_QPA_PLATFORM": "xcb" if system == "Linux" else "cocoa"})
-    prefix = ["xvfb-run", "-a", "-s", "-screen 0 1280x800x24 +extension GLX",
-              "dbus-run-session", "--"] if system == "Linux" else []
-    media = RESULTS / "recovery.y4m"
-    command("offscreen-media", [sys.executable, "tests/generate_recovery_media.py", str(media)])
-    run_scenarios("test_renderer_loss_offscreen", prefix, env, media)
+    raise RuntimeError("BLOCKED: offscreen render fixture violates the render-thread contract")
 
 
 def run_scenarios(fixture, prefix, env, media):
+    if fixture == "test_renderer_loss_offscreen":
+        raise RuntimeError("BLOCKED: offscreen render fixture violates the render-thread contract")
     for scenario in ("playing", "paused", "held-hook"):
         evidence = RESULTS / fixture / scenario
         evidence.mkdir(parents=True, exist_ok=fixture != "test_renderer_loss_offscreen")
@@ -243,14 +242,6 @@ def run_scenarios(fixture, prefix, env, media):
         if fixture == "test_webclient_containment" and scenario != "held-hook":
             if any(not (evidence / name).is_file() for name in ("containment-before.png", "containment-after.png")):
                 raise RuntimeError(f"Missing containment {scenario} image evidence")
-        if fixture == "test_renderer_loss_offscreen" and scenario != "held-hook":
-            images = ["offscreen-before.png", "offscreen-after.png"]
-            if scenario == "playing":
-                images.append("offscreen-after2.png")
-            if any(not (evidence / name).is_file() for name in images):
-                raise RuntimeError(f"Missing offscreen {scenario} image evidence")
-        if fixture == "test_renderer_loss_offscreen":
-            record_case(evidence, BUILD / "tests" / fixture, scenario)
 
 
 def run_stages(system, mode, desktop_missing):
@@ -260,11 +251,10 @@ def run_stages(system, mode, desktop_missing):
     headless_checks()
     directory = Path(os.environ["CI_EVIDENCE_DIR"])
     update(directory, "build_core", "passed", "Native build and classified core checks passed")
-    update(directory, "offscreen", "not_run", "Checking native runtime prerequisites")
+    update(directory, "offscreen", "blocked", "Native render-thread contract is unresolved; fixture held before launch")
     try:
         desktop_preflight(system, desktop_missing)
     except RuntimeError as error:
-        update(directory, "offscreen", "blocked", str(error))
         if system == "Linux":
             update_obligation(directory, "blocked", str(error))
         if system == "Darwin":
@@ -272,15 +262,8 @@ def run_stages(system, mode, desktop_missing):
             return
         raise
     runtime_ctest(system, mode)
-    offscreen(system)
-    update(directory, "offscreen", "passed", "All three native OpenGL scenarios passed")
     if system == "Linux":
-        try:
-            run_active_stop(BUILD, RESULTS, directory, command)
-        except (OSError, RuntimeError, ValueError, KeyError) as error:
-            update_obligation(directory, "failed", str(error))
-            raise
-        update_obligation(directory, "blocked", "Native offscreen render-thread contract review is pending")
+        update_obligation(directory, "blocked", "Native render-thread contract is unresolved; fixture held before launch")
 
 
 def main():

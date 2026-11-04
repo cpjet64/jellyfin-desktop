@@ -84,8 +84,8 @@ class TestHeadlessRouting(unittest.TestCase):
             for name in ("configure", "headless_checks", "desktop_preflight", "runtime_ctest", "offscreen", "run_active_stop"):
                 stack.enter_context(patch.object(native, name, side_effect=lambda *a, n=name: events.append(n)))
             native.run_stages("Linux", "static", [])
-        self.assertEqual(events, ["configure", "headless_checks", "desktop_preflight", "runtime_ctest", "offscreen", "run_active_stop"])
-        obligation.assert_called_once_with(Path("unused"), "blocked", "Native offscreen render-thread contract review is pending")
+        self.assertEqual(events, ["configure", "headless_checks", "desktop_preflight", "runtime_ctest"])
+        obligation.assert_called_once_with(Path("unused"), "blocked", "Native render-thread contract is unresolved; fixture held before launch")
 
     def test_missing_linux_display_is_still_a_failure(self):
         with self.assertRaisesRegex(RuntimeError, "xvfb-run"):
@@ -97,25 +97,29 @@ class TestHeadlessRouting(unittest.TestCase):
             native.desktop_preflight("Darwin", [])
         verify.assert_called_once()
 
-    def test_offscreen_runs_all_scenarios_and_requires_second_playing_frame(self):
-        with tempfile.TemporaryDirectory(prefix="ci-routing-test-", dir=native.ROOT) as temp:
-            results = Path(temp)
-            seen = []
-            def fake_command(name, args, **kwargs):
-                if name.endswith("-report"):
-                    return
-                scenario = kwargs["env"]["RECOVERY_SCENARIO"]
-                seen.append(scenario)
-                case = Path(kwargs["env"]["RECOVERY_EVIDENCE_DIR"])
-                (case / "qtest.txt").write_text("result")
-                if scenario != "held-hook":
-                    for image in ("offscreen-before.png", "offscreen-after.png"):
-                        (case / image).write_bytes(b"image")
-                if scenario == "playing":
-                    (case / "offscreen-after2.png").write_bytes(b"image")
-            with patch.object(native, "RESULTS", results), patch.object(native, "record_case"), patch.object(native, "command", side_effect=fake_command):
-                native.run_scenarios("test_renderer_loss_offscreen", [], {}, results / "media")
-            self.assertEqual(seen, ["playing", "paused", "held-hook"])
+    def test_held_offscreen_never_launches(self):
+        with patch.object(native, "command") as launch:
+            with self.assertRaisesRegex(RuntimeError, "render-thread contract"):
+                native.offscreen("Linux")
+            with self.assertRaisesRegex(RuntimeError, "render-thread contract"):
+                native.run_scenarios("test_renderer_loss_offscreen", [], {}, Path("media"))
+            launch.assert_not_called()
+
+    def test_all_held_native_executables_rejected_before_launch(self):
+        for target in ("test_renderer_loss_offscreen", "test_mpris_active_stop", "test_c2_retirement_native"):
+            with self.subTest(target=target), patch.object(native.subprocess, "Popen") as launch:
+                with self.assertRaisesRegex(RuntimeError, "render-thread contract"):
+                    native.command("held", ["/tmp/" + target])
+                launch.assert_not_called()
+
+    def test_windows_driver_keeps_packaging_after_hold(self):
+        script = (native.ROOT / "dev/windows/ci.ps1").read_text(encoding="utf-8")
+        self.assertNotIn("Invoke-OffscreenTests $build", script)
+        hold = script.index("fixture held before launch")
+        for name in ("windows_mpv_loader_integration.py", "windows_packaging_runtime_test.py",
+                     "windows_installer_compile_test.py", "dev/windows/package.py"):
+            self.assertGreater(script.index(name), hold)
+        self.assertNotIn("test_c2_retirement_state', 'test_c2_retirement_native", script)
 
     def test_missing_build_inputs_reported_before_bootstrap(self):
         with patch.object(headless_requirements, "known_prefixes", return_value=[]), \

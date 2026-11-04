@@ -150,10 +150,7 @@ def validate_headless(base, job, sha, ref, pipeline_id):
         check_junit(artifact(directory, "headless-ctest.xml"), CORE)
         check_junit(artifact(directory, "runtime-ctest.xml"), required)
     validate_build_manifest(directory, report)
-    require_render(directory, "offscreen", "offscreen-before.png", "offscreen-after.png", "offscreen-after2.png",
-                   ("TestRendererLossOffscreen", "actualPlayback"))
-    check_offscreen_metadata(directory, report)
-    return report, directory
+    raise ValueError("legacy offscreen-render-v1 receipts are invalidated by the render-thread contract")
 
 
 def validate_geometry(directory, report, record):
@@ -237,18 +234,7 @@ def require_mpris_scenario(path, scenario):
 
 
 def validate_linux_active_stop(directory, report):
-    for scenario in ("playing", "paused"):
-        prefix = f"linux-mpris-active-stop/{scenario}"
-        validate_named_receipt(directory, report, prefix, "linux-mpris-active-stop-v1", scenario,
-                               ("TestMprisActiveStop", "activeStop"), ("active-before.png", "active-after.png"), False)
-        require_mpris_scenario(artifact(directory, prefix + "/qtest.txt"), scenario)
-        record = json.loads(artifact(directory, prefix + "/case.json").read_text(encoding="utf-8"))
-        required = {"source_sha": report["source_sha"], "launcher": "xvfb-private-dbus-v1", "exit_code": 0,
-                    "media_sha256": hashlib.sha256(artifact(directory, "recovery.y4m").read_bytes()).hexdigest(),
-                    "build_manifest_sha256": hashlib.sha256(artifact(directory, "build-manifest.json").read_bytes()).hexdigest()}
-        for key, value in required.items():
-            if record.get(key) != value:
-                raise ValueError(f"linux_active_stop {scenario}: incorrect {key}")
+    raise ValueError("legacy MPRIS offscreen receipts are invalidated by the render-thread contract")
 
 
 def validate_desktop(directory, report):

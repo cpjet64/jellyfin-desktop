@@ -39,23 +39,7 @@ def digest(path):
 
 
 def record_case(directory, executable, scenario):
-    if scenario not in ("playing", "paused", "held-hook"):
-        raise ValueError("unknown scenario")
-    from acceptance import require_case, require_offscreen_capability
-    require_case(Path(directory).parent, Path(directory).name, expected=("TestRendererLossOffscreen", "actualPlayback"), scenario=scenario)
-    require_offscreen_capability(Path(directory) / "qtest.txt")
-    job = os.environ["CI_JOB_NAME"]
-    platform, mode = JOBS[job]
-    record = dict(producer="offscreen-render-v1", scenario=scenario, job=job,
-                  platform=platform, mode=mode, job_id=os.environ["CI_JOB_ID"],
-                  pipeline_id=os.environ["CI_PIPELINE_ID"], sha=os.environ["CI_COMMIT_SHA"],
-                  ref=os.environ["CI_COMMIT_REF_NAME"], executable_sha256=digest(executable),
-                  qtest_sha256=digest(Path(directory) / "qtest.txt"))
-    images = [] if scenario == "held-hook" else ["offscreen-before.png", "offscreen-after.png"]
-    if scenario == "playing":
-        images.append("offscreen-after2.png")
-    record["images"] = {name: digest(Path(directory) / name) for name in images}
-    (Path(directory) / "case.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    raise RuntimeError("BLOCKED: legacy offscreen-render-v1 evidence is invalidated by the render-thread contract")
 
 
 def update(directory, phase, status, reason):
@@ -124,17 +108,13 @@ def run_job():
     report = json.loads((directory / "evidence.json").read_text(encoding="utf-8"))
     if code and report.get("active_phase"):
         update(directory, report["active_phase"], "failed", f"Native process exited {code}")
-    elif code and report.get("offscreen") == "passed":
+    elif code and report.get("build_core") == "passed":
         update(directory, "build_core", "failed", f"Post-test native process exited {code}")
     results = ROOT / "build" / "ci-results"
     if results.is_dir():
-        shutil.copytree(results, directory, dirs_exist_ok=True)
-        offscreen = results / "test_renderer_loss_offscreen"
-        if offscreen.is_dir():
-            shutil.copytree(offscreen, directory / "offscreen", dirs_exist_ok=True)
-    executable = ROOT / "build/tests" / ("test_renderer_loss_offscreen.exe" if platform == "windows" else "test_renderer_loss_offscreen")
-    if executable.is_file() and (directory / "offscreen").is_dir():
-        shutil.copy2(executable, directory / "offscreen-executable")
+        held = shutil.ignore_patterns("offscreen", "test_renderer_loss_offscreen", "linux-mpris-active-stop",
+                                      "test_c2_retirement_native")
+        shutil.copytree(results, directory, dirs_exist_ok=True, ignore=held)
     return code
 
 

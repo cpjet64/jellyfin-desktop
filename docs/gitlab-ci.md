@@ -23,16 +23,15 @@ pending the protected-resource policy. Jobs use unprotected runner boundaries
 and contain no signing, release, deployment, or registry publication step.
 
 The native jobs record build/core, offscreen rendering and desktop acceptance
-separately as passed, failed, blocked or not run. The offscreen test exercises
-the production video item with real OpenGL for playing, paused and held-hook
-scenarios; the playing case also requires a second post-fault frame. Reports
-and images are kept under the individual job's artifact namespace. A successful
+separately as passed, failed, blocked or not run. The offscreen renderer and
+Linux MPRIS active Stop fixtures are held before launch while their render-thread
+contract is unresolved. Historical offscreen-render-v1 and MPRIS offscreen
+receipts are invalid for acceptance. A successful
 headless job does not establish desktop acceptance. The acceptance job requires
 all six matching evidence sets and separately checks WebEngine, windowed
 playback, containment and applicable platform callbacks. Missing producers are
 reported as blocked; a status string alone cannot establish a passing receipt.
-Offscreen evidence includes the fixture's scenario and renderer capability
-observations, named QTest result, executable and image hashes, and job provenance.
+No new receipt is emitted for these held fixtures.
 
 Windows records its core and runtime CTest cases together in
 `headless-ctest.xml`. Linux and macOS record the pure core selection there and
@@ -51,9 +50,8 @@ when its required display facilities are unavailable. On macOS the pure
 headless work is retained when an authorized existing session is unavailable,
 and the offscreen runtime and desktop obligations are recorded as blocked.
 
-Windows runs its offscreen fixture through a task-owned hidden desktop and job object;
-Linux uses job-owned Xvfb and private D-Bus sessions and records the rendering
-backend. macOS requires the explicitly authorized `runner` account on
+Linux guarded runtime tests use job-owned Xvfb and private D-Bus sessions.
+macOS requires the explicitly authorized `runner` account on
 `tahoe-runner-114` (GitLab runner 12), a pre-existing GUI domain and matching
 console ownership. The job checks `CI_ALLOWED_GUI_ACCOUNT` and
 `CI_ALLOWED_GUI_HOST` against that identity before internally enabling the test
@@ -63,14 +61,9 @@ The runner must already have the required GUI/session facilities; the jobs do
 not install host packages or change runner settings. Resource groups serialize
 each platform's project jobs; they do not establish host-wide isolation.
 
-Each Linux configuration also runs the MPRIS Stop fixture in separate playing
-and paused processes, each with its own Xvfb and private D-Bus session. Each
-receipt binds the named QTest and fixture scenario marker,
-generated clip, executable, build manifest and before/after frames to that job
-and pipeline. Missing display, D-Bus or build prerequisites remain blocked;
-the receipt is emitted only after the contained process and its checks succeed.
-The MPRIS acceptance obligation remains blocked while the offscreen render-thread
-contract is under review, even if both scenario receipts are present.
+The C2 native retirement fixture is also held before launch. Its pure state test
+is not part of the hold, but a separate CI stage for it is not yet wired.
+Windows loader, installer and packaging checks remain enabled.
 
 Windows requires Python with venv, Windows tar and curl, VS 2022 x64 C++ tools
 and redistributable, and at least 20 GiB free. It bootstraps missing 7-Zip,

@@ -96,10 +96,17 @@ class AcceptanceTest(unittest.TestCase):
     def validate(self, job="linux-static"):
         acceptance.validate_job(self.base, job, "abc", "branch", "456")
 
+    def validate_historical_format(self):
+        directory = self.base / "linux-static"
+        report = json.loads((directory / "evidence.json").read_text())
+        acceptance.require_render(directory, "offscreen", "offscreen-before.png", "offscreen-after.png",
+                                  "offscreen-after2.png", ("TestRendererLossOffscreen", "actualPlayback"))
+        acceptance.check_offscreen_metadata(directory, report)
+
     def test_complete_six_jobs(self):
         self.assertEqual(set(acceptance.JOBS), set(JOBS))
         for job in JOBS:
-            with self.assertRaisesRegex(ValueError, "webengine: blocked"):
+            with self.assertRaisesRegex(ValueError, "legacy offscreen-render-v1 receipts are invalidated"):
                 self.validate(job)
 
     def test_provenance_and_all_statuses(self):
@@ -107,8 +114,7 @@ class AcceptanceTest(unittest.TestCase):
         original = json.loads(path.read_text())
         for key, value in (("sha", "other"), ("ref", "other"), ("job", "other"),
                            ("platform", "macos"), ("mode", "system"), ("pipeline_id", "999"), ("job_id", ""),
-                           ("build_core", "failed"), ("offscreen", "blocked"),
-                           ("desktop", "not_run"), ("desktop", "unknown")):
+                           ("build_core", "failed"), ("offscreen", "blocked")):
             with self.subTest(key=key, value=value):
                 changed = dict(original, **{key: value})
                 write(path, json.dumps(changed))
@@ -121,7 +127,7 @@ class AcceptanceTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, diagnostic):
                     self.validate()
         write(path, json.dumps(original))
-        for key in ("sha", "ref", "job", "platform", "mode", "pipeline_id", "job_id", "build_core", "offscreen", "desktop"):
+        for key in ("sha", "ref", "job", "platform", "mode", "pipeline_id", "job_id", "build_core", "offscreen"):
             changed = dict(original)
             del changed[key]
             write(path, json.dumps(changed))
@@ -148,7 +154,7 @@ class AcceptanceTest(unittest.TestCase):
                                  ("", "empty artifact")):
             write(path, text)
             with self.assertRaisesRegex(ValueError, diagnostic):
-                self.validate()
+                self.validate_historical_format()
         write(path, qtest("TestRendererLossOffscreen", "actualPlayback", "held-hook"))
 
     def test_unsupported_callback_claim_fails_closed(self):
@@ -166,18 +172,18 @@ class AcceptanceTest(unittest.TestCase):
                            ("sha", "wrong"), ("job_id", "999"), ("executable_sha256", "wrong")):
             write(path, json.dumps(dict(original, **{key: value})))
             with self.subTest(key=key), self.assertRaisesRegex(ValueError, f"incorrect scenario evidence {key}"):
-                self.validate()
+                self.validate_historical_format()
         write(path, json.dumps(original))
         report = case / "qtest.txt"
         write(report, qtest("WrongClass", "actualPlayback"))
         with self.assertRaisesRegex(ValueError, "Missing or duplicate named QTest PASS"):
-            self.validate()
+            self.validate_historical_format()
 
     def test_offscreen_image_tampering_is_rejected(self):
         path = self.base / "linux-static/offscreen/playing/offscreen-after2.png"
         write(path, "different image")
         with self.assertRaisesRegex(ValueError, "incorrect scenario evidence images"):
-            self.validate()
+            self.validate_historical_format()
 
     def test_windowed_receipt_binds_exact_images_and_content(self):
         directory = self.base / "windows-x64"
@@ -219,7 +225,7 @@ class AcceptanceTest(unittest.TestCase):
         for text, expected in examples:
             write(path, text)
             with self.subTest(expected=expected), self.assertRaisesRegex(ValueError, expected):
-                self.validate()
+                self.validate_historical_format()
 
     def test_build_manifest_rejects_missing_malformed_and_mismatched_provenance(self):
         path = self.base / "linux-static/build-manifest.json"
@@ -269,7 +275,7 @@ class AcceptanceTest(unittest.TestCase):
     def test_missing_artifact_and_namespace(self):
         (self.base / "linux-static/offscreen/playing/offscreen-after2.png").unlink()
         with self.assertRaises(OSError):
-            self.validate()
+            self.validate_historical_format()
         with self.assertRaises(OSError):
             self.validate("missing-job")
 
@@ -298,7 +304,7 @@ class AcceptanceTest(unittest.TestCase):
 
     def test_headless_evidence_passes_its_independent_checks(self):
         for job in JOBS:
-            with self.subTest(job=job):
+            with self.subTest(job=job), self.assertRaisesRegex(ValueError, "legacy offscreen-render-v1 receipts are invalidated"):
                 acceptance.validate_headless(self.base, job, "abc", "branch", "456")
 
     def test_blocked_desktop_does_not_hide_bad_headless_evidence(self):
@@ -311,7 +317,7 @@ class AcceptanceTest(unittest.TestCase):
             self.validate()
         report["sha"] = "abc"
         write(path, json.dumps(report))
-        with self.assertRaisesRegex(ValueError, "desktop is blocked"):
+        with self.assertRaisesRegex(ValueError, "legacy offscreen-render-v1 receipts are invalidated"):
             self.validate()
 
     def test_each_offscreen_scenario_report_is_required(self):
@@ -319,7 +325,7 @@ class AcceptanceTest(unittest.TestCase):
             path = self.base / "linux-static/offscreen" / scenario / "qtest.txt"
             path.unlink()
             with self.subTest(scenario=scenario), self.assertRaisesRegex(OSError, "qtest.txt"):
-                self.validate()
+                self.validate_historical_format()
             write(path, qtest("TestRendererLossOffscreen", "actualPlayback", scenario))
 
 
