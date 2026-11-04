@@ -83,7 +83,30 @@ private slots:
 private:
   void invalidSeeks(MediaKeysDelegate* delegate, mpv_handle* handle);
   void detachedStop(MediaKeysDelegate* delegate, mpv_handle* handle, InputComponent& input);
+  void unavailableFunctions(InputAppleMediaKeys& source);
 };
+
+void AppleNativeControls::unavailableFunctions(InputAppleMediaKeys& source)
+{
+  const auto visibility = source.SetNowPlayingVisibility;
+  const auto origin = source.GetLocalOrigin;
+  const auto canBePlaying = source.SetCanBeNowPlayingApplication;
+  {
+    const auto restore = qScopeGuard([&]() {
+      source.SetNowPlayingVisibility = visibility;
+      source.GetLocalOrigin = origin;
+      source.SetCanBeNowPlayingApplication = canBePlaying;
+    });
+    source.SetNowPlayingVisibility = nullptr;
+    source.GetLocalOrigin = nullptr;
+    source.SetCanBeNowPlayingApplication = nullptr;
+    qInfo() << "Synthetic unavailable MediaRemote function check";
+    source.handleStateChanged(PlayerComponent::State::paused);
+  }
+  QVERIFY(source.SetNowPlayingVisibility == visibility);
+  QVERIFY(source.GetLocalOrigin == origin);
+  QVERIFY(source.SetCanBeNowPlayingApplication == canBePlaying);
+}
 
 void AppleNativeControls::invalidSeeks(MediaKeysDelegate* delegate, mpv_handle* handle)
 {
@@ -145,13 +168,15 @@ void AppleNativeControls::delegatePath()
   auto* mapping = input.findChild<InputMapping*>();
   QVERIFY(mapping && mapping->loadMappings());
   InputAppleMediaKeys source;
-  source.SetNowPlayingVisibility = nullptr;
-  source.GetLocalOrigin = nullptr;
-  source.SetCanBeNowPlayingApplication = nullptr;
+  QVERIFY(source.SetNowPlayingVisibility == nullptr);
+  QVERIFY(source.GetLocalOrigin == nullptr);
+  QVERIFY(source.SetCanBeNowPlayingApplication == nullptr);
   QVERIFY(source.initInput());
   MediaKeysDelegate* delegate = (__bridge MediaKeysDelegate*)source.m_delegate;
   QVERIFY(delegate);
   DelegateRegistration registration(source.m_delegate);
+  unavailableFunctions(source);
+  if (QTest::currentTestFailed()) return;
   bool dispatched = false;
   const auto connection = QObject::connect(&source, &InputBase::receivedInput, &input,
                    [&](const QString& name, const QString& key, InputBase::InputkeyState state) {

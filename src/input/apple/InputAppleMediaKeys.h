@@ -31,9 +31,9 @@ private:
   typedef void (*SetNowPlayingVisibilityFunc)(void* origin, int visibility);
   typedef void* (*GetLocalOriginFunc)(void);
   typedef void (*SetCanBeNowPlayingApplicationFunc)(int);
-  SetNowPlayingVisibilityFunc SetNowPlayingVisibility;
-  GetLocalOriginFunc GetLocalOrigin;
-  SetCanBeNowPlayingApplicationFunc SetCanBeNowPlayingApplication;
+  SetNowPlayingVisibilityFunc SetNowPlayingVisibility = nullptr;
+  GetLocalOriginFunc GetLocalOrigin = nullptr;
+  SetCanBeNowPlayingApplicationFunc SetCanBeNowPlayingApplication = nullptr;
 
   bool m_pendingUpdate;
   quint64 m_currentTime;
