@@ -9,6 +9,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import time
 
 from linux_qt_library import load_library
 from linux_qt_plan import MAX_EXPANSION, attach_replays, scan_archives
@@ -18,6 +19,14 @@ from qt_sdk_archive import check_storage, download_archive, stage_entries
 
 BUILD_RESERVE = 8 * 1024 * 1024 * 1024
 DEADLINE_SECONDS = 1800
+ADDRESS_SPACE_BYTES = 6 * 1024**3
+CPU_SECONDS = 1500
+GROUP_EXIT_SECONDS = 5
+
+
+def decoder_limits():
+    return {"address_space_bytes": ADDRESS_SPACE_BYTES, "cpu_seconds": CPU_SECONDS,
+            "wall_seconds": DEADLINE_SECONDS}
 
 
 @dataclass(frozen=True)
@@ -31,31 +40,55 @@ def manifest_hash():
     return hashlib.sha256(Path(__file__).with_name("qt-6.9.3-unix.json").read_bytes()).hexdigest()
 
 
+def settle_group(child):
+    """Kill only the launched process group and prove its disappearance."""
+    try:
+        os.killpg(child.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        child.wait(timeout=GROUP_EXIT_SECONDS)
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("Qt worker did not exit after termination") from error
+    deadline = time.monotonic() + GROUP_EXIT_SECONDS
+    while True:
+        try:
+            os.killpg(child.pid, 0)
+        except ProcessLookupError:
+            return
+        except OSError as error:
+            raise RuntimeError("cannot verify Qt worker process-group exit") from error
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Qt worker process group did not disappear")
+        time.sleep(0.05)
+
+
 def run_worker(workspace):
     """Run decoding and probes in a bounded, task-owned process group."""
     args = [sys.executable, str(Path(__file__).resolve()), "--worker", str(workspace)]
-    child = subprocess.Popen(args, start_new_session=True)
+    try:
+        child = subprocess.Popen(args, start_new_session=True)
+    except OSError as error:
+        error.add_note(f"Qt decoder limits: {decoder_limits()}")
+        raise
+    failure = None
     try:
         result = child.wait(timeout=DEADLINE_SECONDS)
-    except subprocess.TimeoutExpired as error:
-        raise TimeoutError("Qt SDK acquisition deadline exceeded") from error
-    finally:
-        active_error = sys.exc_info()[0] is not None
-        try:
-            os.killpg(child.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        except OSError:
-            if not active_error:
-                raise
-        if child.poll() is None:
-            try:
-                child.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                if not active_error:
-                    raise RuntimeError("Qt worker did not terminate")
-    if result:
-        raise RuntimeError(f"Qt SDK acquisition failed: worker exit {result}")
+        if result:
+            failure = RuntimeError(f"Qt SDK acquisition failed: worker exit {result}; limits={decoder_limits()}")
+    except subprocess.TimeoutExpired:
+        failure = TimeoutError(f"Qt SDK acquisition deadline exceeded; limits={decoder_limits()}")
+    except BaseException as error:
+        failure = error
+        failure.add_note(f"Qt decoder limits: {decoder_limits()}")
+    try:
+        settle_group(child)
+    except BaseException as error:
+        if failure is None:
+            raise RuntimeError(f"Qt worker cleanup failed; limits={decoder_limits()}") from error
+        failure.add_note(f"Qt worker cleanup also failed: {error}")
+    if failure is not None:
+        raise failure
 
 
 def stage_qt(workspace):
@@ -109,7 +142,8 @@ def complete_qt(candidate, report):
         raise ValueError("Qt SDK probe did not validate the candidate")
     receipt = candidate.workspace / "qt-sdk-ready.json"
     temporary = candidate.workspace / "qt-sdk-ready.pending"
-    payload = json.dumps({"prefix": str(prefix), "manifest_sha256": candidate.manifest_sha256}, sort_keys=True)
+    payload = json.dumps({"prefix": str(prefix), "manifest_sha256": candidate.manifest_sha256,
+                          "decoder_limits": decoder_limits()}, sort_keys=True)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     with os.fdopen(os.open(temporary, flags, 0o600), "w", encoding="utf-8") as output:
         output.write(payload + "\n")
@@ -123,8 +157,8 @@ def complete_qt(candidate, report):
 def worker_main():
     import resource
 
-    resource.setrlimit(resource.RLIMIT_AS, (6 * 1024**3, 6 * 1024**3))
-    resource.setrlimit(resource.RLIMIT_CPU, (1500, 1500))
+    resource.setrlimit(resource.RLIMIT_AS, (ADDRESS_SPACE_BYTES, ADDRESS_SPACE_BYTES))
+    resource.setrlimit(resource.RLIMIT_CPU, (CPU_SECONDS, CPU_SECONDS))
     if len(sys.argv) != 3 or sys.argv[1] != "--worker":
         raise ValueError("invalid Qt worker invocation")
     workspace = Path(sys.argv[2]).resolve(strict=True)
