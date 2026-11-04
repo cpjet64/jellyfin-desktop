@@ -42,12 +42,14 @@ void TestC2RetirementNative::terminalRecreation()
   QVERIFY(!renders.isEmpty());
   const auto original = renders.last();
   QVERIFY(original.context && original.thread && original.returned > original.entered);
+  QVERIFY(control.captureFirstCreation(original.thread, original.context));
   QVERIFY(control.terminal(player, canceled, canceled.count()));
   QVERIFY(sameBinding());
   QVERIFY(control.save(evidence + "/c2-terminal-g1-stopped.json", control.terminalEvidence(control.g1)));
   QVERIFY(control.retire(control.g1, 1, original.thread, original.context, sameBinding));
   QVERIFY(control.save(evidence + "/c2-terminal-g1-retired.json", control.retirementEvidence()));
-  QVERIFY(control.recreate());
+  QVERIFY(control.recreate(original.thread, original.context));
+  QVERIFY(control.save(evidence + "/c2-terminal-g2-created.json", control.creationEvidence()));
   QVERIFY(sameBinding());
   const auto creationBoundary = QtThreaded::monotonicNanos();
   QVERIFY(control.sameRenderContextAfter(creationBoundary, original.thread, original.context));

@@ -34,6 +34,14 @@ public:
     ready = std::make_unique<QSignalSpy>(item, &MpvAbstractItem::ready);
     retired = std::make_unique<QSignalSpy>(item, &MpvAbstractItem::renderRetired);
     created = std::make_unique<QSignalSpy>(item, &MpvAbstractItem::renderCreated);
+    QObject::connect(item, &MpvAbstractItem::renderCreated, item,
+      [this](quint64 retiredGeneration, quint64 createdGeneration) {
+        if (retiredGeneration != g1 || creationAckNs != 0) return;
+        creationAckNs = QtThreaded::monotonicNanos();
+        ackOldGeneration = retiredGeneration;
+        ackNewGeneration = createdGeneration;
+        creationAckOnGui = QThread::currentThread() == QCoreApplication::instance()->thread();
+      }, Qt::DirectConnection);
     failures = std::make_unique<QSignalSpy>(item, &MpvAbstractItem::renderFailure);
     observer = std::make_unique<C2EventObserver>(core);
     if (!observer->client || !scene.sync(error) || !wait([&] { return !ready->isEmpty(); })) return false;
@@ -177,13 +185,37 @@ public:
       DiagnosticFailureInjection::freeOriginalContext.load() == context && sameBinding();
   }
 
-  bool recreate()
+  bool captureFirstCreation(quintptr thread, quintptr context)
   {
+    firstCreateCount = DiagnosticFailureInjection::createCallCount.load();
+    firstCreateGeneration = DiagnosticFailureInjection::createCallGeneration.load();
+    firstCreateThread = DiagnosticFailureInjection::createCallThread.load();
+    firstCreateContext = DiagnosticFailureInjection::createCallContext.load();
+    firstCreateEnteredNs = DiagnosticFailureInjection::createCallEnteredNs.load();
+    firstCreateReturnedNs = DiagnosticFailureInjection::createCallReturnedNs.load();
+    firstCreateResult = DiagnosticFailureInjection::createCallResult.load();
+    return firstCreateCount == 1 && firstCreateGeneration == g1 && firstCreateThread == thread &&
+      firstCreateContext == context && firstCreateResult == 0 && firstCreateEnteredNs > 0 &&
+      firstCreateReturnedNs >= firstCreateEnteredNs;
+  }
+
+  bool recreate(quintptr thread, quintptr context)
+  {
+    if (DiagnosticFailureInjection::createCallCount.load() != firstCreateCount) return false;
     if (item->requestRenderCreation(g1) != MpvAbstractItem::CreationRequest::Accepted ||
         !wait([&] { return !created->isEmpty() || !failures->isEmpty(); })) return false;
     if (created->count() != 1 || !failures->isEmpty() || created->at(0).at(0).toULongLong() != g1) return false;
     g2 = created->at(0).at(1).toULongLong();
-    return g2 && g2 != g1 && item->renderGeneration() == g2;
+    const auto entered = DiagnosticFailureInjection::createCallEnteredNs.load();
+    const auto returned = DiagnosticFailureInjection::createCallReturnedNs.load();
+    return g2 && g2 != g1 && item->renderGeneration() == g2 && creationAckOnGui &&
+      ackOldGeneration == g1 && ackNewGeneration == g2 &&
+      DiagnosticFailureInjection::createCallCount.load() == firstCreateCount + 1 &&
+      DiagnosticFailureInjection::createCallGeneration.load() == g2 &&
+      DiagnosticFailureInjection::createCallThread.load() == thread &&
+      DiagnosticFailureInjection::createCallContext.load() == context &&
+      DiagnosticFailureInjection::createCallResult.load() == 0 && entered > 0 &&
+      returned >= entered && creationAckNs >= returned;
   }
 
   bool sameRenderContextAfter(qint64 boundary, quintptr thread, quintptr context)
@@ -227,6 +259,23 @@ public:
       {"ack_order", DiagnosticFailureInjection::ackOrder.load()}};
   }
 
+  QJsonObject creationEvidence() const
+  {
+    return {{"g1_count_baseline", firstCreateCount}, {"g2_count", DiagnosticFailureInjection::createCallCount.load()},
+      {"g1_generation", qint64(g1)}, {"g2_generation", qint64(g2)},
+      {"g1_actual_generation", qint64(firstCreateGeneration)}, {"g1_actual_result", firstCreateResult},
+      {"g1_actual_thread", QString::number(firstCreateThread, 16)},
+      {"g1_actual_context", QString::number(firstCreateContext, 16)},
+      {"g1_actual_entered_ns", firstCreateEnteredNs}, {"g1_actual_returned_ns", firstCreateReturnedNs},
+      {"actual_generation", qint64(DiagnosticFailureInjection::createCallGeneration.load())},
+      {"actual_thread", QString::number(DiagnosticFailureInjection::createCallThread.load(), 16)},
+      {"actual_context", QString::number(DiagnosticFailureInjection::createCallContext.load(), 16)},
+      {"actual_result", DiagnosticFailureInjection::createCallResult.load()},
+      {"actual_entered_ns", qint64(DiagnosticFailureInjection::createCallEnteredNs.load())},
+      {"actual_returned_ns", qint64(DiagnosticFailureInjection::createCallReturnedNs.load())},
+      {"matching_gui_ack_ns", creationAckNs}, {"ack_on_gui", creationAckOnGui}};
+  }
+
   bool finish()
   {
     observer->close();
@@ -247,6 +296,13 @@ public:
   quint64 g1 = 0, g2 = 0;
   qint64 entry = 0, playBoundary = 0, startPosition = 0, endPosition = 0;
   qint64 observedInsertId = 0, terminalObservedNs = 0, retireRequestedNs = 0, retireAcknowledgedNs = 0;
+  qint64 creationAckNs = 0;
+  qint64 firstCreateEnteredNs = 0, firstCreateReturnedNs = 0;
+  quint64 ackOldGeneration = 0, ackNewGeneration = 0;
+  quint64 firstCreateGeneration = 0;
+  quintptr firstCreateThread = 0, firstCreateContext = 0;
+  int firstCreateCount = 0, firstCreateResult = -1;
+  bool creationAckOnGui = false;
   int observedEndReason = -1, observedEndError = 0, observedInsertCount = 0;
   int observedIdleStatus = -1, observedIdle = 0, observedVoStatus = 0, observedForceStatus = -1;
   QString observedForce;
