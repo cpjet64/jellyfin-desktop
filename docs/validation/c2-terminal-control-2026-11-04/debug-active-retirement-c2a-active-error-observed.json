@@ -1,0 +1,80 @@
+{
+    "entry": 1,
+    "events": [
+        {
+            "entry": 1,
+            "error": 0,
+            "insert_count": 0,
+            "insert_id": 0,
+            "kind": 6,
+            "reason": 0
+        },
+        {
+            "entry": 0,
+            "error": 0,
+            "insert_count": 0,
+            "insert_id": 0,
+            "kind": 8,
+            "reason": 0
+        },
+        {
+            "entry": 0,
+            "error": 0,
+            "insert_count": 0,
+            "insert_id": 0,
+            "kind": 17,
+            "reason": 0
+        },
+        {
+            "entry": 0,
+            "error": 0,
+            "insert_count": 0,
+            "insert_id": 0,
+            "kind": 17,
+            "reason": 0
+        },
+        {
+            "entry": 0,
+            "error": 0,
+            "insert_count": 0,
+            "insert_id": 0,
+            "kind": 21,
+            "reason": 0
+        },
+        {
+            "entry": 0,
+            "error": 0,
+            "insert_count": 0,
+            "insert_id": 0,
+            "kind": 17,
+            "reason": 0
+        },
+        {
+            "entry": 0,
+            "error": 0,
+            "insert_count": 0,
+            "insert_id": 0,
+            "kind": 17,
+            "reason": 0
+        },
+        {
+            "entry": 1,
+            "error": -15,
+            "insert_count": 0,
+            "insert_id": 0,
+            "kind": 7,
+            "reason": 4
+        },
+        {
+            "entry": 0,
+            "error": 0,
+            "insert_count": 0,
+            "insert_id": 0,
+            "kind": 11,
+            "reason": 0
+        }
+    ],
+    "stop_attempted": false,
+    "stop_error": 0,
+    "stop_status": -1
+}

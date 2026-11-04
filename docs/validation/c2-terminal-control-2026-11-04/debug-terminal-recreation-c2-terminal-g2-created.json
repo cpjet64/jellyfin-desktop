@@ -1,0 +1,20 @@
+{
+    "ack_on_gui": true,
+    "actual_context": "17ddff83f70",
+    "actual_entered_ns": 32916675354400,
+    "actual_generation": 2,
+    "actual_result": 0,
+    "actual_returned_ns": 32916729833300,
+    "actual_thread": "1098c",
+    "g1_actual_context": "17ddff83f70",
+    "g1_actual_entered_ns": 32915328370000,
+    "g1_actual_generation": 1,
+    "g1_actual_result": 0,
+    "g1_actual_returned_ns": 32915399868000,
+    "g1_actual_thread": "1098c",
+    "g1_count_baseline": 1,
+    "g1_generation": 1,
+    "g2_count": 2,
+    "g2_generation": 2,
+    "matching_gui_ack_ns": 32916735821200
+}

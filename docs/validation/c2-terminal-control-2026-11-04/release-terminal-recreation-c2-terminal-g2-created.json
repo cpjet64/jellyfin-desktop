@@ -1,0 +1,20 @@
+{
+    "ack_on_gui": true,
+    "actual_context": "186b7424180",
+    "actual_entered_ns": 32925126554200,
+    "actual_generation": 2,
+    "actual_result": 0,
+    "actual_returned_ns": 32925179898300,
+    "actual_thread": "aac4",
+    "g1_actual_context": "186b7424180",
+    "g1_actual_entered_ns": 32923840544800,
+    "g1_actual_generation": 1,
+    "g1_actual_result": 0,
+    "g1_actual_returned_ns": 32923906875900,
+    "g1_actual_thread": "aac4",
+    "g1_count_baseline": 1,
+    "g1_generation": 1,
+    "g2_count": 2,
+    "g2_generation": 2,
+    "matching_gui_ack_ns": 32925188464300
+}

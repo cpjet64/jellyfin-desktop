@@ -1,0 +1,13 @@
+{
+    "ack_count": 2,
+    "ack_observed_ns": 32917944081800,
+    "ack_order": 12,
+    "clear_order": 11,
+    "free_context": "17ddff83f70",
+    "free_count": 2,
+    "free_order": 10,
+    "free_thread": "1098c",
+    "generation": 2,
+    "original_context": "17ddff83f70",
+    "request_ns": 32917912023400
+}

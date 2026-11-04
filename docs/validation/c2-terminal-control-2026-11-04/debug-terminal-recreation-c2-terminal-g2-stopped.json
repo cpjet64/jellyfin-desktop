@@ -1,0 +1,16 @@
+{
+    "current_vo_status": -10,
+    "end_position_ms": 766,
+    "entry": 2,
+    "force_window": "no",
+    "force_window_status": 0,
+    "generation": 2,
+    "idle": true,
+    "idle_status": 0,
+    "raw_end_error": 0,
+    "raw_end_reason": 2,
+    "raw_insert_count": 0,
+    "raw_insert_id": 0,
+    "start_position_ms": 533,
+    "terminal_observed_ns": 32917900538300
+}

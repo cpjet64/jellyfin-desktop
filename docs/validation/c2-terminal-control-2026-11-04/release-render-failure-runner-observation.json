@@ -1,0 +1,55 @@
+{
+  "helper_exit": 7,
+  "timed_out": false,
+  "app_wait_exit": [
+    [
+      "0",
+      "1"
+    ]
+  ],
+  "active_before": [
+    [
+      "true",
+      "0",
+      "0"
+    ]
+  ],
+  "active_after": [
+    [
+      "true",
+      "0",
+      "0",
+      "fail"
+    ]
+  ],
+  "termination": [
+    [
+      "false",
+      "false",
+      "0"
+    ]
+  ],
+  "exit_query": [
+    [
+      "0",
+      "0",
+      "true",
+      "0"
+    ]
+  ],
+  "safe": true,
+  "source_sha": "f9cd456ebd5749024fe63e5548d1469ccc6a87e4",
+  "mode": "release",
+  "scenario": "render-failure",
+  "started_ns": 1793786608007444800,
+  "finished_ns": 1793786610187606400,
+  "executable_sha256": "65275ba8227cb46b1b5b7b52c7a4076978df9c66dd8db418f22a04a39100553e",
+  "helper_sha256": "706e0a939b4dff4b2f2996996863943c3d3a5dfba6dc46e96578f4fb73bd7a42",
+  "qtest_exists": true,
+  "qtest_footer": true,
+  "qtest_totals": [
+    "Totals: 2 passed, 1 failed, 0 skipped, 0 blacklisted, 2016ms"
+  ],
+  "qtest_sha256": "05de27fba831c9421fee992284c662523335b859d35ceb492cb79f3359754035",
+  "test_pass": false
+}

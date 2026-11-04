@@ -1,0 +1,17 @@
+[
+    {
+        "received_ns": 32922389132900,
+        "severity": 0,
+        "text": "vo/libmpv: mpv_render_context_render() not being called or stuck."
+    },
+    {
+        "received_ns": 32922389168400,
+        "severity": 2,
+        "text": "vo/libmpv: No render context set."
+    },
+    {
+        "received_ns": 32922389184000,
+        "severity": 2,
+        "text": "cplayer: Error opening/initializing the VO window."
+    }
+]
