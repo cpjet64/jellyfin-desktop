@@ -5,6 +5,7 @@ aggregate acquisition and workspace budgets and serialize the qualification.
 """
 import hashlib
 import errno
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import stat
@@ -16,7 +17,7 @@ CHUNK = 1024 * 1024
 
 def check_zip_directory(archive):
     """Reject large or multi-entry central directories before ZipFile parses."""
-    with open(archive, "rb") as source:
+    with preserving_close(open(archive, "rb")) as source:
         source.seek(0, os.SEEK_END)
         length = source.tell()
         source.seek(max(0, length - 65557))
@@ -31,7 +32,7 @@ def check_zip_directory(archive):
             size > 8 * 1024 * 1024 or start + size != absolute_end or
             offset + 22 + comment != len(tail)):
         raise ValueError("ZIP directory exceeds bounded single-entry policy")
-    with open(archive, "rb") as source:
+    with preserving_close(open(archive, "rb")) as source:
         source.seek(start)
         record = source.read(46)
     if len(record) != 46 or record[:4] != b"PK\x01\x02":
@@ -44,12 +45,48 @@ def check_zip_directory(archive):
 def storage_exhausted(exc):
     """Recognize direct or wrapped storage failures without following cycles."""
     seen = set()
-    while exc is not None and id(exc) not in seen:
-        seen.add(id(exc))
-        if isinstance(exc, OSError) and exc.errno in (errno.ENOSPC, getattr(errno, "EDQUOT", -1)):
+    pending = [exc]
+    storage_codes = {errno.ENOSPC}
+    if hasattr(errno, "EDQUOT"):
+        storage_codes.add(errno.EDQUOT)
+    while pending:
+        current = pending.pop()
+        if not isinstance(current, BaseException) or id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, OSError) and current.errno in storage_codes:
             return True
-        exc = getattr(exc, "reason", None) or exc.__cause__ or exc.__context__
+        pending.extend((getattr(current, "reason", None), current.__cause__, current.__context__))
     return False
+
+
+def record_cleanup_failure(primary, operation, failure):
+    """Attach non-secret secondary failure information to the primary error."""
+    primary.helper_cleanup_failed = True
+    note = f"{operation} cleanup failed: {type(failure).__name__}"
+    if hasattr(primary, "add_note"):
+        primary.add_note(note)
+    else:
+        primary.helper_cleanup_notes = getattr(primary, "helper_cleanup_notes", []) + [note]
+
+
+@contextmanager
+def preserving_close(resource):
+    """Close while retaining an exception already raised by the body."""
+    try:
+        yield resource
+    except BaseException as primary:
+        try:
+            resource.close()
+        except BaseException as failure:
+            record_cleanup_failure(primary, "close", failure)
+        raise
+    else:
+        try:
+            resource.close()
+        except BaseException as failure:
+            record_cleanup_failure(failure, "close", failure)
+            raise
 
 
 def checked_copy(source, destination, size, sha256):
@@ -57,7 +94,7 @@ def checked_copy(source, destination, size, sha256):
     digest = hashlib.sha256()
     count = 0
     try:
-        with open(destination, "xb") as output:
+        with preserving_close(open(destination, "xb")) as output:
             while True:
                 chunk = source.read(min(CHUNK, size - count + 1))
                 if not chunk:
@@ -72,8 +109,11 @@ def checked_copy(source, destination, size, sha256):
     except BaseException as exc:
         # Only remove a file created by this invocation, never an existing file.
         storage_failure = storage_exhausted(exc)
-        if 'output' in locals() and not storage_failure:
-            os.unlink(destination)
+        if 'output' in locals() and not storage_failure and not getattr(exc, "helper_cleanup_failed", False):
+            try:
+                os.unlink(destination)
+            except BaseException as failure:
+                record_cleanup_failure(exc, "unlink", failure)
         raise
 
 
@@ -84,7 +124,7 @@ def extract_deno(archive, stage, expected_sha256, max_expanded):
     destination = stage / "deno"
     try:
         check_zip_directory(archive)
-        with zipfile.ZipFile(archive) as zf:
+        with preserving_close(zipfile.ZipFile(archive)) as zf:
             entries = zf.infolist()
             if len(entries) != 1:
                 raise ValueError("expected exactly one ZIP member")
@@ -96,12 +136,15 @@ def extract_deno(archive, stage, expected_sha256, max_expanded):
                 raise ValueError("unexpected, special, or encrypted ZIP member")
             if entry.file_size > max_expanded:
                 raise ValueError("expanded payload exceeds limit")
-            with zf.open(entry) as source:
+            with preserving_close(zf.open(entry)) as source:
                 checked_copy(source, destination, entry.file_size, expected_sha256)
     except BaseException as exc:
         storage_failure = storage_exhausted(exc)
-        if not storage_failure:
-            stage.rmdir()  # checked_copy removes its own partial file
+        if not storage_failure and not getattr(exc, "helper_cleanup_failed", False):
+            try:
+                stage.rmdir()  # checked_copy removes its own partial file
+            except BaseException as failure:
+                record_cleanup_failure(exc, "rmdir", failure)
         raise
     return destination
 

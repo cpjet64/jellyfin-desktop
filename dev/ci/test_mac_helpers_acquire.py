@@ -2,7 +2,9 @@ import hashlib
 import errno
 import io
 import json
+import os
 from pathlib import Path
+import ssl
 import tempfile
 import unittest
 from unittest import mock
@@ -138,6 +140,89 @@ class AcquisitionTests(unittest.TestCase):
                         acquisition._acquire(parent, 0, lambda url, timeout: Response(objects[url]), lease)
             self.assertEqual(list(parent.iterdir()), [])
             self.assertFalse(lease.exists())
+
+    def test_primary_tls_error_survives_stage_cleanup_failure_and_closes_fd(self):
+        with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:
+            root = Path(directory)
+            _, _, manifest = self.fixture(root)
+            parent = root / "private"
+            parent.mkdir()
+            primary = urllib.error.URLError(ssl.SSLCertVerificationError("certificate"))
+            close = os.close
+            with mock.patch.object(acquisition, "MANIFEST", manifest), \
+                    mock.patch.object(acquisition.shutil, "rmtree", side_effect=PermissionError("denied")), \
+                    mock.patch.object(acquisition.os, "close", wraps=close) as close_mock:
+                with self.assertRaises(urllib.error.URLError) as caught:
+                    acquisition._acquire(parent, 0, mock.Mock(side_effect=primary))
+            self.assertIs(caught.exception, primary)
+            self.assertTrue(primary.helper_cleanup_failed)
+            self.assertEqual(close_mock.call_count, 1)
+            self.assertTrue((parent / ".mac-helper-acquisition.lock").exists())
+            self.assertTrue((parent / "mac-helpers").exists())
+
+    def test_close_failure_without_primary_fails_and_retains_lock(self):
+        with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:
+            root = Path(directory)
+            _, objects, manifest = self.fixture(root)
+            parent = root / "private"
+            parent.mkdir()
+            real_close = os.close
+            def failed_close(fd):
+                real_close(fd)
+                raise OSError("close failed")
+            with mock.patch.object(acquisition, "MANIFEST", manifest), \
+                    mock.patch.object(acquisition.os, "close", side_effect=failed_close):
+                with self.assertRaisesRegex(OSError, "close failed"):
+                    acquisition._acquire(parent, 0, lambda url, timeout: Response(objects[url]))
+            self.assertTrue((parent / ".mac-helper-acquisition.lock").exists())
+
+    def test_primary_and_close_failures_keep_primary_and_lease(self):
+        with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:
+            root = Path(directory)
+            _, _, manifest = self.fixture(root)
+            parent = root / "private"
+            parent.mkdir()
+            primary = ValueError("primary")
+            real_close = os.close
+            def failed_close(fd):
+                real_close(fd)
+                raise OSError("close failed")
+            with mock.patch.object(acquisition, "MANIFEST", manifest), \
+                    mock.patch.object(acquisition.os, "close", side_effect=failed_close):
+                with self.assertRaises(ValueError) as caught:
+                    acquisition._acquire(parent, 0, mock.Mock(side_effect=primary))
+            self.assertIs(caught.exception, primary)
+            self.assertTrue(primary.helper_cleanup_failed)
+            self.assertTrue((parent / ".mac-helper-acquisition.lock").exists())
+
+    def test_redirect_failure_cleans_stage_without_publication(self):
+        class BadRedirect(Response):
+            def geturl(self):
+                return "https://unapproved.example/file"
+        with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:
+            root = Path(directory)
+            _, _, manifest = self.fixture(root)
+            parent = root / "private"
+            parent.mkdir()
+            with mock.patch.object(acquisition, "MANIFEST", manifest):
+                with self.assertRaises(ValueError):
+                    acquisition._acquire(parent, 0, lambda *_args, **_kwargs: BadRedirect(b"x"))
+            self.assertEqual(list(parent.iterdir()), [])
+
+    def test_stage_cleanup_only_failure_is_reported_and_descriptor_closed(self):
+        with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:
+            root = Path(directory)
+            stage = root / "stage"
+            stage.mkdir()
+            lock = root / "lock"
+            descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            close = os.close
+            with mock.patch.object(acquisition.shutil, "rmtree", side_effect=PermissionError("denied")), \
+                    mock.patch.object(acquisition.os, "close", wraps=close) as close_mock:
+                with self.assertRaises(PermissionError):
+                    acquisition.finish_acquisition(stage, lock, descriptor, True, None)
+            close_mock.assert_called_once_with(descriptor)
+            self.assertTrue(lock.exists())
 
 
 if __name__ == "__main__":

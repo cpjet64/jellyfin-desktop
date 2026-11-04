@@ -12,7 +12,8 @@ import urllib.request
 from urllib.parse import urlsplit
 import sys
 
-from mac_helpers import checked_copy, extract_deno, storage_exhausted
+from mac_helpers import (checked_copy, extract_deno, preserving_close,
+                         record_cleanup_failure, storage_exhausted)
 
 MANIFEST = Path(__file__).with_name("mac_helpers_manifest.json")
 ALLOWED = {"github.com", "release-assets.githubusercontent.com",
@@ -48,7 +49,7 @@ def verified_paths(workspace):
     for path, digest in zip(paths, expected):
         if path.is_symlink() or not path.is_file():
             raise ValueError("helper is not a regular file")
-        with path.open("rb") as source:
+        with preserving_close(path.open("rb")) as source:
             actual = hashlib.file_digest(source, "sha256").hexdigest()
         if actual != digest:
             raise ValueError("helper digest mismatch")
@@ -84,6 +85,40 @@ def acquire(parent, project_root, committed_bytes):
     return _acquire(parent, committed_bytes, official_open, deps / ".mac-helper-acquisition.lock")
 
 
+def finish_acquisition(stage, lock, lock_fd, created_stage, primary):
+    """Close the descriptor even if cleanup fails; retain uncertain leases."""
+    failure = primary
+    incomplete = primary is not None and (storage_exhausted(primary) or
+                                          getattr(primary, "helper_cleanup_failed", False))
+    if created_stage and not incomplete:
+        try:
+            shutil.rmtree(stage)
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+            else:
+                record_cleanup_failure(failure, "stage removal", exc)
+            incomplete = True
+    try:
+        os.close(lock_fd)
+    except BaseException as exc:
+        if failure is None:
+            failure = exc
+        else:
+            record_cleanup_failure(failure, "descriptor close", exc)
+        incomplete = True
+    if not incomplete:
+        try:
+            lock.unlink()
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+            else:
+                record_cleanup_failure(failure, "lock removal", exc)
+    if primary is None and failure is not None:
+        raise failure
+
+
 def _acquire(parent, committed_bytes, opener, lease=None):
     """Use only a private reserved parent; READY marks complete verification."""
     parent = Path(parent)
@@ -103,7 +138,7 @@ def _acquire(parent, committed_bytes, opener, lease=None):
     stage = parent / "mac-helpers"
     lock_fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     created_stage = False
-    storage_failure = False
+    primary = None
     try:
         if shutil.disk_usage(parent).free - committed_bytes < limits["free_space"]:
             raise ValueError("insufficient free space")
@@ -111,11 +146,11 @@ def _acquire(parent, committed_bytes, opener, lease=None):
         created_stage = True
         for name in ("yt_dlp", "deno_zip"):
             item = manifest[name]
-            with opener(item["url"], timeout=60) as response:
+            with preserving_close(opener(item["url"], timeout=60)) as response:
                 validate_url(response.geturl())
                 checked_copy(response, stage / name, item["size"], item["sha256"])
         checksum = manifest["deno_executable"]
-        with opener(checksum["checksum_url"], timeout=60) as response:
+        with preserving_close(opener(checksum["checksum_url"], timeout=60)) as response:
             validate_url(response.geturl())
             checked_copy(response, stage / "deno.sha256sum",
                          checksum["checksum_bytes"], checksum["checksum_sha256"])
@@ -123,17 +158,13 @@ def _acquire(parent, committed_bytes, opener, lease=None):
                      limits["deno_expanded"])
         # Close the marker before atomically linking it without replacement.
         marker = stage / ".READY.pending"
-        with open(marker, "xb"):
+        with preserving_close(open(marker, "xb")):
             pass
         os.link(marker, stage / "READY")
         created_stage = False
         return stage
     except BaseException as exc:
-        storage_failure = storage_exhausted(exc)
+        primary = exc
         raise
     finally:
-        if created_stage and not storage_failure:
-            shutil.rmtree(stage)
-        os.close(lock_fd)
-        if not storage_failure:
-            lock.unlink()
+        finish_acquisition(stage, lock, lock_fd, created_stage, primary)

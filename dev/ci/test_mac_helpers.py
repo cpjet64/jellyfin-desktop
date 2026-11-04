@@ -1,10 +1,14 @@
 import hashlib
+import errno
 import io
+import ssl
+import traceback
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
+import urllib.error
 
 import mac_helpers
 
@@ -15,6 +19,80 @@ class MacHelpersTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         SCRATCH.mkdir(exist_ok=True)
+
+    def test_storage_classifier_checks_all_exception_edges(self):
+        errors = [errno.ENOSPC]
+        if hasattr(errno, "EDQUOT"):
+            errors.append(errno.EDQUOT)
+        for code in errors:
+            self.assertTrue(mac_helpers.storage_exhausted(OSError(code, "full")))
+            for edge in ("reason", "__cause__", "__context__"):
+                with self.subTest(code=code, edge=edge):
+                    outer = urllib.error.URLError("string reason")
+                    setattr(outer, edge, OSError(code, "full"))
+                    self.assertTrue(mac_helpers.storage_exhausted(outer))
+            outer = urllib.error.URLError("non-storage reason")
+            outer.__cause__ = OSError(code, "full")
+            self.assertTrue(mac_helpers.storage_exhausted(outer))
+        for value in (None, "non-exception", OSError(-1, "unrelated"),
+                      urllib.error.URLError(ssl.SSLCertVerificationError("certificate"))):
+            self.assertFalse(mac_helpers.storage_exhausted(value))
+        with patch.object(mac_helpers.errno, "EDQUOT", create=True):
+            delattr(mac_helpers.errno, "EDQUOT")
+            self.assertFalse(mac_helpers.storage_exhausted(OSError(-1, "unrelated")))
+
+    def test_storage_classifier_handles_cycles_and_shared_branches(self):
+        first, second = RuntimeError("first"), RuntimeError("second")
+        first.__cause__ = first
+        self.assertFalse(mac_helpers.storage_exhausted(first))
+        first.__cause__ = second
+        first.__context__ = second
+        second.__context__ = first
+        self.assertFalse(mac_helpers.storage_exhausted(first))
+        second.__cause__ = OSError(errno.ENOSPC, "full")
+        self.assertTrue(mac_helpers.storage_exhausted(first))
+
+    def test_close_failure_preserves_original_and_records_secondary(self):
+        class BadClose:
+            def close(self):
+                raise OSError("close failed")
+        primary = ValueError("original")
+        try:
+            with mac_helpers.preserving_close(BadClose()):
+                raise primary
+        except ValueError as caught:
+            self.assertIs(caught, primary)
+            self.assertTrue(any(frame.name == "test_close_failure_preserves_original_and_records_secondary"
+                                for frame in traceback.extract_tb(caught.__traceback__)))
+        else:
+            self.fail("primary error was not raised")
+        self.assertTrue(primary.helper_cleanup_failed)
+        notes = getattr(primary, "__notes__", getattr(primary, "helper_cleanup_notes", []))
+        self.assertIn("close cleanup failed: OSError", notes)
+        with self.assertRaises(OSError) as close_only:
+            with mac_helpers.preserving_close(BadClose()):
+                pass
+        self.assertTrue(close_only.exception.helper_cleanup_failed)
+
+    def test_copy_unlink_failure_preserves_primary(self):
+        with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:
+            path = Path(directory) / "asset"
+            with patch.object(mac_helpers.os, "unlink", side_effect=PermissionError("denied")):
+                with self.assertRaises(ValueError) as caught:
+                    mac_helpers.checked_copy(io.BytesIO(b"x"), path, 1, "0" * 64)
+            self.assertTrue(caught.exception.helper_cleanup_failed)
+            self.assertTrue(path.exists())
+
+    def test_zip_rmdir_failure_preserves_primary(self):
+        with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:
+            root = Path(directory)
+            archive = root / "bad.zip"
+            archive.write_bytes(b"invalid")
+            with patch.object(Path, "rmdir", side_effect=PermissionError("denied")):
+                with self.assertRaises(ValueError) as caught:
+                    mac_helpers.extract_deno(archive, root / "stage", "0" * 64, 10)
+            self.assertTrue(caught.exception.helper_cleanup_failed)
+            self.assertTrue((root / "stage").exists())
 
     def test_copy_cleans_private_stage_on_mismatch(self):
         with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:
