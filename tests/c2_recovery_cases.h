@@ -157,6 +157,13 @@ void TestC2RetirementNative::recovery()
   QVERIFY(player.componentInitialize());
   Scene scene;
   QVERIFY(scene.init());
+  qInfo() << "C2 scenario" << scenario;
+  qInfo() << "C2 capability context-valid" << scene.context.isValid()
+          << "surface-valid" << scene.surface.isValid()
+          << "context-current" << (QOpenGLContext::currentContext() == &scene.context)
+          << "framebuffer-valid" << scene.target->isValid();
+  const QImage capability = scene.target->toImage();
+  qInfo() << "C2 capability framebuffer-readback" << !capability.isNull() << capability.size();
   player.setWindow(scene.window.get());
   struct DeferredRelease {
     ~DeferredRelease() { DiagnosticFailureInjection::holdDeferredUpdate = false; }
@@ -232,8 +239,11 @@ void TestC2RetirementNative::recreate(Scene& scene, PlayerComponent& player, C2R
   if (scenario == "render-failure") DiagnosticFailureInjection::render = MPV_ERROR_UNSUPPORTED;
   QSignalSpy failed(scene.item, &MpvAbstractItem::renderFailure);
   scene.retired = false;
+  qInfo() << "C2 phase before G2 request";
   QCOMPARE(scene.item->requestRenderCreation(first), MpvAbstractItem::CreationRequest::Accepted);
+  qInfo() << "C2 phase after G2 request before frame wait";
   QVERIFY(scene.waitFor([&] { return !created.isEmpty() || !failed.isEmpty(); }, 15000));
+  qInfo() << "C2 phase after G2 frame wait" << created.count() << failed.count();
   if (scenario == "create-failure") {
     verifyFailedCreate(scene, first, failed, noContext, created, retired);
     return;
@@ -262,8 +272,10 @@ void TestC2RetirementNative::finishRecovery(Scene& scene, PlayerComponent& playe
                                             QSignalSpy& failed, QSignalSpy& retired)
 {
   mpv_handle* core = scene.item->controller()->mpv();
+  qInfo() << "C2 phase before afterReady";
   const auto outcome = scenario == "render-failure" ? C2ReplayRecipe::Outcome::Failed :
                                                       recipe.afterReady(core, observer);
+  qInfo() << "C2 phase after afterReady" << int(outcome);
   if (scenario == "render-failure") {
     QVERIFY(scene.waitFor([&] { return !failed.isEmpty(); }, 10000));
     QCOMPARE(failed.count(), 1);

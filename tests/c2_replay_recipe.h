@@ -48,9 +48,12 @@ public:
 
   Outcome afterReady(mpv_handle* core, C2EventObserver& observer)
   {
+    qInfo() << "C2 phase afterReady enter";
     if (intent == Intent::Stopped) return Outcome::Cancelled;
     observer.drain();
+    qInfo() << "C2 phase before idle property";
     const auto idle = observer.flag("idle-active");
+    qInfo() << "C2 phase after idle property" << idle.error << idle.value;
     if (idle.error < 0) return Outcome::Failed;
     if (!idle.value)
       return observer.latestStartedEntry() == entryId && observer.latestLoadedEntry() == entryId && sameFile(core)
@@ -64,19 +67,27 @@ public:
     if (!ended) return Outcome::Failed;
     if (attempted || file.isEmpty()) return Outcome::Failed;
     int pause = 1;
+    qInfo() << "C2 phase before replay pause";
     if (mpv_set_property(core, "pause", MPV_FORMAT_FLAG, &pause) < 0) return Outcome::Failed;
+    qInfo() << "C2 phase after replay pause";
     attempted = true;
     const char* command[] = {"loadfile", file.constData(), "replace", nullptr};
-    return mpv_command(core, command) < 0 ? Outcome::Failed : Outcome::LoadAccepted;
+    qInfo() << "C2 phase before replay loadfile";
+    const int result = mpv_command(core, command);
+    qInfo() << "C2 phase after replay loadfile" << result;
+    return result < 0 ? Outcome::Failed : Outcome::LoadAccepted;
   }
 
   bool restore(mpv_handle* core) const
   {
     if (intent == Intent::Stopped) return false;
     int pause = 1;
+    qInfo() << "C2 phase before restore pause";
     if (mpv_set_property(core, "pause", MPV_FORMAT_FLAG, &pause) < 0) return false;
-    return mpv_set_property(core, "time-pos", MPV_FORMAT_DOUBLE,
-                            const_cast<double*>(&position)) >= 0;
+    qInfo() << "C2 phase before restore seek";
+    const int result = mpv_set_property(core, "time-pos", MPV_FORMAT_DOUBLE, const_cast<double*>(&position));
+    qInfo() << "C2 phase after restore seek" << result;
+    return result >= 0;
   }
 
   bool resume(mpv_handle* core) const
