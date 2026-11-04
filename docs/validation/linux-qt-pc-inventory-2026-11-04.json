@@ -1,0 +1,986 @@
+{
+  "source": "3a2e46a20d4707a61544add409300d2b5dadd654",
+  "count": 70,
+  "files": [
+    {
+      "name": "Qt6Concurrent.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 347,
+      "before_sha256": "a944233ea0c5f5225ccad596f87f112554cdbb61e1b20a9cd853012b419371be",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "a3c9c2463c9b06b42266b2700b6e4433a26e10b566ad798b735df04d2ed32d11"
+    },
+    {
+      "name": "Qt6Core.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 321,
+      "before_sha256": "d7c2de760983f36ab1c46122e282e81d13cff1d3e78e0989f4d4fc407d52cb09",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "def052705c912b047ec0713d6e57dbd8b5a80e4b7be76800fd5388c52c1de775"
+    },
+    {
+      "name": "Qt6DBus.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 317,
+      "before_sha256": "b113eb10e1c4e134e1442fa475b7e5ad6133e350b80972aaf44adc1fd483397f",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "8989f02a4e4555f3cb1f630fc319335ab8d9fee12b04df21f411a481225d7cdd"
+    },
+    {
+      "name": "Qt6Designer.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 391,
+      "before_sha256": "01b58781c36b6dffbc5d98b1e8c86c4d768b533a24d23f0abb8e6eed5a6e0089",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "881deaec1ccfa3b37d4ab5a40f97fc41965cc3a0d29fba314117acc5f148ba55"
+    },
+    {
+      "name": "Qt6Gui.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 312,
+      "before_sha256": "1b6ff57ac59d23c0619fbc718580ec72c897248bfb484e28baec7a3e85dead21",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "b4adacc4e5ec80e34329d696b0e9bac5b63a2d412406a5166d5dd322e24bf464"
+    },
+    {
+      "name": "Qt6Help.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 342,
+      "before_sha256": "1ea04e7f42d97fdaee52f470e70416841ef233b9670d5553ebf912bc112f1a9d",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "71751b546a8e5520124e6f7b967d8622148c63173a4b476fcbf475b6b2e040d5"
+    },
+    {
+      "name": "Qt6LabsAnimation.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 370,
+      "before_sha256": "b73e2b4644386fd3d74458e0ef716238193c316a756bda45a06b3addb9755fb0",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "757ea630e7c0af1b07a016897e9a4d767318700dc8a134b4a6b1124fcfb7b3ea"
+    },
+    {
+      "name": "Qt6LabsFolderListModel.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 412,
+      "before_sha256": "ad00513f3e781630149ef311e4a4011ca85e18a8ad8972b3012855d24dc14da0",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "9b35340e6c5eacc076dbc5c9caefcde7377091ebb21a5c89583f1bbf65f3d5f1"
+    },
+    {
+      "name": "Qt6LabsPlatform.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 339,
+      "before_sha256": "5ee100538038c2cb5516cda17fd8c1a71c7960fd42c91351da21bda237c21385",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "4a09538fc85e103282345e7afea79af7195478d7850cd3c4d132d8150bf21aa1"
+    },
+    {
+      "name": "Qt6LabsQmlModels.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 374,
+      "before_sha256": "2f0c70f04a0725111b18f32708dc357713b990eef81198678ef6afec32e450f2",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "9bbbc1f9a347bb14559f9969745e0576b31a16ff3a6999f7d969f4b9318df053"
+    },
+    {
+      "name": "Qt6LabsSettings.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 364,
+      "before_sha256": "016e474fd87caa182a57ac837d72afdf775f18b5df1fd30f2e6decc43ebcad28",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "db473eed7108c88efb29f2c1dfcc05d469f13c96df1c9da8e72f94a4988a0ae3"
+    },
+    {
+      "name": "Qt6LabsSharedImage.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 388,
+      "before_sha256": "117792d5b250f6c795c879da7967549ea1ffd0f21d524cc3419966a39d59dcbb",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "8f1abb1875318373bc711c585d8d740281da1ff4badf472da2197a401e1a5f84"
+    },
+    {
+      "name": "Qt6LabsWavefrontMesh.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 398,
+      "before_sha256": "f5b18fc1720ec0c0046ec5133b0be340a85499a80a6ac69d35d66d1be64cf2f1",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "4ca715444b5ad4e28db03a2191d09789aeb7c1995d5d72f6ec3067b877ad4f63"
+    },
+    {
+      "name": "Qt6Linguist.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 245,
+      "before_sha256": "0ad342153bad11aa00fe6b0b6755bcf65d67e1b9fc2ba98f7aafea83b8af1eb3",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "1dee332dbd8c30485debdabd0fd3529b1ec57286b86834cfbb8fe73ac9dac2a6"
+    },
+    {
+      "name": "Qt6Network.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 332,
+      "before_sha256": "62e38abe61e16c0ed63796724348b730d8c455c1067a44d3d6eefc001510219c",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "af0afac59142a8f0b276b992d6b15615514f699a16b78168b4d61fb5a3142264"
+    },
+    {
+      "name": "Qt6OpenGL.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 334,
+      "before_sha256": "1f0c782f227e4893443890b0f2d4cbde97c5fd2615c2888d57bb146bec329dac",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "5f3f1abb7ab781d8271cc9a1cf901460ab8a2137b6c8ecd3ad8107848bae3802"
+    },
+    {
+      "name": "Qt6OpenGLWidgets.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 375,
+      "before_sha256": "153d909c224c1ee410d1b5e4d30fcad3879cb632e7278027dbb19e72d876e26c",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "5a2253298d053e09f580ac97bb80fb5574dfb7028ac43e573f86dafc196e82ef"
+    },
+    {
+      "name": "Qt6Platform.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 297,
+      "before_sha256": "1e8c6d9602125d6abb9013f4cf29e1f11a03958f4e02f3fac981ca89fe7c47df",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "cabd84076ad70df58e63e16ede42e00a2a1fc43ae3a7038a5d143ea93a2d830f"
+    },
+    {
+      "name": "Qt6Positioning.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 352,
+      "before_sha256": "aa07434f8097d57e34dd1effb65645062f3d41fa279ec45ba00da5640d6a4651",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "473d826dc5e47ea2349dc54feaff7213c42d31ede8b20f616b7510c1c71c8619"
+    },
+    {
+      "name": "Qt6PositioningQuick.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 408,
+      "before_sha256": "f1eaa9995f0e12022c47157a5de1a11f81dac0993afa519ee83429fce18f4c07",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "bd244e269ec7ab20785f07c86968471c9a3c1b44e014346464467cc50c95916a"
+    },
+    {
+      "name": "Qt6PrintSupport.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 375,
+      "before_sha256": "d7acf73702e7999fa67062ab6482faca80fac5f05b5592209466d874bd7d7d88",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "ca03c2495114ffb54a7ff2320b2a398f39e7a8743ad23e455bf946764584458d"
+    },
+    {
+      "name": "Qt6Qml.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 341,
+      "before_sha256": "b48b2a587053693fb5c989e592961f3c9381934effc0f0acc9783c79852330d1",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "e1ff3fd8479d9120c15c87be26c2197c0efb2174eac191a98cc9eaec2d1ef83e"
+    },
+    {
+      "name": "Qt6QmlAssetDownloader.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 386,
+      "before_sha256": "c62c12d1a41e902c29fdbe72749abefd547a07317afba8b0ff13858ce0b6abb2",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "e1e2ff03c913b9076acb940c7485c9e7810fd8b4cee0bdc106cf823ce7cf716e"
+    },
+    {
+      "name": "Qt6QmlCompiler.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 359,
+      "before_sha256": "8ae8e6e1f27eebd12d0ec127649c640192437a1bef721d6713b80b2a7cb1ec80",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "b1dd92a62833495ee4595157cb7761499337341045c37485d2aa5b10ac36516e"
+    },
+    {
+      "name": "Qt6QmlCore.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 339,
+      "before_sha256": "4cca3193f650dfa93294810b3d0c35776e9fa1c64abfc8b3173db00e22eca53a",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "97c82169b4b6131e6eaacf73448f6b43400ceed0e83fe2b755c8e2116a0510ac"
+    },
+    {
+      "name": "Qt6QmlIntegration.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 329,
+      "before_sha256": "fe3561ea35a19cab36ad3314fd8d8e3fb8e57409385330747225891f4ad1a560",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "f556ee12a699d0716806951fe0ef353a8f56a87c3358da352568d43dd566772d"
+    },
+    {
+      "name": "Qt6QmlLocalStorage.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 386,
+      "before_sha256": "c0bc99aa73fe6e55e30945005240662b70983dd2dfcd5e6d59ca34efa39997f5",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "eeb34eae431f01494a81d8d82d84ddeec985946fc905e6d3b378b3e46abc5b58"
+    },
+    {
+      "name": "Qt6QmlMeta.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 363,
+      "before_sha256": "cbf3db58d628baf8f668b3768b712421ca2d23bd869d0fbdf215facf7b0db9b8",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "c2c83833bf3d956f501c4f5e4024a8ca3db69887184a470a8e0fcd5e54fdbf0e"
+    },
+    {
+      "name": "Qt6QmlModels.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 349,
+      "before_sha256": "067c19e0092fa10413102e98d2f92bc3df70e2d22eb6d39a1f27454702a7462c",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "020ae962097bae12ea589210a09f008a974873f1607866fc70cfafab34669758"
+    },
+    {
+      "name": "Qt6QmlNetwork.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 365,
+      "before_sha256": "bbd16ad4a5b166adaa433e781d70712984ba8d21bf1b44b0b91acbb7c5bc6dc4",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "1c5d3ae8a1b0921487adcde5df1a086af2b73a287b239229cd1439332e8f91c6"
+    },
+    {
+      "name": "Qt6QmlWorkerScript.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 379,
+      "before_sha256": "bbbb115c73fa75acbcf1dc6ae58303897997d69cb844afd7cff63c264b38c8d3",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "36cfa9110602ab581fcc71e13eb7b729467ab4abbc7111d52ecd785ffa72052c"
+    },
+    {
+      "name": "Qt6QmlXmlListModel.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 379,
+      "before_sha256": "859041431cbaaaad86b93c7f859e3c149304671d9e8d95507121af494ce7e4f6",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "870fe1ab95466dcbf2ce6b9fcbc48d3ec3125e612d642d411b76f1c5e650868b"
+    },
+    {
+      "name": "Qt6Quick.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 370,
+      "before_sha256": "7c4ff6d656d02b3a0c46788bad7382a0f722e77a69adbc9e3b6179bc08eb48c4",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "fa615eac34dec66489b9464fd2a99de1bbdc5fa488c4cdfc8b4c931d3c255b63"
+    },
+    {
+      "name": "Qt6QuickControls2.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 383,
+      "before_sha256": "ed096d0a8d7242e682e9a3df7b3e94581348214bf9f6f4d8924a04ae2684ae48",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "24cc0f1a09b8ad005fb18018b0afbd0d0a1e2ececaf7b4910020d490cf73b458"
+    },
+    {
+      "name": "Qt6QuickControls2Basic.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 374,
+      "before_sha256": "1fb4fc197161cd18970e3453fbd2994ba3ed601cdf405626ead58d219e24c783",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "2b9aea54b898536da80b639de93fcdb34e655fbb8f7fdfea1ca593759e90a847"
+    },
+    {
+      "name": "Qt6QuickControls2BasicStyleImpl.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 419,
+      "before_sha256": "1b10df6d5c058e309476d51224c2e4dea1e76efc09654b20e58bdf56ecd35dfc",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "3658c2bc2426a9d08e2fae04f38aaa4f14d0ace8b439ad908337649437162ce7"
+    },
+    {
+      "name": "Qt6QuickControls2FluentWinUI3StyleImpl.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 454,
+      "before_sha256": "ad6268ae9e490960f496f845957a5d6ef273c4ab27a5fc02c9fc3b6cf804357f",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "b7ee7c753e3de9f6e05494a5a352a5b7944d4552707ce067edea250c151899da"
+    },
+    {
+      "name": "Qt6QuickControls2Fusion.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 379,
+      "before_sha256": "71886b4f37b6bd8d8dfa72400629b65606840ddd2b44295f0c54c93e69346d48",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "60e397c09cb8d8a98dfd19fec56748cb6a3b0ca836122fd6623b2c7c55cd008d"
+    },
+    {
+      "name": "Qt6QuickControls2FusionStyleImpl.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 424,
+      "before_sha256": "d87340c7ca0d7715d265f44c7e67830a63562e391dc769572e6377b3daa7faf4",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "e038f8e84fecb0e59f63c32bf5b712a320e0d0dfdaf852c5f39bb06f18cc416f"
+    },
+    {
+      "name": "Qt6QuickControls2Imagine.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 384,
+      "before_sha256": "db7d23e821dede5968baf7b1287debeeb22eace0b814b479791a86b57cc2531b",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "a8dd86c2e1711d6328f83884aa20e7decd26275a99ea8270971175ba35fccb1b"
+    },
+    {
+      "name": "Qt6QuickControls2ImagineStyleImpl.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 429,
+      "before_sha256": "8dd990cba63ede4d18c151fc13795535ecca18f0e1f81b3aa1615145eac519f9",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "1f448dc0e1e2630a058ee792358be76b132dd86a5f09e6e2fd69075e62186f5d"
+    },
+    {
+      "name": "Qt6QuickControls2Impl.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 403,
+      "before_sha256": "119dc0742a5a95e40818317b514fc7a4565c62d8434d0ea52454b3d9de8022d0",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "5346bc38369b6983824d90b08d277dbcd383a4f4a3dc3b4de56bf7b057fe618b"
+    },
+    {
+      "name": "Qt6QuickControls2Material.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 389,
+      "before_sha256": "ce3e06ae6725f79f795583b61f13c9852bba7fbe6d1a4f56c37cfb3bdc4c6b4f",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "e401772d8f589725e3189c054964a3b16bfd003ae3908f705ef8036e1d4bc519"
+    },
+    {
+      "name": "Qt6QuickControls2MaterialStyleImpl.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 434,
+      "before_sha256": "4e7ba2f530553771d40631d7c3d839e6f8063e8cfab777ab23e7793293eabfd6",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "1ff9e6e7b782a66a399e251602c14fc629e2f05453ca41b7450506341b26beb0"
+    },
+    {
+      "name": "Qt6QuickControls2Universal.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 394,
+      "before_sha256": "e5977dddc2a9831765a1ecb2d8e10c9f34495e7f289e2a319527d80da2ca7065",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "979d8b68d3898fed585724a09687635faca451db402af78111a8f6a5d6f8c0c7"
+    },
+    {
+      "name": "Qt6QuickControls2UniversalStyleImpl.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 439,
+      "before_sha256": "5ce987acc3dbf1ed52aa6357b1e5b2a9674765ac0082f93727c48b74a5f8eb3c",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "fbf9c7b395dc82d021076c5029f4fa3186c13017f592e8844c3f9722a4740417"
+    },
+    {
+      "name": "Qt6QuickDialogs2.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 378,
+      "before_sha256": "e24d13a8cdd2fca539b9285fbc0602cfe54d1a3f0f95fce9198f6dbb6f8c78a6",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "bb5a60d73c0e5b50ba1080f416a7ea2025aa418cd806758a54acf442f26f3234"
+    },
+    {
+      "name": "Qt6QuickDialogs2QuickImpl.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 423,
+      "before_sha256": "ec23361b9164f9767045fb9e599ad6c6c976e55b102566e1b6602687c7e7baed",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "a9635f949943ce3565b191f28b0bfbe2383ddaf12b9b0d826a3d4a6b6fc8f234"
+    },
+    {
+      "name": "Qt6QuickDialogs2Utils.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 387,
+      "before_sha256": "0b36d78764389800f52522b9a38f788fbca8512dc33b3e83946531d40929b9f0",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "316190cb08e307b5e075482214b75d4438e833c323f136fe4d9e2e080c1f4a01"
+    },
+    {
+      "name": "Qt6QuickEffects.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 380,
+      "before_sha256": "8596e31d6cfcebcc40a715c42f11e9d6fed7055db67421e8b13378ca9aa0cc3e",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "ba986055d9f7cbf8941c8cf15e325212d8c7a0d5fa1b184e5a0dfc2b8e903e67"
+    },
+    {
+      "name": "Qt6QuickLayouts.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 380,
+      "before_sha256": "8983113928f264f552e5a614facda2a2b0ad12b376224450ed7fe90f67f901db",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "5394fb2aca6609dd468a8d149a88836ca931a450e4da4992cedc5f5e9f49d890"
+    },
+    {
+      "name": "Qt6QuickTemplates2.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 401,
+      "before_sha256": "520f13265a5a495a625172a2a0de588d4fc4600bcaab416b6efd6f3c2d7eb1d6",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "6de9f47fd5f324253af5950d13ca63680be98f51a67c7100d7be86a4ab63f607"
+    },
+    {
+      "name": "Qt6QuickTest.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 348,
+      "before_sha256": "4e9212a8604514e64ddc75e00e4ad98a55dccf4d183085e6ec1bed6ccd4e0a0b",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "624eff1e0ff5fdcad5b8b4ecf62bb216029d98779c9322191af7f873bef25628"
+    },
+    {
+      "name": "Qt6QuickVectorImage.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 359,
+      "before_sha256": "2da37d98b1e9e0b5155d62859845a36d398cf0a7944cfbaf3b0a99faa7678151",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "00aa2b234477af7e751d908872c0f2a98576a1c4ea709e606bafbb40468e3636"
+    },
+    {
+      "name": "Qt6QuickWidgets.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 391,
+      "before_sha256": "c4e19a92181567378a4ab1cdddf0cc776d77888d65e9ec19419c3c360d673e38",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "a0d32b3b569570d7319b350961599da30b220112acb28168f0bea68b47c901ae"
+    },
+    {
+      "name": "Qt6Sql.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 312,
+      "before_sha256": "1db05f6aa588b46fdf19637ad06ff2e51073724c4b3b2e035cd8e1a5ccea81c6",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "602fb632fcdca42b47ba8ae48c4ab5cb021ef1a96885d17ce9be22cd40135933"
+    },
+    {
+      "name": "Qt6Svg.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 319,
+      "before_sha256": "1dd7c696f54be1ec0f184ba1d339922210df6c1ac6067177f27adee5862deb00",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "3ede0852f6519cb3050f0aad10ed0053313e4c40175a923c806d7aed16839fc0"
+    },
+    {
+      "name": "Qt6SvgWidgets.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 372,
+      "before_sha256": "63e9472c97114ffb8b11edd7d4534985905c1788c9e191e476a15480fa39606a",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "ce72adba21634d106914c9092b507e6af5800700999c5b185dfb4255e7e4d7bf"
+    },
+    {
+      "name": "Qt6Test.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 320,
+      "before_sha256": "26004bae6e7809e934b33fcfa4f28f9803288caef4d3f652ae274e9b328795f7",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "0b7068d29fa588b48b33c787edc62181ce50abf2fb7352189cbc09d4e0819219"
+    },
+    {
+      "name": "Qt6UiPlugin.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 323,
+      "before_sha256": "a89686fc6f90640a5e6b59d6e66576ea62fd6147a5c6b4ea70eebbb491e1ae94",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "617dc14b37d68d58db1a546c17754c8fa8fae9de9429212a4d0854232762bf36"
+    },
+    {
+      "name": "Qt6UiTools.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 367,
+      "before_sha256": "bcb85055ceb456f9fb38bc5a00ad83eceb1dc4b7b11aa0bd1cd9839ea2ad54f7",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "42b1b1135b1be05e4d50c675b1085748417fef164f74749f23b6fe5ea738d3cc"
+    },
+    {
+      "name": "Qt6WaylandClient.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 369,
+      "before_sha256": "e37f2976c46a25b4111d1439db588f031d2d4f6eef9a96f25e05ffdc297c1835",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "a57a4c0e8dfdbe84ea103d6cf510585db4fc44deaa08bb7bb9731eeef1bb1996"
+    },
+    {
+      "name": "Qt6WebChannel.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 346,
+      "before_sha256": "89dc157e5b317e28b1b5b14ee6f31decfe99b1e850fd9c69ccbdebd9481b70d8",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "30ee9e7fc2f96f61393596264354036c8d363cfcc77414effa927e18a330f42d"
+    },
+    {
+      "name": "Qt6WebChannelQuick.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 354,
+      "before_sha256": "8fd1344df5b18469f4b213dd39dbac0f480ed8623d19db44626eb9ef232e320c",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "3fc7b9877aabee8cf3dda880efa0fc5199ff156092e4f3c4855776788eec74d3"
+    },
+    {
+      "name": "Qt6WebEngineCore.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 418,
+      "before_sha256": "f2106e96d15bd3689883f7edb83614f69e519ceca7a2587f9f8e7e798a8c7e77",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "ff5c18eb01c39a5282973ecee4eb2bf24303f2596a7e9916d408f63c019ad918"
+    },
+    {
+      "name": "Qt6WebEngineQuick.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 426,
+      "before_sha256": "385098e3d34da9263903f367ab472754faa6435dabe2310373b0b9db49ff3479",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "7be588303254e1d79c512423d2414d06e15db33d9c65daeaf9e612ddeaf21316"
+    },
+    {
+      "name": "Qt6WebEngineQuickDelegatesQml.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 349,
+      "before_sha256": "7c55b0e40bfbb1a594d139210d2ef7fcfc2995fafc932ae38db59818c0582e54",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "8dd7da4ae1830e02d3efd4ccbbad0c2f78eb0ff4b5fa5d00c71d6ecbb1b4cef2"
+    },
+    {
+      "name": "Qt6WebEngineWidgets.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 428,
+      "before_sha256": "4064103adde750be241fb63bda464b320ff23eec53468426088e4b0e9d520ff1",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "a24c053dc74599bb97f0c30de92a207e71007ca4da883f55849e82d7d99a72da"
+    },
+    {
+      "name": "Qt6Widgets.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 339,
+      "before_sha256": "f06b408fe5296c133d99c9d174569bc7cfa5a4ab34d1e2790d155b4680cb5bcd",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "68771196c534b6fd441ea8de13b3ed35aaadd1173ea312016d61086cdc241f8c"
+    },
+    {
+      "name": "Qt6Xml.pc",
+      "type": 32768,
+      "mode": "0o644",
+      "bytes": 312,
+      "before_sha256": "e8e00eb4ee490fbb443a62e3c0e4496b2ab0701b253f24cafb0404ad309f5444",
+      "prefix_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "baked_lines": [
+        "prefix=/home/qt/work/install"
+      ],
+      "proposed_after_sha256": "cf5f98d54fb3e736a3ca929d4a453ee6515306060f35ec3babf06adfae5ca92f"
+    }
+  ]
+}
