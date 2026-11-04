@@ -37,6 +37,7 @@ function Invoke-OffscreenTests {
     $env:QT_QPA_PLATFORM = 'windows'
     foreach ($scenario in @('playing', 'paused', 'held-hook')) {
         $evidence = Join-Path $Results "offscreen/$scenario"
+        if (Test-Path -LiteralPath $evidence) { throw "Offscreen evidence already exists: $evidence" }
         $env:RECOVERY_SCENARIO = $scenario
         $env:RECOVERY_MEDIA = $media
         $env:RECOVERY_EVIDENCE_DIR = $evidence
@@ -48,6 +49,7 @@ function Invoke-OffscreenTests {
                 if (-not (Test-Path -LiteralPath "$evidence/$image" -PathType Leaf)) { throw "Missing offscreen $scenario image $image" }
             }
         }
+        Run-Native $Python @('dev/ci/evidence.py', 'record-case', $evidence, "$Build/tests/test_renderer_loss_offscreen.exe", $scenario)
     }
 }
 

@@ -1,11 +1,14 @@
 """Validate all native evidence; a status string alone is never proof."""
 import json
 import os
+import hashlib
+import re
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
 
 from check_results import check_junit, check_qtest
+from desktop_policy import COMMON, PLATFORM
 
 JOBS = ("windows-x64", "windows-system", "linux-static", "linux-system",
         "macos-static", "macos-system")
@@ -15,7 +18,7 @@ CORE = ("test_systemcomponent", "test_log", "test_settings", "test_displaymanage
         "test_log_rotation", "test_chromiumflags", "test_webclient_transport",
         "test_mpv_test_bootstrap_pure")
 RUNTIME = ("test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard",
-           "test_mpv_test_bootstrap")
+           "test_mpv_test_bootstrap", "test_windowmanager")
 STATIC = ("test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state")
 
 
@@ -30,21 +33,65 @@ def artifact(directory, relative):
     return resolved
 
 
-def require_case(directory, relative, images=()):
-    check_qtest(artifact(directory, relative + "/qtest.txt"))
+def require_case(directory, relative, images=(), expected=None, scenario=None):
+    path = artifact(directory, relative + "/qtest.txt")
+    check_qtest(path)
+    if expected:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for case in ("initTestCase", expected[1], "cleanupTestCase"):
+            line = rf"(?m)^PASS\s*:\s*{re.escape(expected[0])}::{re.escape(case)}\(\)\s*$"
+            if len(re.findall(line, text)) != 1:
+                raise ValueError(f"Missing or duplicate named QTest PASS: {expected[0]}::{case}")
+        all_passes = re.findall(r"(?m)^PASS\s*:\s*([^\r\n]+)$", text)
+        required_passes = {f"{expected[0]}::{case}()" for case in ("initTestCase", expected[1], "cleanupTestCase")}
+        if len(all_passes) != 3 or {item.strip() for item in all_passes} != required_passes:
+            raise ValueError(f"Unexpected named QTest PASS case: {expected[0]}")
+        if not text.rstrip().endswith(f"********* Finished testing of {expected[0]} *********"):
+            raise ValueError(f"Incorrect QTest footer: {expected[0]}")
+        if scenario:
+            marker = rf"(?m)^QINFO\s*:\s*{re.escape(expected[0])}::{re.escape(expected[1])}\(\) RECOVERY_SCENARIO=([^\s]+)\s*$"
+            if re.findall(marker, text) != [scenario]:
+                raise ValueError(f"Missing or incorrect fixture scenario marker: {scenario}")
     for image in images:
         artifact(directory, relative + "/" + image)
 
 
-def require_render(directory, prefix, before, after, after2):
+def require_render(directory, prefix, before, after, after2, expected=None):
     for scenario in SCENARIOS:
         images = [] if scenario == "held-hook" else [before, after]
         if scenario == "playing":
             images.append(after2)
-        require_case(directory, f"{prefix}/{scenario}", images)
+        require_case(directory, f"{prefix}/{scenario}", images, expected, scenario if expected else None)
 
 
-def validate_headless(base, job, sha, ref):
+def require_offscreen_capability(path):
+    text = Path(path).read_text(encoding="utf-8", errors="replace")
+    capability = (r"(?m)^QINFO\s*:\s*TestRendererLossOffscreen::actualPlayback\(\) "
+                  r"RECOVERY_CAPABILITIES context=valid surface=valid current=true render_readback=valid\s*$")
+    if len(re.findall(capability, text)) != 1:
+        raise ValueError("missing offscreen capability observation")
+
+
+def check_offscreen_metadata(directory, report):
+    executable = artifact(directory, "offscreen-executable")
+    binary_hash = hashlib.sha256(executable.read_bytes()).hexdigest()
+    for scenario in SCENARIOS:
+        prefix = f"offscreen/{scenario}"
+        require_offscreen_capability(artifact(directory, prefix + "/qtest.txt"))
+        case = json.loads(artifact(directory, prefix + "/case.json").read_text(encoding="utf-8"))
+        required = {key: report[key] for key in ("sha", "ref", "job", "platform", "mode", "job_id", "pipeline_id")}
+        required.update(producer="offscreen-render-v1", scenario=scenario, executable_sha256=binary_hash,
+                        qtest_sha256=hashlib.sha256(artifact(directory, prefix + "/qtest.txt").read_bytes()).hexdigest())
+        images = [] if scenario == "held-hook" else ["offscreen-before.png", "offscreen-after.png"]
+        if scenario == "playing":
+            images.append("offscreen-after2.png")
+        required["images"] = {name: hashlib.sha256(artifact(directory, prefix + "/" + name).read_bytes()).hexdigest() for name in images}
+        for key, value in required.items():
+            if case.get(key) != value:
+                raise ValueError(f"{scenario}: incorrect scenario evidence {key}")
+
+
+def validate_headless(base, job, sha, ref, pipeline_id):
     directory = base / job
     if directory.is_symlink() or directory.resolve(strict=True).parent != base.resolve(strict=True):
         raise ValueError(f"{job}: invalid artifact namespace")
@@ -52,11 +99,12 @@ def validate_headless(base, job, sha, ref):
     expected_platform, expected_mode = job.split("-", 1)
     expected_mode = "static" if expected_mode == "x64" else expected_mode
     for key, expected in (("sha", sha), ("ref", ref), ("job", job),
-                          ("platform", expected_platform), ("mode", expected_mode)):
+                          ("platform", expected_platform), ("mode", expected_mode), ("pipeline_id", pipeline_id)):
         if report.get(key) != expected:
             raise ValueError(f"{job}: incorrect or missing {key}")
-    if not str(report.get("job_id", "")).isdecimal():
-        raise ValueError(f"{job}: missing job identity")
+    for key in ("job_id", "pipeline_id"):
+        if not str(report.get(key, "")).isdecimal():
+            raise ValueError(f"{job}: missing {key} identity")
     for obligation in ("build_core", "offscreen"):
         status = report.get(obligation)
         if status not in STATUSES:
@@ -71,35 +119,143 @@ def validate_headless(base, job, sha, ref):
     else:
         check_junit(artifact(directory, "headless-ctest.xml"), CORE)
         check_junit(artifact(directory, "runtime-ctest.xml"), required)
-    require_render(directory, "offscreen", "offscreen-before.png", "offscreen-after.png", "offscreen-after2.png")
+    require_render(directory, "offscreen", "offscreen-before.png", "offscreen-after.png", "offscreen-after2.png",
+                   ("TestRendererLossOffscreen", "actualPlayback"))
+    check_offscreen_metadata(directory, report)
     return report, directory
 
 
-def validate_job(base, job, sha, ref):
-    report, directory = validate_headless(base, job, sha, ref)
+def validate_geometry(directory, report, record):
+    if record.get("producer") != "windows-geometry-v1":
+        raise ValueError("windows_geometry: unsupported producer")
+    for key in ("sha", "ref", "job", "job_id", "pipeline_id", "platform", "mode"):
+        if record.get(key) != report.get(key):
+            raise ValueError(f"windows_geometry: incorrect {key}")
+    for name in ("executable", "helper"):
+        path = artifact(directory, "geometry/" + name)
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if record.get(name + "_sha256") != digest:
+            raise ValueError(f"windows_geometry: incorrect {name} hash")
+    bounds, storage = [], []
+    for number in range(1, 4):
+        prefix = f"geometry/geometry-{number}"
+        result = json.loads(artifact(directory, prefix + "/result.json").read_text(encoding="utf-8"))
+        snapshot = json.loads(artifact(directory, prefix + "/storage.json").read_text(encoding="utf-8"))
+        log = artifact(directory, prefix + "/console.log").read_text(encoding="utf-8", errors="replace")
+        for name in ("result.json", "storage.json", "console.log"):
+            relative = prefix + "/" + name
+            digest = hashlib.sha256(artifact(directory, relative).read_bytes()).hexdigest()
+            if record.get("sha256", {}).get(relative) != digest:
+                raise ValueError(f"windows_geometry: missing or mismatched hash for {relative}")
+        if result.get("case") != f"geometry-{number}" or result.get("helperExit") != 0 or result.get("failures") != []:
+            raise ValueError(f"windows_geometry: failed geometry-{number}")
+        observation = result.get("observation", {})
+        if observation.get("error") or observation.get("actionError") or observation.get("exitRequested") is not True:
+            raise ValueError(f"windows_geometry: incomplete observation geometry-{number}")
+        matches = re.findall(r"(?m)^window bounds (-?\d+ -?\d+ -?\d+ -?\d+)\s*$", log)
+        if len(matches) != 1 or matches[0] != result.get("bounds"):
+            raise ValueError(f"windows_geometry: missing or inconsistent bounds geometry-{number}")
+        if "app wait 0 exit 0" not in log or "forcedCleanup false; job active processes 0" not in log:
+            raise ValueError(f"windows_geometry: unclean geometry-{number}")
+        if number == 1:
+            for marker in ("F11 enter passed", "F11 restore passed", "Alt+Return enter passed",
+                           "Alt+Return restore passed", "normal bounds passed"):
+                if "window actions " + marker not in log:
+                    raise ValueError(f"windows_geometry: missing {marker}")
+        bounds.append(result.get("bounds"))
+        storage.append(snapshot.get("sections", {}).get("state"))
+    if not bounds[0] or len(set(bounds)) != 1 or not storage[0] or any(item != storage[0] for item in storage):
+        raise ValueError("windows_geometry: bounds or storage snapshots differ")
+
+
+def validate_named_receipt(directory, report, prefix, producer, scenario, expected, images=()):
+    require_case(directory, prefix, images, expected, scenario if scenario != "single" else None)
+    record = json.loads(artifact(directory, prefix + "/case.json").read_text(encoding="utf-8"))
+    binary = artifact(directory, "desktop-executables/" + producer)
+    required = {key: report[key] for key in ("sha", "ref", "job", "job_id", "pipeline_id", "platform", "mode")}
+    required.update(producer=producer, scenario=scenario, executable_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                    qtest_sha256=hashlib.sha256(artifact(directory, prefix + "/qtest.txt").read_bytes()).hexdigest())
+    for key, expected_value in required.items():
+        if record.get(key) != expected_value:
+            raise ValueError(f"{prefix}: incorrect {key}")
+
+
+def validate_windowed(directory, report, name):
+    if name == "webengine":
+        return validate_named_receipt(directory, report, "webengine", "webengine-v1", "single",
+                                      ("TestWebClientFaultWebEngine", "channelCannotReattach"))
+    playback = name == "windowed_playback"
+    prefix = "desktop-render" if playback else "containment"
+    producer = "windowed-render-v1" if playback else "containment-v1"
+    expected = ("TestRendererLossPlayback", "actualPlayback") if playback else ("TestWebClientContainment", "containment")
+    for scenario in SCENARIOS:
+        images = [] if scenario == "held-hook" else (["before.png", "after.png"] if playback else
+                                                     ["containment-before.png", "containment-after.png"])
+        if playback and scenario == "playing":
+            images.append("after2.png")
+        validate_named_receipt(directory, report, f"{prefix}/{scenario}", producer, scenario, expected, images)
+
+
+def validate_desktop(directory, report):
+    platform = report.get("platform")
+    if platform not in PLATFORM:
+        return ["desktop: unsupported platform"]
+    entries = report.get("obligations")
+    if not isinstance(entries, dict):
+        return ["desktop: missing obligations"]
+    errors = []
+    for name in COMMON + PLATFORM[platform]:
+        record = entries.get(name, {})
+        status = record.get("status") if isinstance(record, dict) else None
+        if status not in STATUSES:
+            errors.append(f"{name}: invalid or missing status")
+        elif status != "passed":
+            reason = record.get("reason")
+            errors.append(f"{name}: {status}: {reason or 'missing reason'}")
+        elif name in COMMON or name in ("windows_geometry", "linux_mpris_fault"):
+            try:
+                if name == "windows_geometry":
+                    validate_geometry(directory, report, record)
+                elif name == "linux_mpris_fault":
+                    validate_named_receipt(directory, report, "linux-mpris-fault", "linux-mpris-fault-v1", "single",
+                                           ("TestMprisFault", "faultRejectsSeek"))
+                else:
+                    validate_windowed(directory, report, name)
+            except (OSError, ValueError, KeyError) as error:
+                errors.append(str(error))
+        else:
+            errors.append(f"{name}: passed claim has no supported receipt producer")
+    return errors
+
+
+def validate_job(base, job, sha, ref, pipeline_id):
+    report, directory = validate_headless(base, job, sha, ref, pipeline_id)
     status = report.get("desktop")
     if status not in STATUSES:
         raise ValueError(f"{job}: invalid desktop status")
+    errors = validate_desktop(directory, report)
     if status != "passed":
-        raise ValueError(f"{job}: desktop is {status}")
-    require_case(directory, "webengine")
-    require_render(directory, "desktop-render", "before.png", "after.png", "after2.png")
-    for scenario in SCENARIOS:
-        images = [] if scenario == "held-hook" else ["containment-before.png", "containment-after.png"]
-        require_case(directory, f"containment/{scenario}", images)
-    # No producer exists yet: missing real native-controls proof must fail closed.
-    require_case(directory, "native-controls")
-    raise ValueError(f"{job}: native-controls receipt verification is not implemented")
+        errors.insert(0, f"{job}: desktop is {status}")
+    if errors:
+        raise ValueError("; ".join(errors))
 
 
 def main():
-    sha, ref = os.environ["CI_COMMIT_SHA"], os.environ["CI_COMMIT_REF_NAME"]
+    sha, ref, pipeline_id = os.environ["CI_COMMIT_SHA"], os.environ["CI_COMMIT_REF_NAME"], os.environ["CI_PIPELINE_ID"]
     errors = []
     for job in JOBS:
+        directory = Path("build/ci-evidence") / job
         try:
-            validate_job(Path("build/ci-evidence"), job, sha, ref)
+            validate_headless(Path("build/ci-evidence"), job, sha, ref, pipeline_id)
         except (OSError, ValueError, KeyError, ET.ParseError) as error:
             errors.append(f"{job}: {error}")
+        try:
+            report = json.loads(artifact(directory, "evidence.json").read_text(encoding="utf-8"))
+            if report.get("desktop") != "passed":
+                errors.append(f"{job}: desktop is {report.get('desktop', 'missing')}")
+            errors.extend(f"{job}: {error}" for error in validate_desktop(directory, report))
+        except (OSError, ValueError, KeyError) as error:
+            errors.append(f"{job}: desktop evidence unavailable: {error}")
     for error in errors:
         print(error, file=sys.stderr)
     return bool(errors)

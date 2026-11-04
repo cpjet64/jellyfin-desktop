@@ -107,7 +107,7 @@ class TestHeadlessRouting(unittest.TestCase):
                         (case / image).write_bytes(b"image")
                 if scenario == "playing":
                     (case / "offscreen-after2.png").write_bytes(b"image")
-            with patch.object(native, "RESULTS", results), patch.object(native, "command", side_effect=fake_command):
+            with patch.object(native, "RESULTS", results), patch.object(native, "record_case"), patch.object(native, "command", side_effect=fake_command):
                 native.run_scenarios("test_renderer_loss_offscreen", [], {}, results / "media")
             self.assertEqual(seen, ["playing", "paused", "held-hook"])
 

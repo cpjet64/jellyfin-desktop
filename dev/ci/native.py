@@ -14,7 +14,7 @@ from native_bootstrap import bootstrap
 from native_inventory import incompatible_tools, inventory, prepare_process_paths, unavailable_compilers
 from macos_session import verify_existing_session
 from headless_requirements import missing_build_inputs
-from evidence import update
+from evidence import record_case, update
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
@@ -226,7 +226,7 @@ def offscreen(system):
 def run_scenarios(fixture, prefix, env, media):
     for scenario in ("playing", "paused", "held-hook"):
         evidence = RESULTS / fixture / scenario
-        evidence.mkdir(parents=True, exist_ok=True)
+        evidence.mkdir(parents=True, exist_ok=fixture != "test_renderer_loss_offscreen")
         local = env.copy()
         local.update({"RECOVERY_SCENARIO": scenario, "RECOVERY_MEDIA": str(media), "RECOVERY_EVIDENCE_DIR": str(evidence)})
         command(f"{fixture}-{scenario}", prefix + [str(BUILD / "tests" / fixture),
@@ -246,6 +246,8 @@ def run_scenarios(fixture, prefix, env, media):
                 images.append("offscreen-after2.png")
             if any(not (evidence / name).is_file() for name in images):
                 raise RuntimeError(f"Missing offscreen {scenario} image evidence")
+        if fixture == "test_renderer_loss_offscreen":
+            record_case(evidence, BUILD / "tests" / fixture, scenario)
 
 
 def run_stages(system, mode, desktop_missing):

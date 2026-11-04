@@ -1,16 +1,42 @@
 """Record native job progress and retain partial evidence on failure."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+from desktop_policy import blocked_obligations
 
 JOBS = {"windows-x64": ("windows", "static"), "windows-system": ("windows", "system"),
         "linux-static": ("linux", "static"), "linux-system": ("linux", "system"),
         "macos-static": ("macos", "static"), "macos-system": ("macos", "system")}
 PHASES = ("build_core", "offscreen", "desktop")
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def digest(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def record_case(directory, executable, scenario):
+    if scenario not in ("playing", "paused", "held-hook"):
+        raise ValueError("unknown scenario")
+    from acceptance import require_case, require_offscreen_capability
+    require_case(Path(directory).parent, Path(directory).name, expected=("TestRendererLossOffscreen", "actualPlayback"), scenario=scenario)
+    require_offscreen_capability(Path(directory) / "qtest.txt")
+    job = os.environ["CI_JOB_NAME"]
+    platform, mode = JOBS[job]
+    record = dict(producer="offscreen-render-v1", scenario=scenario, job=job,
+                  platform=platform, mode=mode, job_id=os.environ["CI_JOB_ID"],
+                  pipeline_id=os.environ["CI_PIPELINE_ID"], sha=os.environ["CI_COMMIT_SHA"],
+                  ref=os.environ["CI_COMMIT_REF_NAME"], executable_sha256=digest(executable),
+                  qtest_sha256=digest(Path(directory) / "qtest.txt"))
+    images = [] if scenario == "held-hook" else ["offscreen-before.png", "offscreen-after.png"]
+    if scenario == "playing":
+        images.append("offscreen-after2.png")
+    record["images"] = {name: digest(Path(directory) / name) for name in images}
+    (Path(directory) / "case.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
 
 
 def update(directory, phase, status, reason):
@@ -30,9 +56,10 @@ def run_job():
     directory = ROOT / "build" / "ci-evidence" / job
     directory.mkdir(parents=True, exist_ok=False)
     report = dict(sha=os.environ["CI_COMMIT_SHA"], ref=os.environ["CI_COMMIT_REF_NAME"],
-                  job=job, platform=platform, mode=mode, job_id=os.environ["CI_JOB_ID"],
+                  job=job, platform=platform, mode=mode, job_id=os.environ["CI_JOB_ID"], pipeline_id=os.environ["CI_PIPELINE_ID"],
                   active_phase="build_core", build_core="not_run", offscreen="not_run",
-                  desktop="blocked", desktop_reason="Desktop receipt verification is not implemented")
+                  desktop="blocked", desktop_reason="Desktop obligations not run by the headless job",
+                  obligations=blocked_obligations(platform))
     (directory / "evidence.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     env = os.environ.copy()
     env["CI_EVIDENCE_DIR"] = str(directory)
@@ -56,12 +83,18 @@ def run_job():
         offscreen = results / "test_renderer_loss_offscreen"
         if offscreen.is_dir():
             shutil.copytree(offscreen, directory / "offscreen", dirs_exist_ok=True)
+    executable = ROOT / "build/tests" / ("test_renderer_loss_offscreen.exe" if platform == "windows" else "test_renderer_loss_offscreen")
+    if executable.is_file() and (directory / "offscreen").is_dir():
+        shutil.copy2(executable, directory / "offscreen-executable")
     return code
 
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         sys.exit(run_job())
+    if len(sys.argv) == 5 and sys.argv[1] == "record-case":
+        record_case(*sys.argv[2:])
+        sys.exit(0)
     if len(sys.argv) != 4:
         sys.exit("usage: evidence.py PHASE STATUS REASON")
     update(Path(os.environ["CI_EVIDENCE_DIR"]), *sys.argv[1:])

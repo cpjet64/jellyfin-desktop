@@ -15,7 +15,7 @@ class EvidenceTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.environment = {"CI_JOB_NAME": "linux-static", "CI_JOB_ID": "11",
-                            "CI_COMMIT_SHA": "abc", "CI_COMMIT_REF_NAME": "feature/test"}
+                            "CI_COMMIT_SHA": "abc", "CI_COMMIT_REF_NAME": "feature/test", "CI_PIPELINE_ID": "22"}
 
     def run_job(self, child):
         with patch.object(evidence, "ROOT", self.root), patch.dict(os.environ, self.environment, clear=True), \

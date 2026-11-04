@@ -1,5 +1,6 @@
 """Black-box examples for the native acceptance evidence contract."""
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -7,11 +8,17 @@ import unittest
 import acceptance
 
 ROOT = Path(__file__).resolve().parents[2]
-QTEST = "Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted\n"
+def qtest(class_name, case, scenario="playing"):
+    return (f"PASS   : {class_name}::initTestCase()\nQINFO  : {class_name}::{case}() RECOVERY_SCENARIO={scenario}\n"
+            f"QINFO  : {class_name}::{case}() RECOVERY_CAPABILITIES context=valid surface=valid current=true render_readback=valid\n"
+            f"PASS   : {class_name}::{case}()\nPASS   : {class_name}::cleanupTestCase()\n"
+            f"Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted\n********* Finished testing of {class_name} *********\n")
+
+QTEST = qtest("TestRendererLossOffscreen", "actualPlayback")
 JOBS = ("windows-x64", "windows-system", "linux-static", "linux-system", "macos-static", "macos-system")
 CORE = ("test_systemcomponent", "test_log", "test_settings", "test_displaymanager", "test_log_rotation",
         "test_chromiumflags", "test_webclient_transport", "test_mpv_test_bootstrap_pure")
-RUNTIME = ("test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard", "test_mpv_test_bootstrap")
+RUNTIME = ("test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard", "test_mpv_test_bootstrap", "test_windowmanager")
 STATIC = ("test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state")
 SCENARIOS = ("playing", "paused", "held-hook")
 
@@ -30,7 +37,11 @@ def fixture(base, job):
     platform, mode = job.split("-", 1)
     mode = "static" if mode == "x64" else mode
     report = dict(sha="abc", ref="branch", job=job, platform=platform, mode=mode,
-                  job_id="123", build_core="passed", offscreen="passed", desktop="passed")
+                  job_id="123", pipeline_id="456", build_core="passed", offscreen="passed", desktop="passed")
+    names = ["webengine", "windowed_playback", "containment"]
+    names += {"windows": ["windows_geometry", "windows_callback"],
+              "linux": ["linux_mpris_fault", "linux_active_stop"], "macos": ["macos_media_callback"]}[platform]
+    report["obligations"] = {name: {"status": "blocked", "reason": "not available"} for name in names}
     write(directory / "evidence.json", json.dumps(report))
     runtime = list(RUNTIME) + (list(STATIC) if mode == "static" else [])
     if platform == "linux":
@@ -38,19 +49,25 @@ def fixture(base, job):
     write(directory / "headless-ctest.xml", junit(list(CORE) + (runtime if platform == "windows" else [])))
     if platform != "windows":
         write(directory / "runtime-ctest.xml", junit(runtime))
+    write(directory / "offscreen-executable", "binary")
     for prefix in ("offscreen", "desktop-render", "containment"):
         for scenario in SCENARIOS:
             case = directory / prefix / scenario
-            write(case / "qtest.txt", QTEST)
-            if scenario == "held-hook":
-                continue
-            images = {"offscreen": ["offscreen-before.png", "offscreen-after.png"],
+            write(case / "qtest.txt", qtest("TestRendererLossOffscreen", "actualPlayback", scenario))
+            images = [] if scenario == "held-hook" else {"offscreen": ["offscreen-before.png", "offscreen-after.png"],
                       "desktop-render": ["before.png", "after.png"],
                       "containment": ["containment-before.png", "containment-after.png"]}[prefix]
             if scenario == "playing" and prefix != "containment":
                 images.append("offscreen-after2.png" if prefix == "offscreen" else "after2.png")
             for image in images:
                 write(case / image)
+            if prefix == "offscreen":
+                metadata = dict(sha="abc", ref="branch", job=job, platform=platform, mode=mode,
+                                job_id="123", pipeline_id="456", scenario=scenario, producer="offscreen-render-v1",
+                                executable_sha256=hashlib.sha256(b"binary").hexdigest(),
+                                qtest_sha256=hashlib.sha256((case / "qtest.txt").read_bytes()).hexdigest(),
+                                images={image: hashlib.sha256((case / image).read_bytes()).hexdigest() for image in images})
+                write(case / "case.json", json.dumps(metadata))
     for case in ("webengine", "native-controls"):
         write(directory / case / "qtest.txt", QTEST)
     return report
@@ -66,26 +83,26 @@ class AcceptanceTest(unittest.TestCase):
             fixture(self.base, job)
 
     def validate(self, job="linux-static"):
-        acceptance.validate_job(self.base, job, "abc", "branch")
+        acceptance.validate_job(self.base, job, "abc", "branch", "456")
 
     def test_complete_six_jobs(self):
         self.assertEqual(set(acceptance.JOBS), set(JOBS))
         for job in JOBS:
-            with self.assertRaisesRegex(ValueError, "receipt verification is not implemented"):
+            with self.assertRaisesRegex(ValueError, "webengine: blocked"):
                 self.validate(job)
 
     def test_provenance_and_all_statuses(self):
         path = self.base / "linux-static/evidence.json"
         original = json.loads(path.read_text())
         for key, value in (("sha", "other"), ("ref", "other"), ("job", "other"),
-                           ("platform", "macos"), ("mode", "system"), ("job_id", ""),
+                           ("platform", "macos"), ("mode", "system"), ("pipeline_id", "999"), ("job_id", ""),
                            ("build_core", "failed"), ("offscreen", "blocked"),
                            ("desktop", "not_run"), ("desktop", "unknown")):
             with self.subTest(key=key, value=value):
                 changed = dict(original, **{key: value})
                 write(path, json.dumps(changed))
                 if key == "job_id":
-                    diagnostic = "missing job identity"
+                    diagnostic = "missing job_id identity"
                 elif key in ("build_core", "offscreen", "desktop"):
                     diagnostic = f"invalid {key} status" if value == "unknown" else f"{key} is {value}"
                 else:
@@ -93,11 +110,11 @@ class AcceptanceTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, diagnostic):
                     self.validate()
         write(path, json.dumps(original))
-        for key in ("sha", "ref", "job", "platform", "mode", "job_id", "build_core", "offscreen", "desktop"):
+        for key in ("sha", "ref", "job", "platform", "mode", "pipeline_id", "job_id", "build_core", "offscreen", "desktop"):
             changed = dict(original)
             del changed[key]
             write(path, json.dumps(changed))
-            diagnostic = ("missing job identity" if key == "job_id" else
+            diagnostic = ("missing job_id identity" if key == "job_id" else
                           f"invalid {key} status" if key in ("build_core", "offscreen", "desktop") else
                           f"incorrect or missing {key}")
             with self.subTest(missing=key), self.assertRaisesRegex(ValueError, diagnostic):
@@ -121,10 +138,62 @@ class AcceptanceTest(unittest.TestCase):
             write(path, text)
             with self.assertRaisesRegex(ValueError, diagnostic):
                 self.validate()
-        write(path, QTEST)
-        (self.base / "linux-static/native-controls/qtest.txt").unlink()
-        with self.assertRaises(OSError):
+        write(path, qtest("TestRendererLossOffscreen", "actualPlayback", "held-hook"))
+
+    def test_unsupported_callback_claim_fails_closed(self):
+        path = self.base / "windows-x64/evidence.json"
+        report = json.loads(path.read_text())
+        report["obligations"]["windows_callback"] = {"status": "passed", "producer": "invented"}
+        errors = acceptance.validate_desktop(path.parent, report)
+        self.assertTrue(any("windows_callback: passed claim has no supported receipt producer" in error for error in errors))
+
+    def test_scenario_identity_and_provenance_are_required(self):
+        case = self.base / "linux-static/offscreen/playing"
+        path = case / "case.json"
+        original = json.loads(path.read_text())
+        for key, value in (("scenario", "paused"), ("producer", "unknown"), ("pipeline_id", "999"),
+                           ("sha", "wrong"), ("job_id", "999"), ("executable_sha256", "wrong")):
+            write(path, json.dumps(dict(original, **{key: value})))
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, f"incorrect scenario evidence {key}"):
+                self.validate()
+        write(path, json.dumps(original))
+        report = case / "qtest.txt"
+        write(report, qtest("WrongClass", "actualPlayback"))
+        with self.assertRaisesRegex(ValueError, "Missing or duplicate named QTest PASS"):
             self.validate()
+
+    def test_offscreen_image_tampering_is_rejected(self):
+        path = self.base / "linux-static/offscreen/playing/offscreen-after2.png"
+        write(path, "different image")
+        with self.assertRaisesRegex(ValueError, "incorrect scenario evidence images"):
+            self.validate()
+
+    def test_geometry_requires_all_three_clean_launches_and_snapshots(self):
+        directory = self.base / "windows-x64"
+        report = json.loads((directory / "evidence.json").read_text())
+        record = {key: report[key] for key in ("sha", "ref", "job", "job_id", "pipeline_id", "platform", "mode")}
+        record.update(producer="windows-geometry-v1", sha256={})
+        for name in ("executable", "helper"):
+            path = directory / "geometry" / name
+            write(path, name)
+            record[name + "_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        markers = "\n".join("window actions " + item for item in
+                            ("F11 enter passed", "F11 restore passed", "Alt+Return enter passed",
+                             "Alt+Return restore passed", "normal bounds passed"))
+        for number in range(1, 4):
+            prefix = f"geometry/geometry-{number}"
+            data = {"result.json": json.dumps({"case": f"geometry-{number}", "helperExit": 0,
+                                               "failures": [], "bounds": "1 2 3 4", "observation": {"exitRequested": True}}),
+                    "storage.json": json.dumps({"sections": {"state": {"XPosition": 1}}}),
+                    "console.log": "window bounds 1 2 3 4\napp wait 0 exit 0\nforcedCleanup false; job active processes 0\n" + markers}
+            for name, text in data.items():
+                path = directory / prefix / name
+                write(path, text)
+                record["sha256"][f"{prefix}/{name}"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        acceptance.validate_geometry(directory, report, record)
+        (directory / "geometry/geometry-2/storage.json").unlink()
+        with self.assertRaisesRegex(OSError, "storage.json"):
+            acceptance.validate_geometry(directory, report, record)
 
     def test_missing_artifact_and_namespace(self):
         (self.base / "linux-static/offscreen/playing/offscreen-after2.png").unlink()
@@ -157,7 +226,7 @@ class AcceptanceTest(unittest.TestCase):
     def test_headless_evidence_passes_its_independent_checks(self):
         for job in JOBS:
             with self.subTest(job=job):
-                acceptance.validate_headless(self.base, job, "abc", "branch")
+                acceptance.validate_headless(self.base, job, "abc", "branch", "456")
 
     def test_blocked_desktop_does_not_hide_bad_headless_evidence(self):
         path = self.base / "linux-static/evidence.json"
@@ -178,7 +247,7 @@ class AcceptanceTest(unittest.TestCase):
             path.unlink()
             with self.subTest(scenario=scenario), self.assertRaisesRegex(OSError, "qtest.txt"):
                 self.validate()
-            write(path, QTEST)
+            write(path, qtest("TestRendererLossOffscreen", "actualPlayback", scenario))
 
 
 if __name__ == "__main__":

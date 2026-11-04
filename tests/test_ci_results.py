@@ -20,12 +20,22 @@ class TestQtReports(unittest.TestCase):
             RESULTS.check_qtest("unused")
 
     def test_valid_report_passes(self):
-        self.check("Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted")
+        self.check("Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted\n********* Finished testing of Example *********\n")
 
     def test_failed_skipped_empty_and_short_reports_fail(self):
         for text in ("", "Totals: 2 passed, 0 failed, 0 skipped",
                      "Totals: 3 passed, 1 failed, 0 skipped",
                      "Totals: 3 passed, 0 failed, 1 skipped"):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                self.check(text)
+
+    def test_rejects_fail_skip_multiple_totals_and_missing_footer(self):
+        footer = "********* Finished testing of Example *********"
+        good = "Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted"
+        for text in (good, f"FAIL!  : Example::case()\n{good}\n{footer}",
+                     f"SKIP   : Example::case()\n{good}\n{footer}",
+                     f"{good}\nTotals: 3 passed, 1 failed, 0 skipped\n{footer}",
+                     f"{good}\n{footer}\nextra"):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 self.check(text)
 

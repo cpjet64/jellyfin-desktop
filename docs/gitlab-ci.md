@@ -28,8 +28,11 @@ the production video item with real OpenGL for playing, paused and held-hook
 scenarios; the playing case also requires a second post-fault frame. Reports
 and images are kept under the individual job's artifact namespace. A successful
 headless job does not establish desktop acceptance. The acceptance job requires
-all six matching evidence sets and currently fails closed because desktop
-receipt verification is not implemented.
+all six matching evidence sets and separately checks WebEngine, windowed
+playback, containment and applicable platform callbacks. Missing producers are
+reported as blocked; a status string alone cannot establish a passing receipt.
+Offscreen evidence includes the fixture's scenario and renderer capability
+observations, named QTest result, executable and image hashes, and job provenance.
 
 Windows records its core and runtime CTest cases together in
 `headless-ctest.xml`. Linux and macOS record the pure core selection there and
