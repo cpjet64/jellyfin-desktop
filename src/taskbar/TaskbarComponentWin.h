@@ -17,6 +17,7 @@ public:
 
 private:
   friend class TestWindowsNativeControls;
+  friend class TestWindowsSmtcLifetime;
   void onPauseClicked();
   void onPrevClicked();
   void onNextClicked();
@@ -24,6 +25,7 @@ private:
   void setControlsVisible(bool value);
   void setPaused(bool value);
   void initializeMediaTransport(HWND hwnd);
+  void initializeMediaTransportControls();
   void onMetaData(const QVariantMap &meta, QUrl baseUrl);
   void setAudioMeta(const QVariantMap &meta);
   void setVideoMeta(const QVariantMap &meta);

@@ -189,6 +189,28 @@ void TaskbarComponentWin::initializeMediaTransport(HWND hwnd)
     qWarning() << "Failed to GetForWindow";
     return;
   }
+  initializeMediaTransportControls();
+}
+
+void TaskbarComponentWin::initializeMediaTransportControls()
+{
+  auto hr = m_systemControls->get_DisplayUpdater(&m_displayUpdater);
+  if (FAILED(hr))
+  {
+    qWarning() << "Failed to get Display updater";
+    return;
+  }
+
+  hr = m_systemControls->put_IsEnabled(false);
+  hr = m_systemControls->put_IsPlayEnabled(true);
+  hr = m_systemControls->put_IsPauseEnabled(true);
+  hr = m_systemControls->put_IsPreviousEnabled(true);
+  hr = m_systemControls->put_IsNextEnabled(true);
+  hr = m_systemControls->put_IsStopEnabled(true);
+  hr = m_systemControls->put_IsRewindEnabled(true);
+  hr = m_systemControls->put_IsFastForwardEnabled(true);
+  hr = m_systemControls->put_IsChannelDownEnabled(true);
+  hr = m_systemControls->put_IsChannelUpEnabled(true);
 
   auto handler = Callback<
     ITypedEventHandler<
@@ -201,25 +223,6 @@ void TaskbarComponentWin::initializeMediaTransport(HWND hwnd)
   if (FAILED(hr))
   {
     qWarning() << "Failed to add callback handler";
-    return;
-  }
-
-  hr = m_systemControls->put_IsEnabled(false);
-
-  hr = m_systemControls->put_IsPlayEnabled(true);
-  hr = m_systemControls->put_IsPauseEnabled(true);
-  hr = m_systemControls->put_IsPreviousEnabled(true);
-  hr = m_systemControls->put_IsNextEnabled(true);
-  hr = m_systemControls->put_IsStopEnabled(true);
-  hr = m_systemControls->put_IsRewindEnabled(true);
-  hr = m_systemControls->put_IsFastForwardEnabled(true);
-  hr = m_systemControls->put_IsChannelDownEnabled(true);
-  hr = m_systemControls->put_IsChannelUpEnabled(true);
-
-  hr = m_systemControls->get_DisplayUpdater(&m_displayUpdater);
-  if (FAILED(hr))
-  {
-    qWarning() << "Failed to get Display updater";
     return;
   }
 
