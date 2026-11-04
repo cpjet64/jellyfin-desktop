@@ -62,9 +62,9 @@ class TestHeadlessRouting(unittest.TestCase):
         calls = []
         with redirect_stdout(io.StringIO()), patch.object(native, "command", side_effect=lambda name, args, **kw: calls.append((name, args))):
             native.headless_checks()
-        self.assertEqual(len(native.HEADLESS_TESTS), 11)
+        self.assertEqual(len(native.HEADLESS_TESTS), 13)
         names = set(native.HEADLESS_TESTS)
-        self.assertTrue({"test_systemcomponent", "test_log", "test_webclient_transport", "test_mpv_test_bootstrap_pure", "test_smtc_admission_model", "test_c2a_hold_gate", "test_c2_error_terminal"}.issubset(names))
+        self.assertTrue({"test_systemcomponent", "test_log", "test_webclient_transport", "test_mpv_test_bootstrap_pure", "test_smtc_admission_model", "test_c2a_hold_gate", "test_c2_error_terminal", "test_c2_fault_quiescence_policy", "test_c2_synthetic_service"}.issubset(names))
         self.assertTrue(names.isdisjoint({"test_fault_stop", "test_windowmanager", "test_mpv_test_bootstrap",
                                          "test_mpvqt_event_ownership", "test_webclient_fault_webengine"}))
         ctest = next(args for name, args in calls if name == "headless-ctest")
@@ -129,6 +129,8 @@ class TestHeadlessRouting(unittest.TestCase):
         self.assertIn("'test_smtc_admission_model'", script)
         self.assertIn("'test_c2a_hold_gate'", script)
         self.assertIn("'test_c2_error_terminal'", script)
+        self.assertIn("'test_c2_fault_quiescence_policy'", script)
+        self.assertIn("'test_c2_synthetic_service'", script)
         hold = script.index("fixture held before launch")
         for name in ("windows_mpv_loader_integration.py", "windows_packaging_runtime_test.py",
                      "windows_installer_compile_test.py", "dev/windows/package.py"):
