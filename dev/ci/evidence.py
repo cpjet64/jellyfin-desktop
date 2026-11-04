@@ -69,6 +69,29 @@ def update(directory, phase, status, reason):
     path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
+def run_process(command, cwd, env, platform, log):
+    options = {"creationflags": subprocess.CREATE_NO_WINDOW} if platform == "windows" else {}
+    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, errors="replace", bufsize=1, **options)
+    try:
+        with log.open("w", encoding="utf-8") as output:
+            for line in process.stdout:
+                output.write(line)
+                output.flush()
+                print(line, end="", flush=True)
+        return process.wait()
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        if process.stdout:
+            process.stdout.close()
+
+
 def run_job():
     job = os.environ["CI_JOB_NAME"]
     platform, mode = JOBS[job]
@@ -94,8 +117,7 @@ def run_job():
                 "Bypass", "-File", "dev/windows/ci.ps1"] if platform == "windows"
                else [sys.executable, "dev/ci/native.py"])
     try:
-        options = {"creationflags": subprocess.CREATE_NO_WINDOW} if platform == "windows" else {}
-        code = subprocess.call(command, cwd=ROOT, env=env, **options)
+        code = run_process(command, ROOT, env, platform, directory / "native-process.log")
     except OSError as error:
         print(f"Unable to start native job: {error}", file=sys.stderr)
         code = 1

@@ -1,11 +1,13 @@
 """Exercise job evidence lifecycle without launching a native build."""
 import json
+import io
 import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
+from contextlib import redirect_stdout
 
 import evidence
 MPVQT_SHA = "2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e"
@@ -21,7 +23,7 @@ class EvidenceTest(unittest.TestCase):
 
     def run_job(self, child):
         with patch.object(evidence, "ROOT", self.root), patch.object(evidence, "verify_source", return_value=("abc", MPVQT_SHA)), patch.dict(os.environ, self.environment, clear=True), \
-                patch.object(evidence.subprocess, "call", side_effect=child):
+                patch.object(evidence, "run_process", side_effect=lambda command, cwd, env, platform, log: child(command, cwd=cwd, env=env)):
             code = evidence.run_job()
         path = self.root / "build/ci-evidence/linux-static/evidence.json"
         return code, json.loads(path.read_text(encoding="utf-8"))
@@ -67,6 +69,44 @@ class EvidenceTest(unittest.TestCase):
             evidence.verify_source(self.root, "abc")
         with probe(["abc\n", "", " 2ebbd38 external/mpvqt\n", "wrong\n"]), self.assertRaisesRegex(ValueError, "MpvQt source revision"):
             evidence.verify_source(self.root, "abc")
+
+    def test_unix_process_uses_pipe_and_preserves_output_and_exit(self):
+        process = SimpleNamespace(stdout=io.StringIO("one\ntwo\n"), wait=lambda: 9, poll=lambda: 9)
+        output = io.StringIO()
+        with patch.object(evidence.subprocess, "Popen", return_value=process) as popen, redirect_stdout(output):
+            code = evidence.run_process(["example"], self.root, {}, "linux", self.root / "native.log")
+        self.assertEqual(code, 9)
+        self.assertEqual(output.getvalue(), "one\ntwo\n")
+        self.assertEqual((self.root / "native.log").read_text(), "one\ntwo\n")
+        self.assertEqual(popen.call_args.kwargs["stdout"], evidence.subprocess.PIPE)
+        self.assertEqual(popen.call_args.kwargs["stderr"], evidence.subprocess.STDOUT)
+        self.assertNotIn("creationflags", popen.call_args.kwargs)
+
+    def test_output_failure_terminates_and_waits_for_owned_child(self):
+        class BrokenOutput:
+            def __iter__(self):
+                raise OSError("output failed")
+            def close(self):
+                pass
+        calls = []
+        process = SimpleNamespace(stdout=BrokenOutput(), poll=lambda: None,
+                                  terminate=lambda: calls.append("terminate"),
+                                  wait=lambda timeout=None: calls.append(("wait", timeout)))
+        with patch.object(evidence.subprocess, "Popen", return_value=process), self.assertRaisesRegex(OSError, "output failed"):
+            evidence.run_process(["example"], self.root, {}, "linux", self.root / "native.log")
+        self.assertEqual(calls, ["terminate", ("wait", 10)])
+
+    @unittest.skipUnless(os.name == "nt", "Windows PowerShell integration")
+    def test_hidden_powershell_streams_stdout_stderr_and_exit(self):
+        output = io.StringIO()
+        command = ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+                   "Write-Host 'child-output'; [Console]::Error.WriteLine('child-error'); exit 7"]
+        with redirect_stdout(output):
+            code = evidence.run_process(command, self.root, os.environ.copy(), "windows", self.root / "native.log")
+        self.assertEqual(code, 7)
+        self.assertIn("child-output", output.getvalue())
+        self.assertIn("child-error", output.getvalue())
+        self.assertEqual((self.root / "native.log").read_text(), output.getvalue())
 
 
 if __name__ == "__main__":
