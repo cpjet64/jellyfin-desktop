@@ -41,6 +41,9 @@ This graph follows declared metadata only: source archive identity, packaging
 bootstrap, generated wheels, dynamic build hooks and Python 3.15 compatibility
 are still unverified. In particular, do not silently replace the Python formula's
 flit-core 4.1 with 3.12; that is a deliberate proposed difference for review.
+PyPI's glad2 2.0.8 metadata declares Jinja2 >=2.7,<4 at runtime; the reference
+libplacebo Jinja2 3.1.6 resource satisfies that stated range. The optional
+Fortran extra is not selected by this proposal.
 
 The proposed five compressed source sizes total 4,280,800 bytes. Expanded,
 wheel, native-extension and peak sizes are unknown. Resolve each candidate's

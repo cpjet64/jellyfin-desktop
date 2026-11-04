@@ -48,8 +48,14 @@ as the backend's selected Meson.
 [Candidate additions](macos-library-backend-candidates.md) record proposed
 Cython 3.3.1, meson-python 0.22.1, packaging 26.3, pyproject-metadata 0.12.1
 and flit-core 3.12.0 source hashes; they are not yet an approved closure.
-Also unresolved are glad2's backend, the exact flit-core 4.1.0
-bootstrap metadata, candidate flit-core 3.x compatibility,
+The flit-core 4.1.0 upstream tag resolves to commit
+`75b1c909d587c1ff5e0fd5f3df1046f74ee249d4`; its
+[flit_core/pyproject.toml](https://github.com/pypa/flit/blob/75b1c909d587c1ff5e0fd5f3df1046f74ee249d4/flit_core/pyproject.toml)
+declares an in-tree backend with no build requirements. Its release sdist has
+not been inspected. glad2's upstream backend metadata is now recorded in
+the candidate additions; release-sdist comparison remains open.
+
+Also unresolved are candidate flit-core 3.x compatibility,
 dynamic PEP 517 requirements, Python 3.15 binary compatibility, and any
 network or tool invoked by build hooks. Resolve these from immutable source
 commit and release metadata; compare archive contents when separately
