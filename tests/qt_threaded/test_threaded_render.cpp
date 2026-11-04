@@ -51,6 +51,17 @@ static bool differentBrightFrames(const QList<QtThreaded::Frame>& frames, quint6
   return false;
 }
 
+static bool validCleanupOrder(const QtThreaded::Audit& audit)
+{
+  return audit.frameSettledOrder > 0 &&
+         audit.frameSettledOrder < audit.wrappersClearedOrder &&
+         audit.wrappersClearedOrder < audit.fallbackDetachedOrder &&
+         audit.fallbackDetachedOrder < audit.rhiCleanupOrder &&
+         audit.rhiCleanupOrder < audit.controlDestroyedOrder &&
+         audit.controlDestroyedOrder < audit.workerJoinedOrder &&
+         audit.workerJoinedOrder < audit.surfaceDestroyedOrder;
+}
+
 void TestThreadedRender::independentFrames()
 {
   QtThreaded::Scene scene;
@@ -92,6 +103,7 @@ void TestThreadedRender::independentFrames()
   QVERIFY(end.workerJoined && end.contextDestroyed && end.surfaceDestroyed && end.controlDestroyed);
   QVERIFY(end.admissionClosed && end.frameSettled);
   QVERIFY(end.affinitiesVerified && end.noActiveFrameAtCleanup);
+  QVERIFY(validCleanupOrder(end));
   QCOMPARE(end.framesStarted, end.framesCompleted);
   QVERIFY(end.contextCurrentAtCleanup && end.wrappersCleared && end.aliasesCleared && end.fallbackDetached);
   QCOMPARE(end.rhiCreatedCount, quint64(1));
@@ -115,6 +127,7 @@ void TestThreadedRender::initializationFailures_data()
 {
   QTest::addColumn<int>("failure");
   QTest::newRow("wrong-version") << static_cast<int>(QtThreaded::FailurePoint::WrongVersion);
+  QTest::newRow("wrong-private-state") << static_cast<int>(QtThreaded::FailurePoint::WrongPrivateState);
   QTest::newRow("before-transfer") << static_cast<int>(QtThreaded::FailurePoint::BeforeTransfer);
   QTest::newRow("after-transfer") << static_cast<int>(QtThreaded::FailurePoint::AfterTransfer);
   QTest::newRow("after-rhi") << static_cast<int>(QtThreaded::FailurePoint::AfterRhiCreated);
@@ -142,6 +155,19 @@ void TestThreadedRender::initializationFailures()
     QCOMPARE(audit.surfaceDestroyedCount, quint64(0));
     return;
   }
+  if (failure == static_cast<int>(QtThreaded::FailurePoint::WrongPrivateState)) {
+    QVERIFY(audit.privateBoundaryEntered && audit.privateStateRejected);
+    QVERIFY(!audit.workerReady && !audit.workerJoined && !audit.transferred && !audit.rhiCreated);
+    QVERIFY(!audit.fallbackDetached);
+    QCOMPARE(audit.controlDestroyedCount, quint64(1));
+    QCOMPARE(audit.contextDestroyedCount, quint64(1));
+    QCOMPARE(audit.surfaceDestroyedCount, quint64(1));
+    QCOMPARE(audit.contextDestructionThread, audit.guiThread);
+    QCOMPARE(audit.surfaceDestructionThread, audit.guiThread);
+    QCOMPARE(audit.rhiCreatedCount, quint64(0));
+    QCOMPARE(audit.cleanupCount, quint64(0));
+    return;
+  }
   if (failure == static_cast<int>(QtThreaded::FailurePoint::BeforeTransfer)) {
     QVERIFY(audit.workerReady && audit.workerJoined && !audit.transferred && !audit.rhiCreated);
     QVERIFY(audit.contextDestroyed && audit.surfaceDestroyed && audit.controlDestroyed);
@@ -163,6 +189,7 @@ void TestThreadedRender::initializationFailures()
     QCOMPARE(audit.rhiCreatedCount, quint64(1));
     QCOMPARE(audit.rhiDestroyedCount, quint64(1));
     QCOMPARE(audit.rhiCleanupThread, audit.renderThread);
+    QVERIFY(validCleanupOrder(audit));
     QVERIFY(!audit.initialized && !audit.targetReady);
     QCOMPARE(audit.frames, quint64(0));
   }
