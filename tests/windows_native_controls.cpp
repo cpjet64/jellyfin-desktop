@@ -146,12 +146,12 @@ void TestWindowsNativeControls::callbackPath()
   QVERIFY2(MpvTestBootstrap::prepareMpvTestEnvironment(root, &error), qPrintable(error));
   QVERIFY2(prepareMpvTestProfile(evidence, &error), qPrintable(error));
   QVERIFY(SettingsComponent::Get().componentInitialize());
+  RenderStartupDiagnostics diagnostics;
   QQuickWindow window;
   window.resize(640, 360);
   auto* video = new MpvVideoItem(window.contentItem());
   video->setParent(window.contentItem());
   video->setSize(QSizeF(640, 360));
-  RenderStartupDiagnostics diagnostics;
   diagnostics.observe(window, *video);
   auto& player = PlayerComponent::Get();
   QVERIFY(player.componentInitialize());
