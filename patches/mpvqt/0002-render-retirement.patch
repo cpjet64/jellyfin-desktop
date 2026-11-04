@@ -346,3 +346,98 @@ index b4726e9..a36e84b 100644
 -
 -    return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
 +        return result;
+diff --git a/src/mpvabstractitem.cpp b/src/mpvabstractitem.cpp
+--- a/src/mpvabstractitem.cpp
++++ b/src/mpvabstractitem.cpp
+@@ -81 +81 @@
+-    if (!owner->state.request(generation) || !window()) return;
++    if (!owner->service.retirementAllowed(generation) || !owner->state.request(generation) || !window()) return;
+@@ -125,0 +126,29 @@
++bool MpvAbstractItem::armSyntheticFrameService(quint64 generation, qint64 deadlineNs)
++{
++    auto owner = std::atomic_load(&d_ptr->renderOwner);
++    return owner->state.accepts(generation) &&
++        owner->service.arm(generation, deadlineNs, DiagnosticFailureInjection::monotonicNanos());
++}
++
++bool MpvAbstractItem::requestSyntheticFrameServiceClose(quint64 generation, bool terminalConfirmed)
++{
++    auto owner = std::atomic_load(&d_ptr->renderOwner);
++    if (!window() || !owner->service.requestClose(generation, terminalConfirmed,
++                                                   DiagnosticFailureInjection::monotonicNanos())) return false;
++    window()->scheduleRenderJob(QRunnable::create([this, owner, generation] {
++        const bool original = owner->context && QThread::currentThread() == owner->originalThread &&
++            QOpenGLContext::currentContext() == owner->originalContext;
++        const bool closed = owner->service.close(generation, original, DiagnosticFailureInjection::monotonicNanos());
++        if (closed) {
++            DiagnosticFailureInjection::serviceCloseOrder = ++DiagnosticFailureInjection::order;
++            DiagnosticFailureInjection::serviceCloseNs = DiagnosticFailureInjection::monotonicNanos();
++        }
++        QMetaObject::invokeMethod(this, [this, owner, generation, closed] {
++            if (closed && owner->service.acknowledge(generation)) emit syntheticFrameServiceClosed(generation);
++            else emit syntheticFrameServiceCloseFailed(generation);
++        }, Qt::QueuedConnection);
++    }), QQuickWindow::BeforeRenderingStage);
++    update();
++    return true;
++}
++
+diff --git a/src/mpvabstractitem.h b/src/mpvabstractitem.h
+--- a/src/mpvabstractitem.h
++++ b/src/mpvabstractitem.h
+@@ -42,0 +43,2 @@
++    bool armSyntheticFrameService(quint64 generation, qint64 deadlineNs);
++    bool requestSyntheticFrameServiceClose(quint64 generation, bool terminalConfirmed);
+@@ -51,0 +54,2 @@
++    void syntheticFrameServiceClosed(quint64 generation);
++    void syntheticFrameServiceCloseFailed(quint64 generation);
+diff --git a/src/mpvabstractitem_p.h b/src/mpvabstractitem_p.h
+--- a/src/mpvabstractitem_p.h
++++ b/src/mpvabstractitem_p.h
+@@ -11,0 +12 @@
++#include "c2/SyntheticFrameService.h"
+@@ -20 +21 @@
+-    DiagnosticRenderOwner(quint64 id, MpvAbstractItem* target) : generation(id), state(id), item(target) {}
++    DiagnosticRenderOwner(quint64 id, MpvAbstractItem* target) : generation(id), state(id), service(id), item(target) {}
+@@ -23,0 +25 @@
++    SyntheticFrameService service;
+diff --git a/src/mpvrenderer.cpp b/src/mpvrenderer.cpp
+--- a/src/mpvrenderer.cpp
++++ b/src/mpvrenderer.cpp
+@@ -91,0 +92,21 @@
++static void servicePendingFrame(DiagnosticRenderOwner* owner)
++{
++    const bool original = owner->context && QThread::currentThread() == owner->originalThread &&
++        QOpenGLContext::currentContext() == owner->originalContext;
++    if (!owner->service.allow(owner->generation, original, DiagnosticFailureInjection::monotonicNanos())) return;
++    if (!(mpv_render_context_update(owner->context) & MPV_RENDER_UPDATE_FRAME)) return;
++    ++DiagnosticFailureInjection::servicePendingCount;
++    DiagnosticFailureInjection::servicePendingNs = DiagnosticFailureInjection::monotonicNanos();
++    int skip = 1;
++    mpv_render_param params[] = {{MPV_RENDER_PARAM_SKIP_RENDERING, &skip}, {MPV_RENDER_PARAM_INVALID, nullptr}};
++    DiagnosticFailureInjection::serviceGeneration = owner->generation;
++    DiagnosticFailureInjection::serviceThread = reinterpret_cast<std::uintptr_t>(QThread::currentThreadId());
++    DiagnosticFailureInjection::serviceContext = reinterpret_cast<std::uintptr_t>(QOpenGLContext::currentContext());
++    DiagnosticFailureInjection::serviceSkipEnteredNs = DiagnosticFailureInjection::monotonicNanos();
++    ++DiagnosticFailureInjection::serviceSkipCount;
++    const int result = mpv_render_context_render(owner->context, params);
++    DiagnosticFailureInjection::serviceResult = result;
++    DiagnosticFailureInjection::serviceSkipReturnedNs = DiagnosticFailureInjection::monotonicNanos();
++    owner->service.result(owner->generation, result);
++}
++
+@@ -95 +116,4 @@
+-    if (!owner->context || !owner->state.accepts(owner->generation)) return;
++    if (!owner->context || !owner->state.accepts(owner->generation)) {
++        servicePendingFrame(owner.get());
++        return;
++    }
+@@ -114,0 +139,3 @@
++    if (!injected && owner->service.phase() != SyntheticFrameService::Phase::Never &&
++        owner->service.phase() != SyntheticFrameService::Phase::Armed)
++        ++DiagnosticFailureInjection::ordinaryPostFaultCount;
+@@ -116,0 +144,4 @@
++        const bool original = owner->context && QThread::currentThread() == owner->originalThread &&
++            QOpenGLContext::currentContext() == owner->originalContext;
++        owner->service.activate(owner->generation, injected == MPV_ERROR_UNSUPPORTED, result, original,
++                                DiagnosticFailureInjection::monotonicNanos());
