@@ -31,6 +31,7 @@ public:
   }
   void renderMayExist() { uncertainRender = true; }
   void rendererReady() { ready = true; }
+  void noteSubmission() { submissionAttempted = true; submissionAt = QtThreaded::monotonicNanos(); }
   void bind(const std::function<bool()>& verify, const std::function<int()>& canceledCount,
             const std::function<qint64()>& canceledTime)
   { sameBinding = verify; canceled = canceledCount; canceledAt = canceledTime; bound = true; }
@@ -50,9 +51,12 @@ public:
   }
   QJsonObject evidence() const
   {
-    return {{"bound", bound}, {"renderer_ready", ready}, {"stop_entered", stopEntered},
+    return {{"bound", bound}, {"renderer_ready", ready}, {"submission_attempted", submissionAttempted},
+            {"submission_at", submissionAt}, {"stop_attempted", stopAttempted},
+            {"resources_settled", resourcesSettled}, {"stop_entered", stopEntered},
             {"stop_returned", stopReturned}, {"terminal_confirmed", idleAt},
-            {"canceled_received", cancelAt}, {"canceled_count", cancelCount},
+            {"canceled_received", canceledAt ? canceledAt() : cancelAt},
+            {"canceled_count", canceled ? canceled() : cancelCount},
             {"retirement_requested", retirementAt}, {"retirement_acknowledged", ackAt},
             {"shutdown_returned", shutdownAt}, {"generation", qint64(generation)},
             {"stop_status", stopStatus}, {"stop_error", stopError}, {"idle_status", idleStatus},
@@ -73,7 +77,7 @@ private:
     const int status = mpv_get_property(core, name, MPV_FORMAT_FLAG, &value);
     return {{"status", status}, {"value", value}, {"received", QtThreaded::monotonicNanos()}};
   }
-  bool prepareStop()
+  bool prepareTerminal()
   {
     QCoreApplication::processEvents();
     if (beforeStop && !beforeStop()) clean = false;
@@ -83,19 +87,24 @@ private:
     properties.insert("before_force_window", force);
     properties.insert("before_current_vo", vo);
     properties.insert("before_vo_configured", configured);
-    if (force["status"].toInt() < 0 || vo["status"].toInt() < 0 ||
-        vo["value"].toString() != "libmpv" || configured["status"].toInt() < 0 || canceled() != 0)
+    if (force["status"].toInt() < 0 || configured["status"].toInt() < 0 || canceled() != 0 ||
+        (submissionAttempted && (vo["status"].toInt() < 0 || vo["value"].toString() != "libmpv")))
       clean = false;
+    if (submissionAttempted && !stopPlayback()) return false;
+    const int setStatus = mpv_set_property_string(core, "force-window", "no");
+    properties.insert("force_window_set_no_status", setStatus);
+    properties.insert("force_window_set_no_returned", QtThreaded::monotonicNanos());
+    return setStatus >= 0 && awaitTerminal();
+  }
+  bool stopPlayback()
+  {
+    stopAttempted = true;
     stopEntered = QtThreaded::monotonicNanos();
     const auto result = player.requestNativeStop();
     stopReturned = QtThreaded::monotonicNanos();
     stopStatus = int(result.status);
     stopError = result.error;
-    if (result.status != PlayerComponent::NativeStopResult::Status::Accepted) return false;
-    const int setStatus = mpv_set_property_string(core, "force-window", "no");
-    properties.insert("force_window_set_no_status", setStatus);
-    properties.insert("force_window_set_no_returned", QtThreaded::monotonicNanos());
-    return setStatus >= 0 && awaitTerminal();
+    return result.status == PlayerComponent::NativeStopResult::Status::Accepted;
   }
   bool awaitTerminal()
   {
@@ -115,8 +124,8 @@ private:
       cancelAt = canceledAt();
       if (force["status"].toInt() < 0 || idleStatus < 0 ||
           (vo["status"].toInt() < 0 && vo["status"].toInt() != MPV_ERROR_PROPERTY_UNAVAILABLE) ||
-          cancelCount > 1) return false;
-      if (force["value"].toString() == "no" && idleValue && cancelCount == 1 &&
+          cancelCount > (submissionAttempted ? 1 : 0)) return false;
+      if (force["value"].toString() == "no" && idleValue && cancelCount == (submissionAttempted ? 1 : 0) &&
           vo["status"].toInt() == MPV_ERROR_PROPERTY_UNAVAILABLE) {
         idleAt = QtThreaded::monotonicNanos();
         if (afterStop && !afterStop()) clean = false;
@@ -129,7 +138,7 @@ private:
   bool retire()
   {
     if (!core || !retired || item->renderGeneration() != generation) return false;
-    if (bound && (!sameBinding() || !prepareStop())) return false;
+    if (bound && (!sameBinding() || !prepareTerminal())) return false;
     if (!bound && readString("current-vo")["status"].toInt() != MPV_ERROR_PROPERTY_UNAVAILABLE) return false;
     retirementAt = QtThreaded::monotonicNanos();
     item->requestRenderRetirement(generation);
@@ -156,7 +165,8 @@ private:
   std::function<qint64()> canceledAt;
   std::unique_ptr<QSignalSpy> retired;
   bool attempted = false, resourcesSettled = false, clean = true;
-  bool uncertainRender = false, ready = false, bound = false;
+  bool uncertainRender = false, ready = false, bound = false, submissionAttempted = false, stopAttempted = false;
+  qint64 submissionAt = 0;
   qint64 stopEntered = 0, stopReturned = 0, idleAt = 0, cancelAt = 0;
   qint64 retirementAt = 0, ackAt = 0, shutdownAt = 0;
   int stopStatus = -1, stopError = 0, idleStatus = MPV_ERROR_GENERIC, idleValue = 0, ackCount = 0, cancelCount = 0;
