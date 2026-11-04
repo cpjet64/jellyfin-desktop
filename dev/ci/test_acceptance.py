@@ -17,7 +17,7 @@ def qtest(class_name, case, scenario="playing"):
 QTEST = qtest("TestRendererLossOffscreen", "actualPlayback")
 JOBS = ("windows-x64", "windows-system", "linux-static", "linux-system", "macos-static", "macos-system")
 CORE = ("test_systemcomponent", "test_log", "test_settings", "test_displaymanager", "test_log_rotation",
-        "test_chromiumflags", "test_webclient_transport", "test_mpv_test_bootstrap_pure", "test_smtc_admission_model")
+        "test_chromiumflags", "test_webclient_transport", "test_mpv_test_bootstrap_pure", "test_smtc_admission_model", "test_c2a_hold_gate")
 RUNTIME = ("test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard", "test_mpv_test_bootstrap", "test_windowmanager")
 MPVQT_SHA = "2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e"
 STATIC = ("test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state")
@@ -107,6 +107,13 @@ class AcceptanceTest(unittest.TestCase):
         self.assertEqual(set(acceptance.JOBS), set(JOBS))
         for job in JOBS:
             with self.assertRaisesRegex(ValueError, "legacy offscreen-render-v1 receipts are invalidated"):
+                self.validate(job)
+
+    def test_callback_guard_is_required_for_each_platform(self):
+        for job in JOBS:
+            path = self.base / job / "headless-ctest.xml"
+            path.write_text(path.read_text().replace('<testcase name="test_c2a_hold_gate"/>', ''), encoding="utf-8")
+            with self.subTest(job=job), self.assertRaisesRegex(ValueError, "Missing CTest cases: test_c2a_hold_gate"):
                 self.validate(job)
 
     def test_provenance_and_all_statuses(self):

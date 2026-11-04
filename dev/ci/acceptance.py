@@ -17,7 +17,7 @@ SCENARIOS = ("playing", "paused", "held-hook")
 STATUSES = ("passed", "failed", "blocked", "not_run")
 CORE = ("test_systemcomponent", "test_log", "test_settings", "test_displaymanager",
         "test_log_rotation", "test_chromiumflags", "test_webclient_transport",
-        "test_mpv_test_bootstrap_pure", "test_smtc_admission_model")
+        "test_mpv_test_bootstrap_pure", "test_smtc_admission_model", "test_c2a_hold_gate")
 RUNTIME = ("test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard",
            "test_mpv_test_bootstrap", "test_windowmanager")
 STATIC = ("test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state")

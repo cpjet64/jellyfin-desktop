@@ -4,6 +4,11 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+add_executable(test_c2a_hold_gate test_c2a_hold_gate.cpp)
+target_link_libraries(test_c2a_hold_gate PRIVATE Qt6::Core Qt6::Test Threads::Threads)
+add_test(NAME test_c2a_hold_gate COMMAND test_c2a_hold_gate)
+set_tests_properties(test_c2a_hold_gate PROPERTIES TIMEOUT 60)
+
 if(MPVQT_C2_DIAGNOSTIC_ONLY)
   add_subdirectory(qt_threaded)
   add_executable(test_c2a_retirement_native test_c2a_retirement_native.cpp
