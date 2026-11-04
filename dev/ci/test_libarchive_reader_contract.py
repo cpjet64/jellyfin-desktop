@@ -89,6 +89,7 @@ class StructuredReaderContract(unittest.TestCase):
         fake.archive_entry_acl_types.return_value = 0
         fake.archive_entry_xattr_count.return_value = 0
         fake.archive_entry_sparse_count.return_value = 0
+        fake.archive_entry_fflags_text.return_value = None
         fake.archive_entry_mode.return_value = stat.S_IFREG | 0o644
         fake.archive_entry_size_is_set.return_value = 1
         fake.archive_entry_size.return_value = 1
@@ -168,6 +169,15 @@ class StructuredReaderContract(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     stream.next_entry()
 
+    def test_privileged_file_flags_are_rejected(self):
+        fake = self.backend()
+        self.header(fake, [0])
+        fake.archive_entry_fflags_text.return_value = b"uchg"
+        with patch.object(reader.os, "open", return_value=7), patch.object(reader.os, "close"):
+            with reader.Reader("archive", fake) as stream:
+                with self.assertRaises(ValueError):
+                    stream.next_entry()
+
     def test_abi_declares_every_reader_symbol(self):
         required = {"archive_version_number", "archive_read_new", "archive_read_support_filter_none",
                     "archive_read_support_format_7zip", "archive_read_open_fd", "archive_read_next_header",
@@ -175,7 +185,8 @@ class StructuredReaderContract(unittest.TestCase):
                     "archive_format", "archive_filter_code", "archive_read_free", "archive_entry_pathname",
                     "archive_entry_hardlink", "archive_entry_symlink", "archive_entry_size",
                     "archive_entry_size_is_set", "archive_entry_mode", "archive_entry_is_encrypted",
-                    "archive_entry_acl_types", "archive_entry_xattr_count", "archive_entry_sparse_count"}
+                    "archive_entry_acl_types", "archive_entry_xattr_count", "archive_entry_sparse_count",
+                    "archive_entry_fflags_text"}
         self.assertEqual(set(library.ABI), required)
         for name, (result, arguments) in library.ABI.items():
             with self.subTest(name=name):
