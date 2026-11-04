@@ -42,6 +42,7 @@ struct Scene::Data {
   bool transferred = false;
   bool synchronized = false;
   bool pendingReadback = false;
+  quint64 order = 0;
   bool initializeGui(QString* error);
   void initializeWorker();
   void initializePartialRhi();

@@ -10,13 +10,13 @@ void Scene::Data::cleanup()
 {
   { QMutexLocker guard(&lock); state.admissionClosed = true; state.cleanupThread = currentThread(); }
   if (timer) { timer->stop(); delete timer; timer = nullptr; }
-  { QMutexLocker guard(&lock); state.frameSettled = true; }
   if (failure == FailurePoint::BlockCleanup) { fail("injected blocked cleanup"); return; }
   if (!context || !surface || !context->makeCurrent(surface)) { fail("cleanup context unavailable"); return; }
   { QMutexLocker guard(&lock); state.contextCurrentAtCleanup = true; }
   auto* priv = QQuickRenderControlPrivate::get(control);
   if (priv->frameStatus == QQuickRenderControlPrivate::RecordingFrame) { fail("cleanup encountered active frame"); return; }
-  { QMutexLocker guard(&lock); state.noActiveFrameAtCleanup = true; }
+  { QMutexLocker guard(&lock); state.noActiveFrameAtCleanup = true; state.frameSettled = true;
+    state.frameSettledOrder = ++order; }
   auto* win = QQuickWindowPrivate::get(window);
   auto* savedContext = priv->rc;
   auto* savedRhi = priv->rhi;
@@ -24,9 +24,8 @@ void Scene::Data::cleanup()
   if (priv->offscreenSurface != surface || (priv->rhi && !priv->ownRhi)) {
     fail("unexpected fallback or QRhi ownership"); return;
   }
-  const bool wasInitialized = priv->initialized;
   control->invalidate();
-  if (wasInitialized) priv->rc->invalidate();
+  priv->rc->invalidate();
   QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
   window->setRenderTarget(QQuickRenderTarget());
   win->ensureCustomRenderTarget();
@@ -34,13 +33,14 @@ void Scene::Data::cleanup()
   if (rt.rt.renderTarget || rt.res.texture || rt.res.renderBuffer || rt.res.rpDesc ||
       rt.implicitBuffers.depthStencil || rt.implicitBuffers.depthStencilTexture ||
       rt.implicitBuffers.multisampleTexture) { fail("Qt render target wrappers remain"); return; }
-  { QMutexLocker guard(&lock); state.wrappersCleared = true; }
+  { QMutexLocker guard(&lock); state.wrappersCleared = true; state.wrappersClearedOrder = ++order; }
   if (!context->makeCurrent(surface)) { fail("cleanup could not restore context"); return; }
   delete target; target = nullptr;
   priv->offscreenSurface = nullptr;
-  { QMutexLocker guard(&lock); state.fallbackDetached = true; }
+  { QMutexLocker guard(&lock); state.fallbackDetached = true; state.fallbackDetachedOrder = ++order; }
   delete control; control = nullptr;
-  { QMutexLocker guard(&lock); state.controlDestroyed = true; ++state.controlDestroyedCount; }
+  { QMutexLocker guard(&lock); state.controlDestroyed = true; ++state.controlDestroyedCount;
+    state.controlDestroyedOrder = ++order; }
   { QMutexLocker guard(&lock);
     if (savedRhi && (state.rhiDestroyedCount != 1 || state.rhiCleanupThread != state.cleanupThread)) {
       state.error = "QRhi cleanup callback was not observed exactly once on worker";
@@ -64,10 +64,12 @@ void Scene::Data::cleanup()
 
 bool Scene::shutdown(QString* error)
 {
+  { QMutexLocker guard(&data->lock); data->state.admissionClosed = true; }
   if (data->started && !data->transferred && !data->state.workerJoined) {
     data->thread.quit();
     if (!data->thread.wait(10000)) { data->fail("untransferred worker did not join"); return false; }
     data->state.workerJoined = true;
+    data->state.workerJoinedOrder = ++data->order;
     data->started = false;
   }
   if (!data->started) {
@@ -84,7 +86,7 @@ bool Scene::shutdown(QString* error)
       ++data->state.contextDestroyedCount; }
     if (data->surface) { delete data->surface; data->surface = nullptr;
       data->state.surfaceDestroyed = true; data->state.surfaceDestructionThread = currentThread();
-      ++data->state.surfaceDestroyedCount; }
+      ++data->state.surfaceDestroyedCount; data->state.surfaceDestroyedOrder = ++data->order; }
     return true;
   }
   if (data->state.workerJoined) return true;
@@ -92,15 +94,20 @@ bool Scene::shutdown(QString* error)
     data->state.admissionClosed = true;
     if (data->pendingReadback) { data->pendingReadback = false; ++data->state.readbacksCancelled; }
   }
-  if (!data->transferred || !data->dispatch([this] { data->cleanup(); }, error, true)) return false;
+  if (!data->transferred || !data->dispatch([this] {
+    data->cleanup();
+    QMutexLocker guard(&data->lock);
+    if (data->state.cleanupCount) data->state.cleanupAckOrder = ++data->order;
+  }, error, true)) return false;
   { QMutexLocker guard(&data->lock); if (!data->state.cleanupCount) return false; }
   data->thread.quit();
   if (!data->thread.wait(10000)) { data->fail("render worker did not join"); return false; }
-  { QMutexLocker guard(&data->lock); data->state.workerJoined = true; }
+  { QMutexLocker guard(&data->lock); data->state.workerJoined = true; data->state.workerJoinedOrder = ++data->order; }
   delete data->window; data->window = nullptr;
   delete data->surface; data->surface = nullptr;
   { QMutexLocker guard(&data->lock); data->state.surfaceDestructionThread = currentThread();
-    data->state.surfaceDestroyed = true; ++data->state.surfaceDestroyedCount; }
+    data->state.surfaceDestroyed = true; ++data->state.surfaceDestroyedCount;
+    data->state.surfaceDestroyedOrder = ++data->order; }
   return true;
 }
 }

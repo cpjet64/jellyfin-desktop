@@ -83,7 +83,9 @@ bool Scene::Data::initializeGui(QString* error)
   surface->create();
   state.privateBoundaryEntered = true;
   auto* priv = QQuickRenderControlPrivate::get(control);
-  if (!surface->isValid() || priv->window != window || priv->rhi || priv->offscreenSurface || priv->initialized) {
+  if (failure == FailurePoint::WrongPrivateState || !surface->isValid() || priv->window != window ||
+      priv->rhi || priv->offscreenSurface || priv->initialized) {
+    state.privateStateRejected = true;
     if (error) *error = "invalid initial private state or surface";
     return false;
   }
@@ -98,6 +100,7 @@ void Scene::Data::observeRhi(QRhi* rhi)
     QMutexLocker guard(&lock);
     state.rhiCleanupThread = currentThread();
     ++state.rhiDestroyedCount;
+    state.rhiCleanupOrder = ++order;
   });
 }
 
