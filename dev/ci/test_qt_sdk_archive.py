@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from qt_sdk_archive import Entry, check_storage, download_archive, plan_entries, stage_entries, validate_manifest, verify_archive, verify_materialized_link
+from qt_sdk_archive import Entry, check_storage, download_archive, plan_entries, publish_stage, stage_entries, validate_manifest, verify_archive, verify_materialized_link
 
 
 ROOT = "6.9.3/gcc_64"
@@ -214,6 +214,22 @@ class QtArchiveTest(unittest.TestCase):
                                    parent / "ready", 20, ROOT)
             self.assertEqual((result / ROOT / "tool").read_bytes(), b"ok")
             self.assertFalse((parent / "stage").exists())
+
+    @unittest.skipUnless(sys.platform in ("win32", "linux"),
+                         "native publisher supports Windows and Linux")
+    def test_native_publication_preserves_existing_destination(self):
+        self.publisher.stop()
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            stage, destination = parent / "stage", parent / "ready"
+            stage.mkdir()
+            destination.mkdir()
+            (stage / "source").write_text("source")
+            (destination / "existing").write_text("existing")
+            with self.assertRaises(OSError):
+                publish_stage(stage, destination)
+            self.assertEqual((stage / "source").read_text(), "source")
+            self.assertEqual((destination / "existing").read_text(), "existing")
 
     def test_conflicting_overlay_never_publishes(self):
         for second in (file_entry("file", b"different"), file_entry("file", mode=0o644)):
