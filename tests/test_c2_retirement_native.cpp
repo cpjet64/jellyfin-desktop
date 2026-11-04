@@ -286,6 +286,15 @@ void TestC2RetirementNative::retireAndVerify(Scene& scene, PlayerComponent& play
   }
   DiagnosticFailureInjection::blockNextRetire = true;
   scene.item->requestRenderRetirement(generation);
+  if (scenario == "retire") {
+    QTest::qWait(250); // Pump GUI events without running a render-control frame.
+    QVERIFY(blocked.isEmpty());
+    QVERIFY(retired.isEmpty());
+    QCOMPARE(DiagnosticFailureInjection::frees.load(), 0);
+    QCOMPARE(scene.item->controller(), controller);
+    QCOMPARE(controller->mpv(), core);
+    qInfo() << "C2 retirement job made no progress while frames were withheld";
+  }
   QVERIFY(scene.waitFor([&] { return !blocked.isEmpty(); }, 10000));
   if (scenario == "retire") QVERIFY(DiagnosticFailureInjection::updatesDeferred.load() > deferredBefore);
   QVERIFY(retired.isEmpty());
