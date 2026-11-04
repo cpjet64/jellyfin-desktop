@@ -25,10 +25,10 @@ not establish recovery from loss of the native OpenGL context or a GPU reset.
   an explicit retirement request and acknowledges only an actual, safe free.
   Reconstructing a renderer, reloading media, and automatic retries need a later
   reviewed implementation and acceptance evidence.
-- The core/render-resource lifetime owner for blocked retirement is still under
-  design review. Neither returning from an item destructor with dangling state,
-  freeing under a replacement GL context, nor destroying the core first is a
-  valid implementation of blocked retirement.
+- C2a runs only in a diagnostic build without application or package targets.
+  The fixture retains the whole item, window, core, original GL context, and
+  surface until retirement completes. It does not establish a production
+  shutdown policy or permit arbitrary QML/window destruction during retirement.
 
 ## Controlled-retirement obligations
 
@@ -47,6 +47,14 @@ not establish recovery from loss of the native OpenGL context or a GPU reset.
    callback races, and the actual events and state changes caused by retirement.
 6. Keep core destruction behind safe render-resource retirement. Do not suppress
    real mpv events to make playback appear uninterrupted.
+7. A missing original context means `BlockedNoContext`, zero frees/core
+   terminations, and no acknowledgement. The fixture may restore that same
+   context and explicitly retry the same generation once. A scheduled job that
+   never executes also has no acknowledgement; report bounded missing progress.
+8. Test permanent context unavailability with fake resources only. Every real
+   native pass must legally retire, tear down the item, terminate the core, and
+   exit naturally with zero owned processes. Irreversible context loss is a
+   failure, not demonstrated recovery.
 
 The pinned mpv implementation disables active video when its render context is
 freed. A surviving handle or successful free/create pair is therefore not proof
