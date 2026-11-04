@@ -56,7 +56,7 @@ def command(name, args, *, env=None, timeout=120):
         raise RuntimeError(f"{name} failed ({code}); see {log}")
 
 
-def preflight():
+def preflight(prepared_tools=False):
     system = platform.system()
     machine = platform.machine().lower()
     if system == "Darwin":
@@ -96,6 +96,12 @@ def preflight():
     if host_missing:
         raise RuntimeError("BLOCKED: missing host prerequisites: " + ", ".join(host_missing))
     bootstrap_missing = [name for name in missing if name in can_bootstrap]
+    if prepared_tools and bootstrap_missing:
+        raise RuntimeError("BLOCKED: prepared native tools are unavailable: " + ", ".join(bootstrap_missing))
+    if prepared_tools:
+        absent = missing_build_inputs(mode, os.environ, found.get("pkg-config"), bool(explicit))
+        if absent:
+            raise RuntimeError("BLOCKED: prepared build inputs not found: " + ", ".join(absent))
     if bootstrap_missing:
         absent = missing_build_inputs(mode, os.environ, found.get("pkg-config"), bool(explicit))
         if absent:
@@ -116,6 +122,73 @@ def preflight():
     return system, mode, desktop_missing
 
 
+def fresh_sdk_workspace(root, job):
+    if not job.isdecimal():
+        raise RuntimeError("BLOCKED: numeric CI_JOB_ID required for job-local SDK")
+    root = root.resolve(strict=True)
+    if root.stat().st_uid != os.getuid():
+        raise RuntimeError("BLOCKED: checkout is not owned by the CI job user")
+    deps = root / "deps"
+    if deps.is_symlink():
+        raise RuntimeError("BLOCKED: job dependency directory is a symlink")
+    deps.mkdir(exist_ok=True)
+    if not deps.is_dir() or deps.stat().st_uid != os.getuid() or deps.resolve().parent != root:
+        raise RuntimeError("BLOCKED: job dependency directory is not owned by this checkout")
+    workspace = deps / ("ci-" + job)
+    try:
+        workspace.mkdir(mode=0o700)
+    except FileExistsError as error:
+        raise RuntimeError("BLOCKED: job SDK workspace already exists") from error
+    return workspace
+
+
+def prepare_linux_sdk():
+    if (platform.system(), platform.machine().lower()) != ("Linux", "x86_64") or os.environ.get("CI_JOB_IMAGE"):
+        raise RuntimeError("BLOCKED: job-local SDK requires native Linux x86_64")
+    if os.environ.get("CI_MPVQT_MODE") != "static":
+        raise RuntimeError("BLOCKED: job-local SDK currently supports static mode only")
+    conflicts = ("CI_QT_PREFIX", "CI_MPV_PREFIX", "CI_MPV_DEV_DEB", "CI_MPV_INCLUDE_DIR", "CI_MPV_LIBRARY", "CI_MPV_PINNED_RUNTIME")
+    if any(os.environ.get(key) for key in conflicts):
+        raise RuntimeError("BLOCKED: job-local SDK conflicts with existing explicit inputs")
+    if shutil.disk_usage(ROOT).free < 10 * 1024**3:
+        raise RuntimeError("BLOCKED: at least 10 GiB free space required")
+    if unavailable_compilers(os.environ) or not all(shutil.which(name) for name in ("cc", "c++", "pkg-config", "git")):
+        raise RuntimeError("BLOCKED: native compiler and host tools required")
+    try:
+        from linux_qt_archive import stage_qt
+        from linux_mpv_payload import acquire_mpv
+        from linux_sdk_probe import probe_sdk
+    except ImportError as error:
+        raise RuntimeError("BLOCKED: validated job-local SDK helpers are unavailable") from error
+    found = inventory("Linux", "static")
+    missing = {name for name in ("cmake", "ctest", "ninja", "node") if not found.get(name)}
+    missing.update(name for name in incompatible_tools(found) if name in ("cmake", "ctest", "ninja", "node"))
+    if "ctest" in missing:
+        missing.add("cmake")
+    workspace = fresh_sdk_workspace(ROOT, os.environ.get("CI_JOB_ID", ""))
+    if missing:
+        bins = bootstrap(missing, workspace / "native-tools")
+        os.environ["PATH"] = os.pathsep.join([str(path) for path in bins] + [os.environ.get("PATH", "")])
+    qt_prefix = Path(stage_qt(workspace)).resolve(strict=True)
+    try:
+        qt_prefix.relative_to(workspace.resolve(strict=True))
+    except ValueError as error:
+        raise RuntimeError("BLOCKED: staged Qt prefix is outside the job workspace") from error
+    mpv_paths = acquire_mpv(workspace)
+    expected = {"CI_MPV_DEV_DEB", "CI_MPV_INCLUDE_DIR", "CI_MPV_LIBRARY", "CI_MPV_PINNED_RUNTIME"}
+    if set(mpv_paths) != expected or mpv_paths["CI_MPV_PINNED_RUNTIME"] != "1":
+        raise RuntimeError("BLOCKED: incomplete staged mpv identity")
+    explicit_inputs({**os.environ, **mpv_paths}, "Linux", ROOT)
+    report = probe_sdk(qt_prefix, workspace, mpv_paths)
+    updates = report.get("environment", {})
+    if set(updates) != {"PKG_CONFIG_PATH", "LD_LIBRARY_PATH"} or not all(isinstance(v, str) and v for v in updates.values()):
+        raise RuntimeError("BLOCKED: SDK probe did not provide validated runtime paths")
+    if (Path(updates["PKG_CONFIG_PATH"]).resolve() != qt_prefix / "lib/pkgconfig" or
+            Path(updates["LD_LIBRARY_PATH"]).resolve() != qt_prefix / "lib"):
+        raise RuntimeError("BLOCKED: SDK probe returned paths outside the selected Qt prefix")
+    os.environ.update({"CI_QT_PREFIX": str(qt_prefix), **mpv_paths, **updates})
+
+
 def portable_checks():
     command("report-gate-tests", [sys.executable, "tests/test_ci_results.py"])
     command("evidence-tests", [sys.executable, "dev/ci/test_evidence.py"])
@@ -127,6 +200,7 @@ def portable_checks():
     command("native-prerequisite-inventory-tests", [sys.executable, "dev/ci/test_native_prereq_inventory.py"])
     command("explicit-mpv-tests", [sys.executable, "dev/ci/test_explicit_mpv.py"])
     command("native-order-tests", [sys.executable, "dev/ci/test_native_order.py"])
+    command("linux-sdk-order-tests", [sys.executable, "dev/ci/test_linux_sdk_order.py"])
     command("qt-unix-manifest-tests", [sys.executable, "dev/ci/test_qt_unix_manifest.py"])
     command("mac-session-tests", [sys.executable, "dev/ci/test_macos_session.py"])
     command("headless-routing-tests", [sys.executable, "dev/ci/test_headless_routing.py"])
@@ -293,7 +367,14 @@ def main():
     RESULTS.mkdir(parents=True, exist_ok=True)
     portable_checks()
     command("native-prereq-inventory", [sys.executable, "dev/ci/native_prereq_inventory.py"], timeout=600)
-    system, mode, desktop_missing = preflight()
+    sdk_mode = os.environ.get("CI_LINUX_SDK_MODE", "")
+    if sdk_mode not in ("", "job-local"):
+        raise RuntimeError("BLOCKED: unsupported CI_LINUX_SDK_MODE")
+    if sdk_mode:
+        prepare_linux_sdk()
+        system, mode, desktop_missing = preflight(prepared_tools=True)
+    else:
+        system, mode, desktop_missing = preflight()
     verify_mpvqt_source()
     patch_env = os.environ.copy()
     patch_env["MPVQT_TEST_SOURCE"] = str(ROOT / "external/mpvqt")
