@@ -42,6 +42,27 @@ class StaticInspectionTests(unittest.TestCase):
         self.assertTrue(subject.storage_failure(group_type("group", [RuntimeError("x"), full])))
         self.assertFalse(subject.storage_failure(urllib.error.URLError("TLS failure")))
 
+    def test_storage_classifier_without_edquot(self):
+        import urllib.error
+        had_quota = hasattr(errno, "EDQUOT")
+        quota = getattr(errno, "EDQUOT", None)
+        if had_quota:
+            delattr(errno, "EDQUOT")
+        try:
+            full = OSError(errno.ENOSPC, "full")
+            shared = urllib.error.URLError(full)
+            outer = SyntheticGroup("shared", [shared, shared])
+            full.__context__ = outer
+            self.assertTrue(subject.storage_failure(outer))
+            self.assertFalse(subject.storage_failure(OSError(errno.EIO, "other")))
+            self.assertFalse(subject.storage_failure(urllib.error.URLError("TLS failure")))
+            windows = OSError("quota")
+            windows.winerror = 1816
+            self.assertTrue(subject.storage_failure(windows))
+        finally:
+            if had_quota:
+                errno.EDQUOT = quota
+
     def archive(self, directory, entries):
         path = Path(directory) / "fixture.tar.gz"
         with tarfile.open(path, "w:gz") as archive:

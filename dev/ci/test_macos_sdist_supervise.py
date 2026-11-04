@@ -41,6 +41,79 @@ class FakeProcess:
 
 
 class SupervisorTests(unittest.TestCase):
+    def invoke_main(self, base, result, validation=None):
+        argv = ["supervisor", "--worker-sha256", "a" * 64,
+                "--manifest-sha256", "b" * 64, "--python-sha256", "c" * 64]
+        with patch.object(subject.sys, "argv", argv), patch.object(subject, "prepare", return_value=base), \
+                patch.object(subject, "run_worker", return_value=result), \
+                patch.object(subject, "validate_result", side_effect=validation):
+            return subject.main()
+
+    def worker_outcome(self, **overrides):
+        result = {"child_pid": 1234, "exit_code": 0, "forced_stop": False, "child_reaped": True,
+                  "output_within_limit": True, "elapsed_seconds": 1.5, "stdout_bytes": 3, "stderr_bytes": 4}
+        result.update(overrides)
+        return result
+
+    def test_ordinary_worker_failure_retains_outcome(self):
+        with tempfile.TemporaryDirectory(dir=subject.REPO / "deps") as directory:
+            base = Path(directory)
+            result = self.worker_outcome(exit_code=7)
+            self.assertEqual(self.invoke_main(base, result), 7)
+            outcome = json.loads((base / "worker-outcome.json").read_text(encoding="utf-8"))
+            self.assertEqual(outcome, {"status": "failed", **result})
+            self.assertFalse((base / "supervisor-receipt.json").exists())
+
+    def test_timeout_retains_outcome(self):
+        with tempfile.TemporaryDirectory(dir=subject.REPO / "deps") as directory:
+            base = Path(directory)
+            result = self.worker_outcome(exit_code=1, forced_stop=True)
+            self.assertEqual(self.invoke_main(base, result), 76)
+            outcome = json.loads((base / "worker-outcome.json").read_text(encoding="utf-8"))
+            self.assertEqual(outcome, {"status": "failed", **result})
+            self.assertFalse((base / "supervisor-receipt.json").exists())
+
+    def test_postflight_failure_retains_original_error_and_outcome(self):
+        with tempfile.TemporaryDirectory(dir=subject.REPO / "deps") as directory:
+            base = Path(directory)
+            error = ValueError("invalid result")
+            result = self.worker_outcome()
+            with self.assertRaises(ValueError) as caught:
+                self.invoke_main(base, result, error)
+            self.assertIs(caught.exception, error)
+            outcome = json.loads((base / "worker-outcome.json").read_text(encoding="utf-8"))
+            failure = json.loads((base / "validation-error.json").read_text(encoding="utf-8"))
+            self.assertEqual(outcome, {"status": "pending_validation", **result})
+            self.assertEqual(failure, {"status": "failed", "error_type": "ValueError", "error": "invalid result"})
+            self.assertFalse((base / "supervisor-receipt.json").exists())
+
+    def test_postflight_storage_failure_writes_no_further_record(self):
+        with tempfile.TemporaryDirectory(dir=subject.REPO / "deps") as directory:
+            base = Path(directory)
+            with self.assertRaises(OSError):
+                self.invoke_main(base, self.worker_outcome(), OSError(errno.ENOSPC, "full"))
+            self.assertTrue((base / "worker-outcome.json").exists())
+            self.assertFalse((base / "validation-error.json").exists())
+            self.assertFalse((base / "supervisor-receipt.json").exists())
+
+    def test_success_receipt_only_after_validation(self):
+        with tempfile.TemporaryDirectory(dir=subject.REPO / "deps") as directory:
+            base = Path(directory)
+            (base / "sources").mkdir()
+            reserve = base / "sources" / "reservation.bin"
+            reserve.write_bytes(b"reservation")
+            argv = ["supervisor", "--worker-sha256", "a" * 64,
+                    "--manifest-sha256", "b" * 64, "--python-sha256", "c" * 64]
+            with patch.object(subject.sys, "argv", argv), patch.object(subject, "prepare", return_value=base), \
+                    patch.object(subject, "run_worker", return_value=self.worker_outcome()), \
+                    patch.object(subject, "validate_result", return_value={"archives": 6}), patch("builtins.print"):
+                self.assertEqual(subject.main(), 0)
+            outcome = json.loads((base / "worker-outcome.json").read_text(encoding="utf-8"))
+            receipt = json.loads((base / "supervisor-receipt.json").read_text(encoding="utf-8"))
+            self.assertEqual(outcome["status"], "pending_validation")
+            self.assertEqual(receipt["archives"], 6)
+            self.assertFalse(reserve.exists())
+
     def test_masked_storage_failure(self):
         full = OSError(errno.ENOSPC, "full")
         wrapped = RuntimeError("masked")
@@ -50,6 +123,27 @@ class SupervisorTests(unittest.TestCase):
         group_type = getattr(builtins, "ExceptionGroup", SyntheticGroup)
         self.assertTrue(subject.storage_failure(group_type("group", [RuntimeError("x"), full])))
         self.assertFalse(subject.storage_failure(RuntimeError("other")))
+
+    def test_storage_classifier_without_edquot(self):
+        import urllib.error
+        had_quota = hasattr(errno, "EDQUOT")
+        quota = getattr(errno, "EDQUOT", None)
+        if had_quota:
+            delattr(errno, "EDQUOT")
+        try:
+            full = OSError(errno.ENOSPC, "full")
+            shared = urllib.error.URLError(full)
+            outer = SyntheticGroup("shared", [shared, shared])
+            full.__context__ = outer
+            self.assertTrue(subject.storage_failure(outer))
+            self.assertFalse(subject.storage_failure(OSError(errno.EIO, "other")))
+            self.assertFalse(subject.storage_failure(urllib.error.URLError("TLS failure")))
+            windows = OSError("quota")
+            windows.winerror = 1816
+            self.assertTrue(subject.storage_failure(windows))
+        finally:
+            if had_quota:
+                errno.EDQUOT = quota
 
     def test_worker_has_no_process_or_dynamic_execution_calls(self):
         tree = ast.parse(subject.WORKER.read_text(encoding="utf-8"))
@@ -92,6 +186,8 @@ class SupervisorTests(unittest.TestCase):
                 self.assertEqual(subject.main(), 75)
             self.assertTrue(reserve.exists())
             self.assertFalse((base / "supervisor-receipt.json").exists())
+            self.assertFalse((base / "worker-outcome.json").exists())
+            self.assertFalse((base / "validation-error.json").exists())
 
     def test_result_requires_all_matching_sources(self):
         with tempfile.TemporaryDirectory(dir=subject.REPO / "deps") as directory:

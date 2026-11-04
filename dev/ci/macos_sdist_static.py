@@ -52,6 +52,10 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def storage_failure(error):
     pending, seen = [error], set()
+    storage_codes = {errno.ENOSPC}
+    quota = getattr(errno, "EDQUOT", None)
+    if quota is not None:
+        storage_codes.add(quota)
     while pending:
         current = pending.pop()
         if id(current) in seen:
@@ -60,7 +64,7 @@ def storage_failure(error):
         if len(seen) > 256:
             return True
         if isinstance(current, OSError) and (
-                current.errno in (errno.ENOSPC, errno.EDQUOT) or
+                current.errno in storage_codes or
                 getattr(current, "winerror", None) in (39, 112, 1816)):
             return True
         for value in (getattr(current, "__cause__", None), getattr(current, "__context__", None),

@@ -31,6 +31,10 @@ def digest(path):
 
 def storage_failure(error):
     pending, seen = [error], set()
+    storage_codes = {errno.ENOSPC}
+    quota = getattr(errno, "EDQUOT", None)
+    if quota is not None:
+        storage_codes.add(quota)
     while pending:
         current = pending.pop()
         if id(current) in seen:
@@ -39,7 +43,7 @@ def storage_failure(error):
         if len(seen) > 256:
             return True
         if isinstance(current, OSError) and (
-                current.errno in (errno.ENOSPC, errno.EDQUOT) or
+                current.errno in storage_codes or
                 getattr(current, "winerror", None) in (39, 112, 1816)):
             return True
         for value in (getattr(current, "__cause__", None), getattr(current, "__context__", None),
@@ -132,6 +136,29 @@ def validate_result(base, expected_worker, expected_manifest, expected_python):
             "transferred": report["transferred"], "expanded": report["expanded"]}
 
 
+def persist_record(path, record):
+    with path.open("x", encoding="utf-8") as output:
+        json.dump(record, output, indent=2)
+        output.flush()
+        os.fsync(output.fileno())
+
+
+def validate_with_evidence(base, args):
+    try:
+        return validate_result(base, args.worker_sha256, args.manifest_sha256, args.python_sha256)
+    except BaseException as error:
+        if storage_failure(error):
+            raise
+        record = {"status": "failed", "error_type": type(error).__name__, "error": str(error)}
+        try:
+            persist_record(base / "validation-error.json", record)
+        except BaseException as record_error:
+            if storage_failure(record_error):
+                raise
+            raise error from record_error
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--worker-sha256", required=True)
@@ -140,13 +167,18 @@ def main():
     args = parser.parse_args()
     base = prepare(args.worker_sha256, args.manifest_sha256, args.python_sha256)
     result = run_worker(base)
+    if result["exit_code"] == 75:
+        return 75
+    failed = (result["forced_stop"] or not result["child_reaped"] or
+              not result["output_within_limit"] or result["exit_code"] != 0)
+    persist_record(base / "worker-outcome.json", {"status": "failed" if failed else "pending_validation", **result})
     if result["forced_stop"]:
         return 76
     if not result["child_reaped"] or not result["output_within_limit"]:
         return 77
     if result["exit_code"] != 0:
         return result["exit_code"] if 0 < result["exit_code"] < 256 else 1
-    result.update(validate_result(base, args.worker_sha256, args.manifest_sha256, args.python_sha256))
+    result.update(validate_with_evidence(base, args))
     result.update({"worker_sha256": args.worker_sha256, "manifest_sha256": args.manifest_sha256,
                    "python_sha256": args.python_sha256,
                    "reservation_bytes": RESERVE_BYTES, "scope": "single reviewed worker; no children"})
