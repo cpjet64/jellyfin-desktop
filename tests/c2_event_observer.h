@@ -31,6 +31,7 @@ public:
       const mpv_event* event = mpv_wait_event(client, 0);
       if (!event || event->event_id == MPV_EVENT_NONE) break;
       Event copy{event->event_id};
+      copy.error = event->error;
       if (event->event_id == MPV_EVENT_START_FILE && event->data) {
         copy.playlistId = static_cast<const mpv_event_start_file*>(event->data)->playlist_entry_id;
       } else if (event->event_id == MPV_EVENT_END_FILE && event->data) {
@@ -57,6 +58,25 @@ public:
     int result = 0;
     for (const auto& event : events) if (event.kind == kind) ++result;
     return result;
+  }
+
+  int64_t latestLoadedEntry() const
+  {
+    int64_t pending = 0;
+    int64_t loaded = 0;
+    for (const auto& event : events) {
+      if (event.kind == MPV_EVENT_START_FILE) pending = event.playlistId;
+      else if (event.kind == MPV_EVENT_FILE_LOADED) loaded = event.error == 0 ? pending : 0;
+    }
+    return loaded;
+  }
+
+  int64_t latestStartedEntry() const
+  {
+    int64_t started = 0;
+    for (const auto& event : events)
+      if (event.kind == MPV_EVENT_START_FILE) started = event.playlistId;
+    return started;
   }
 
   void mark(const char* stage)

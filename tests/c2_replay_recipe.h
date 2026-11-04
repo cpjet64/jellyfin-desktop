@@ -24,7 +24,7 @@ public:
     const bool same = (url.isLocalFile() ? url.toLocalFile() : actual) == localFile;
     mpv_free(path);
     int paused = 0;
-    if (!same || mpv_get_property(core, "time-pos", MPV_FORMAT_DOUBLE, &position) < 0 ||
+    if (!same || playlistId <= 0 || mpv_get_property(core, "time-pos", MPV_FORMAT_DOUBLE, &position) < 0 ||
         mpv_get_property(core, "pause", MPV_FORMAT_FLAG, &paused) < 0 ||
         !std::isfinite(position) || position < 0) return false;
     file = encoded;
@@ -36,13 +36,25 @@ public:
 
   void stop() { intent = Intent::Stopped; }
 
+  bool sameFile(mpv_handle* core) const
+  {
+    char* raw = mpv_get_property_string(core, "path");
+    if (!raw) return false;
+    const QString actual = QString::fromUtf8(raw);
+    mpv_free(raw);
+    const QUrl url(actual);
+    return (url.isLocalFile() ? url.toLocalFile() : actual) == QString::fromUtf8(file);
+  }
+
   Outcome afterReady(mpv_handle* core, C2EventObserver& observer)
   {
     if (intent == Intent::Stopped) return Outcome::Cancelled;
     observer.drain();
     const auto idle = observer.flag("idle-active");
     if (idle.error < 0) return Outcome::Failed;
-    if (!idle.value) return Outcome::Continued;
+    if (!idle.value)
+      return observer.latestStartedEntry() == entryId && observer.latestLoadedEntry() == entryId && sameFile(core)
+          ? Outcome::Continued : Outcome::Failed;
     bool ended = false;
     for (const auto& event : observer.events)
       if (event.kind == MPV_EVENT_END_FILE && event.playlistId == entryId && event.insertCount == 0 &&

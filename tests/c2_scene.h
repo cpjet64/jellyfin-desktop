@@ -29,6 +29,7 @@ public:
   MpvVideoItem* item = nullptr;
   bool mayHaveContext = false;
   bool retired = false;
+  bool noContextConfirmed = false;
 };
 
 inline bool Scene::init()
@@ -75,7 +76,7 @@ inline bool Scene::waitFor(const std::function<bool()>& predicate, int ms)
 
 inline bool Scene::destroyItem()
 {
-  if (!retired || !context.makeCurrent(&surface)) return false;
+  if ((!retired && !noContextConfirmed) || !context.makeCurrent(&surface)) return false;
   control->invalidate();
   if (!context.makeCurrent(&surface)) return false;
   delete item;
@@ -85,7 +86,7 @@ inline bool Scene::destroyItem()
 
 inline Scene::~Scene()
 {
-  if (mayHaveContext && !retired) std::_Exit(EXIT_FAILURE);
+  if (mayHaveContext && !retired && !noContextConfirmed) std::_Exit(EXIT_FAILURE);
   if ((target || item) && !context.makeCurrent(&surface)) std::_Exit(EXIT_FAILURE);
   if (control) control->invalidate();
   if ((target || item) && !context.makeCurrent(&surface)) std::_Exit(EXIT_FAILURE);
