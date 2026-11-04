@@ -1,9 +1,24 @@
 #include <QtTest/QtTest>
 #include <wrl/implements.h>
+#include <wrl/event.h>
+#include <condition_variable>
+#include <functional>
+#include <thread>
+#include "smtc_admission_model.h"
 #include "taskbar/TaskbarComponentWin.h"
 
 using namespace ABI::Windows::Media;
 using namespace Microsoft::WRL;
+using ButtonHandler = __FITypedEventHandler_2_Windows__CMedia__CSystemMediaTransportControls_Windows__CMedia__CSystemMediaTransportControlsButtonPressedEventArgs;
+
+class ModelButtonArgs final : public RuntimeClass<RuntimeClassFlags<WinRt>, ISystemMediaTransportControlsButtonPressedEventArgs>
+{
+  InspectableClass(L"Jellyfin.Test.ModelButtonArgs", BaseTrust)
+public:
+  SystemMediaTransportControlsButton button = SystemMediaTransportControlsButton_Play;
+  IFACEMETHODIMP get_Button(SystemMediaTransportControlsButton* out) override
+  { if (!out) return E_POINTER; *out = button; return S_OK; }
+};
 
 class FakeUpdater final : public RuntimeClass<RuntimeClassFlags<WinRt>, ISystemMediaTransportControlsDisplayUpdater>
 {
@@ -31,6 +46,9 @@ public:
   ComPtr<FakeUpdater> updater = Make<FakeUpdater>();
   HRESULT updaterResult = S_OK;
   HRESULT addResult = S_OK;
+  HRESULT removeResult = S_OK;
+  ComPtr<ButtonHandler> retained;
+  std::function<void()> duringRemove;
   int adds = 0, removes = 0, gets = 0;
   EventRegistrationToken removed{};
   IFACEMETHODIMP get_PlaybackStatus(MediaPlaybackStatus*) override { return E_NOTIMPL; }
@@ -58,15 +76,16 @@ public:
   FAKE_ENABLED(ChannelUp)
   FAKE_ENABLED(ChannelDown)
 #undef FAKE_ENABLED
-  IFACEMETHODIMP add_ButtonPressed(__FITypedEventHandler_2_Windows__CMedia__CSystemMediaTransportControls_Windows__CMedia__CSystemMediaTransportControlsButtonPressedEventArgs*, EventRegistrationToken* token) override
+  IFACEMETHODIMP add_ButtonPressed(ButtonHandler* handler, EventRegistrationToken* token) override
   {
     ++adds;
     if (FAILED(addResult)) return addResult;
+    retained = handler;
     token->value = 4812;
     return S_OK;
   }
   IFACEMETHODIMP remove_ButtonPressed(EventRegistrationToken token) override
-  { ++removes; removed = token; return S_OK; }
+  { ++removes; removed = token; if (duringRemove) duringRemove(); if (SUCCEEDED(removeResult)) retained.Reset(); return removeResult; }
   IFACEMETHODIMP add_PropertyChanged(__FITypedEventHandler_2_Windows__CMedia__CSystemMediaTransportControls_Windows__CMedia__CSystemMediaTransportControlsPropertyChangedEventArgs*, EventRegistrationToken*) override { return E_NOTIMPL; }
   IFACEMETHODIMP remove_PropertyChanged(EventRegistrationToken) override { return E_NOTIMPL; }
 };
@@ -78,6 +97,9 @@ private slots:
   void updaterFailure();
   void registrationFailure();
   void registeredLifetime();
+  void failedRemovalRetainsProductionDelegate();
+  void modelClosedAndReentrant();
+  void modelHeldAndNewRegistration();
 };
 
 void TestWindowsSmtcLifetime::updaterFailure()
@@ -94,6 +116,103 @@ void TestWindowsSmtcLifetime::updaterFailure()
   QCOMPARE(controls->adds, 0);
   QCOMPARE(controls->removes, 0);
   QCOMPARE(controls->updater->clears, 0);
+}
+
+void TestWindowsSmtcLifetime::failedRemovalRetainsProductionDelegate()
+{
+  auto controls = Make<FakeControls>();
+  controls->removeResult = E_FAIL;
+  {
+    TaskbarComponentWin taskbar;
+    taskbar.m_systemControls = controls;
+    taskbar.initializeMediaTransportControls();
+    QVERIFY(controls->retained);
+  }
+  QCOMPARE(controls->removes, 1);
+  QVERIFY(controls->retained); // Never invoke the real raw-owner callback here.
+  controls->retained.Reset();
+}
+
+static ComPtr<ButtonHandler> makeModelHandler(const std::shared_ptr<SmtcAdmissionModel>& state,
+                                              std::function<void()> beforeEnqueue = {})
+{
+  return Callback<ButtonHandler>([state, beforeEnqueue](ISystemMediaTransportControls*,
+                                        ISystemMediaTransportControlsButtonPressedEventArgs* args) -> HRESULT {
+    SystemMediaTransportControlsButton button;
+    const HRESULT hr = args->get_Button(&button);
+    if (FAILED(hr)) return hr;
+    if (beforeEnqueue) beforeEnqueue();
+    smtcModelEnqueue(state, static_cast<int>(button));
+    return S_OK;
+  });
+}
+
+void TestWindowsSmtcLifetime::modelClosedAndReentrant()
+{
+  std::vector<int> values;
+  auto receiver = std::make_unique<SmtcModelReceiver>(values);
+  auto state = std::make_shared<SmtcAdmissionModel>(receiver.get());
+  auto controls = Make<FakeControls>();
+  auto args = Make<ModelButtonArgs>();
+  auto handler = makeModelHandler(state);
+  EventRegistrationToken token{};
+  QCOMPARE(controls->add_ButtonPressed(handler.Get(), &token), S_OK);
+  QCOMPARE(controls->retained->Invoke(controls.Get(), args.Get()), S_OK);
+  smtcModelClose(state);
+  smtcModelClose(state);
+  controls->removeResult = E_FAIL;
+  controls->duringRemove = [&] { QCOMPARE(controls->retained->Invoke(controls.Get(), args.Get()), S_OK); };
+  QCOMPARE(controls->remove_ButtonPressed(token), E_FAIL);
+  receiver.reset();
+  QCOMPARE(controls->retained->Invoke(controls.Get(), args.Get()), S_OK);
+  QCoreApplication::processEvents();
+  QVERIFY(values.empty());
+}
+
+void TestWindowsSmtcLifetime::modelHeldAndNewRegistration()
+{
+  std::vector<int> oldValues, newValues;
+  auto oldReceiver = std::make_unique<SmtcModelReceiver>(oldValues);
+  auto oldState = std::make_shared<SmtcAdmissionModel>(oldReceiver.get());
+  std::weak_ptr<SmtcAdmissionModel> oldWeak = oldState;
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool entered = false, release = false;
+  auto oldHandler = makeModelHandler(oldState, [&] {
+    std::unique_lock<std::mutex> lock(mutex);
+    entered = true;
+    cv.notify_one();
+    cv.wait_for(lock, std::chrono::seconds(5), [&] { return release; });
+  });
+  auto controls = Make<FakeControls>();
+  EventRegistrationToken token{};
+  QCOMPARE(controls->add_ButtonPressed(oldHandler.Get(), &token), S_OK);
+  ComPtr<ButtonHandler> retainedOld = controls->retained;
+  auto args = Make<ModelButtonArgs>();
+  std::thread worker([&] { retainedOld->Invoke(nullptr, args.Get()); });
+  bool observed = false;
+  { std::unique_lock<std::mutex> lock(mutex); observed = cv.wait_for(lock, std::chrono::seconds(5), [&] { return entered; }); }
+  smtcModelClose(oldState);
+  oldReceiver.reset();
+  SmtcModelReceiver newReceiver(newValues);
+  auto newState = std::make_shared<SmtcAdmissionModel>(&newReceiver);
+  auto newHandler = makeModelHandler(newState);
+  const HRESULT addNewResult = controls->add_ButtonPressed(newHandler.Get(), &token);
+  { std::lock_guard<std::mutex> lock(mutex); release = true; }
+  cv.notify_one();
+  worker.join();
+  QVERIFY(observed);
+  QCOMPARE(addNewResult, S_OK);
+  QCOMPARE(controls->retained->Invoke(nullptr, args.Get()), S_OK);
+  QCoreApplication::processEvents();
+  QVERIFY(oldValues.empty());
+  QCOMPARE(newValues.size(), size_t(1));
+  QCOMPARE(newValues.front(), static_cast<int>(SystemMediaTransportControlsButton_Play));
+  smtcModelClose(newState);
+  oldHandler.Reset();
+  retainedOld.Reset();
+  oldState.reset();
+  QVERIFY(oldWeak.expired());
 }
 
 void TestWindowsSmtcLifetime::registrationFailure()
