@@ -90,6 +90,7 @@ $venvPython = Join-Path $ci 'venv/Scripts/python.exe'
 Run-Native $venvPython @('tests/test_ci_results.py')
 Run-Native $venvPython @('dev/ci/test_evidence.py')
 Run-Native $venvPython @('dev/ci/test_fixture_suspend_policy.py')
+Run-Native $venvPython @('dev/ci/test_settlement_failure.py')
 Run-Native $venvPython @('dev/ci/test_build_manifest.py')
 Run-Native $venvPython @('dev/ci/test_acceptance.py')
 Run-Native $venvPython @('dev/ci/test_safe_extract.py')

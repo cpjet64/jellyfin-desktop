@@ -197,6 +197,7 @@ def prepare_linux_sdk():
 
 
 def portable_checks():
+    command("settlement-failure-tests", [sys.executable, "dev/ci/test_settlement_failure.py"])
     command("fixture-suspend-policy-tests", [sys.executable, "dev/ci/test_fixture_suspend_policy.py"])
     command("qga-terminal-tests", [sys.executable, "dev/ci/test_qga_terminal.py"])
     command("mac-sdist-static-tests", [sys.executable, "dev/ci/test_macos_sdist_static.py"])

@@ -111,7 +111,7 @@ class NativeOrderTest(unittest.TestCase):
                      "dev/ci/test_mac_helpers_acquire.py", "dev/ci/test_mac_carchive.py",
                      "dev/ci/test_qga_terminal.py", "dev/ci/test_macos_sdist_static.py",
                      "dev/ci/test_macos_sdist_supervise.py", "dev/ci/test_linux_qt_cache.py",
-                     "dev/ci/test_fixture_suspend_policy.py"):
+                     "dev/ci/test_fixture_suspend_policy.py", "dev/ci/test_settlement_failure.py"):
             self.assertEqual(paths.count(path), 1)
         self.assertNotIn("dev/ci/test_linux_sdk_cmake.py", paths)
 
@@ -120,11 +120,12 @@ class NativeOrderTest(unittest.TestCase):
         for path in ("dev/ci/test_mac_helpers.py", "dev/ci/test_mac_helpers_acquire.py",
                      "dev/ci/test_mac_carchive.py", "dev/ci/test_qga_terminal.py",
                      "dev/ci/test_macos_sdist_static.py", "dev/ci/test_macos_sdist_supervise.py",
-                     "dev/ci/test_linux_qt_cache.py", "dev/ci/test_fixture_suspend_policy.py"):
+                     "dev/ci/test_linux_qt_cache.py", "dev/ci/test_fixture_suspend_policy.py",
+                     "dev/ci/test_settlement_failure.py"):
             self.assertEqual(script.count(path), 1)
 
     def test_new_portable_suite_failure_stops_following_checks(self):
-        for failed in ("fixture-suspend-policy-tests", "qga-terminal-tests", "mac-sdist-static-tests",
+        for failed in ("settlement-failure-tests", "fixture-suspend-policy-tests", "qga-terminal-tests", "mac-sdist-static-tests",
                        "mac-sdist-supervisor-tests", "linux-qt-cache-tests"):
             calls = []
             def run(name, args, **kwargs):
