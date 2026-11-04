@@ -156,15 +156,17 @@ def _acquire(parent, committed_bytes, opener, lease=None):
                          checksum["checksum_bytes"], checksum["checksum_sha256"])
         extract_deno(stage / "deno_zip", stage / "extracted", checksum["sha256"],
                      limits["deno_expanded"])
+        # Keep the verified stage even when preparation or finalization fails.
+        created_stage = False
         # Close the marker before atomically linking it without replacement.
         marker = stage / ".READY.pending"
         with preserving_close(open(marker, "xb")):
             pass
-        os.link(marker, stage / "READY")
-        created_stage = False
-        return stage
     except BaseException as exc:
         primary = exc
         raise
     finally:
         finish_acquisition(stage, lock, lock_fd, created_stage, primary)
+    # A stage becomes consumable only after the lease has been finalized.
+    os.link(marker, stage / "READY")
+    return stage

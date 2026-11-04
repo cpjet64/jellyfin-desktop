@@ -117,7 +117,7 @@ class AcquisitionTests(unittest.TestCase):
                     with mock.patch("mac_helpers_acquire." + target, side_effect=error):
                         with self.assertRaises(urllib.error.URLError):
                             acquisition._acquire(parent, 0, lambda url, timeout: Response(objects[url]))
-                self.assertTrue((parent / ".mac-helper-acquisition.lock").exists())
+                self.assertEqual((parent / ".mac-helper-acquisition.lock").exists(), target == "checked_copy")
                 self.assertTrue((parent / "mac-helpers").is_dir())
                 self.assertFalse((parent / "mac-helpers" / "READY").exists())
 
@@ -138,7 +138,8 @@ class AcquisitionTests(unittest.TestCase):
                 with mock.patch("mac_helpers_acquire.os.link", side_effect=FileExistsError):
                     with self.assertRaises(FileExistsError):
                         acquisition._acquire(parent, 0, lambda url, timeout: Response(objects[url]), lease)
-            self.assertEqual(list(parent.iterdir()), [])
+            self.assertTrue((parent / "mac-helpers" / ".READY.pending").exists())
+            self.assertFalse((parent / "mac-helpers" / "READY").exists())
             self.assertFalse(lease.exists())
 
     def test_primary_tls_error_survives_stage_cleanup_failure_and_closes_fd(self):
@@ -171,10 +172,43 @@ class AcquisitionTests(unittest.TestCase):
                 real_close(fd)
                 raise OSError("close failed")
             with mock.patch.object(acquisition, "MANIFEST", manifest), \
-                    mock.patch.object(acquisition.os, "close", side_effect=failed_close):
+                    mock.patch.object(acquisition.os, "close", side_effect=failed_close) as close_mock:
                 with self.assertRaisesRegex(OSError, "close failed"):
                     acquisition._acquire(parent, 0, lambda url, timeout: Response(objects[url]))
+            self.assertEqual(close_mock.call_count, 1)
             self.assertTrue((parent / ".mac-helper-acquisition.lock").exists())
+            stage = parent / "mac-helpers"
+            self.assertEqual((stage / "yt_dlp").read_bytes(), objects["yt"])
+            self.assertEqual((stage / "extracted" / "deno").read_bytes(), b"deno executable")
+            self.assertTrue((stage / ".READY.pending").exists())
+            self.assertFalse((stage / "READY").exists())
+            with self.assertRaisesRegex(ValueError, "not ready"):
+                acquisition.verified_paths(stage)
+
+    def test_lease_removal_failure_retains_verified_but_unconsumable_stage(self):
+        with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:
+            root = Path(directory)
+            _, objects, manifest = self.fixture(root)
+            parent = root / "private"
+            parent.mkdir()
+            lock = parent / ".mac-helper-acquisition.lock"
+            real_unlink = Path.unlink
+            def failed_unlink(path, *args, **kwargs):
+                if path == lock:
+                    raise PermissionError("lease removal failed")
+                return real_unlink(path, *args, **kwargs)
+            with mock.patch.object(acquisition, "MANIFEST", manifest), \
+                    mock.patch.object(Path, "unlink", failed_unlink):
+                with self.assertRaisesRegex(PermissionError, "lease removal failed"):
+                    acquisition._acquire(parent, 0, lambda url, timeout: Response(objects[url]))
+            stage = parent / "mac-helpers"
+            self.assertTrue(lock.exists())
+            self.assertEqual((stage / "yt_dlp").read_bytes(), objects["yt"])
+            self.assertEqual((stage / "extracted" / "deno").read_bytes(), b"deno executable")
+            self.assertTrue((stage / ".READY.pending").exists())
+            self.assertFalse((stage / "READY").exists())
+            with self.assertRaisesRegex(ValueError, "not ready"):
+                acquisition.verified_paths(stage)
 
     def test_primary_and_close_failures_keep_primary_and_lease(self):
         with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:
