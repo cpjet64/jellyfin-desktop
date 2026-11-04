@@ -62,12 +62,16 @@ class TestInventory(unittest.TestCase):
         calls = []
         def run(args, **kwargs):
             calls.append((args, kwargs["env"]))
-            payload = '{"formulae":[{"name":"mpv","installed":[{"version":"1.0"}]}]}'
-            return SimpleNamespace(returncode=0, stdout=payload if "info" in args else "mpv 1.0")
-        with redirect_stdout(io.StringIO()), patch.object(native_inventory.shutil, "which", return_value="/usr/local/bin/brew"), \
+            payload = '{"formulae":[{"name":"mpv","installed":[{"version":"1.0"}]},{"name":"unrelated","installed":[{"version":"2"}]}]}'
+            return SimpleNamespace(returncode=0, stdout=payload if "info" in args else "mpv 1.0\nunrelated 2")
+        output = io.StringIO()
+        with redirect_stdout(output), patch.object(native_inventory.shutil, "which", return_value="/usr/local/bin/brew"), \
                 patch.object(native_inventory.subprocess, "run", side_effect=run):
             native_inventory.brew_versions()
         self.assertEqual([args[1] for args, _ in calls], ["list", "info"])
+        self.assertNotIn("--installed", calls[1][0])
+        self.assertNotIn("unrelated", output.getvalue())
+        self.assertIn("mpv", output.getvalue())
         self.assertTrue(all(env["HOMEBREW_NO_AUTO_UPDATE"] == "1" for _, env in calls))
 
 

@@ -98,11 +98,14 @@ def brew_versions():
     try:
         result = subprocess.run([brew, "list", "--versions", "qt", "mpv"], text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, env=environment)
-        print(f"Homebrew installed qt/mpv: {result.stdout.strip() or 'not reported'}", flush=True)
-        info = subprocess.run([brew, "info", "--installed", "--json=v2", "qt", "mpv"], text=True,
+        selected = [line for line in result.stdout.splitlines() if line.split() and line.split()[0] in ("qt", "mpv")]
+        print(f"Homebrew installed qt/mpv: {'; '.join(selected) or 'not reported'}", flush=True)
+        info = subprocess.run([brew, "info", "--json=v2", "qt", "mpv"], text=True,
                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, env=environment)
         if info.returncode == 0:
             for formula in json.loads(info.stdout).get("formulae", []):
+                if formula.get("name") not in ("qt", "mpv"):
+                    continue
                 versions = [item.get("version") for item in formula.get("installed", [])]
                 print(f"Homebrew {formula.get('name')} installed versions: {versions}", flush=True)
         else:

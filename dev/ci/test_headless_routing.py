@@ -47,6 +47,17 @@ class TestHeadlessRouting(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Qt6"):
             self.preflight_with(found, ["Qt6 development modules missing"])
 
+    def test_prerequisite_inventory_precedes_preflight_failure(self):
+        events = []
+        with tempfile.TemporaryDirectory(prefix="inventory-order-test-", dir=native.ROOT) as temp, \
+                patch.object(native, "RESULTS", Path(temp)), \
+                patch.object(native, "portable_checks", side_effect=lambda: events.append("portable")), \
+                patch.object(native, "command", side_effect=lambda name, args, **kw: events.append(name)), \
+                patch.object(native, "preflight", side_effect=RuntimeError("missing inputs")):
+            with self.assertRaisesRegex(RuntimeError, "missing inputs"):
+                native.main()
+        self.assertEqual(events, ["portable", "native-prereq-inventory"])
+
     def test_core_checks_select_only_explicit_nonvisual_cases(self):
         calls = []
         with redirect_stdout(io.StringIO()), patch.object(native, "command", side_effect=lambda name, args, **kw: calls.append((name, args))):
