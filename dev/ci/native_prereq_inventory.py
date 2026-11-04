@@ -19,7 +19,7 @@ PACKAGES = ("libmpv-dev", "libmpv2", "xvfb", "mesa-utils")
 GROUPS = {"runtime": ("libmpv2",), "development": ("libmpv-dev", "libmpv2"),
           "display": ("xvfb", "mesa-utils")}
 TOOLS = ("cc", "c++", "cmake", "ninja", "pkg-config")
-MAC_MODULES = ("libavcodec", "libavformat", "libavutil", "libswresample", "libswscale", "libass", "libplacebo")
+MAC_MODULES = ("libavcodec", "libavfilter", "libavformat", "libavutil", "libswresample", "libswscale", "libass", "libplacebo")
 SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+:~_-]*$")
 BUDGET_SECONDS = 540
 DEADLINE = None
