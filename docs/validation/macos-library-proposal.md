@@ -43,6 +43,10 @@ failure. Do not alter the host's global tools, configuration or services.
 [local patch metadata](macos-media-local-patches.md),
 [mpv inputs](macos-library-mpv-lock.md) and
 [FFmpeg inputs](macos-library-ffmpeg-lock.md) record the discovered inputs.
+Additional [Python backend candidates](macos-library-backend-candidates.md)
+and formula-visible [media](macos-library-path-rewrites-media.md) and
+[codec](macos-library-path-rewrites-codecs.md) path rewrites are separately
+recorded; they are not yet verified as a closed build graph.
 The local patch index includes candidates outside the helper-substituted graph;
 do not apply a patch merely because it appears there. The source and resource
 tables have undergone the four static Tahoe formula-condition audits linked
