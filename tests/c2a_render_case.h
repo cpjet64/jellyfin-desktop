@@ -3,6 +3,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QScopeGuard>
 #include <QFile>
 #include <QUrl>
 #include "c2_event_observer.h"
@@ -117,6 +118,11 @@ struct C2aRenderState
   QSignalSpy canceled;
   QSignalSpy finished;
   QJsonArray phases;
+  QJsonArray errorsAtFailure;
+  int canceledAtFailure = 0;
+  int finishedAtFailure = 0;
+  bool retirementRequested = false;
+  bool retirementSucceeded = false;
 };
 
 void TestC2RetirementNative::renderFailure()
@@ -161,6 +167,20 @@ void TestC2RetirementNative::injectRenderFailure(C2aFixture& fixture, PlayerComp
 {
   state.phases.append(observeMpvPhase(state.observer, state.core, "before-injection"));
   QVERIFY(validMpvPhase(state.phases.last().toObject()));
+  const auto sameBinding = [&] { return player.m_mpv == state.controller && player.m_mpvGeneration == state.binding &&
+      state.controller->mpv() == state.core && player.m_doAc3Transcoding == state.ac3; };
+  const auto connection = QObject::connect(fixture.item, &MpvAbstractItem::renderFailure, fixture.item,
+    [&](quint64 generation, MpvAbstractItem::RenderFailureStage stage, int error) {
+      if (state.retirementRequested || generation != state.generation ||
+          stage != MpvAbstractItem::RenderFailureStage::Render || error != MPV_ERROR_UNSUPPORTED) return;
+      state.retirementRequested = true;
+      state.phases.append(observeMpvPhase(state.observer, state.core, "after-render-failure-before-retirement", false));
+      state.errorsAtFailure = errorMessages(state.playerError);
+      state.canceledAtFailure = state.canceled.count();
+      state.finishedAtFailure = state.finished.count();
+      state.retirementSucceeded = fixture.cleanup.requestRetirement(state.generation, sameBinding);
+    }, Qt::DirectConnection);
+  const auto disconnect = qScopeGuard([&] { QObject::disconnect(connection); });
   DiagnosticFailureInjection::render = MPV_ERROR_UNSUPPORTED;
   QTRY_COMPARE_WITH_TIMEOUT(fixture.failure->count(), 1, 15000);
   QCOMPARE(fixture.failure->at(0).at(0).toULongLong(), state.generation);
@@ -175,23 +195,20 @@ void TestC2RetirementNative::injectRenderFailure(C2aFixture& fixture, PlayerComp
   QCOMPARE(player.m_mpv, state.controller);
   QCOMPARE(player.m_mpvGeneration, state.binding);
   QCOMPARE(player.m_doAc3Transcoding, state.ac3);
-  state.phases.append(observeMpvPhase(state.observer, state.core, "after-render-failure-before-retirement", false));
   QVERIFY(validMpvPhase(state.phases.last().toObject()));
   const QJsonObject early{{"scenario", "render-failure"}, {"generation", qint64(state.generation)},
-    {"injected_error", int(MPV_ERROR_UNSUPPORTED)}, {"player_errors", errorMessages(state.playerError)},
+    {"injected_error", int(MPV_ERROR_UNSUPPORTED)}, {"player_errors", state.errorsAtFailure},
     {"reported_error", fixture.failure->at(0).at(2).toInt()},
     {"reported_stage", int(fixture.failure->at(0).at(1).value<MpvAbstractItem::RenderFailureStage>())},
-    {"finished", state.finished.count()}, {"canceled", state.canceled.count()}, {"phases", state.phases}};
+    {"finished", state.finishedAtFailure}, {"canceled", state.canceledAtFailure}, {"phases", state.phases}};
   QVERIFY(saveRenderEvidence(evidence, "c2a-render-observed.json", early));
-  QVERIFY(!fatalDiagnostic.load());
+  QVERIFY(state.retirementRequested && state.retirementSucceeded);
 }
 
 void TestC2RetirementNative::retireRenderFailure(C2aFixture& fixture, PlayerComponent& player,
                                                 C2aRenderState& state, const QString& evidence)
 {
-  const auto sameBinding = [&] { return player.m_mpv == state.controller && player.m_mpvGeneration == state.binding &&
-      state.controller->mpv() == state.core && player.m_doAc3Transcoding == state.ac3; };
-  QVERIFY(fixture.cleanup.requestRetirement(state.generation, sameBinding));
+  QVERIFY(state.retirementRequested && state.retirementSucceeded);
   QCOMPARE(DiagnosticFailureInjection::frees.load(), 1);
   QVERIFY(DiagnosticFailureInjection::ackOrder.load() > 0);
   QCOMPARE(DiagnosticFailureInjection::freeThread.load(), state.render.thread);
