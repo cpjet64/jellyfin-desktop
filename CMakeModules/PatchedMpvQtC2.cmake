@@ -28,7 +28,7 @@ if(MPVQT_C2_DIAGNOSTIC_ONLY)
     message(FATAL_ERROR "Unable to apply C2 diagnostic patch: ${_patch_error}")
   endif()
   set(_c2_output_hashes
-    "mpvabstractitem.cpp|3fdc338967c9fe5de7262bea0d32daa3841beaaa345252af7871caf80d4d3d49"
+    "mpvabstractitem.cpp|6c06f506e53b378dee2a7440955c59a1c8bed05b12d1470caee0644b10e16787"
     "mpvabstractitem.h|f0d7c9d50019aff85ecf75c680150291d9d32b5dd4a2e04cc6f83886c1f372d3"
     "mpvabstractitem_p.h|8de8db81c9e00c6588262276d77557e6336ace69ffc84041dfdbd2cf4beeae98"
     "mpvrenderer.cpp|6b7c168c361ec6e39e0840588b81fdd28daef56e98fcd2dd1bbf09b88c2f18ca")

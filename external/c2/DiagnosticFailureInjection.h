@@ -23,6 +23,10 @@ struct DiagnosticFailureInjection
   static std::atomic<int> unregisterEnteredOrder;
   static std::atomic<std::uintptr_t> unregisterThread;
   static std::atomic<int> unregisteredOrder;
+  static std::atomic<std::uintptr_t> freeThread;
+  static std::atomic<std::uintptr_t> freeCurrentContext;
+  static std::atomic<std::uintptr_t> freeOriginalContext;
+  static std::atomic<std::uint64_t> freeGeneration;
   static std::atomic<int> freedOrder;
   static std::atomic<int> clearedOrder;
   static std::atomic<int> ackOrder;

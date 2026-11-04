@@ -15,7 +15,7 @@ index ffccf4a..2223149 100644
 @@ -54 +60 @@ MpvAbstractItem::~MpvAbstractItem()
 -        mpv_render_context_free(d_ptr->m_mpv_gl);
 +        qFatal("Diagnostic render context must retire before item destruction");
-@@ -61,0 +68,44 @@ MpvAbstractItem::~MpvAbstractItem()
+@@ -61,0 +68,48 @@ MpvAbstractItem::~MpvAbstractItem()
 +    DiagnosticFailureInjection::coreOrder = ++DiagnosticFailureInjection::order;
 +}
 +
@@ -43,6 +43,10 @@ index ffccf4a..2223149 100644
 +                DiagnosticFailureInjection::unregisteredOrder = ++DiagnosticFailureInjection::order;
 +            },
 +            [this, owner] {
++                DiagnosticFailureInjection::freeThread = reinterpret_cast<std::uintptr_t>(QThread::currentThreadId());
++                DiagnosticFailureInjection::freeCurrentContext = reinterpret_cast<std::uintptr_t>(QOpenGLContext::currentContext());
++                DiagnosticFailureInjection::freeOriginalContext = reinterpret_cast<std::uintptr_t>(owner->originalContext);
++                DiagnosticFailureInjection::freeGeneration = owner->generation;
 +                mpv_render_context_free(owner->context);
 +                ++DiagnosticFailureInjection::frees;
 +                DiagnosticFailureInjection::freedOrder = ++DiagnosticFailureInjection::order;
@@ -201,9 +205,9 @@ index 2223149..d1985a5 100644
 @@ -80 +82 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
 -    auto owner = d_ptr->renderOwner;
 +    auto owner = std::atomic_load(&d_ptr->renderOwner);
-@@ -105,0 +108 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
+@@ -109,0 +112 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
 +                d_ptr->retirementAcknowledged = true;
-@@ -113,0 +117,33 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
+@@ -117,0 +121,33 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
 +MpvAbstractItem::CreationRequest MpvAbstractItem::requestRenderCreation(quint64 generation)
 +{
 +    if (!d_ptr->retirementAcknowledged || generation != d_ptr->visibleGeneration.load())
