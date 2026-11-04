@@ -2,6 +2,7 @@
 
 import json
 import contextlib
+from functools import lru_cache
 import io
 import os
 from pathlib import Path
@@ -15,12 +16,14 @@ import time
 from macos_session import verify_existing_session
 
 PACKAGES = ("libmpv-dev", "libmpv2", "xvfb", "mesa-utils")
+GROUPS = {"runtime": ("libmpv2",), "development": ("libmpv-dev", "libmpv2"),
+          "display": ("xvfb", "mesa-utils")}
 TOOLS = ("cc", "c++", "cmake", "ninja", "pkg-config")
 SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+:~_-]*$")
 
 
 def run(args, timeout=60):
-    allowed = {"apt-cache", "apt-get", "ldd", "sw_vers", "arch", "xcode-select", "xcrun", "pkgutil", "stat"}
+    allowed = {"apt-cache", "apt-get", "dpkg", "ldd", "sw_vers", "arch", "xcode-select", "xcrun", "pkgutil", "stat"}
     if not args or args[0] not in allowed:
         raise ValueError("command not allowed")
     if args[0] == "apt-get" and (len(args) < 5 or args[1:4] !=
@@ -28,6 +31,9 @@ def run(args, timeout=60):
         raise ValueError("apt-get requires simulated non-recommends install")
     if args[0] == "apt-cache" and (len(args) < 3 or args[1] not in ("policy", "show")):
         raise ValueError("apt-cache accepts policy or show only")
+    if args[0] == "dpkg" and (len(args) != 5 or args[1] != "--compare-versions" or
+                              args[3] not in ("lt", "gt") or not SAFE.fullmatch(args[2]) or not SAFE.fullmatch(args[4])):
+        raise ValueError("dpkg accepts only safe version comparisons")
     if args[0] in ("apt-cache", "apt-get"):
         operands = args[2:] if args[0] == "apt-cache" else args[4:]
         if any(not all(SAFE.fullmatch(part) for part in operand.split("=")) or
@@ -56,6 +62,18 @@ def candidate(text):
     return value if value != "(none)" and SAFE.fullmatch(value) else None
 
 
+def version_action(old, new):
+    if old == new:
+        return "unchanged"
+    less = run(["dpkg", "--compare-versions", new, "lt", old])
+    if less.get("exit") == 0:
+        return "downgrade"
+    if less.get("exit") != 1:
+        return "unknown"
+    greater = run(["dpkg", "--compare-versions", new, "gt", old])
+    return "upgrade" if greater.get("exit") == 0 else "unchanged" if greater.get("exit") == 1 else "unknown"
+
+
 def transaction(text):
     changes = []
     for line in text.splitlines():
@@ -64,10 +82,10 @@ def transaction(text):
             raise ValueError("unrecognized package transaction entry")
         if match:
             action, name, old, new = match.groups()
-            if not SAFE.fullmatch(name) or (new and not SAFE.fullmatch(new)):
+            if not SAFE.fullmatch(name) or (new and not SAFE.fullmatch(new)) or (old and not SAFE.fullmatch(old)):
                 raise ValueError("unexpected package transaction entry")
             changes.append({"action": "remove" if action == "Remv" else
-                            "upgrade" if old else "install", "package": name,
+                            version_action(old, new) if old and new else "unknown" if old else "install", "package": name,
                             "installed": old, "version": new})
     return changes
 
@@ -90,6 +108,80 @@ def index_metadata(root=Path("/var/lib/apt/lists")):
         {"name": p.name, "age_seconds": max(0, int(now - p.stat().st_mtime))} for p in sorted(files)]}
 
 
+def enrich_transaction(changes, query):
+    for item in changes:
+        item["policy"] = query("policy", item["package"])
+        version = item["installed"] if item["action"] == "remove" else item["version"]
+        if version:
+            item["metadata"] = query("show", f"{item['package']}={version}")
+            item["sizes"] = package_sizes(item["metadata"].get("output", ""))
+
+
+def summarize_transaction(simulation, query):
+    result = {"simulation": simulation}
+    if simulation.get("exit") != 0:
+        return result
+    changes = transaction(simulation["output"])
+    enrich_transaction(changes, query)
+    result["transaction"] = changes
+    changed_names = {item["package"] for item in changes}
+    configured = re.findall(r"(?m)^Conf\s+(\S+)", simulation["output"])
+    result["additional_configure"] = [name for name in configured if name not in changed_names]
+    installed = [item for item in changes if item["action"] not in ("remove", "unchanged")]
+    result["download_bytes_sum"] = (sum(i["sizes"]["Size"] for i in installed)
+                                    if all("Size" in i.get("sizes", {}) for i in installed) else None)
+    result["installed_bytes_sum"] = (sum(i["sizes"]["Installed-Size"] for i in installed)
+                                     if all("Installed-Size" in i.get("sizes", {}) for i in installed) else None)
+    result["size_note"] = "Package metadata totals, not download cache or installed-size delta."
+    return result
+
+
+def constrained_operands(exact, changes):
+    changed = [item for item in changes if item["action"] in ("upgrade", "downgrade", "remove", "unknown")]
+    if any(not item.get("installed") or not SAFE.fullmatch(item["installed"]) for item in changed):
+        raise ValueError("installed version missing for a changed package")
+    requested = dict(item.split("=", 1) for item in exact)
+    original = dict(requested)
+    overrides = []
+    seen = {}
+    for item in sorted(changed, key=lambda entry: entry["package"]):
+        name, installed = item["package"], item["installed"]
+        if name in seen and seen[name] != installed:
+            raise ValueError("conflicting installed versions for a changed package")
+        seen[name] = installed
+        if name in original and original[name] != installed:
+            overrides.append({"package": name, "requested": original[name], "frozen": installed})
+        requested[name] = installed
+    return [f"{name}={version}" for name, version in requested.items()], overrides
+
+
+def solve_group(names, candidates, query):
+    if any(not candidates.get(name) for name in names):
+        return {"simulation": {"blocked": "one or more exact candidates unavailable"}}
+    if names == GROUPS["development"] and candidates["libmpv-dev"] != candidates["libmpv2"]:
+        return {"simulation": {"blocked": "libmpv-dev and libmpv2 candidate versions differ"}}
+    exact = [f"{name}={candidates[name]}" for name in names]
+    prefix = ["apt-get", "--simulate", "--no-install-recommends", "install"]
+    result = summarize_transaction(run(prefix + exact, 60), query)
+    changes = result.get("transaction")
+    if changes is None or not any(item["action"] in ("upgrade", "downgrade", "remove", "unknown") for item in changes):
+        return result
+    try:
+        frozen, overrides = constrained_operands(exact, changes)
+    except ValueError as error:
+        result["constrained"] = {"blocked": str(error)}
+        return result
+    constrained = summarize_transaction(run(prefix + frozen, 60), query)
+    constrained["requested_operands"] = exact
+    constrained["constrained_operands"] = frozen
+    constrained["requested_overrides"] = overrides
+    final = constrained.get("transaction")
+    constrained["preserves_installed"] = (None if final is None or constrained.get("additional_configure") else
+        not any(item["action"] in ("upgrade", "downgrade", "remove", "unknown") for item in final))
+    result["constrained"] = constrained
+    return result
+
+
 def linux_inventory():
     policies = {name: run(["apt-cache", "policy", name]) for name in PACKAGES}
     candidates = {name: candidate(result.get("output", "")) for name, result in policies.items()}
@@ -97,29 +189,10 @@ def linux_inventory():
               "glibc": run(["ldd", "--version"])}
     result["candidate_details"] = {name: run(["apt-cache", "show", f"{name}={version}"])
                                    for name, version in candidates.items() if version}
-    if not all(candidates.values()):
-        result["simulation"] = {"blocked": "one or more exact candidates unavailable"}
-        return result
-    exact = [f"{name}={candidates[name]}" for name in PACKAGES]
-    simulation = run(["apt-get", "--simulate", "--no-install-recommends", "install", *exact], 120)
-    result["simulation"] = simulation
-    if simulation.get("exit") != 0:
-        return result
-    changes = transaction(simulation["output"])
-    result["transaction"] = changes
-    for item in changes:
-        if item["action"] == "remove" or not item["version"]:
-            continue
-        spec = f"{item['package']}={item['version']}"
-        item["metadata"] = run(["apt-cache", "show", spec])
-        item["policy"] = run(["apt-cache", "policy", item["package"]])
-        item["sizes"] = package_sizes(item["metadata"].get("output", ""))
-    installed = [item for item in changes if item["action"] != "remove"]
-    result["download_bytes_sum"] = (sum(i["sizes"]["Size"] for i in installed)
-                                    if all("Size" in i.get("sizes", {}) for i in installed) else None)
-    result["installed_bytes_sum"] = (sum(i["sizes"]["Installed-Size"] for i in installed)
-                                     if all("Installed-Size" in i.get("sizes", {}) for i in installed) else None)
-    result["size_note"] = "Sums are package metadata totals, not download cache or installed-size delta."
+    @lru_cache(maxsize=None)
+    def query(kind, operand):
+        return run(["apt-cache", kind, operand])
+    result["groups"] = {name: solve_group(names, candidates, query) for name, names in GROUPS.items()}
     return result
 
 

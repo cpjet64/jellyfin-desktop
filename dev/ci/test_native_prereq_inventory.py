@@ -13,7 +13,8 @@ class InventoryTest(unittest.TestCase):
     def test_transaction_and_sizes(self):
         text = ("Inst libmpv2 [0.34] (0.35 Debian:stable [amd64])\n"
                 "Inst xvfb (2:21.1 Debian:stable [amd64])\nRemv obsolete [1.0]\n")
-        items = inventory.transaction(text)
+        with patch.object(inventory, "version_action", return_value="upgrade"):
+            items = inventory.transaction(text)
         self.assertEqual([item["action"] for item in items], ["upgrade", "install", "remove"])
         self.assertEqual(items[0]["version"], "0.35")
         self.assertEqual(inventory.package_sizes("Size: 42\nInstalled-Size: 12\n"),
@@ -23,6 +24,7 @@ class InventoryTest(unittest.TestCase):
         for command in (["apt-get", "install", "xvfb"], ["apt-get", "update"],
                         ["apt-cache", "policy", "--option"], ["apt-get", "--simulate",
                          "--no-install-recommends", "install", "xvfb=1", "-o"],
+                        ["dpkg", "--configure", "-a"], ["dpkg", "--compare-versions", "1", "eq", "2"],
                         ["brew", "update"], ["xcrun", "--run", "sh"],
                         ["stat", "-f", "%u", "/etc/passwd"]):
             with self.subTest(command=command), self.assertRaises(ValueError):
@@ -41,17 +43,93 @@ class InventoryTest(unittest.TestCase):
 
         with patch.object(inventory, "run", side_effect=fake), patch.object(inventory, "index_metadata", return_value={}):
             result = inventory.linux_inventory()
-        self.assertIn(["apt-get", "--simulate", "--no-install-recommends", "install",
-                       *[name + "=1.2-3" for name in inventory.PACKAGES]], calls)
-        self.assertIsNone(result["download_bytes_sum"])
-        self.assertIsNone(result["installed_bytes_sum"])
+        self.assertIn(["apt-get", "--simulate", "--no-install-recommends", "install", "libmpv2=1.2-3"], calls)
+        self.assertIn(["apt-get", "--simulate", "--no-install-recommends", "install", "libmpv-dev=1.2-3", "libmpv2=1.2-3"], calls)
+        self.assertIn(["apt-get", "--simulate", "--no-install-recommends", "install", "xvfb=1.2-3", "mesa-utils=1.2-3"], calls)
+        self.assertIsNone(result["groups"]["runtime"]["download_bytes_sum"])
+        self.assertIsNone(result["groups"]["runtime"]["installed_bytes_sum"])
 
     def test_missing_candidate_never_simulates(self):
         with patch.object(inventory, "run", return_value={"exit": 0, "output": "Candidate: (none)"}) as call, \
              patch.object(inventory, "index_metadata", return_value={}):
             result = inventory.linux_inventory()
-        self.assertIn("blocked", result["simulation"])
+        self.assertTrue(all("blocked" in group["simulation"] for group in result["groups"].values()))
         self.assertFalse(any(args.args[0][0] == "apt-get" for args in call.call_args_list))
+
+    def test_version_classification_is_not_lexicographic(self):
+        def compare(args, timeout=60):
+            new, op, old = args[2], args[3], args[4]
+            values = {"2": 2, "10": 10, "1.0-0": 1, "1.0": 1}
+            success = values[new] < values[old] if op == "lt" else values[new] > values[old]
+            return {"exit": 0 if success else 1, "output": ""}
+        with patch.object(inventory, "run", side_effect=compare):
+            self.assertEqual(inventory.version_action("2", "10"), "upgrade")
+            self.assertEqual(inventory.version_action("10", "2"), "downgrade")
+            self.assertEqual(inventory.version_action("1.0", "1.0-0"), "unchanged")
+            self.assertEqual(inventory.version_action("2", "2"), "unchanged")
+
+    def test_transaction_distinguishes_downgrade_equal_and_removal(self):
+        data = ("Inst one [2] (1 repo [amd64])\nInst two [1] (1 repo [amd64])\n"
+                "Inst three [1] (2 repo [amd64])\nRemv four [4]\n")
+        def action(old, new):
+            return "downgrade" if new < old else "upgrade" if new > old else "unchanged"
+        with patch.object(inventory, "version_action", side_effect=action):
+            changes = inventory.transaction(data)
+        self.assertEqual([item["action"] for item in changes], ["downgrade", "unchanged", "upgrade", "remove"])
+        self.assertEqual([item["installed"] for item in changes], ["2", "1", "1", "4"])
+
+    def test_six_bounded_simulations_preserve_exact_freezes_and_conflicts(self):
+        calls = []
+        def fake(args, timeout=60):
+            calls.append(args)
+            if args[:2] == ["apt-cache", "policy"]:
+                return {"exit": 0, "output": "  Candidate: 2\n"}
+            if args[0] == "dpkg":
+                return {"exit": 0 if args[3] == "gt" else 1, "output": ""}
+            if args[0] == "apt-get":
+                if "shared=1" in args:
+                    return {"command": args, "exit": 100, "output": "Conflicts: frozen shared dependency"}
+                return {"exit": 0, "output": "Inst shared [1] (2 repo [amd64])\nRemv obsolete [3]\n"}
+            return {"exit": 0, "output": "Size: 50\nInstalled-Size: 10\n"}
+        with patch.object(inventory, "run", side_effect=fake), patch.object(inventory, "index_metadata", return_value={}):
+            result = inventory.linux_inventory()
+        simulations = [args for args in calls if args[0] == "apt-get"]
+        self.assertEqual(len(simulations), 6)
+        for group in result["groups"].values():
+            self.assertEqual([item["action"] for item in group["transaction"]], ["upgrade", "remove"])
+            constrained = group["constrained"]["simulation"]
+            self.assertEqual(constrained["exit"], 100)
+            self.assertIn("Conflicts: frozen", constrained["output"])
+            self.assertEqual(constrained["command"][-2:], ["obsolete=3", "shared=1"])
+            self.assertIsNone(group["constrained"]["preserves_installed"])
+
+    def test_constrained_solver_cannot_hide_newly_introduced_change(self):
+        calls = []
+        def fake(args, timeout=60):
+            calls.append(args)
+            if args[0] == "dpkg":
+                return {"exit": 0 if args[3] == "gt" else 1}
+            if args[0] == "apt-get":
+                package = "different" if "original=1" in args else "original"
+                return {"command": args, "exit": 0, "output": f"Inst {package} [1] (2 repo [amd64])\n"}
+            return {"exit": 0, "output": ""}
+        with patch.object(inventory, "run", side_effect=fake):
+            group = inventory.solve_group(("libmpv2",), {"libmpv2": "2"}, lambda *_: {"output": ""})
+        self.assertFalse(group["constrained"]["preserves_installed"])
+        self.assertEqual(sum(args[0] == "apt-get" for args in calls), 2)
+
+    def test_requested_candidate_is_explicitly_overridden_once(self):
+        changes = [{"action": "upgrade", "package": "libmpv2", "installed": "1", "version": "2"}]
+        operands, overrides = inventory.constrained_operands(["libmpv2=2", "xvfb=3"], changes)
+        self.assertEqual(operands, ["libmpv2=1", "xvfb=3"])
+        self.assertEqual(overrides, [{"package": "libmpv2", "requested": "2", "frozen": "1"}])
+
+    def test_development_candidates_must_match(self):
+        with patch.object(inventory, "run") as run:
+            result = inventory.solve_group(inventory.GROUPS["development"],
+                                           {"libmpv-dev": "2", "libmpv2": "1"}, lambda *_: {})
+        self.assertIn("candidate versions differ", result["simulation"]["blocked"])
+        run.assert_not_called()
 
     def test_mac_guard_reports_block_without_session_creation(self):
         with patch.object(inventory, "run", return_value={"exit": 0, "output": ""}), \
