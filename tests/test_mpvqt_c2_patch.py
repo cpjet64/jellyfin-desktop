@@ -61,6 +61,14 @@ class DiagnosticPatchTest(unittest.TestCase):
                     self.assertLess(item.index("ackEmittedNs"), item.index("emit renderRetired(generation)"))
                     renderer = (copy / "src/mpvrenderer.cpp").read_text(encoding="utf-8")
                     self.assertLess(renderer.index("failurePublishedNs"), renderer.index("QMetaObject::invokeMethod(item", renderer.index("failurePublishedNs")))
+                    create = renderer.split("int MpvAbstractItem::createDiagnosticRenderContext()", 1)[1]
+                    branch = create.index("if (!injected)")
+                    entry = create.index("createCallEnteredNs", branch)
+                    count = create.index("++DiagnosticFailureInjection::createCallCount", entry)
+                    call = create.index("result = mpv_render_context_create(", count)
+                    result = create.index("createCallResult = result", call)
+                    returned = create.index("createCallReturnedNs", result)
+                    self.assertTrue(branch < entry < count < call < result < returned)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,13 @@ struct DiagnosticFailureInjection
   static std::atomic<std::int64_t> freeReturnedNs;
   static std::atomic<std::int64_t> ackEmittedNs;
   static std::atomic<int> create;
+  static std::atomic<int> createCallCount;
+  static std::atomic<std::int64_t> createCallEnteredNs;
+  static std::atomic<std::int64_t> createCallReturnedNs;
+  static std::atomic<std::uint64_t> createCallGeneration;
+  static std::atomic<std::uintptr_t> createCallThread;
+  static std::atomic<std::uintptr_t> createCallContext;
+  static std::atomic<int> createCallResult;
   static std::atomic<int> render;
   static std::atomic<bool> blockNextRetire;
   static std::atomic<int> frees;

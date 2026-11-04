@@ -318,19 +318,29 @@ index b4726e9..a36e84b 100644
 +{
 +        auto owner = std::atomic_load(&d_ptr->renderOwner);
 +        if (!owner->state.accepts(owner->generation)) return MPV_ERROR_GENERIC;
-@@ -146 +161 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -146 +161,11 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -        int result = injected ? injected : mpv_render_context_create(&m_mpvAItem->d_ptr->m_mpv_gl, m_mpvAItem->d_ptr->m_mpv, params);
-+        int result = injected ? injected : mpv_render_context_create(&d_ptr->m_mpv_gl, d_ptr->m_mpv, params);
-@@ -149 +164 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
++        int result = injected;
++        if (!injected) {
++            DiagnosticFailureInjection::createCallGeneration = owner->generation;
++            DiagnosticFailureInjection::createCallThread = reinterpret_cast<std::uintptr_t>(QThread::currentThreadId());
++            DiagnosticFailureInjection::createCallContext = reinterpret_cast<std::uintptr_t>(QOpenGLContext::currentContext());
++            DiagnosticFailureInjection::createCallEnteredNs = DiagnosticFailureInjection::monotonicNanos();
++            ++DiagnosticFailureInjection::createCallCount;
++            result = mpv_render_context_create(&d_ptr->m_mpv_gl, d_ptr->m_mpv, params);
++            DiagnosticFailureInjection::createCallResult = result;
++            DiagnosticFailureInjection::createCallReturnedNs = DiagnosticFailureInjection::monotonicNanos();
++        }
+@@ -149 +174 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -                auto* item = m_mpvAItem;
 +                auto* item = this;
-@@ -155 +170 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -155 +180 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -            return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
 +            return result;
-@@ -158 +173 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -158 +183 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -        owner->context = m_mpvAItem->d_ptr->m_mpv_gl;
 +        owner->context = d_ptr->m_mpv_gl;
-@@ -162,4 +177 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -162,4 +187 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -        Q_EMIT m_mpvAItem->ready();
 -    }
 -
