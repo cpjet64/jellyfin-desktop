@@ -151,6 +151,7 @@ void TestWindowsNativeControls::callbackPath()
   window.resize(640, 360);
   auto* video = new MpvVideoItem(window.contentItem());
   video->setParent(window.contentItem());
+  video->setObjectName("video");
   video->setSize(QSizeF(640, 360));
   diagnostics.observe(window, *video);
   auto& player = PlayerComponent::Get();
