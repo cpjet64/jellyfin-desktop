@@ -248,6 +248,7 @@ Q_SIGNALS:
 private:
 #ifdef MPVQT_C2_DIAGNOSTIC_ONLY
   friend class TestC2RetirementNative;
+  friend class TestMpvThreadIndependence;
   int m_c2HookDelayMs = -1;
   int m_c2HooksScheduled = 0;
   int m_c2HooksCompleted = 0;

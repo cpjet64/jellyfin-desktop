@@ -5,6 +5,17 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
 if(MPVQT_C2_DIAGNOSTIC_ONLY)
+  add_subdirectory(qt_threaded)
+  add_executable(test_mpv_thread_independence test_mpv_thread_independence.cpp
+    mpv_test_bootstrap.cpp mpv_test_profile.cpp "${CMAKE_BINARY_DIR}/src/qrc_resources.cpp")
+  add_dependencies(test_mpv_thread_independence generate_resources)
+  target_include_directories(test_mpv_thread_independence PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core ${CMAKE_SOURCE_DIR}/src/shared ${CMAKE_SOURCE_DIR}/external)
+  target_link_libraries(test_mpv_thread_independence PRIVATE jmp_core qt_threaded_fixture Qt6::Test Qt6::Quick Qt6::OpenGL)
+  if(WIN32 AND MSVC)
+    get_filename_component(_independence_mpv_dir "${MPV_LIBRARY}" DIRECTORY)
+    add_custom_command(TARGET test_mpv_thread_independence POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_independence_mpv_dir}/libmpv-2.dll" "$<TARGET_FILE_DIR:test_mpv_thread_independence>/libmpv-2.dll")
+  endif()
   add_executable(test_c2_retirement_state test_c2_retirement_state.cpp)
   target_include_directories(test_c2_retirement_state PRIVATE ${CMAKE_SOURCE_DIR}/external)
   target_link_libraries(test_c2_retirement_state PRIVATE Qt6::Core Qt6::Test Threads::Threads)
