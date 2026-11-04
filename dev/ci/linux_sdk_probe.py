@@ -83,6 +83,13 @@ def check_executable(build, library, qt, env):
         raise RuntimeError("BLOCKED: QLibraryInfo version or prefix differs from selected Qt")
 
 
+def check_private_targets(build, qt):
+    for module in ("Gui", "Quick", "WebEngineCore"):
+        paths = (build / ("Qt6_" + module + "Private-includes.txt")).read_text().splitlines()
+        if not paths or any(not beneath(path, qt) for path in paths):
+            raise RuntimeError("BLOCKED: Qt private target contains missing or nonlocal includes: " + module)
+
+
 def probe_sdk(qt_prefix, job_root, mpv_environment):
     root = Path(job_root).resolve(strict=True)
     qt = Path(qt_prefix).resolve(strict=True)
@@ -101,6 +108,7 @@ def probe_sdk(qt_prefix, job_root, mpv_environment):
     source = Path(__file__).resolve().parent / "linux_sdk_probe"
     run(["cmake", "-S", source, "-B", build, "-G", "Ninja", "-DQTROOT=" + str(qt),
          "-DMPV_INCLUDE_DIR=" + str(include), "-DMPV_LIBRARY=" + str(library)], env=env)
+    check_private_targets(build, qt)
     run(["cmake", "--build", build, "--parallel", "2"], env=env)
     check_executable(build, library, qt, env)
     return {"qt_prefix": str(qt), "mpv_include": str(include), "mpv_library": str(library),
