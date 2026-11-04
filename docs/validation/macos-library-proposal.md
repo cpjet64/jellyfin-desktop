@@ -58,9 +58,9 @@ formula; their bounded acquisition is described separately and remains held.
 Retain mpv's libmpv, JavaScript, LuaJIT, libarchive, uchardet and Vulkan
 features; FFmpeg shared libraries, VideoToolbox, AudioToolbox, OpenSSL,
 declared codec libraries and AC3 encoder/filter; libass CoreText, libplacebo
-lcms/shaderc/Vulkan and the macOS audio-device-change fix. The sole proposed
-formula feature difference is disabling HTML documentation and omitting the
-docutils generator; this has not yet been reviewed as behavior-neutral. Keep
+lcms/shaderc/Vulkan and the macOS audio-device-change fix. The reviewed
+build-only documentation difference explicitly disables HTML, manpage and PDF
+generation. Omit docutils only if no other selected consumer requires it. Keep
 all other runtime behavior and the separate helper available. The detailed
 [feature matrix](macos-media-feature-matrix.md) specifies acceptance evidence;
 autodetection that silently omits a required feature must fail the build.

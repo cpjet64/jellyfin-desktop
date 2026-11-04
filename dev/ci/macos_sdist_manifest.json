@@ -1,0 +1,8 @@
+[
+  {"name":"vapoursynth-82.tar.gz","url":"https://files.pythonhosted.org/packages/25/2e/1a5cb192ce26077c5afe9056a11b3a2d936c4e413b4fec5eee74d45bdb01/vapoursynth-82.tar.gz","size":1140956,"sha256":"1128316620890ba8e5b69c924a665f98001b2ba4230dadead0f296446ea71843"},
+  {"name":"cython-3.3.1.tar.gz","url":"https://files.pythonhosted.org/packages/99/ca/18e324972e5cac914816fdd7bb03e19a455b90039c277a538f7781b50c85/cython-3.3.1.tar.gz","size":3743354,"sha256":"e0e45989e821bef6aa9ae15c7d583ab5e055f7406c4b3624e49e06d24e90375a"},
+  {"name":"meson_python-0.22.1.tar.gz","url":"https://files.pythonhosted.org/packages/b4/40/343ae23722d5d66a7b94b752d1b194202640995296379333b274b1860871/meson_python-0.22.1.tar.gz","size":121887,"sha256":"52c88628b0e5671592dc2306613fb5f6f3615fd24def059b9894f143b7f9a139"},
+  {"name":"packaging-26.3.tar.gz","url":"https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz","size":313412,"sha256":"94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79"},
+  {"name":"pyproject_metadata-0.12.1.tar.gz","url":"https://files.pythonhosted.org/packages/4f/76/1cae539918a7b1746d624c2f01560b793c22cd8c081157505bb9bbf0e34d/pyproject_metadata-0.12.1.tar.gz","size":48457,"sha256":"8809a4df6fe08279b39a8890669506ed3158e0617855ac9aff098fcbe772ae4c"},
+  {"name":"flit_core-3.12.0.tar.gz","url":"https://files.pythonhosted.org/packages/69/59/b6fc2188dfc7ea4f936cd12b49d707f66a1cb7a1d2c16172963534db741b/flit_core-3.12.0.tar.gz","size":53690,"sha256":"18f63100d6f94385c6ed57a72073443e1a71a4acb4339491615d0f16d6ff01b2"}
+]

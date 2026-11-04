@@ -5,7 +5,7 @@ The reference is Homebrew core commit `c38a4a58b06912c3e64e5afd7f7dfe8aedd84dc5`
 `https://raw.githubusercontent.com/Homebrew/homebrew-core/c38a4a58b06912c3e64e5afd7f7dfe8aedd84dc5/Formula/`.
 No source archives, patches, builds, or runtime behavior were verified here.
 
-The proposed Desktop profile retains yt-dlp because users can override the application's requested `ytdl=false` setting; its return value is unchecked. It excludes docutils and HTML documentation, a proposed difference from the reference formula. A custom build must explicitly disable HTML generation. FFmpeg is tracked separately. All reference runtime dependencies remain candidates.
+The proposed Desktop profile retains yt-dlp because users can override the application's requested `ytdl=false` setting; its return value is unchecked. Documentation omission is approved as a build-only difference: explicitly disable HTML, manpage and PDF generation, and exclude docutils only if no other retained component consumes it. FFmpeg is tracked separately. All reference runtime dependencies remain candidates.
 
 ## mpv
 
@@ -16,7 +16,7 @@ The proposed Desktop profile retains yt-dlp because users can override the appli
 - Backport: https://github.com/mpv-player/mpv/commit/75b2ccfeb1ce4ed5a40ac9860fa74f3d1265e13f.patch?full_index=1; SHA-256 `3906b98b02071a0d5747a400406494ca69cef7afd8d3eee4a99fdbe40dc90c1f`.
 - Backport: https://github.com/mpv-player/mpv/commit/c5d391adba7bd024954d0df1e0405f5749f4d4ca.patch?full_index=1; SHA-256 `769b218df220738cc1cf9f81cf696c16518c5dfe56a5ef028e33b22536e0e924`.
 
-Reference build tools are meson, ninja, pkgconf, and docutils. Its Meson options enable HTML documentation, JavaScript, libmpv, LuaJIT, libarchive, uchardet, and Vulkan, and disable build dates. The proposed profile changes the HTML option and excludes docutils; its other flags and feature behavior require validation. The formula has a macOS-specific `mpv.pc` adjustment for libarchive. It is not established that this adjustment is suitable for a relocated bundle.
+Reference build tools are meson, ninja, pkgconf, and docutils. Its Meson options enable HTML documentation, JavaScript, libmpv, LuaJIT, libarchive, uchardet, and Vulkan, and disable build dates. The approved documentation difference disables all three documentation outputs and conditionally omits docutils; other flags and feature behavior require validation. The formula has a macOS-specific `mpv.pc` adjustment for libarchive. It is not established that this adjustment is suitable for a relocated bundle.
 
 Reference runtime dependencies, excluding the separately tracked FFmpeg: jpeg-turbo, libarchive, libass, libbluray, libplacebo, little-cms2, luajit, mujs, rubberband, uchardet, vapoursynth, vulkan-loader, yt-dlp, zimg, and macOS-only molten-vk. These must be available before configuring mpv; their own build and runtime prerequisites precede them. A complete topological order has not been proven.
 
@@ -26,7 +26,7 @@ Reference runtime dependencies, excluding the separately tracked FFmpeg: jpeg-tu
 | --- | --- |
 | `lib/libass.rb` | pkgconf (build), freetype, fribidi, harfbuzz, libunibreak; nasm (Intel build). macOS disables fontconfig. Autoconf, automake and libtool declared in its HEAD block are not stable dependencies. |
 | `lib/libplacebo.rb` | fast_float, meson, ninja, pkgconf, python@3.15, vulkan-headers (build); little-cms2, shaderc, vulkan-loader. Enables lcms, shaderc and Vulkan. Its build resources are listed below. |
-| `m/molten-vk.rb` | cmake and Xcode 11.7 or newer; macOS only. Six stable Git resources are listed below. |
+| `m/molten-vk.rb` | The formula declares cmake and Xcode 11.7 or newer; pinned MoltenVK 1.4.2 upstream requires Xcode 15.0.1 or newer. macOS only. Six stable Git resources are listed below. |
 | `v/vapoursynth.rb` | ninja, pkgconf, vulkan-headers (build), python@3.15 and zimg. llvm is selected by the formula for Ventura or older, not Tahoe. Its glslang resource is listed below. |
 | `s/shaderc.rb` | cmake and macOS Python for build; three stable Git resources below. Disables shaderc tests and installation of its embedded glslang, SPIRV-Tools and googletest. |
 | `lib/libbluray.rb` | meson, ninja, pkgconf, fontconfig, freetype, libudfread and macOS libxml2. Enables fontconfig, freetype and libxml2; disables BD-J JAR. |
