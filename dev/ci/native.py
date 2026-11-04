@@ -280,7 +280,7 @@ def run_stages(system, mode, desktop_missing):
         except (OSError, RuntimeError, ValueError, KeyError) as error:
             update_obligation(directory, "failed", str(error))
             raise
-        update_obligation(directory, "passed", "Private D-Bus active playback Stop reached idle")
+        update_obligation(directory, "blocked", "Native offscreen render-thread contract review is pending")
 
 
 def main():

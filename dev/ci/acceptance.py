@@ -199,8 +199,8 @@ def validate_geometry(directory, report, record):
         raise ValueError("windows_geometry: bounds or storage snapshots differ")
 
 
-def validate_named_receipt(directory, report, prefix, producer, scenario, expected, images=()):
-    require_case(directory, prefix, images, expected, scenario if scenario != "single" else None)
+def validate_named_receipt(directory, report, prefix, producer, scenario, expected, images=(), scenario_marker=True):
+    require_case(directory, prefix, images, expected, scenario if scenario != "single" and scenario_marker else None)
     record = json.loads(artifact(directory, prefix + "/case.json").read_text(encoding="utf-8"))
     binary = artifact(directory, "desktop-executables/" + producer)
     required = {key: report[key] for key in ("sha", "ref", "job", "job_id", "pipeline_id", "platform", "mode")}
@@ -229,17 +229,26 @@ def validate_windowed(directory, report, name):
         validate_named_receipt(directory, report, f"{prefix}/{scenario}", producer, scenario, expected, images)
 
 
+def require_mpris_scenario(path, scenario):
+    text = Path(path).read_text(encoding="utf-8", errors="replace")
+    marker = r"(?m)^QINFO\s*:\s*TestMprisActiveStop::activeStop\(\) MPRIS_STOP_SCENARIO=([^\s]+)\s*$"
+    if re.findall(marker, text) != [scenario]:
+        raise ValueError(f"linux_active_stop: missing or incorrect fixture scenario marker: {scenario}")
+
+
 def validate_linux_active_stop(directory, report):
-    prefix = "linux-mpris-active-stop"
-    validate_named_receipt(directory, report, prefix, "linux-mpris-active-stop-v1", "single",
-                           ("TestMprisActiveStop", "activeStop"), ("active-before.png", "active-after.png"))
-    record = json.loads(artifact(directory, prefix + "/case.json").read_text(encoding="utf-8"))
-    required = {"source_sha": report["source_sha"], "launcher": "xvfb-private-dbus-v1", "exit_code": 0,
-                "media_sha256": hashlib.sha256(artifact(directory, "recovery.y4m").read_bytes()).hexdigest(),
-                "build_manifest_sha256": hashlib.sha256(artifact(directory, "build-manifest.json").read_bytes()).hexdigest()}
-    for key, value in required.items():
-        if record.get(key) != value:
-            raise ValueError(f"linux_active_stop: incorrect {key}")
+    for scenario in ("playing", "paused"):
+        prefix = f"linux-mpris-active-stop/{scenario}"
+        validate_named_receipt(directory, report, prefix, "linux-mpris-active-stop-v1", scenario,
+                               ("TestMprisActiveStop", "activeStop"), ("active-before.png", "active-after.png"), False)
+        require_mpris_scenario(artifact(directory, prefix + "/qtest.txt"), scenario)
+        record = json.loads(artifact(directory, prefix + "/case.json").read_text(encoding="utf-8"))
+        required = {"source_sha": report["source_sha"], "launcher": "xvfb-private-dbus-v1", "exit_code": 0,
+                    "media_sha256": hashlib.sha256(artifact(directory, "recovery.y4m").read_bytes()).hexdigest(),
+                    "build_manifest_sha256": hashlib.sha256(artifact(directory, "build-manifest.json").read_bytes()).hexdigest()}
+        for key, value in required.items():
+            if record.get(key) != value:
+                raise ValueError(f"linux_active_stop {scenario}: incorrect {key}")
 
 
 def validate_desktop(directory, report):

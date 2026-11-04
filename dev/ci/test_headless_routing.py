@@ -80,11 +80,12 @@ class TestHeadlessRouting(unittest.TestCase):
             stack.enter_context(patch.dict(native.os.environ, {"CI_EVIDENCE_DIR": "unused"}))
             stack.enter_context(patch.object(native, "update"))
             stack.enter_context(patch.object(build_manifest, "capture"))
-            stack.enter_context(patch.object(native, "update_obligation"))
+            obligation = stack.enter_context(patch.object(native, "update_obligation"))
             for name in ("configure", "headless_checks", "desktop_preflight", "runtime_ctest", "offscreen", "run_active_stop"):
                 stack.enter_context(patch.object(native, name, side_effect=lambda *a, n=name: events.append(n)))
             native.run_stages("Linux", "static", [])
         self.assertEqual(events, ["configure", "headless_checks", "desktop_preflight", "runtime_ctest", "offscreen", "run_active_stop"])
+        obligation.assert_called_once_with(Path("unused"), "blocked", "Native offscreen render-thread contract review is pending")
 
     def test_missing_linux_display_is_still_a_failure(self):
         with self.assertRaisesRegex(RuntimeError, "xvfb-run"):
