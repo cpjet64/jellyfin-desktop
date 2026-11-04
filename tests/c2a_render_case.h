@@ -105,7 +105,17 @@ struct C2aRenderState
   C2aRenderState(PlayerComponent& player, C2aFixture& fixture)
     : controller(fixture.controller), core(fixture.core), generation(fixture.generation),
       observer(core), retired(fixture.item, &MpvAbstractItem::renderRetired), playerError(&player, &PlayerComponent::error),
-      canceled(&player, &PlayerComponent::canceled), finished(&player, &PlayerComponent::finished) {}
+      canceled(&player, &PlayerComponent::canceled), finished(&player, &PlayerComponent::finished)
+  {
+    ackConnection = QObject::connect(fixture.item, &MpvAbstractItem::renderRetired, fixture.item,
+      [this](quint64 acknowledged) {
+        if (acknowledged != generation) return;
+        ackReceipt = QtThreaded::monotonicNanos();
+        ackOnGui = QThread::currentThread() == QCoreApplication::instance()->thread();
+        ++matchingAcks;
+      }, Qt::DirectConnection);
+  }
+  ~C2aRenderState() { QObject::disconnect(ackConnection); }
   MpvController* controller;
   mpv_handle* core;
   quint64 generation;
@@ -124,9 +134,33 @@ struct C2aRenderState
   qint64 requestReturned = 0;
   qint64 failureHandlerReturned = 0;
   qint64 failureUnwound = 0;
+  qint64 ackReceipt = 0;
+  int matchingAcks = 0;
+  bool ackOnGui = false;
+  QMetaObject::Connection ackConnection;
   bool failureOnGui = false;
   bool retirementRequested = false;
 };
+
+namespace {
+QJsonObject renderTiming(const C2aRenderState& state)
+{
+  return {{"clock", "std::chrono::steady_clock nanoseconds since epoch"},
+    {"sample_note", "atomic fields loaded independently at fixture return; zero means not observed"},
+    {"generation", qint64(state.generation)},
+    {"failure_queued_for_gui_ns", qint64(DiagnosticFailureInjection::failurePublishedNs.load())},
+    {"failure_received_gui_ns", state.failureReceipt}, {"request_entered_ns", state.requestEntered},
+    {"request_returned_ns", state.requestReturned}, {"handler_return_boundary_ns", state.failureHandlerReturned},
+    {"failure_unwound_ns", state.failureUnwound},
+    {"unregister_entered_ns", qint64(DiagnosticFailureInjection::unregisterEnteredNs.load())},
+    {"unregister_returned_ns", qint64(DiagnosticFailureInjection::unregisterReturnedNs.load())},
+    {"free_entered_ns", qint64(DiagnosticFailureInjection::freeEnteredNs.load())},
+    {"free_returned_ns", qint64(DiagnosticFailureInjection::freeReturnedNs.load())},
+    {"ack_emitted_ns", qint64(DiagnosticFailureInjection::ackEmittedNs.load())},
+    {"matching_ack_received_ns", state.ackReceipt}, {"matching_ack_count", state.matchingAcks},
+    {"matching_ack_on_gui", state.ackOnGui}};
+}
+}
 
 void TestC2RetirementNative::renderFailure()
 {
@@ -147,6 +181,10 @@ void TestC2RetirementNative::verifyRenderFailure(C2aFixture& fixture, PlayerComp
                                                 const QString& media, const QString& evidence)
 {
   C2aRenderState state(player, fixture);
+  const auto saveTiming = qScopeGuard([&] {
+    if (!saveRenderEvidence(evidence, "c2a-render-timing.json", renderTiming(state)))
+      QTest::qFail("could not save render timing evidence", __FILE__, __LINE__);
+  });
   QCOMPARE(state.controller->eventMode(), MpvController::EventMode::External);
   state.binding = player.m_mpvGeneration;
   state.ac3 = player.m_doAc3Transcoding;
