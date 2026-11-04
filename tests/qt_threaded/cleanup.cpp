@@ -15,6 +15,8 @@ void Scene::Data::cleanup()
   if (!context || !surface || !context->makeCurrent(surface)) { fail("cleanup context unavailable"); return; }
   { QMutexLocker guard(&lock); state.contextCurrentAtCleanup = true; }
   auto* priv = QQuickRenderControlPrivate::get(control);
+  if (priv->frameStatus == QQuickRenderControlPrivate::RecordingFrame) { fail("cleanup encountered active frame"); return; }
+  { QMutexLocker guard(&lock); state.noActiveFrameAtCleanup = true; }
   auto* win = QQuickWindowPrivate::get(window);
   auto* savedContext = priv->rc;
   auto* savedRhi = priv->rhi;

@@ -4,6 +4,8 @@
 #include <QQuickRenderTarget>
 #include <QQuickItem>
 #include <QSGRendererInterface>
+#include <QLibraryInfo>
+#include <QFileInfo>
 #include <cstdlib>
 #include <chrono>
 
@@ -33,15 +35,15 @@ bool Scene::Data::dispatch(const std::function<void()>& action, QString* error)
     }
     ++state.requestsAdmitted;
   }
-  if (!QMetaObject::invokeMethod(&executor, [action, done] { action(); done->release(); }, Qt::QueuedConnection)) {
+  if (!QMetaObject::invokeMethod(&executor, [this, action, done] {
+        action(); { QMutexLocker guard(&lock); ++state.requestsCompleted; } done->release();
+      }, Qt::QueuedConnection)) {
     fail("worker request could not be queued");
     if (error) *error = state.error;
     return false;
   }
   if (!done->tryAcquire(1, 10000)) {
-    fail("worker request timed out; process must remain contained");
-    if (error) *error = state.error;
-    return false;
+    std::_Exit(EXIT_FAILURE); // Never return to GUI mutations with unknown worker state.
   }
   QMutexLocker guard(&lock);
   if (error) *error = state.error;
@@ -63,6 +65,12 @@ bool Scene::Data::initializeGui(QString* error)
     if (error) *error = "Qt runtime must be exactly 6.9.3";
     return false;
   }
+  const QString expected = QFileInfo(QStringLiteral(QT_THREADED_QT_PREFIX)).canonicalFilePath();
+  const QString actual = QFileInfo(QLibraryInfo::path(QLibraryInfo::PrefixPath)).canonicalFilePath();
+  if (expected.isEmpty() || actual != expected) {
+    if (error) *error = "Qt runtime prefix does not match the private header build";
+    return false;
+  }
   if (failure == FailurePoint::BeforeTransfer) { if (error) *error = "injected before transfer"; return false; }
   QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
   control = new QQuickRenderControl;
@@ -73,6 +81,7 @@ bool Scene::Data::initializeGui(QString* error)
   surface = new QOffscreenSurface;
   surface->setFormat(context->format());
   surface->create();
+  state.privateBoundaryEntered = true;
   auto* priv = QQuickRenderControlPrivate::get(control);
   if (!surface->isValid() || priv->window != window || priv->rhi || priv->offscreenSurface || priv->initialized) {
     if (error) *error = "invalid initial private state or surface";
@@ -97,6 +106,11 @@ void Scene::Data::initializeWorker()
   { QMutexLocker guard(&lock); state.rhiCreated = priv->rhi; state.rhiCreatedCount = priv->rhi ? 1 : 0; }
   if (!initialized) { fail("render control initialization failed"); return; }
   if (!priv->ownRhi || !priv->rhi || priv->offscreenSurface != surface) { fail("unexpected QRhi ownership"); return; }
+  priv->rhi->addCleanupCallback(this, [this](QRhi*) {
+    QMutexLocker guard(&lock);
+    state.rhiCleanupThread = currentThread();
+    ++state.rhiDestroyedCount;
+  });
   { QMutexLocker guard(&lock); state.initialized = true; state.targetReady = true; }
   if (failure == FailurePoint::AfterInit) { fail("injected after initialization"); return; }
   timer = new QTimer(&executor);
@@ -112,16 +126,25 @@ bool Scene::initialize(QString* error)
     if (error) *error = localError;
     return false;
   }
-  data->executor.moveToThread(&data->thread);
+  auto ready = std::make_shared<QSemaphore>();
+  QObject::connect(&data->thread, &QThread::started, &data->thread, [ready] { ready->release(); }, Qt::DirectConnection);
   data->thread.start();
   data->started = true;
-  if (!data->dispatch([this] { QMutexLocker guard(&data->lock); data->state.workerReady = true;
-                               data->state.renderThread = currentThread(); }, error)) return false;
+  if (!ready->tryAcquire(1, 10000)) std::_Exit(EXIT_FAILURE);
+  { QMutexLocker guard(&data->lock); data->state.workerReady = true; }
+  data->executor.moveToThread(&data->thread);
   data->control->prepareThread(&data->thread);
   data->control->moveToThread(&data->thread);
   data->context->moveToThread(&data->thread);
   data->transferred = true;
-  { QMutexLocker guard(&data->lock); data->state.transferred = true; }
+  auto* priv = QQuickRenderControlPrivate::get(data->control);
+  auto* win = QQuickWindowPrivate::get(data->window);
+  const bool affinities = data->control->thread() == &data->thread && priv->rc->thread() == &data->thread &&
+    win->animationController->thread() == &data->thread && data->context->thread() == &data->thread &&
+    data->window->thread() == QCoreApplication::instance()->thread() &&
+    data->window->contentItem()->thread() == QCoreApplication::instance()->thread();
+  { QMutexLocker guard(&data->lock); data->state.transferred = true; data->state.affinitiesVerified = affinities; }
+  if (!affinities) { data->fail("unexpected object affinity after transfer"); return false; }
   if (!data->dispatch([this] { data->initializeWorker(); }, error)) return false;
   QMutexLocker guard(&data->lock);
   if (error) *error = data->state.error;
@@ -133,8 +156,13 @@ void Scene::Data::render()
   if (!synchronized) return;
   if (!context->makeCurrent(surface)) { fail("render context unavailable"); return; }
   control->beginFrame();
+  if (QQuickRenderControlPrivate::get(control)->frameStatus != QQuickRenderControlPrivate::RecordingFrame) {
+    fail("beginFrame failed"); return;
+  }
+  { QMutexLocker guard(&lock); ++state.framesStarted; }
   control->render();
   control->endFrame();
+  { QMutexLocker guard(&lock); ++state.framesCompleted; }
   Frame frame{target->toImage(), 0, currentThread(), monotonicNanos()};
   QMutexLocker guard(&lock);
   frame.sequence = ++state.frames;
@@ -153,14 +181,28 @@ bool Scene::sync(QString* error)
     }
   }
   data->control->polishItems();
-  return data->dispatch([this] {
-    if (!data->context->makeCurrent(data->surface)) { data->fail("sync context unavailable"); return; }
+  auto done = std::make_shared<QSemaphore>();
+  { QMutexLocker guard(&data->lock); ++data->state.requestsAdmitted; }
+  const bool queued = QMetaObject::invokeMethod(&data->executor, [this, done] {
+    if (!data->context->makeCurrent(data->surface)) { data->fail("sync context unavailable"); done->release(); return; }
     data->control->beginFrame();
+    if (QQuickRenderControlPrivate::get(data->control)->frameStatus != QQuickRenderControlPrivate::RecordingFrame) {
+      data->fail("sync beginFrame failed"); done->release(); return;
+    }
+    { QMutexLocker guard(&data->lock); ++data->state.framesStarted; }
     data->control->sync();
+    data->synchronized = true;
+    { QMutexLocker guard(&data->lock); ++data->state.requestsCompleted; }
+    done->release(); // GUI may resume after sync, while rendering continues.
     data->control->render();
     data->control->endFrame();
-    data->synchronized = true;
-  }, error);
+    { QMutexLocker guard(&data->lock); ++data->state.framesCompleted; }
+  }, Qt::QueuedConnection);
+  if (!queued) { data->fail("sync request could not be queued"); return false; }
+  if (!done->tryAcquire(1, 10000)) std::_Exit(EXIT_FAILURE);
+  QMutexLocker guard(&data->lock);
+  if (error) *error = data->state.error;
+  return data->state.error.isEmpty();
 }
 
 QQuickItem* Scene::contentItem() const { return data->window ? data->window->contentItem() : nullptr; }

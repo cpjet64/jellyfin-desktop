@@ -14,6 +14,8 @@
 #include <QtQuick/private/qquickrendercontrol_p.h>
 #include <QtQuick/private/qquickwindow_p.h>
 #include <QtQuick/private/qsgcontext_p.h>
+#include <QtQuick/private/qquickanimatorcontroller_p.h>
+#include <rhi/qrhi.h>
 
 #if QT_VERSION != QT_VERSION_CHECK(6, 9, 3)
 #error "Qt threaded diagnostic requires matching Qt 6.9.3 private headers"
