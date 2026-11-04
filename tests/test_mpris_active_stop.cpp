@@ -79,7 +79,8 @@ private slots:
   void activeStop();
 private:
   void waitForPlayback(MprisOffscreenScene& scene, PlayerComponent& player, const QString& evidence);
-  void exerciseBus(const QDBusConnection& client, const QString& service, mpv_handle* handle);
+  void exerciseBus(const QDBusConnection& client, const QString& service, mpv_handle* handle,
+                   MprisOffscreenScene& scene, PlayerComponent& player, const QString& scenario);
 };
 
 void TestMprisActiveStop::waitForPlayback(MprisOffscreenScene& scene, PlayerComponent& player,
@@ -111,7 +112,8 @@ void TestMprisActiveStop::waitForPlayback(MprisOffscreenScene& scene, PlayerComp
 }
 
 void TestMprisActiveStop::exerciseBus(const QDBusConnection& client, const QString& service,
-                                      mpv_handle* handle)
+                                      mpv_handle* handle, MprisOffscreenScene& scene,
+                                      PlayerComponent& player, const QString& scenario)
 {
   auto& input = InputComponent::Get();
   QSignalSpy forwarded(&input, &InputComponent::hostInput);
@@ -124,6 +126,21 @@ void TestMprisActiveStop::exerciseBus(const QDBusConnection& client, const QStri
   QCOMPARE(forwarded.at(0).at(0).toStringList(), QStringList{"stop"});
   QCOMPARE(stops.count(), 0);
   QCOMPARE(idleState(handle), 0);
+  int paused = -1;
+  QCOMPARE(mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &paused), 0);
+  QCOMPARE(paused, scenario == "paused" ? 1 : 0);
+  if (scenario == "playing") {
+    const qint64 before = player.getPosition();
+    QElapsedTimer timer;
+    timer.start();
+    while (player.getPosition() <= before + 200 && timer.elapsed() < 3000) {
+      QVERIFY(scene.frame());
+      QTest::qWait(20);
+    }
+    QVERIFY(player.getPosition() > before + 200);
+    QCOMPARE(mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &paused), 0);
+    QCOMPARE(paused, 0);
+  }
   WebClientFaultGuard::instance().observeRendererLoss(0, 17);
   QCOMPARE(canSeek(client, service), QVariant(false));
   QCOMPARE(invoke(client, service, playerInterface, "Stop").type(), QDBusMessage::ReplyMessage);
@@ -143,6 +160,9 @@ void TestMprisActiveStop::activeStop()
   const QString root = qEnvironmentVariable("JELLYFIN_TEST_OWNED_ROOT");
   const QString evidence = qEnvironmentVariable("RECOVERY_EVIDENCE_DIR");
   const QString media = qEnvironmentVariable("RECOVERY_MEDIA");
+  const QString scenario = qEnvironmentVariable("RECOVERY_SCENARIO");
+  QVERIFY(scenario == "playing" || scenario == "paused");
+  qInfo().noquote() << "MPRIS_STOP_SCENARIO=" + scenario;
   const QString rootPath = QFileInfo(root).canonicalFilePath();
   const QString evidencePath = QFileInfo(evidence).canonicalFilePath();
   const QString mediaPath = QFileInfo(media).canonicalFilePath();
@@ -182,20 +202,22 @@ void TestMprisActiveStop::activeStop()
   QVERIFY(player.load(QUrl::fromLocalFile(media).toString(), {{"autoplay", true}}, {{"type", "video"}}));
   waitForPlayback(scene, player, evidence);
   if (QTest::currentTestFailed()) return;
-  int paused = 1;
-  QCOMPARE(mpv_set_property(handle, "pause", MPV_FORMAT_FLAG, &paused), 0);
-  QTRY_VERIFY_WITH_TIMEOUT(mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &paused) >= 0 && paused, 5000);
+  if (scenario == "paused") {
+    int paused = 1;
+    QCOMPARE(mpv_set_property(handle, "pause", MPV_FORMAT_FLAG, &paused), 0);
+    QTRY_VERIFY_WITH_TIMEOUT(mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &paused) >= 0 && paused, 5000);
+  }
   QCOMPARE(idleState(handle), 0);
   MprisComponent mpris;
   QVERIFY(mpris.componentInitialize());
   mpris.componentPostInitialize();
-  // Bridge notifications describe the known ten-second clip and paused core; they are setup, not playback proof.
-  qInfo() << "Seeding MPRIS bridge duration and paused state for generated ten-second clip";
+  // Bridge notifications describe the clip and core state; they are setup, not playback proof.
+  qInfo() << "Seeding MPRIS bridge duration and state for generated ten-second clip";
   mpris.notifyDurationChange(10000);
-  mpris.notifyPlaybackState("Paused");
+  mpris.notifyPlaybackState(scenario == "paused" ? "Paused" : "Playing");
   const QString profile = QFileInfo(ProfileManager::activeProfile().cacheDir()).fileName();
   const QString service = "org.mpris.MediaPlayer2.JellyfinDesktop.profile_" + profile;
-  exerciseBus(client, service, handle);
+  exerciseBus(client, service, handle, scene, player, scenario);
 }
 
 int main(int argc, char** argv)
