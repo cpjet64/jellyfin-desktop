@@ -2,9 +2,11 @@
 
 #include <QMetaObject>
 #include <QObject>
+#include <QThread>
 #include <memory>
 #include <mutex>
 
+// Close and receiver destruction must run on the receiver's GUI thread.
 // The retained state is inert after close and never owns the receiver.
 class SmtcAdmission
 {
@@ -29,6 +31,7 @@ public:
   void close()
   {
     std::lock_guard<std::mutex> lock(m_mutex);
+    Q_ASSERT(!m_receiver || QThread::currentThread() == m_receiver->thread());
     m_receiver = nullptr;
   }
 

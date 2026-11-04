@@ -28,6 +28,7 @@ private:
   void setPaused(bool value);
   void initializeMediaTransport(HWND hwnd);
   void initializeMediaTransportControls();
+  void shutdownMediaTransportControls();
   void onMetaData(const QVariantMap &meta, QUrl baseUrl);
   void setAudioMeta(const QVariantMap &meta);
   void setVideoMeta(const QVariantMap &meta);
