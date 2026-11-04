@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <cstdint>
 
 // Linked only by the diagnostic build. Zero means use the real libmpv call.
 struct DiagnosticFailureInjection
@@ -14,8 +15,13 @@ struct DiagnosticFailureInjection
   static std::atomic<int> order;
   static std::atomic<int> closedOrder;
   static std::atomic<int> callbackEnteredOrder;
+  static std::atomic<std::uint64_t> callbackGeneration;
+  static std::atomic<std::uintptr_t> callbackThread;
+  static std::atomic<int> callbackHoldLeftOrder;
+  // Callback accounting completed; this is not a literal C++ return stamp.
   static std::atomic<int> callbackExitedOrder;
   static std::atomic<int> unregisterEnteredOrder;
+  static std::atomic<std::uintptr_t> unregisterThread;
   static std::atomic<int> unregisteredOrder;
   static std::atomic<int> freedOrder;
   static std::atomic<int> clearedOrder;
