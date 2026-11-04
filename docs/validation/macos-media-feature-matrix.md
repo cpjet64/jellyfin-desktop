@@ -10,15 +10,17 @@ deployment target, Xcode and compiler compatibility remain unverified.
 | --- | --- | --- |
 | Embedded rendering | mpv enables libmpv; Desktop selects `vo=libmpv` | Real Qt application video, start/stop/restart/close and event lifecycle; CLI alone is insufficient |
 | Hardware decode | FFmpeg enables VideoToolbox and AudioToolbox; Desktop exposes auto, copy, disabled and macOS compatibility modes | Configuration plus observed H.264, HEVC and AV1 decode/interoperability where supported; distinguish actual hardware from software fallback |
-| Audio | Desktop selects device, channels, exclusive mode and passthrough codecs | Audible output, switching and fallback; exercise AC3/DTS/EAC3/DTS-HD/TrueHD passthrough only with suitable hardware; audio-device change regression for mpv patch |
+| Audio | Desktop selects device, channels, exclusive mode and passthrough codecs; EAC3, DTS-HD and TrueHD settings are excluded on macOS | Audible output, switching and fallback; exercise exposed AC3/DTS passthrough with suitable hardware; audio-device change regression for mpv patch |
 | Subtitles | libass, shaping dependencies and CoreText on macOS | Styled ASS, complex shaping, font lookup, external/embedded selection, delay and off |
-| Filters | Desktop may request AC3 processing and other filters | Verify `libavfilter` and AC3 encoder/filter availability by runtime capability query and representative behavior, fail if missing |
+| Filters | S/PDIF with AC3 passthrough enables `lavcac3enc` | Verify `libavfilter` and AC3 encoder/filter availability by runtime capability query and representative behavior with a suitable receiver; fail if missing |
 | Codecs | Reference enables dav1d, VPX, Opus, LAME, x264, x265, SVT-AV1 and vmaf | Compare resolved configure flags and codec capabilities to required reference set; exercise representative media |
 | Network | FFmpeg enables OpenSSL; Desktop loads media URLs | HTTPS success with trusted certificate, rejection of invalid certificate, streaming/seek/recovery against controlled endpoint |
 | Color and scaling | libplacebo enables shaderc, Vulkan and lcms; mpv enables Vulkan and MoltenVK | Verify built features and selected runtime path; test scaling/color and HDR where supported; do not assume embedded rendering uses Vulkan |
 | Playback control | Desktop manages tracks and playback via libmpv | Seek, play/pause, buffering, end/error, server transcode, subtitle/audio switching, manual overrides |
 
-Desktop sets `ytdl=false` by default, but supports manual mpv settings. Any
+Desktop sets `ytdl=false` by default, but applies manual mpv settings afterward.
+Omitting yt-dlp covers default playback only and may affect a user's manual
+`ytdl=yes` configuration. Any
 exclusion of yt-dlp, scripting, VapourSynth, bluray or other formula features
 must state its effect on those settings and receive product review. Documentation
 generation may be excluded only after proving no runtime/resource dependency;

@@ -32,9 +32,14 @@ and approve the resulting lock before use; never silently replace a hash after
 an upstream archive changes. Do not extract or build during this acquisition.
 An archive URL's content is not presumed byte-identical to Homebrew's git
 checkout. Additional unidentified inputs are not covered by these ten caps.
-Separately, the pinned core Python formula references a patch in Homebrew/brew;
-the core commit does not pin that repository or patch. Resolve and hash that
-small metadata file against a separately reviewed immutable brew revision.
+The pinned core Python, glib and libtool patches reside in homebrew-core itself.
+Their SHA-256 values at this reference, respectively, are
+`9f2eae1d08720b06ac3d9ef1999c09388b9db39dfb52687fc261ff820bff20c3`,
+`d846efd0bf62918350da94f850db33b0f8727fece9bfaf8164566e3094e80c97` and
+`35acd6aebc19843f1a2b3a63e880baceb0f5278ab1ace661e57a502d9d78c93c`.
+They are `Patches/python/3.13-sysconfig.diff`,
+`Patches/glib/hardcoded-paths.diff` and
+`Patches/libtool/configure-big_sur.diff` in the pinned core tree.
 
 The inline `libvpx` patch is already present in the pinned formula's `__END__`
 section. Its 1,720 UTF-8 bytes after the `__END__` line, including final LF,
