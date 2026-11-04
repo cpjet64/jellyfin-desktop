@@ -72,7 +72,7 @@ QString resolveExistingAncestor(QString path)
 bool albumArtInsideRoot(const QStringList& messages, const QString& root)
 {
   if (messages.size() != 1) return false;
-  const QRegularExpression pattern(R"rx(\bdir:\s*"([^"]+)")rx");
+  const QRegularExpression pattern(QStringLiteral("\\bdir:\\s*\"([^\"]+)\""));
   const auto match = pattern.match(messages.first());
   if (!match.hasMatch()) return false;
   const QString base = QFileInfo(root).canonicalFilePath();
