@@ -251,7 +251,10 @@ private:
   int m_c2HookDelayMs = -1;
   int m_c2HooksScheduled = 0;
   int m_c2HooksCompleted = 0;
-  int m_c2LastHookContinueResult = 0;
+  int m_c2HookContinueCalls = 0;
+  int m_c2LastHookContinueResult = -1;
+  uint64_t m_c2LastScheduledHookId = 0;
+  uint64_t m_c2LastContinuedHookId = 0;
 #endif
   friend class TestFaultStop;
   friend class TestPlayerReleasedState;

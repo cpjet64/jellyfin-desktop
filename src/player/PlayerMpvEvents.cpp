@@ -118,6 +118,9 @@ void PlayerComponent::scheduleMpvHook(const QString& resumeId)
 #if MPV_CLIENT_API_VERSION >= MPV_MAKE_VERSION(1, 100)
 void PlayerComponent::scheduleMpvHook(uint64_t id)
 {
+#ifdef MPVQT_C2_DIAGNOSTIC_ONLY
+  m_c2LastScheduledHookId = id;
+#endif
 #ifdef MPVQT_EXTERNAL_EVENTS
   const auto generation = m_mpvGeneration;
 #endif
@@ -128,6 +131,8 @@ void PlayerComponent::scheduleMpvHook(uint64_t id)
     qInfo() << "resuming loading";
 #ifdef MPVQT_C2_DIAGNOSTIC_ONLY
     m_c2LastHookContinueResult = mpv_hook_continue(m_mpv->mpv(), id);
+    m_c2LastContinuedHookId = id;
+    ++m_c2HookContinueCalls;
 #else
     mpv_hook_continue(m_mpv->mpv(), id);
 #endif
