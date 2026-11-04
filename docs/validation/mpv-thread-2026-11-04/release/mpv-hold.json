@@ -1,0 +1,254 @@
+{
+    "end": 20011154247100,
+    "frame1_sequence": 51,
+    "frame1_thread": "11954",
+    "frame1_time": 20011029515000,
+    "frame2_sequence": 52,
+    "frame2_thread": "11954",
+    "frame2_time": 20011045288400,
+    "getters": [
+        {
+            "entered": 20010802899400,
+            "position": 533,
+            "returned": 20010802905900
+        },
+        {
+            "entered": 20010823576300,
+            "position": 566,
+            "returned": 20010823586500
+        },
+        {
+            "entered": 20010844356400,
+            "position": 600,
+            "returned": 20010844365000
+        },
+        {
+            "entered": 20010864422200,
+            "position": 600,
+            "returned": 20010864435400
+        },
+        {
+            "entered": 20010885447000,
+            "position": 633,
+            "returned": 20010885457800
+        },
+        {
+            "entered": 20010905975700,
+            "position": 633,
+            "returned": 20010905989900
+        },
+        {
+            "entered": 20010927553700,
+            "position": 666,
+            "returned": 20010927569500
+        },
+        {
+            "entered": 20010948611600,
+            "position": 700,
+            "returned": 20010948625100
+        },
+        {
+            "entered": 20010969141500,
+            "position": 700,
+            "returned": 20010969154000
+        },
+        {
+            "entered": 20010989671900,
+            "position": 733,
+            "returned": 20010989686200
+        },
+        {
+            "entered": 20011010192400,
+            "position": 766,
+            "returned": 20011010203600
+        },
+        {
+            "entered": 20011031006600,
+            "position": 766,
+            "returned": 20011031018100
+        },
+        {
+            "entered": 20011051077800,
+            "position": 800,
+            "returned": 20011051092100
+        },
+        {
+            "entered": 20011071603900,
+            "position": 800,
+            "returned": 20011071620300
+        },
+        {
+            "entered": 20011092153800,
+            "position": 833,
+            "returned": 20011092168300
+        },
+        {
+            "entered": 20011112674500,
+            "position": 866,
+            "returned": 20011112686000
+        },
+        {
+            "entered": 20011133716200,
+            "position": 866,
+            "returned": 20011133730400
+        }
+    ],
+    "probe": "fixture MpvRenderer subclass entry and return",
+    "start": 20010802899300,
+    "wrapper_renders": [
+        {
+            "context": "253bf744a40",
+            "entered": 20010804157900,
+            "renderer": "253c23815b0",
+            "returned": 20010804630300,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010820683200,
+            "renderer": "253c23815b0",
+            "returned": 20010821222100,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010836209600,
+            "renderer": "253c23815b0",
+            "returned": 20010836668200,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010852986800,
+            "renderer": "253c23815b0",
+            "returned": 20010853485100,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010868541500,
+            "renderer": "253c23815b0",
+            "returned": 20010868981800,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010884628200,
+            "renderer": "253c23815b0",
+            "returned": 20010885111100,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010900103600,
+            "renderer": "253c23815b0",
+            "returned": 20010900543100,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010916677600,
+            "renderer": "253c23815b0",
+            "returned": 20010917213100,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010932872100,
+            "renderer": "253c23815b0",
+            "returned": 20010933362900,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010948757500,
+            "renderer": "253c23815b0",
+            "returned": 20010949243900,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010964244600,
+            "renderer": "253c23815b0",
+            "returned": 20010964699900,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010980781900,
+            "renderer": "253c23815b0",
+            "returned": 20010981253900,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20010996282400,
+            "renderer": "253c23815b0",
+            "returned": 20010996630100,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20011012338600,
+            "renderer": "253c23815b0",
+            "returned": 20011012705900,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20011028841400,
+            "renderer": "253c23815b0",
+            "returned": 20011029237400,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20011044616800,
+            "renderer": "253c23815b0",
+            "returned": 20011045012300,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20011060215300,
+            "renderer": "253c23815b0",
+            "returned": 20011060594100,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20011076721200,
+            "renderer": "253c23815b0",
+            "returned": 20011077149200,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20011092286000,
+            "renderer": "253c23815b0",
+            "returned": 20011092637000,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20011108869800,
+            "renderer": "253c23815b0",
+            "returned": 20011109246100,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20011124350500,
+            "renderer": "253c23815b0",
+            "returned": 20011124875600,
+            "thread": "11954"
+        },
+        {
+            "context": "253bf744a40",
+            "entered": 20011140847500,
+            "renderer": "253c23815b0",
+            "returned": 20011141336700,
+            "thread": "11954"
+        }
+    ]
+}
