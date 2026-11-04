@@ -17,7 +17,7 @@ def qtest(class_name, case, scenario="playing"):
 QTEST = qtest("TestRendererLossOffscreen", "actualPlayback")
 JOBS = ("windows-x64", "windows-system", "linux-static", "linux-system", "macos-static", "macos-system")
 CORE = ("test_systemcomponent", "test_log", "test_settings", "test_displaymanager", "test_log_rotation",
-        "test_chromiumflags", "test_webclient_transport", "test_mpv_test_bootstrap_pure", "test_smtc_admission_model", "test_c2a_hold_gate", "test_c2_error_terminal", "test_c2_fault_quiescence_policy", "test_c2_synthetic_service")
+        "test_chromiumflags", "test_webclient_transport", "test_mpv_test_bootstrap_pure", "test_smtc_admission_model", "test_c2a_hold_gate", "test_c2_error_terminal", "test_c2_fault_quiescence_policy", "test_c2_synthetic_service", "test_c2_fault_restore_permission", "test_c2_fault_restore_frame")
 RUNTIME = ("test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard", "test_mpv_test_bootstrap", "test_windowmanager")
 MPVQT_SHA = "2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e"
 STATIC = ("test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state")
@@ -136,6 +136,16 @@ class AcceptanceTest(unittest.TestCase):
             path.write_text(path.read_text().replace('<testcase name="test_c2_synthetic_service"/>', ''), encoding="utf-8")
             with self.subTest(job=job), self.assertRaisesRegex(ValueError, "Missing CTest cases: test_c2_synthetic_service"):
                 self.validate(job)
+
+    def test_restore_checks_are_required_for_each_platform(self):
+        for name in ("test_c2_fault_restore_permission", "test_c2_fault_restore_frame"):
+            for job in JOBS:
+                path = self.base / job / "headless-ctest.xml"
+                original = path.read_text()
+                path.write_text(original.replace(f'<testcase name="{name}"/>', ''), encoding="utf-8")
+                with self.subTest(job=job, name=name), self.assertRaisesRegex(ValueError, f"Missing CTest cases: {name}"):
+                    self.validate(job)
+                path.write_text(original, encoding="utf-8")
 
     def test_provenance_and_all_statuses(self):
         path = self.base / "linux-static/evidence.json"

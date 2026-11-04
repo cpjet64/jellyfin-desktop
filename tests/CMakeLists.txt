@@ -31,6 +31,17 @@ target_link_libraries(test_c2_synthetic_service PRIVATE Threads::Threads)
 add_test(NAME test_c2_synthetic_service COMMAND test_c2_synthetic_service)
 set_tests_properties(test_c2_synthetic_service PROPERTIES TIMEOUT 60)
 
+add_executable(test_c2_fault_restore_permission test_c2_fault_restore_permission.cpp)
+target_compile_features(test_c2_fault_restore_permission PRIVATE cxx_std_17)
+add_test(NAME test_c2_fault_restore_permission COMMAND test_c2_fault_restore_permission)
+set_tests_properties(test_c2_fault_restore_permission PROPERTIES TIMEOUT 60)
+
+add_executable(test_c2_fault_restore_frame test_c2_fault_restore_frame.cpp)
+target_compile_features(test_c2_fault_restore_frame PRIVATE cxx_std_17)
+target_link_libraries(test_c2_fault_restore_frame PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+add_test(NAME test_c2_fault_restore_frame COMMAND test_c2_fault_restore_frame)
+set_tests_properties(test_c2_fault_restore_frame PROPERTIES TIMEOUT 60)
+
 if(MPVQT_C2_DIAGNOSTIC_ONLY)
   add_subdirectory(qt_threaded)
   add_executable(test_c2a_retirement_native test_c2a_retirement_native.cpp
