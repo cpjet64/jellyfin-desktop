@@ -7,11 +7,14 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <MpvController>
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <thread>
 #include "mpv_thread_cleanup.h"
 #include "mpv_test_bootstrap.h"
@@ -21,15 +24,28 @@
 namespace {
 std::atomic<bool> renderWarning{false};
 QtMessageHandler previousHandler = nullptr;
+QMutex messageMutex;
+QJsonArray diagnosticMessages;
 void watchMessages(QtMsgType type, const QMessageLogContext& context, const QString& message)
 {
-  if (message.contains("not being called or stuck", Qt::CaseInsensitive) ||
-      message.contains("deadlock", Qt::CaseInsensitive)) renderWarning = true;
+  const bool selected = type == QtCriticalMsg || type == QtFatalMsg ||
+      message.contains("not being called or stuck", Qt::CaseInsensitive) ||
+      message.contains("deadlock", Qt::CaseInsensitive);
+  if (selected) {
+    const qint64 received = QtThreaded::monotonicNanos();
+    renderWarning = true;
+    QMutexLocker lock(&messageMutex);
+    diagnosticMessages.append(QJsonObject{{"severity", int(type)}, {"message", message}, {"received", received}});
+    fprintf(stderr, "fixture diagnostic received_ns=%lld severity=%d: %s\n",
+            static_cast<long long>(received), int(type), qPrintable(message));
+    fflush(stderr);
+  }
   if (previousHandler) previousHandler(type, context, message);
 }
 struct MessageWatch {
-  MessageWatch() { renderWarning = false; previousHandler = qInstallMessageHandler(watchMessages); }
+  MessageWatch() { renderWarning = false; diagnosticMessages = {}; previousHandler = qInstallMessageHandler(watchMessages); }
   ~MessageWatch() { qInstallMessageHandler(previousHandler); }
+  QJsonArray messages() const { QMutexLocker lock(&messageMutex); return diagnosticMessages; }
 };
 int brightPixels(const QImage& image)
 {
@@ -62,6 +78,8 @@ private:
                 const QString& media, const QString& evidence);
   void verifyHold(QtThreaded::Scene& scene, PlayerComponent& player, ProbeItem* item,
                   const QString& evidence);
+  void recordLifecycle(QtThreaded::Scene& scene, PlayerComponent& player, MpvThreadCleanup& cleanup,
+                       const QString& evidence, const QJsonArray& diagnostics, bool cleaned);
 };
 
 bool TestMpvThreadIndependence::prepare(const QString& evidence, const QString& media)
@@ -86,10 +104,11 @@ void TestMpvThreadIndependence::healthyPlayback()
   QSignalSpy failed(&player, &PlayerComponent::error);
   QSignalSpy ended(&player, &PlayerComponent::finished);
   QSignalSpy canceled(&player, &PlayerComponent::canceled);
+  qint64 canceledAt = 0;
+  QObject::connect(&player, &PlayerComponent::canceled, &player,
+                   [&] { canceledAt = QtThreaded::monotonicNanos(); });
   QtThreaded::Scene scene;
   MpvThreadCleanup cleanup(player, scene);
-  cleanup.setChecks([&] { return failed.isEmpty() && ended.isEmpty() && canceled.isEmpty() && !renderWarning.load(); },
-                    [&] { return failed.isEmpty() && ended.isEmpty() && !renderWarning.load(); });
   const QString evidence = qEnvironmentVariable("RECOVERY_EVIDENCE_DIR");
   const QString media = qEnvironmentVariable("RECOVERY_MEDIA");
   QVERIFY(prepare(evidence, media));
@@ -97,20 +116,42 @@ void TestMpvThreadIndependence::healthyPlayback()
   QString error;
   QVERIFY2(scene.initialize(&error), qPrintable(error));
   auto* item = new ProbeItem(scene.contentItem());
-  item->setObjectName("video");
-  item->setSize(QSizeF(640, 360));
   auto* controller = item->controller();
   mpv_handle* core = controller ? controller->mpv() : nullptr;
+  cleanup.attach(item, core);
+  QSignalSpy ready(item, &MpvAbstractItem::ready);
+  auto renderFailure = std::make_shared<QSignalSpy>(item, &MpvAbstractItem::renderFailure);
+  cleanup.setChecks([&, renderFailure] { return failed.isEmpty() && ended.isEmpty() && canceled.isEmpty() &&
+      renderFailure->isEmpty() && !renderWarning.load(); },
+    [&, renderFailure] { return failed.isEmpty() && ended.isEmpty() && renderFailure->isEmpty() && !renderWarning.load(); });
+  item->setObjectName("video");
+  item->setSize(QSizeF(640, 360));
+  QVERIFY(core);
+  cleanup.renderMayExist();
+  QVERIFY2(scene.sync(&error), qPrintable(error));
+  QTRY_VERIFY_WITH_TIMEOUT(!ready.isEmpty() || !renderFailure->isEmpty(), 15000);
+  QVERIFY(renderFailure->isEmpty());
+  cleanup.rendererReady();
   player.setWindow(scene.contentItem()->window());
   const quint64 binding = player.m_mpvGeneration;
-  cleanup.attach(item, core, [&, item, controller, core, binding] { return item->controller() == controller && controller &&
-    controller->mpv() == core && player.m_mpv == controller && player.m_mpvGeneration == binding; });
+  cleanup.bind([&, item, controller, core, binding] { return item->controller() == controller && controller &&
+    controller->mpv() == core && player.m_mpv == controller && player.m_mpvGeneration == binding; },
+    [&] { return canceled.count(); }, [&] { return canceledAt; });
   QVERIFY(core && player.m_mpv == controller);
+  QCoreApplication::processEvents();
+  QVERIFY(failed.isEmpty() && ended.isEmpty() && canceled.isEmpty() && renderFailure->isEmpty() && !renderWarning.load());
   exercise(scene, player, item, media, evidence);
   QCoreApplication::processEvents();
-  QVERIFY(failed.isEmpty() && ended.isEmpty() && canceled.isEmpty() && !renderWarning.load());
+  QVERIFY(failed.isEmpty() && ended.isEmpty() && canceled.isEmpty() && renderFailure->isEmpty() && !renderWarning.load());
   const bool cleaned = cleanup.finish();
   QCoreApplication::processEvents();
+  recordLifecycle(scene, player, cleanup, evidence, watch.messages(), cleaned);
+  QVERIFY(failed.isEmpty() && ended.isEmpty() && canceled.count() == 1 && renderFailure->isEmpty() && !renderWarning.load());
+}
+
+void TestMpvThreadIndependence::recordLifecycle(QtThreaded::Scene& scene, PlayerComponent& player,
+    MpvThreadCleanup& cleanup, const QString& evidence, const QJsonArray& diagnostics, bool cleaned)
+{
   const auto audit = scene.audit();
   const int ackOrder = DiagnosticFailureInjection::ackOrder.load();
   const int itemOrder = DiagnosticFailureInjection::itemOrder.load();
@@ -128,11 +169,11 @@ void TestMpvThreadIndependence::healthyPlayback()
   lifecycleData.insert("cleanup_ack_order", qint64(audit.cleanupAckOrder));
   lifecycleData.insert("worker_join_order", qint64(audit.workerJoinedOrder));
   lifecycleData.insert("surface_destroy_order", qint64(audit.surfaceDestroyedOrder));
+  lifecycleData.insert("diagnostics", diagnostics);
   QFile lifecycle(evidence + "/mpv-lifecycle.json");
   QVERIFY(lifecycle.open(QIODevice::WriteOnly | QIODevice::NewOnly));
   QVERIFY(lifecycle.write(QJsonDocument(lifecycleData).toJson()) > 0);
   QVERIFY2(cleaned, "Stop, idle, retirement, or worker cleanup failed");
-  QVERIFY(failed.isEmpty() && ended.isEmpty() && !renderWarning.load());
   QVERIFY(player.m_mpv == nullptr);
   QCOMPARE(DiagnosticFailureInjection::frees.load(), 1);
   QVERIFY(ackOrder > 0 && ackOrder < itemOrder && itemOrder < coreOrder);
@@ -144,10 +185,6 @@ void TestMpvThreadIndependence::healthyPlayback()
 void TestMpvThreadIndependence::exercise(QtThreaded::Scene& scene, PlayerComponent& player,
                                          ProbeItem* item, const QString& media, const QString& evidence)
 {
-  QSignalSpy ready(item, &MpvAbstractItem::ready);
-  QString error;
-  QVERIFY2(scene.sync(&error), qPrintable(error));
-  QTRY_VERIFY_WITH_TIMEOUT(!ready.isEmpty(), 15000);
   QVERIFY(player.load(QUrl::fromLocalFile(media).toString(), {{"autoplay", true}}, {{"type", "video"}}));
   QTRY_VERIFY_WITH_TIMEOUT(player.getPosition() > 500, 10000);
   QTRY_VERIFY_WITH_TIMEOUT(movingFrames(scene.frames()), 10000);
