@@ -10,6 +10,7 @@
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QSignalSpy>
+#include <QScopeGuard>
 #include <QTimer>
 #include <QUrl>
 #include <MpvController>
@@ -54,10 +55,11 @@ QVariant canSeek(const QDBusConnection& client, const QString& service)
   return qvariant_cast<QDBusVariant>(reply.arguments().first()).variant();
 }
 
-bool idle(mpv_handle* handle)
+int idleState(mpv_handle* handle)
 {
   int value = 0;
-  return mpv_get_property(handle, "idle-active", MPV_FORMAT_FLAG, &value) >= 0 && value;
+  if (mpv_get_property(handle, "idle-active", MPV_FORMAT_FLAG, &value) < 0) return -1;
+  return value ? 1 : 0;
 }
 
 int brightPixels(const QImage& image)
@@ -99,11 +101,11 @@ void TestMprisActiveStop::waitForPlayback(MprisOffscreenScene& scene, PlayerComp
   timer.restart();
   while (timer.elapsed() < 3000) {
     second = scene.image();
-    if (player.getPosition() > before + 500 && second != first) break;
+    if (player.getPosition() > before + 500 && brightPixels(second) > 100 && second != first) break;
     QTest::qWait(20);
   }
   QVERIFY(player.getPosition() > before + 500);
-  QVERIFY(!second.isNull() && second != first);
+  QVERIFY(!second.isNull() && brightPixels(second) > 100 && second != first);
   QVERIFY(second.save(evidence + "/active-after.png"));
   qInfo() << "Live generated clip advanced from" << before << "to" << player.getPosition() << "ms";
 }
@@ -116,21 +118,21 @@ void TestMprisActiveStop::exerciseBus(const QDBusConnection& client, const QStri
   QSignalSpy stops(&input, &InputComponent::nativeStopResult);
   SystemComponent::Get().hello("mpris-active-stop-fixture");
   QCOMPARE(canSeek(client, service), QVariant(true));
-  QVERIFY(!idle(handle));
+  QCOMPARE(idleState(handle), 0);
   QCOMPARE(invoke(client, service, playerInterface, "Stop").type(), QDBusMessage::ReplyMessage);
   QCOMPARE(forwarded.count(), 1);
   QCOMPARE(forwarded.at(0).at(0).toStringList(), QStringList{"stop"});
   QCOMPARE(stops.count(), 0);
-  QVERIFY(!idle(handle));
+  QCOMPARE(idleState(handle), 0);
   WebClientFaultGuard::instance().observeRendererLoss(0, 17);
   QCOMPARE(canSeek(client, service), QVariant(false));
   QCOMPARE(invoke(client, service, playerInterface, "Stop").type(), QDBusMessage::ReplyMessage);
   QCOMPARE(stops.count(), 1);
   QCOMPARE(stops.at(0).at(0).toInt(), static_cast<int>(PlayerComponent::NativeStopResult::Status::Accepted));
   QCOMPARE(forwarded.count(), 1);
-  QTRY_VERIFY_WITH_TIMEOUT(idle(handle), 10000);
+  QTRY_COMPARE_WITH_TIMEOUT(idleState(handle), 1, 10000);
   QTest::qWait(1000);
-  QVERIFY(idle(handle));
+  QCOMPARE(idleState(handle), 1);
   QCOMPARE(stops.count(), 1);
   QCOMPARE(forwarded.count(), 1);
   qInfo() << "MPRIS detached Stop accepted once; same mpv core remained idle" << handle;
@@ -151,6 +153,7 @@ void TestMprisActiveStop::activeStop()
   QVERIFY(relativeMedia != ".." && !relativeMedia.startsWith("../") && !QDir::isAbsolutePath(relativeMedia));
   QVERIFY2(QDBusConnection::sessionBus().isConnected(), "A private D-Bus session is required");
   auto client = QDBusConnection::connectToBus(QDBusConnection::SessionBus, "mpris-active-stop-client");
+  const auto disconnect = qScopeGuard([]() { QDBusConnection::disconnectFromBus("mpris-active-stop-client"); });
   QVERIFY(client.isConnected());
   QVERIFY(client.baseService() != QDBusConnection::sessionBus().baseService());
   Q_INIT_RESOURCE(resources);
@@ -182,14 +185,14 @@ void TestMprisActiveStop::activeStop()
   int paused = 1;
   QCOMPARE(mpv_set_property(handle, "pause", MPV_FORMAT_FLAG, &paused), 0);
   QTRY_VERIFY_WITH_TIMEOUT(mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &paused) >= 0 && paused, 5000);
-  QVERIFY(!idle(handle));
+  QCOMPARE(idleState(handle), 0);
   MprisComponent mpris;
   QVERIFY(mpris.componentInitialize());
   mpris.componentPostInitialize();
-  // These are bridge-facing state notifications for the known generated ten-second clip.
-  qInfo() << "Seeding MPRIS bridge metadata for generated ten-second clip";
+  // Bridge notifications describe the known ten-second clip and paused core; they are setup, not playback proof.
+  qInfo() << "Seeding MPRIS bridge duration and paused state for generated ten-second clip";
   mpris.notifyDurationChange(10000);
-  mpris.notifyPlaybackState("Playing");
+  mpris.notifyPlaybackState("Paused");
   const QString profile = QFileInfo(ProfileManager::activeProfile().cacheDir()).fileName();
   const QString service = "org.mpris.MediaPlayer2.JellyfinDesktop.profile_" + profile;
   exerciseBus(client, service, handle);
