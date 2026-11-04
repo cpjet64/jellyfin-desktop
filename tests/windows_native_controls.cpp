@@ -9,6 +9,7 @@
 #include <MpvController>
 #include <mpv/client.h>
 #include <wrl/implements.h>
+#include <memory>
 
 #include "input/InputComponent.h"
 #include "player/MpvVideoItem.h"
@@ -74,19 +75,23 @@ void TestWindowsNativeControls::healthy(TaskbarComponentWin& taskbar, InputCompo
     {SystemMediaTransportControlsButton_ChannelDown, "channeldown"}};
   for (const auto& item : cases) {
     press(taskbar, item.first);
+    QVERIFY(!QTest::currentTestFailed());
     QCOMPARE(actions.count(), 1);
     QCOMPARE(actions.takeFirst().at(0).toStringList(), QStringList{item.second});
   }
+  press(taskbar, SystemMediaTransportControlsButton_Record);
+  QVERIFY(!QTest::currentTestFailed());
   QCOMPARE(actions.count(), 0);
 }
 
 void TestWindowsNativeControls::detached(TaskbarComponentWin& taskbar, InputComponent& input,
                                          PlayerComponent& player, mpv_handle* mpv)
 {
-  auto* observer = mpv_create_client(mpv, "native-controls-observer");
+  std::unique_ptr<mpv_handle, decltype(&mpv_destroy)> observer(
+    mpv_create_client(mpv, "native-controls-observer"), &mpv_destroy);
   QVERIFY(observer);
-  QCOMPARE(mpv_request_event(observer, MPV_EVENT_SEEK, 1), 0);
-  QCOMPARE(mpv_request_event(observer, MPV_EVENT_START_FILE, 1), 0);
+  QCOMPARE(mpv_request_event(observer.get(), MPV_EVENT_SEEK, 1), 0);
+  QCOMPARE(mpv_request_event(observer.get(), MPV_EVENT_START_FILE, 1), 0);
   int pause = 0;
   QCOMPARE(mpv_get_property(mpv, "pause", MPV_FORMAT_FLAG, &pause), 0);
   QCOMPARE(pause, 0);
@@ -96,26 +101,32 @@ void TestWindowsNativeControls::detached(TaskbarComponentWin& taskbar, InputComp
   const QList<SystemMediaTransportControlsButton> buttons{
     SystemMediaTransportControlsButton_Play, SystemMediaTransportControlsButton_Pause,
     SystemMediaTransportControlsButton_Next, SystemMediaTransportControlsButton_Previous,
-    SystemMediaTransportControlsButton_FastForward, SystemMediaTransportControlsButton_Rewind};
+    SystemMediaTransportControlsButton_FastForward, SystemMediaTransportControlsButton_Rewind,
+    SystemMediaTransportControlsButton_ChannelUp, SystemMediaTransportControlsButton_ChannelDown};
   const qint64 position = player.getPosition();
-  for (auto button : buttons) press(taskbar, button);
+  for (auto button : buttons) {
+    press(taskbar, button);
+    QVERIFY(!QTest::currentTestFailed());
+  }
+  press(taskbar, SystemMediaTransportControlsButton_Record);
+  QVERIFY(!QTest::currentTestFailed());
   QCOMPARE(unavailable.count(), buttons.size());
   QCOMPARE(stops.count(), 0);
   QTest::qWait(500);
   QVERIFY(player.getPosition() > position + 200);
   QCOMPARE(mpv_get_property(mpv, "pause", MPV_FORMAT_FLAG, &pause), 0);
   QCOMPARE(pause, 0);
-  for (mpv_event* event = mpv_wait_event(observer, 0); event->event_id != MPV_EVENT_NONE;
-       event = mpv_wait_event(observer, 0)) {
+  for (mpv_event* event = mpv_wait_event(observer.get(), 0); event->event_id != MPV_EVENT_NONE;
+       event = mpv_wait_event(observer.get(), 0)) {
     QVERIFY(event->event_id != MPV_EVENT_SEEK);
     QVERIFY(event->event_id != MPV_EVENT_START_FILE);
   }
   press(taskbar, SystemMediaTransportControlsButton_Stop);
+  QVERIFY(!QTest::currentTestFailed());
   QCOMPARE(stops.count(), 1);
   QCOMPARE(stops.at(0).at(0).toInt(), static_cast<int>(PlayerComponent::NativeStopResult::Status::Accepted));
   int idle = 0;
   QTRY_VERIFY_WITH_TIMEOUT(mpv_get_property(mpv, "idle-active", MPV_FORMAT_FLAG, &idle) >= 0 && idle, 10000);
-  mpv_destroy(observer);
 }
 
 void TestWindowsNativeControls::callbackPath()
@@ -156,7 +167,9 @@ void TestWindowsNativeControls::callbackPath()
   taskbar.m_initialized = false; // No OS registration was made by this fixture.
   auto& input = InputComponent::Get();
   healthy(taskbar, input);
+  QVERIFY(!QTest::currentTestFailed());
   detached(taskbar, input, player, video->controller()->mpv());
+  QVERIFY(!QTest::currentTestFailed());
 }
 
 int main(int argc, char** argv)
