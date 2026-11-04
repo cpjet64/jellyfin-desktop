@@ -16,6 +16,7 @@ public:
   virtual void setWindow(QQuickWindow* window) override;
 
 private:
+  friend class TestWindowsNativeControls;
   void onPauseClicked();
   void onPrevClicked();
   void onNextClicked();
