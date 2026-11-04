@@ -81,24 +81,37 @@ void TestC2RetirementNative::runTerminalRetirement(PlayerComponent& player, C2aF
                                                     const QString& evidence)
 {
   const QString media = qEnvironmentVariable("RECOVERY_MEDIA");
-  QString error;
   QSignalSpy canceled(&player, &PlayerComponent::canceled);
-  QSignalSpy blocked(fixture.item, &MpvAbstractItem::renderRetirementBlocked);
-  QSignalSpy retired(fixture.item, &MpvAbstractItem::renderRetired);
   QVERIFY(fixture.startPlayback(player, media));
-  QVERIFY(fixture.proveAdvancing(player));
-  QVERIFY(fixture.cleanup.stopToTerminal(player, fixture.core, canceled));
+  const bool playbackAdvancing = fixture.proveAdvancing(player);
+  QVERIFY(playbackAdvancing);
+  const bool stopTerminal = fixture.cleanup.stopToTerminal(player, fixture.core, canceled);
+  QVERIFY(stopTerminal);
   QJsonObject record{{"scenario", "terminal-retirement"}, {"generation", qint64(fixture.generation)},
-    {"stop_accepted", true}, {"canceled_count", canceled.count()}, {"playback_advancing", true}};
+    {"playback_advancing", playbackAdvancing}, {"stop_terminal", stopTerminal},
+    {"canceled_count", canceled.count()}};
   QVERIFY(terminalProperties(fixture.core, record));
   const quint64 binding = player.m_mpvGeneration;
   const bool ac3 = player.m_doAc3Transcoding;
   const int hooksScheduled = player.m_c2HooksScheduled, hooksCompleted = player.m_c2HooksCompleted;
+  record.insert("binding_generation", qint64(binding));
+  record.insert("ac3_transcoding", ac3);
+  record.insert("hooks_scheduled", hooksScheduled);
+  record.insert("hooks_completed", hooksCompleted);
   const auto sameBinding = [&] { return fixture.item->controller() == fixture.controller &&
     fixture.controller->mpv() == fixture.core && player.m_mpv == fixture.controller &&
     player.m_mpvGeneration == binding && player.m_doAc3Transcoding == ac3 &&
     player.m_c2HooksScheduled == hooksScheduled && player.m_c2HooksCompleted == hooksCompleted; };
   QVERIFY(sameBinding());
+  runTerminalExperiment(fixture, sameBinding, record, evidence);
+}
+
+void TestC2RetirementNative::runTerminalExperiment(C2aFixture& fixture,
+    const std::function<bool()>& sameBinding, QJsonObject& record, const QString& evidence)
+{
+  QString error;
+  QSignalSpy blocked(fixture.item, &MpvAbstractItem::renderRetirementBlocked);
+  QSignalSpy retired(fixture.item, &MpvAbstractItem::renderRetired);
   QVERIFY2(fixture.scene.pauseFramePump(&error), qPrintable(error));
   const auto paused = fixture.scene.audit();
   QVERIFY(paused.framePumpPaused && paused.pauseAcks == 1 && paused.framesStarted == paused.framesCompleted);
@@ -135,10 +148,18 @@ void TestC2RetirementNative::runTerminalRetirement(PlayerComponent& player, C2aF
   QCOMPARE(retired.at(0).at(0).toULongLong(), fixture.generation);
   QCOMPARE(DiagnosticFailureInjection::frees.load(), 1);
   QVERIFY(DiagnosticFailureInjection::ackOrder.load() > DiagnosticFailureInjection::freedOrder.load());
-  QVERIFY(sameBinding() && fixture.cleanup.confirmRetired());
+  QCOMPARE(DiagnosticFailureInjection::freeGeneration.load(), fixture.generation);
+  QCOMPARE(DiagnosticFailureInjection::freeThread.load(), std::uintptr_t(paused.pauseAckThread));
+  QCOMPARE(DiagnosticFailureInjection::freeCurrentContext.load(), std::uintptr_t(paused.pauseAckContext));
+  QCOMPARE(DiagnosticFailureInjection::freeOriginalContext.load(), std::uintptr_t(paused.pauseAckContext));
+  QVERIFY(fixture.cleanup.confirmRetired(fixture.generation, retired, sameBinding));
   record.insert("blocked_count", blocked.count());
   record.insert("retired_count", retired.count());
   record.insert("binding_preserved_at_ack", sameBinding());
+  record.insert("free_thread", QString::number(DiagnosticFailureInjection::freeThread.load(), 16));
+  record.insert("free_current_context", QString::number(DiagnosticFailureInjection::freeCurrentContext.load(), 16));
+  record.insert("free_original_context", QString::number(DiagnosticFailureInjection::freeOriginalContext.load(), 16));
+  record.insert("free_generation", qint64(DiagnosticFailureInjection::freeGeneration.load()));
   record.insert("closed_order", DiagnosticFailureInjection::closedOrder.load());
   record.insert("unregister_entered_order", DiagnosticFailureInjection::unregisterEnteredOrder.load());
   record.insert("unregistered_order", DiagnosticFailureInjection::unregisteredOrder.load());
