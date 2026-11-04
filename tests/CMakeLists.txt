@@ -174,6 +174,12 @@ if(APPLE)
 endif()
 
 if(LINUX_DBUS)
+  add_executable(test_mpris_active_stop test_mpris_active_stop.cpp
+    mpv_test_bootstrap.cpp mpv_test_profile.cpp "${CMAKE_BINARY_DIR}/src/qrc_resources.cpp")
+  add_dependencies(test_mpris_active_stop generate_resources)
+  target_link_libraries(test_mpris_active_stop jmp_core Qt6::Test Qt6::Quick Qt6::OpenGL Qt6::DBus)
+  target_include_directories(test_mpris_active_stop PRIVATE ${TEST_INCLUDE_DIRS})
+  target_compile_definitions(test_mpris_active_stop PRIVATE ${TEST_COMPILE_DEFS})
   add_executable(test_mpris_fault test_mpris_fault.cpp)
   target_link_libraries(test_mpris_fault jmp_core Qt6::Test Qt6::DBus)
   target_include_directories(test_mpris_fault PRIVATE ${TEST_INCLUDE_DIRS})
