@@ -155,6 +155,7 @@ Run-Native $venvPython @('tests/test_bundle_paths.py')
 Run-Native $venvPython @('tests/test_windows_package_freshness.py')
 Run-Native $venvPython @('tests/test_mpvqt_shared_patch.py')
 Run-Native $found.Node @('--test', 'tests/test_inputPlugin.js')
+Run-Native $found.Node @('--test', 'tests/test_windows_smoke_result.mjs')
 Run-Native $found.Node @('tests/windows_hidden_desktop_fixture.mjs')
 } finally {
     $env:APPDATA = $oldAppData
