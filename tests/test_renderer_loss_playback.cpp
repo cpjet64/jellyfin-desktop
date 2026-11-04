@@ -88,6 +88,7 @@ void TestRendererLossPlayback::actualPlayback()
   const QString media = qEnvironmentVariable("RECOVERY_MEDIA");
   const QString evidence = qEnvironmentVariable("RECOVERY_EVIDENCE_DIR");
   QVERIFY(scenario == "playing" || scenario == "paused" || scenario == "held-hook");
+  qInfo().noquote() << "RECOVERY_SCENARIO=" + scenario;
   QVERIFY(QFileInfo::exists(media));
   QVERIFY(QFileInfo(evidence).isDir());
   Q_INIT_RESOURCE(resources);

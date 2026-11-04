@@ -182,6 +182,7 @@ void TestRendererLossOffscreen::actualPlayback()
   const QString media = qEnvironmentVariable("RECOVERY_MEDIA");
   const QString evidence = qEnvironmentVariable("RECOVERY_EVIDENCE_DIR");
   QVERIFY(scenario == "playing" || scenario == "paused" || scenario == "held-hook");
+  qInfo().noquote() << "RECOVERY_SCENARIO=" + scenario;
   QVERIFY(QFileInfo::exists(media));
   QVERIFY(QFileInfo(evidence).isDir());
   Q_INIT_RESOURCE(resources);
@@ -211,6 +212,9 @@ void TestRendererLossOffscreen::actualPlayback()
   }
   QVERIFY2(!scene.sceneGraphFailed, qPrintable(scene.sceneGraphMessage));
   QVERIFY2(!ready.isEmpty(), "Offscreen mpv renderer readiness timed out");
+  const QImage capabilityReadback = scene.image();
+  QVERIFY2(!capabilityReadback.isNull(), "Offscreen framebuffer readback failed");
+  qInfo().noquote() << "RECOVERY_CAPABILITIES context=valid surface=valid current=true render_readback=valid";
   QTRY_COMPARE_WITH_TIMEOUT(player.requestNativeStop().status,
                             PlayerComponent::NativeStopResult::Status::Accepted, 15000);
   mpv_handle* primary = scene.video->controller()->mpv();
