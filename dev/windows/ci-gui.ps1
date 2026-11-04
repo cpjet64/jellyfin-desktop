@@ -1,5 +1,9 @@
 function Run-HiddenTest {
     param([string]$Helper, [string]$Executable, [string]$Evidence, [string]$Python, [string]$DiagnosticExe = '')
+    $held = @('test_renderer_loss_offscreen', 'test_mpris_active_stop', 'test_c2_retirement_native')
+    if ([IO.Path]::GetFileNameWithoutExtension($Executable) -in $held) {
+        throw 'BLOCKED: native render fixture violates the render-thread contract'
+    }
     New-Item -ItemType Directory -Force -Path $Evidence | Out-Null
     & $Helper $Executable $Evidence '--test-executable'
     $testExit = $LASTEXITCODE
@@ -29,28 +33,7 @@ function Invoke-NativeGuiTests {
 
 function Invoke-OffscreenTests {
     param([string]$Build, [string]$Results, [string]$Python)
-    $helper = Join-Path $Build 'hidden-desktop-ci.exe'
-    Run-Native 'cl.exe' @('/nologo', '/std:c++14', '/EHsc', 'tests/windows_hidden_desktop.cpp', "/Fe:$helper", "/Fo:$Build/hidden-desktop-ci.obj", 'user32.lib')
-    $media = Join-Path $Results 'recovery.y4m'
-    Run-Native $Python @('tests/generate_recovery_media.py', $media)
-    $env:QSG_INFO = '1'
-    $env:QT_QPA_PLATFORM = 'windows'
-    foreach ($scenario in @('playing', 'paused', 'held-hook')) {
-        $evidence = Join-Path $Results "offscreen/$scenario"
-        if (Test-Path -LiteralPath $evidence) { throw "Offscreen evidence already exists: $evidence" }
-        $env:RECOVERY_SCENARIO = $scenario
-        $env:RECOVERY_MEDIA = $media
-        $env:RECOVERY_EVIDENCE_DIR = $evidence
-        Run-HiddenTest $helper "$Build/tests/test_renderer_loss_offscreen.exe" $evidence $Python
-        if ($scenario -ne 'held-hook') {
-            $images = @('offscreen-before.png', 'offscreen-after.png')
-            if ($scenario -eq 'playing') { $images += 'offscreen-after2.png' }
-            foreach ($image in $images) {
-                if (-not (Test-Path -LiteralPath "$evidence/$image" -PathType Leaf)) { throw "Missing offscreen $scenario image $image" }
-            }
-        }
-        Run-Native $Python @('dev/ci/evidence.py', 'record-case', $evidence, "$Build/tests/test_renderer_loss_offscreen.exe", $scenario)
-    }
+    throw 'BLOCKED: native render fixture violates the render-thread contract'
 }
 
 function Invoke-NativeGuiSuite {
