@@ -25,6 +25,12 @@ try {
             try { Run-HiddenTest 'fake-helper' $executable $evidence 'unused' }
             catch { $blocked = $_.Exception.Message -match 'render-thread contract' }
             if (-not $blocked -or (Test-Path -LiteralPath $evidence)) { throw "Held fixture was not rejected: $executable" }
+            $blocked = $false
+            try { Run-HiddenTest 'fake-helper' 'test_webclient_fault_webengine.exe' $evidence 'unused' $executable }
+            catch { $blocked = $_.Exception.Message -match 'render-thread contract' }
+            if (-not $blocked -or (Test-Path -LiteralPath $evidence) -or $script:helperCalls -or $script:nativeCalls) {
+                throw "Held diagnostic was not rejected before launch: $executable"
+            }
         }
     }
     $blocked = $false
@@ -38,7 +44,7 @@ try {
     Run-HiddenTest 'fake-helper' 'test_webclient_fault_webengine.exe' (Join-Path $scratch 'allowed') 'unused'
     if ($script:helperCalls -ne 1 -or $script:nativeCalls -ne 1) { throw 'Permitted fixture control did not run' }
     $script:allowFixture = $false
-    $probe = Join-Path $scratch 'probe.exe'
+    $probe = Join-Path $scratch 'native_gl_probe.exe'
     New-Item -ItemType File -Path $probe | Out-Null
     foreach ($case in @(
         @{ Text = 'Video ready timed out; see startup-result.json'; Calls = 1 },

@@ -1,8 +1,10 @@
 function Run-HiddenTest {
     param([string]$Helper, [string]$Executable, [string]$Evidence, [string]$Python, [string]$DiagnosticExe = '')
     $held = @('test_renderer_loss_offscreen', 'test_mpris_active_stop', 'test_c2_retirement_native')
-    if ([IO.Path]::GetFileNameWithoutExtension($Executable) -in $held) {
-        throw 'BLOCKED: native render fixture violates the render-thread contract'
+    foreach ($candidate in @($Executable, $DiagnosticExe)) {
+        if ($candidate -and [IO.Path]::GetFileNameWithoutExtension($candidate) -in $held) {
+            throw 'BLOCKED: native render fixture violates the render-thread contract'
+        }
     }
     New-Item -ItemType Directory -Force -Path $Evidence | Out-Null
     & $Helper $Executable $Evidence '--test-executable'
