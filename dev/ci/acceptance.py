@@ -19,7 +19,8 @@ CORE = ("test_systemcomponent", "test_log", "test_settings", "test_displaymanage
         "test_log_rotation", "test_chromiumflags", "test_webclient_transport",
         "test_mpv_test_bootstrap_pure", "test_smtc_admission_model", "test_c2a_hold_gate", "test_c2_error_terminal",
         "test_c2_fault_quiescence_policy", "test_c2_synthetic_service",
-        "test_c2_fault_restore_permission", "test_c2_fault_restore_frame", "test_c2_capture_observation")
+        "test_c2_fault_restore_permission", "test_c2_fault_restore_frame", "test_c2_capture_observation",
+        "test_c2_quiescence_observation")
 RUNTIME = ("test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard",
            "test_mpv_test_bootstrap", "test_windowmanager")
 STATIC = ("test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state")

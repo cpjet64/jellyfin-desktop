@@ -27,7 +27,8 @@ HEADLESS_TESTS = ("test_systemcomponent", "test_log", "test_settings", "test_dis
                   "test_log_rotation", "test_chromiumflags", "test_webclient_transport",
                   "test_mpv_test_bootstrap_pure", "test_smtc_admission_model", "test_c2a_hold_gate", "test_c2_error_terminal",
                   "test_c2_fault_quiescence_policy", "test_c2_synthetic_service",
-                  "test_c2_fault_restore_permission", "test_c2_fault_restore_frame", "test_c2_capture_observation")
+                  "test_c2_fault_restore_permission", "test_c2_fault_restore_frame", "test_c2_capture_observation",
+                  "test_c2_quiescence_observation")
 LINUX_DESKTOP_TOOLS = frozenset(("xvfb-run", "xauth", "dbus-run-session", "glxinfo"))
 
 
@@ -196,6 +197,7 @@ def prepare_linux_sdk():
 
 
 def portable_checks():
+    command("fixture-suspend-policy-tests", [sys.executable, "dev/ci/test_fixture_suspend_policy.py"])
     command("qga-terminal-tests", [sys.executable, "dev/ci/test_qga_terminal.py"])
     command("mac-sdist-static-tests", [sys.executable, "dev/ci/test_macos_sdist_static.py"])
     command("mac-sdist-supervisor-tests", [sys.executable, "dev/ci/test_macos_sdist_supervise.py"])
