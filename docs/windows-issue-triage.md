@@ -119,11 +119,30 @@ not establish that any open issue is fixed.
 
 ## Work and proof boundaries
 
-Geometry/fullscreen, nonmutating fallback loading, and logging deadlock fixes are
-queued for investigation; their presence in this plan is not proof of a fix or
-of causality for any issue. Validate the resulting integrated build against
-focused reproducible cases and relevant regression gates. Record exact build
-identity, operating system, display and GPU configuration, media and server
-versions, and outcome. Report untested hardware, external dependency limits,
-and remaining open issues explicitly. No upstream issue, release, signing, or
-distribution state is changed by this document.
+The candidate branch contains integrated changes to window geometry and
+fullscreen restoration ([0715e74](https://gitlab.curtpme.com/cpjet64/jellyfin-desktop/-/commit/0715e74),
+[250a219](https://gitlab.curtpme.com/cpjet64/jellyfin-desktop/-/commit/250a219),
+[762b1a0](https://gitlab.curtpme.com/cpjet64/jellyfin-desktop/-/commit/762b1a0));
+nonmutating, executable-relative mpv fallback loading
+([e54932e](https://gitlab.curtpme.com/cpjet64/jellyfin-desktop/-/commit/e54932e),
+[f0ce8ab](https://gitlab.curtpme.com/cpjet64/jellyfin-desktop/-/commit/f0ce8ab));
+and reentrant logging and rotation fixes
+([d0a6681](https://gitlab.curtpme.com/cpjet64/jellyfin-desktop/-/commit/d0a6681),
+[621b55e](https://gitlab.curtpme.com/cpjet64/jellyfin-desktop/-/commit/621b55e),
+[5513e8e](https://gitlab.curtpme.com/cpjet64/jellyfin-desktop/-/commit/5513e8e)).
+[Windows validation](windows-validation.md) records offscreen tests, a
+protected-install loader fixture, bounded logging cases, and hidden-desktop
+startup and fullscreen observations at the revisions listed there. These
+results demonstrate the tested paths; they do not establish causality or
+resolution of individual upstream issues.
+
+Affected non-AVX2, older-GPU and multi-GPU hardware; HDR and capture; reboot
+and real display changes; and authenticated representative media and server
+playback remain unverified. Automatic playback recovery and native Linux and
+macOS acceptance remain unresolved. The separate
+[diagnostic startup-failure report](validation/mpv-thread-startup-2026-11-04.md)
+and [pipeline 32233 report](validation/pipeline-32233.md) document failures at
+their respective source revisions; neither establishes the cause or resolution
+of an individual upstream issue. Record exact build, environment and outcome
+for future checks. No upstream issue, release, signing, or distribution state is
+changed by this document.
