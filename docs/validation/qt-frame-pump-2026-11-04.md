@@ -7,12 +7,13 @@ and zero skipped cases. This is fixture evidence, not a product release result.
 
 | Build | Test executable SHA-256 | QTest result |
 | --- | --- | --- |
-| Debug | `873b48556c7677b1b602a76e29739c1ab61db3c96eff189e3316787ead890485` | 12 passed, 0 failed, 0 skipped; 2606 ms |
-| Release | `808cd052efeb777c8d238bdfd7d175d4b1ab1e214b3a9206dff64c5ae1b50b9c` | 12 passed, 0 failed, 0 skipped; 2495 ms |
+| Debug | `873b48556c7677b1b602a76e29739c1ab61db3c96eff189e3316787ead890485` | 12 passed, 0 failed, 0 skipped; 2589 ms |
+| Release | `808cd052efeb777c8d238bdfd7d175d4b1ab1e214b3a9206dff64c5ae1b50b9c` | 12 passed, 0 failed, 0 skipped; 2565 ms |
 
-The QTest logs were retained. The desktop helper's console output was not
-retained in a separate file, so this report does not independently establish
-the helper's exit or process-cleanup result.
+The table records a rerun of the same binaries with retained QTest and desktop
+helper logs. In each run the helper reported a known natural application exit
+of zero, known zero active job processes before and after cleanup, and no
+termination request or forced cleanup. Both helper stderr logs were empty.
 
 The pause/resume case checks that the render worker acknowledges the pause
 with its expected context, has no frame in progress, and starts no further
