@@ -126,7 +126,11 @@ void PlayerComponent::scheduleMpvHook(uint64_t id)
     if (!m_mpv || m_mpvGeneration != generation) return;
 #endif
     qInfo() << "resuming loading";
+#ifdef MPVQT_C2_DIAGNOSTIC_ONLY
+    m_c2LastHookContinueResult = mpv_hook_continue(m_mpv->mpv(), id);
+#else
     mpv_hook_continue(m_mpv->mpv(), id);
+#endif
   }));
 }
 #endif

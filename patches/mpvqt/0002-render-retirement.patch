@@ -171,3 +171,106 @@ index 46a6a00..b4726e9 100644
 +        owner->originalContext = QOpenGLContext::currentContext();
 +        owner->originalThread = QThread::currentThread();
 +        mpv_render_context_set_update_callback(owner->context, on_mpv_redraw, owner.get());
+diff --git a/src/mpvabstractitem.cpp b/src/mpvabstractitem.cpp
+index 2223149..84f4304 100644
+--- a/src/mpvabstractitem.cpp
++++ b/src/mpvabstractitem.cpp
+@@ -18,0 +19,2 @@
++static std::atomic<quint64> nextGeneration{1};
++
+@@ -33 +34,0 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
+-    static std::atomic<quint64> nextGeneration{1};
+@@ -34,0 +36 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
++    d_ptr->visibleGeneration = d_ptr->renderOwner->generation;
+@@ -73 +75 @@ quint64 MpvAbstractItem::renderGeneration() const
+-    return d_ptr->renderOwner->generation;
++    return d_ptr->visibleGeneration.load();
+@@ -78 +80 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
+-    auto owner = d_ptr->renderOwner;
++    auto owner = std::atomic_load(&d_ptr->renderOwner);
+@@ -103,0 +106 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
++                d_ptr->retirementAcknowledged = true;
+@@ -111,0 +115,29 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
++MpvAbstractItem::CreationRequest MpvAbstractItem::requestRenderCreation(quint64 generation)
++{
++    if (!d_ptr->retirementAcknowledged || generation != d_ptr->visibleGeneration.load())
++        return CreationRequest::NotRetired;
++    if (d_ptr->creationRequested) return CreationRequest::AlreadyRequested;
++    if (!window()) return CreationRequest::NoWindow;
++    d_ptr->creationRequested = true;
++    auto oldOwner = std::atomic_load(&d_ptr->renderOwner);
++    window()->scheduleRenderJob(QRunnable::create([this, oldOwner, generation] {
++        if (!oldOwner->originalContext || QOpenGLContext::currentContext() != oldOwner->originalContext ||
++            QThread::currentThread() != oldOwner->originalThread) {
++            QMetaObject::invokeMethod(this, [this, generation] { emit renderCreationBlocked(generation); }, Qt::QueuedConnection);
++            return;
++        }
++        auto owner = std::make_shared<DiagnosticRenderOwner>(nextGeneration.fetch_add(1), this);
++        std::atomic_store(&d_ptr->renderOwner, owner);
++        d_ptr->visibleGeneration = owner->generation;
++        MpvRenderer renderer(this);
++        delete renderer.createFramebufferObject(QSize(1, 1));
++        if (!owner->context) return;
++        QMetaObject::invokeMethod(this, [this, generation, owner] {
++            d_ptr->retirementAcknowledged = false;
++            emit renderCreated(generation, owner->generation);
++        }, Qt::QueuedConnection);
++    }), QQuickWindow::BeforeRenderingStage);
++    update();
++    return CreationRequest::Accepted;
++}
++
+diff --git a/src/mpvabstractitem.h b/src/mpvabstractitem.h
+index 6ad0dfd..fee2f08 100644
+--- a/src/mpvabstractitem.h
++++ b/src/mpvabstractitem.h
+@@ -25,0 +26,2 @@ public:
++    enum class CreationRequest { Accepted, NotRetired, AlreadyRequested, NoWindow };
++    Q_ENUM(CreationRequest)
+@@ -40,0 +43 @@ public:
++    CreationRequest requestRenderCreation(quint64 retiredGeneration);
+@@ -48,0 +52,2 @@ Q_SIGNALS:
++    void renderCreated(quint64 retiredGeneration, quint64 generation);
++    void renderCreationBlocked(quint64 retiredGeneration);
+diff --git a/src/mpvabstractitem_p.h b/src/mpvabstractitem_p.h
+index 3d5c445..7962da1 100644
+--- a/src/mpvabstractitem_p.h
++++ b/src/mpvabstractitem_p.h
+@@ -11,0 +12 @@
++#include "c2/DiagnosticFailureInjection.h"
+@@ -14,0 +16 @@
++#include <atomic>
+@@ -16 +18 @@
+-struct DiagnosticRenderOwner
++struct DiagnosticRenderOwner : std::enable_shared_from_this<DiagnosticRenderOwner>
+@@ -18,0 +21 @@ struct DiagnosticRenderOwner
++    ~DiagnosticRenderOwner() { ++DiagnosticFailureInjection::ownersDestroyed; }
+@@ -37,0 +41,3 @@ public:
++    std::atomic<quint64> visibleGeneration{0};
++    bool retirementAcknowledged = false;
++    bool creationRequested = false;
+diff --git a/src/mpvrenderer.cpp b/src/mpvrenderer.cpp
+index b4726e9..d02dca7 100644
+--- a/src/mpvrenderer.cpp
++++ b/src/mpvrenderer.cpp
+@@ -34 +34 @@ void on_mpv_redraw(void *ctx)
+-    auto* owner = static_cast<DiagnosticRenderOwner*>(ctx);
++    auto owner = static_cast<DiagnosticRenderOwner*>(ctx)->shared_from_this();
+@@ -56 +56,10 @@ void on_mpv_redraw(void *ctx)
+-                QTimer::singleShot(10000, item, [deliver] { deliver(true); });
++                if (DiagnosticFailureInjection::holdDeferredUpdate.load()) {
++                    auto* timer = new QTimer(item);
++                    QObject::connect(timer, &QTimer::timeout, item, [timer, deliver] {
++                        if (DiagnosticFailureInjection::holdDeferredUpdate.load()) return;
++                        timer->stop();
++                        deliver(true);
++                        timer->deleteLater();
++                    });
++                    timer->start(20);
++                } else QTimer::singleShot(10000, item, [deliver] { deliver(true); });
+@@ -72 +81 @@ void MpvRenderer::render()
+-    auto owner = m_mpvAItem->d_ptr->renderOwner;
++    auto owner = std::atomic_load(&m_mpvAItem->d_ptr->renderOwner);
+@@ -107 +116 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-        auto owner = m_mpvAItem->d_ptr->renderOwner;
++        auto owner = std::atomic_load(&m_mpvAItem->d_ptr->renderOwner);
