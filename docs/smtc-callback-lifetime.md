@@ -1,12 +1,11 @@
-# Windows media callback lifetime: test-only design
+# Windows media callback lifetime
 
-The current Windows media-button handler captures its component directly.
-If removal fails, the event source can retain that callback after component
-destruction. The test fixture retains the actual registered delegate and checks
-this condition without invoking the unsafe production delegate after teardown.
-No production lifetime fix is included in this design.
+The production Windows media-button delegate captures shared admission state,
+not the component. If removal fails, the event source can retain the delegate;
+the closed admission state prevents it from reaching the destroyed component.
+The fixture retains and invokes the actual registered delegate after teardown.
 
-The test-only model keeps admission state alive independently of the component.
+The admission state remains alive independently of the component.
 The native delegate copies the button value, then queues it to a live GUI-thread
 context while admission is locked. Closing clears the receiver under the same
 lock before attempting event removal. A queued delivery checks admission again
@@ -17,11 +16,11 @@ and the GUI does not wait for a callback to complete. Destruction and action
 dispatch must run on the GUI thread; action dispatch must not continue to use a
 receiver that synchronously destroys itself.
 
-The fixture models a failed removal, a queued event closed before delivery,
+The fixture exercises a failed removal, a queued event closed before delivery,
 reentrant invocation during removal, a callback held before enqueue, repeated
-close, and an old delegate surviving a new registration. It is not evidence of
-the safety of the current production handler. Existing native-control coverage
+close, and an old delegate surviving a new registration. Existing native-control coverage
 remains responsible for actual button mapping and playback behavior. The shared
-model has a platform-neutral QtTest target; Windows execution does not establish
-native Linux or macOS coverage, which remains required. Any production change
-requires separate review and proof.
+admission helper has a platform-neutral QtTest target; Windows execution does
+not establish native Linux or macOS coverage, which remains required. These
+tests do not establish operating-system event dispatch or successful revocation
+when the operating system reports removal failure.

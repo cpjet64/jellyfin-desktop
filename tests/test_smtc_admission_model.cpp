@@ -9,8 +9,28 @@ class Receiver : public QObject
 {
 public:
   explicit Receiver(std::vector<int>& values) : values(values) {}
-  static void dispatch(QObject* object, int value) { static_cast<Receiver*>(object)->values.push_back(value); }
+  static void dispatch(QObject* object, int value)
+  {
+    auto* receiver = static_cast<Receiver*>(object);
+    receiver->deliveryThread = QThread::currentThread();
+    receiver->values.push_back(value);
+  }
   std::vector<int>& values;
+  QThread* deliveryThread = nullptr;
+};
+
+struct JoinWorker
+{
+  std::mutex& mutex;
+  std::condition_variable& cv;
+  bool& release;
+  std::thread worker;
+  ~JoinWorker()
+  {
+    { std::lock_guard<std::mutex> lock(mutex); release = true; }
+    cv.notify_one();
+    if (worker.joinable()) worker.join();
+  }
 };
 
 class TestSmtcAdmissionModel : public QObject
@@ -19,6 +39,7 @@ class TestSmtcAdmissionModel : public QObject
 private slots:
   void closedQueuedDelivery();
   void heldOldAdmission();
+  void workerDeliveryOnReceiverThread();
 };
 
 void TestSmtcAdmissionModel::closedQueuedDelivery()
@@ -42,10 +63,11 @@ void TestSmtcAdmissionModel::heldOldAdmission()
   std::weak_ptr<SmtcAdmission> oldWeak = oldState;
   std::mutex mutex;
   std::condition_variable cv;
-  bool entered = false, release = false, accepted = true;
-  std::thread worker([&] {
+  bool entered = false, release = false, timedOut = false, accepted = true;
+  JoinWorker worker{mutex, cv, release, {}};
+  worker.worker = std::thread([&] {
     { std::unique_lock<std::mutex> lock(mutex); entered = true; cv.notify_one();
-      cv.wait_for(lock, std::chrono::seconds(5), [&] { return release; }); }
+      timedOut = !cv.wait_for(lock, std::chrono::seconds(5), [&] { return release; }); }
     accepted = SmtcAdmission::enqueue(oldState, 1, &Receiver::dispatch);
   });
   bool observed;
@@ -53,12 +75,13 @@ void TestSmtcAdmissionModel::heldOldAdmission()
     observed = cv.wait_for(lock, std::chrono::seconds(5), [&] { return entered; }); }
   oldState->close();
   receiver.reset();
+  { std::lock_guard<std::mutex> lock(mutex); QVERIFY(observed && !release && !timedOut); }
   Receiver newReceiver(newValues);
   auto newState = std::make_shared<SmtcAdmission>(&newReceiver);
   { std::lock_guard<std::mutex> lock(mutex); release = true; }
   cv.notify_one();
-  worker.join();
-  QVERIFY(observed);
+  worker.worker.join();
+  QVERIFY(!timedOut);
   QVERIFY(!accepted);
   QVERIFY(SmtcAdmission::enqueue(newState, 2, &Receiver::dispatch));
   QCoreApplication::processEvents();
@@ -68,6 +91,22 @@ void TestSmtcAdmissionModel::heldOldAdmission()
   newState->close();
   oldState.reset();
   QVERIFY(oldWeak.expired());
+}
+
+void TestSmtcAdmissionModel::workerDeliveryOnReceiverThread()
+{
+  std::vector<int> values;
+  Receiver receiver(values);
+  auto state = std::make_shared<SmtcAdmission>(&receiver);
+  bool accepted = false;
+  std::thread worker([&] { accepted = SmtcAdmission::enqueue(state, 42, &Receiver::dispatch); });
+  worker.join();
+  QVERIFY(accepted);
+  QTRY_COMPARE_WITH_TIMEOUT(values.size(), size_t(1), 5000);
+  QCOMPARE(values.front(), 42);
+  QCOMPARE(receiver.deliveryThread, receiver.thread());
+  QCOMPARE(receiver.deliveryThread, QThread::currentThread());
+  state->close();
 }
 
 QTEST_GUILESS_MAIN(TestSmtcAdmissionModel)

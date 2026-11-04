@@ -1,5 +1,4 @@
 #include <QtTest/QtTest>
-#include <QElapsedTimer>
 #include <wrl/implements.h>
 #include <wrl/event.h>
 #include <condition_variable>
@@ -293,23 +292,20 @@ void TestWindowsSmtcLifetime::heldCallbackAndReplacement()
   ComPtr<ButtonHandler> oldHandler = controls->retained;
   auto args = Make<BlockingButtonArgs>();
   args->gate = std::make_shared<HeldGetter>();
-  JoinHeldWorker held{args->gate, {}};
   HRESULT result = E_FAIL;
+  JoinHeldWorker held{args->gate, {}};
   held.worker = std::thread([oldHandler, args, &result] { result = oldHandler->Invoke(nullptr, args.Get()); });
   bool entered = false;
   { std::unique_lock<std::mutex> lock(held.gate->mutex);
     entered = held.gate->changed.wait_for(lock, std::chrono::seconds(2), [&] { return held.gate->entered; }); }
   QVERIFY(entered);
-  QElapsedTimer elapsed;
-  elapsed.start();
   old.reset();
-  const qint64 closeMs = elapsed.elapsed();
-  bool timedOut;
+  bool heldAtClose;
   { std::lock_guard<std::mutex> lock(held.gate->mutex);
-    timedOut = held.gate->timedOut; held.gate->released = true; }
+    heldAtClose = !held.gate->timedOut && !held.gate->released; held.gate->released = true; }
   held.gate->changed.notify_all();
   held.worker.join();
-  QVERIFY2(!timedOut && closeMs < 4000, "Destruction waited for the blocked COM getter");
+  QVERIFY2(heldAtClose, "Destruction did not return while the COM getter was held");
   QCOMPARE(result, S_OK);
   QCOMPARE(controls->removes, 1);
   QCOMPARE(controls->removed.value, 4812LL);
