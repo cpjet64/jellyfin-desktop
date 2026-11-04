@@ -209,6 +209,7 @@ def portable_checks():
     command("linux-sdk-input-tests", [sys.executable, "dev/ci/test_linux_sdk_inputs.py"])
     command("qt-sdk-archive-tests", [sys.executable, "dev/ci/test_qt_sdk_archive.py"])
     command("linux-qt-plan-tests", [sys.executable, "dev/ci/test_linux_qt_plan.py"])
+    command("linux-qt-pc-tests", [sys.executable, "dev/ci/test_linux_qt_pc.py"])
     command("libarchive-reader-contract-tests", [sys.executable, "dev/ci/test_libarchive_reader_contract.py"])
     command("qt-unix-manifest-tests", [sys.executable, "dev/ci/test_qt_unix_manifest.py"])
     command("mac-session-tests", [sys.executable, "dev/ci/test_macos_session.py"])

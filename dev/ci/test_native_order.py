@@ -106,7 +106,7 @@ class NativeOrderTest(unittest.TestCase):
         paths = [args[-1] for _, args in calls]
         for path in ("dev/ci/test_linux_sdk_order.py", "dev/ci/test_linux_sdk_inputs.py",
                      "dev/ci/test_qt_sdk_archive.py", "dev/ci/test_linux_qt_plan.py",
-                     "dev/ci/test_libarchive_reader_contract.py"):
+                     "dev/ci/test_libarchive_reader_contract.py", "dev/ci/test_linux_qt_pc.py"):
             self.assertEqual(paths.count(path), 1)
         self.assertNotIn("dev/ci/test_linux_sdk_cmake.py", paths)
 

@@ -1,6 +1,7 @@
 """Validate the actual Qt and split mpv inputs before the desktop build."""
 import os
 from pathlib import Path
+import shlex
 import subprocess
 
 from explicit_mpv import explicit_inputs
@@ -26,6 +27,21 @@ def beneath(path, prefix):
         return False
 
 
+def check_module_paths(module, qt, env):
+    for option, flag in (("--cflags", "-I"), ("--libs", "-L")):
+        tokens = shlex.split(run(["pkg-config", option, module], env=env))
+        if not tokens or any("/home/qt/work/install" in token or token in ("-I", "-L", "-l") for token in tokens):
+            raise RuntimeError("BLOCKED: " + module + " has malformed or unrelocated " + option)
+        paths = [token[len(flag):] for token in tokens if token.startswith(flag) and len(token) > len(flag)]
+        if not any(beneath(path, qt) for path in paths):
+            raise RuntimeError("BLOCKED: " + module + " lacks candidate " + flag + " path")
+        for path in paths:
+            if not any(beneath(path, root) for root in (qt, Path("/usr"), Path("/lib"))):
+                raise RuntimeError("BLOCKED: " + module + " has unexpected " + flag + " path")
+        if option == "--libs" and "-l" + module not in tokens:
+            raise RuntimeError("BLOCKED: " + module + " linker flags omit its library")
+
+
 def check_qt_metadata(qt, env):
     for tool, option in (("qmake6", "-query"), ("qtpaths6", "--query")):
         executable = qt / "bin" / tool
@@ -45,6 +61,7 @@ def check_qt_metadata(qt, env):
         pcdir = run(["pkg-config", "--variable=pcfiledir", module], env=env)
         if not beneath(pcdir, qt):
             raise RuntimeError("BLOCKED: " + module + " metadata is outside selected Qt")
+        check_module_paths(module, qt, env)
 
 
 def check_private_headers(qt):
@@ -91,10 +108,12 @@ def check_private_targets(build, qt):
 
 
 def probe_sdk(qt_prefix, job_root, mpv_environment):
+    from linux_qt_pc import validate_pkg_environment
     root = Path(job_root).resolve(strict=True)
     qt = Path(qt_prefix).resolve(strict=True)
     if not beneath(qt, root):
         raise RuntimeError("BLOCKED: Qt prefix must be job-owned")
+    validate_pkg_environment(qt)
     include, library = explicit_inputs(mpv_environment, "Linux", root)
     env = os.environ.copy()
     env.pop("PKG_CONFIG_LIBDIR", None)

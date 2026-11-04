@@ -139,6 +139,7 @@ class PlanTest(unittest.TestCase):
             prefix = root / "qt-candidate" / ROOT
             prefix.mkdir(parents=True)
             (root / "qt-link-modes.json").write_text('[{"archive_mode": 493, "native_mode": 511}]\n')
+            (root / "qt-host-zlib.json").write_text('{"identity": "zlib"}\n')
             candidate = linux_qt_archive.Candidate(root, prefix, linux_qt_archive.manifest_hash())
             environment = {"PKG_CONFIG_PATH": str(prefix / "lib/pkgconfig"),
                            "LD_LIBRARY_PATH": str(prefix / "lib")}
@@ -148,25 +149,37 @@ class PlanTest(unittest.TestCase):
             inventory = root / "qt-link-modes.json"
             original_inventory = inventory.read_text()
             inventory.write_text('{}')
-            with self.assertRaises(ValueError):
-                linux_qt_archive.complete_qt(candidate, {"environment": environment})
-            self.assertFalse((root / "qt-sdk-ready.json").exists())
-            inventory.write_text(original_inventory)
+            report = {"environment": environment, "qt_prefix": str(prefix),
+                      "mpv_include": str(root / "include"), "mpv_library": str(root / "libmpv.so")}
+            normalization = {"version": "qt-pc-prefix-v1", "count": 70, "sha256": "a" * 64}
+            with patch("linux_qt_pc.verify_normalized", return_value=normalization), \
+                    patch("linux_qt_pc.host_zlib", return_value={"identity": "zlib"}):
+                with self.assertRaises(ValueError):
+                    linux_qt_archive.complete_qt(candidate, report)
+                self.assertFalse((root / "qt-sdk-ready.json").exists())
+                inventory.write_text(original_inventory)
+                with patch("linux_qt_pc.host_zlib", return_value={"identity": "changed"}):
+                    with self.assertRaisesRegex(ValueError, "zlib"):
+                        linux_qt_archive.complete_qt(candidate, report)
+                self.assertFalse((root / "qt-sdk-ready.json").exists())
             def fake_link(source, target, **kwargs):
                 if target.exists():
                     raise FileExistsError(target)
                 shutil.copyfile(source, target)
-            with patch("linux_qt_archive.os.link", side_effect=fake_link):
-                self.assertEqual(linux_qt_archive.complete_qt(candidate, {"environment": environment}), prefix)
+            with patch("linux_qt_archive.os.link", side_effect=fake_link), \
+                    patch("linux_qt_pc.verify_normalized", return_value=normalization), \
+                    patch("linux_qt_pc.host_zlib", return_value={"identity": "zlib"}):
+                self.assertEqual(linux_qt_archive.complete_qt(candidate, report), prefix)
                 self.assertTrue((root / "qt-sdk-ready.json").is_file())
                 receipt = json.loads((root / "qt-sdk-ready.json").read_text())
                 self.assertEqual(receipt["decoder_limits"], linux_qt_archive.decoder_limits())
                 self.assertEqual(receipt["symlink_count"], 1)
+                self.assertEqual(receipt["qt_pc_normalization"], normalization)
                 self.assertEqual(receipt["symlink_inventory_sha256"],
                                  __import__("hashlib").sha256((root / "qt-link-modes.json").read_bytes()).hexdigest())
                 self.assertTrue(prefix.is_dir())
                 with self.assertRaises(FileExistsError):
-                    linux_qt_archive.complete_qt(candidate, {"environment": environment})
+                    linux_qt_archive.complete_qt(candidate, report)
 
 
 if __name__ == "__main__":

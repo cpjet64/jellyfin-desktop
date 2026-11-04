@@ -1,5 +1,6 @@
 import hashlib
 import io
+import shlex
 from pathlib import Path
 import tarfile
 import tempfile
@@ -74,6 +75,26 @@ class LinuxInputsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2]) as tmp:
             with self.assertRaisesRegex(RuntimeError, "Qt private header missing"):
                 probe.check_private_headers(Path(tmp))
+
+    def test_qt_compiler_and_linker_paths_are_checked(self):
+        with tempfile.TemporaryDirectory(prefix="qt probe ", dir=Path(__file__).resolve().parents[2]) as tmp:
+            qt = Path(tmp).resolve()
+            include, lib = qt / "include", qt / "lib"
+            include.mkdir()
+            lib.mkdir()
+            results = ["-I" + shlex.quote(str(include)) + " -DQT_CORE_LIB",
+                       "-L" + shlex.quote(str(lib)) + " -lQt6Core"]
+            with patch.object(probe, "run", side_effect=results):
+                probe.check_module_paths("Qt6Core", qt, {})
+            with patch.object(probe, "run", side_effect=["-I" + shlex.quote(str(include)), "-L/home/qt/work/install/lib"]):
+                with self.assertRaisesRegex(RuntimeError, "unrelocated"):
+                    probe.check_module_paths("Qt6Core", qt, {})
+            with patch.object(probe, "run", side_effect=[results[0], "-L" + shlex.quote(str(lib))]):
+                with self.assertRaisesRegex(RuntimeError, "omit its library"):
+                    probe.check_module_paths("Qt6Core", qt, {})
+            with patch.object(probe, "run", return_value="-I"):
+                with self.assertRaisesRegex(RuntimeError, "malformed"):
+                    probe.check_module_paths("Qt6Core", qt, {})
 
     def test_runtime_probe_rejects_alternate_mpv_and_qt_prefix(self):
         with patch.object(probe, "run", side_effect=RuntimeError("Loaded libmpv identity does not match")):

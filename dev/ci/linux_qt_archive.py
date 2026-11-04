@@ -94,11 +94,18 @@ def run_worker(workspace):
 def stage_qt(workspace):
     if sys.platform != "linux":
         raise ValueError("Qt SDK staging requires Linux")
+    from linux_qt_pc import ZLIB_EVIDENCE, host_zlib, normalize_qt_pc, validate_pkg_environment, write_exclusive
     workspace = Path(workspace).resolve(strict=True)
-    run_worker(workspace)
     prefix = workspace / "qt-candidate" / "6.9.3/gcc_64"
+    validate_pkg_environment(prefix)
+    baseline = host_zlib(prefix, include_candidate=False)
+    run_worker(workspace)
     if not prefix.is_dir() or not (workspace / "qt-link-modes.json").is_file():
         raise ValueError("Qt worker did not create a complete candidate")
+    normalize_qt_pc(prefix.resolve(strict=True), workspace)
+    if host_zlib(prefix) != baseline:
+        raise ValueError("host zlib metadata changed after Qt normalization")
+    write_exclusive(workspace / ZLIB_EVIDENCE, json.dumps(baseline, sort_keys=True).encode("utf-8") + b"\n")
     return Candidate(workspace, prefix.resolve(strict=True), manifest_hash())
 
 
@@ -139,6 +146,7 @@ def prepare(workspace):
 
 
 def complete_qt(candidate, report):
+    from linux_qt_pc import ZLIB_EVIDENCE, host_zlib, read_evidence, verify_normalized
     if not isinstance(candidate, Candidate) or candidate.manifest_sha256 != manifest_hash():
         raise ValueError("invalid Qt SDK candidate identity")
     prefix = candidate.workspace / "qt-candidate" / "6.9.3/gcc_64"
@@ -147,6 +155,16 @@ def complete_qt(candidate, report):
     expected = {"PKG_CONFIG_PATH": str(prefix / "lib/pkgconfig"), "LD_LIBRARY_PATH": str(prefix / "lib")}
     if not isinstance(report, dict) or report.get("environment") != expected:
         raise ValueError("Qt SDK probe did not validate the candidate")
+    if (report.get("qt_prefix") != str(prefix) or not isinstance(report.get("mpv_include"), str) or
+            not isinstance(report.get("mpv_library"), str)):
+        raise ValueError("Qt SDK probe returned incomplete input identities")
+    include, library = Path(report["mpv_include"]), Path(report["mpv_library"])
+    if not include.is_absolute() or not include.is_relative_to(candidate.workspace) or not library.is_absolute():
+        raise ValueError("Qt SDK probe returned invalid mpv input identities")
+    normalization = verify_normalized(prefix, candidate.workspace)
+    zlib_evidence = read_evidence(candidate.workspace / ZLIB_EVIDENCE, 65536)
+    if host_zlib(prefix) != json.loads(zlib_evidence):
+        raise ValueError("host zlib metadata changed after SDK probe")
     inventory = (candidate.workspace / "qt-link-modes.json").read_bytes()
     links = json.loads(inventory)
     if not isinstance(links, list):
@@ -155,12 +173,18 @@ def complete_qt(candidate, report):
     temporary = candidate.workspace / "qt-sdk-ready.pending"
     payload = json.dumps({"prefix": str(prefix), "manifest_sha256": candidate.manifest_sha256,
                           "decoder_limits": decoder_limits(), "symlink_count": len(links),
-                          "symlink_inventory_sha256": hashlib.sha256(inventory).hexdigest()}, sort_keys=True)
+                          "symlink_inventory_sha256": hashlib.sha256(inventory).hexdigest(),
+                          "qt_pc_normalization": normalization,
+                          "host_zlib_sha256": hashlib.sha256(zlib_evidence).hexdigest()}, sort_keys=True)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     with os.fdopen(os.open(temporary, flags, 0o600), "w", encoding="utf-8") as output:
         output.write(payload + "\n")
         output.flush()
         os.fsync(output.fileno())
+    if verify_normalized(prefix, candidate.workspace) != normalization:
+        raise ValueError("Qt metadata normalization changed before READY")
+    if read_evidence(candidate.workspace / ZLIB_EVIDENCE, 65536) != zlib_evidence or host_zlib(prefix) != json.loads(zlib_evidence):
+        raise ValueError("host zlib metadata changed before READY")
     os.link(temporary, receipt, follow_symlinks=False)
     temporary.unlink()
     return prefix
