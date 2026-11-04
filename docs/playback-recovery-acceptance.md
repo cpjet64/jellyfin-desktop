@@ -18,12 +18,15 @@ not establish recovery from loss of the native OpenGL context or a GPU reset.
   fresh-controller AC3 correction preserves the old core and configures the new
   core exactly once. Renderer retirement must preserve the existing binding,
   event owner, hook continuations, and AC3 configuration.
-- C2a has accepted evidence for controlled retirement, not automatic recovery.
+- C2a retains the accepted controlled-retirement design, not automatic recovery.
   Its diagnostic build option defaults to OFF and requires bundled MpvQt with
   external event ownership. System MpvQt builds remain outside this capability.
 - C2a reports typed create/render failures and renderer generations. Its
-  controlled retirement acknowledges only an actual, safe free. This evidence
-  does not demonstrate recovery from an actually lost context.
+  controlled retirement acknowledges only an actual, safe free. Earlier
+  single-thread C2a and offscreen native passes are historical observations;
+  they do not satisfy the corrected thread contract and must be rerun after the
+  Qt-only thread lifecycle is reviewed. They do not demonstrate recovery from
+  an actually lost context.
 - C2a runs only in a diagnostic build without application or package targets.
   The fixture retains the whole item, window, core, original GL context, and
   surface until retirement completes. It does not establish a production
@@ -44,8 +47,9 @@ not establish recovery from loss of the native OpenGL context or a GPU reset.
 5. Exercise negative create/render results, one failure per generation, Stop
    during retirement, Stop during a pending load hook, acknowledgement ordering,
    callback races, and the actual events and state changes caused by retirement.
-6. Keep core destruction behind safe render-resource retirement. Do not suppress
-   real mpv events to make playback appear uninterrupted.
+6. Close the secondary observer client before core destruction, and keep core
+   destruction behind safe render-resource retirement. Do not suppress real mpv
+   events to make playback appear uninterrupted.
 7. A missing original context means `BlockedNoContext`, zero frees/core
    terminations, and no acknowledgement. The fixture may restore that same
    context and explicitly retry the same generation once. A scheduled job that
@@ -82,6 +86,18 @@ substitute. Report failures once per generation and perform legal cleanup.
 Three static diagnostic jobs are forthcoming. They are distinct from the six
 required native platform/configuration obligations below, and neither set
 alone establishes the requested product behavior.
+
+The corrected native proof proceeds in order:
+
+1. Review and pass the Qt-only thread-lifecycle proof.
+2. With the GUI thread held, prove render-thread independence using actual mpv
+   render entry and return and fresh images.
+3. Rerun all four C2a scenarios under that corrected lifecycle.
+4. Run one playing C2b scenario, then the remaining seven C2b scenarios.
+
+Do not treat a later step as passed on the strength of the earlier single-thread
+observations. Permanent context loss remains blocked, and production automatic
+recovery remains on hold.
 
 Pinned source: [mpv render contract](https://github.com/mpv-player/mpv/blob/01e2533f3143b8940857ca419b0b367f583e05ca/include/mpv/render.h)
 and [render-context implementation](https://github.com/mpv-player/mpv/blob/01e2533f3143b8940857ca419b0b367f583e05ca/video/out/vo_libmpv.c).
