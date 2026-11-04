@@ -3,6 +3,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QThread>
@@ -11,6 +12,8 @@
 #include <functional>
 #include <memory>
 #include "c2_event_observer.h"
+#include "c2_quiescence_event_trace.h"
+#include "c2_quiescence_observation.h"
 #include "c2/DiagnosticFailureInjection.h"
 #include "mpv_thread_probe.h"
 
@@ -106,28 +109,14 @@ public:
     });
   }
 
-  bool endedByStop(qint64 wanted)
+  bool endedByStop(qint64 wanted, QJsonObject* trace = nullptr)
   {
     observer->drain();
-    bool started = false, loaded = false, ended = false;
-    for (std::size_t index = eventOffset; index < observer->events.size(); ++index) {
-      const auto& event = observer->events[index];
-      if (event.kind == MPV_EVENT_QUEUE_OVERFLOW) return false;
-      if (event.kind == MPV_EVENT_START_FILE) {
-        if (started || event.playlistId != wanted || event.error != 0) return false;
-        started = true;
-      } else if (event.kind == MPV_EVENT_FILE_LOADED) {
-        if (!started || loaded || ended || event.error != 0) return false;
-        loaded = true;
-      } else if (event.kind == MPV_EVENT_END_FILE) {
-        if (!started || !loaded || ended || event.playlistId != wanted || event.reason != MPV_END_FILE_REASON_STOP ||
-            event.error != 0 || event.insertId != 0 || event.insertCount != 0) return false;
-        ended = true;
+    return c2EvaluateStopEvents(observer->events, eventOffset, wanted, trace,
+      [&](const C2EventObserver::Event& event) {
         observedEndReason = event.reason; observedEndError = event.error;
         observedInsertId = event.insertId; observedInsertCount = event.insertCount;
-      }
-    }
-    return started && loaded && ended;
+      });
   }
 
   bool terminal(PlayerComponent& player, QSignalSpy& canceled, int previousCanceled)
@@ -167,22 +156,33 @@ public:
   }
 
   bool retire(quint64 generation, int expectedCount, quintptr thread, quintptr context,
-              const std::function<bool()>& sameBinding)
+              const std::function<bool()>& sameBinding, QJsonObject* trace = nullptr,
+              C2QuiescenceObservation* observation = nullptr)
   {
-    if (!sameBinding() || retired->count() != expectedCount - 1) return false;
+    const auto binding = [&] { const bool value = sameBinding(); if (trace) trace->insert("binding", value); return value; };
+    const auto count = [&] { const int value = retired->count(); if (trace) trace->insert("ack_count", value); return value; };
+    const auto read = [&](const char* key, auto& field) { const auto value = field.load(); if (trace) trace->insert(key, qint64(value)); return value; };
+    if (!binding() || count() != expectedCount - 1) return false;
     retireRequestedNs = QtThreaded::monotonicNanos();
     item->requestRenderRetirement(generation);
-    if (!wait([&] { return retired->count() >= expectedCount; })) return false;
+    if (trace) { trace->insert("request_issued", true); trace->insert("request_ns", retireRequestedNs); }
+    const bool waited = wait([&] { const int value = count();
+      if (observation) observation->sample("retirement-wait", {{"ack_count", value}, {"result", value >= expectedCount}});
+      return value >= expectedCount; });
+    if (trace) trace->insert("wait_completed", waited);
+    if (!waited) return false;
     retireAcknowledgedNs = QtThreaded::monotonicNanos();
-    return retired->count() == expectedCount && retired->at(expectedCount - 1).at(0).toULongLong() == generation &&
-      DiagnosticFailureInjection::frees.load() == expectedCount &&
-      DiagnosticFailureInjection::freedOrder.load() > 0 &&
-      DiagnosticFailureInjection::freedOrder.load() < DiagnosticFailureInjection::clearedOrder.load() &&
-      DiagnosticFailureInjection::clearedOrder.load() < DiagnosticFailureInjection::ackOrder.load() &&
-      DiagnosticFailureInjection::freeGeneration.load() == generation &&
-      DiagnosticFailureInjection::freeThread.load() == thread &&
-      DiagnosticFailureInjection::freeCurrentContext.load() == context &&
-      DiagnosticFailureInjection::freeOriginalContext.load() == context && sameBinding();
+    if (trace) trace->insert("ack_observed_ns", retireAcknowledgedNs);
+    return count() == expectedCount &&
+      ([&] { const auto value = retired->at(expectedCount - 1).at(0).toULongLong(); if (trace) trace->insert("ack_generation", qint64(value)); return value == generation; }()) &&
+      read("frees", DiagnosticFailureInjection::frees) == expectedCount &&
+      read("free_order_first", DiagnosticFailureInjection::freedOrder) > 0 &&
+      read("free_order_second", DiagnosticFailureInjection::freedOrder) < read("clear_order_first", DiagnosticFailureInjection::clearedOrder) &&
+      read("clear_order_second", DiagnosticFailureInjection::clearedOrder) < read("ack_order", DiagnosticFailureInjection::ackOrder) &&
+      read("free_generation", DiagnosticFailureInjection::freeGeneration) == generation &&
+      read("free_thread", DiagnosticFailureInjection::freeThread) == thread &&
+      read("free_current_context", DiagnosticFailureInjection::freeCurrentContext) == context &&
+      read("free_original_context", DiagnosticFailureInjection::freeOriginalContext) == context && binding();
   }
 
   bool captureFirstCreation(quintptr thread, quintptr context)
