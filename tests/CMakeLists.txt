@@ -17,6 +17,13 @@ target_link_libraries(test_c2_error_terminal PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME test_c2_error_terminal COMMAND test_c2_error_terminal)
 set_tests_properties(test_c2_error_terminal PROPERTIES TIMEOUT 90)
 
+add_executable(test_c2_quiescence_observation test_c2_quiescence_observation.cpp)
+target_compile_features(test_c2_quiescence_observation PRIVATE cxx_std_17)
+target_include_directories(test_c2_quiescence_observation PRIVATE ${MPV_INCLUDE_DIR})
+target_link_libraries(test_c2_quiescence_observation PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME test_c2_quiescence_observation COMMAND test_c2_quiescence_observation)
+set_tests_properties(test_c2_quiescence_observation PROPERTIES TIMEOUT 60)
+
 add_executable(test_c2_fault_quiescence_policy test_c2_fault_quiescence_policy.cpp)
 target_compile_features(test_c2_fault_quiescence_policy PRIVATE cxx_std_17)
 target_include_directories(test_c2_fault_quiescence_policy PRIVATE ${MPV_INCLUDE_DIR})
