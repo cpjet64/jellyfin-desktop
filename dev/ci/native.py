@@ -291,6 +291,7 @@ def main():
     portable_checks()
     command("native-prereq-inventory", [sys.executable, "dev/ci/native_prereq_inventory.py"], timeout=600)
     system, mode, desktop_missing = preflight()
+    command("windows-smoke-result-tests", ["node", "--test", "tests/test_windows_smoke_result.mjs"])
     command("explicit-mpv-cmake-tests", [sys.executable, "dev/ci/test_explicit_mpv_cmake.py"])
     with tempfile.TemporaryDirectory(prefix="ci-runtime-", dir=BUILD) as runtime:
         os.environ["JELLYFIN_TEST_OWNED_ROOT"] = str(BUILD)
