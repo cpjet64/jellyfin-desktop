@@ -24,8 +24,9 @@ void Scene::Data::cleanup()
   if (priv->offscreenSurface != surface || (priv->rhi && !priv->ownRhi)) {
     fail("unexpected fallback or QRhi ownership"); return;
   }
+  const bool wasInitialized = priv->initialized;
   control->invalidate();
-  priv->rc->invalidate();
+  if (wasInitialized) priv->rc->invalidate();
   QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
   window->setRenderTarget(QQuickRenderTarget());
   win->ensureCustomRenderTarget();
@@ -40,6 +41,12 @@ void Scene::Data::cleanup()
   { QMutexLocker guard(&lock); state.fallbackDetached = true; }
   delete control; control = nullptr;
   { QMutexLocker guard(&lock); state.controlDestroyed = true; ++state.controlDestroyedCount; }
+  { QMutexLocker guard(&lock);
+    if (savedRhi && (state.rhiDestroyedCount != 1 || state.rhiCleanupThread != state.cleanupThread)) {
+      state.error = "QRhi cleanup callback was not observed exactly once on worker";
+      return;
+    }
+  }
   if (win->renderControl || win->animationController || win->renderer || win->redirect.rt.rt.renderTarget) {
     fail("Qt window retained scene graph resources"); return;
   }

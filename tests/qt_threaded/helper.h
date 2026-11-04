@@ -22,6 +22,7 @@ struct Audit {
   bool aliasesCleared = false, contextDestroyed = false, workerJoined = false, surfaceDestroyed = false;
   bool targetReady = false;
   bool affinitiesVerified = false, noActiveFrameAtCleanup = false;
+  bool partialRhiVerified = false;
   quint64 rhiCreatedCount = 0, rhiDestroyedCount = 0, cleanupCount = 0;
   quint64 controlDestroyedCount = 0, contextDestroyedCount = 0, surfaceDestroyedCount = 0;
   quint64 requestsAdmitted = 0, requestsCompleted = 0, requestsCancelled = 0;

@@ -14,8 +14,10 @@
 #include <QtQuick/private/qquickrendercontrol_p.h>
 #include <QtQuick/private/qquickwindow_p.h>
 #include <QtQuick/private/qsgcontext_p.h>
+#include <QtQuick/private/qsgdefaultrendercontext_p.h>
 #include <QtQuick/private/qquickanimatorcontroller_p.h>
 #include <rhi/qrhi.h>
+#include <rhi/qrhi_platform.h>
 
 #if QT_VERSION != QT_VERSION_CHECK(6, 9, 3)
 #error "Qt threaded diagnostic requires matching Qt 6.9.3 private headers"
@@ -42,6 +44,8 @@ struct Scene::Data {
   bool pendingReadback = false;
   bool initializeGui(QString* error);
   void initializeWorker();
+  void initializePartialRhi();
+  void observeRhi(QRhi* rhi);
   bool dispatch(const std::function<void()>& action, QString* error, bool allowClosed = false);
   void render();
   void cleanup();

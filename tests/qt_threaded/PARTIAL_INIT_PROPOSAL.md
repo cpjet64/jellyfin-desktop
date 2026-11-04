@@ -1,6 +1,7 @@
 # Qt 6.9.3 partial initialization diagnostic proposal
 
-This is a request for review, not an implemented or approved fault seam.
+This records the reviewed test-only negative seam. Approval applies to the
+version-bound diagnostic case only; it is not production or recovery approval.
 `QQuickRenderControl::initialize()` in Qt 6.9.3 calls private `initRhi()` and,
 on success, immediately installs that RHI into the window and initializes the
 scene-graph render context. A caller cannot inject a failure between those steps
@@ -26,10 +27,9 @@ unresponsive worker must remain a contained failure, never a fabricated cleanup
 acknowledgment. The injected fallback and its owner must survive until the
 worker has finished or the containing test process is terminated.
 
-Calling `initRhi()` directly extends the private ABI boundary beyond the
-previously reviewed surface injection and normal destructor. It is not enabled
-by the helper until explicitly approved. It must first be checked against the
-exact Qt 6.9.3 source and matching binaries and then exercised on native
+Calling `initRhi()` directly extends the private ABI boundary beyond surface
+injection and the normal destructor. It must be checked against the exact Qt
+6.9.3 source and matching binaries and then exercised on native
 Windows, Linux, and macOS; unavailable platforms remain blocked. The source is
 [Qt 6.9.3 qquickrendercontrol.cpp](https://github.com/qt/qtdeclarative/blob/v6.9.3/src/quick/items/qquickrendercontrol.cpp#L268-L294)
 and its [private initialization and reset implementation](https://github.com/qt/qtdeclarative/blob/v6.9.3/src/quick/items/qquickrendercontrol.cpp#L696-L736).

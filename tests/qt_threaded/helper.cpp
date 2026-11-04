@@ -91,25 +91,52 @@ bool Scene::Data::initializeGui(QString* error)
   return true;
 }
 
+void Scene::Data::observeRhi(QRhi* rhi)
+{
+  { QMutexLocker guard(&lock); state.rhiCreated = true; ++state.rhiCreatedCount; }
+  rhi->addCleanupCallback(this, [this](QRhi*) {
+    QMutexLocker guard(&lock);
+    state.rhiCleanupThread = currentThread();
+    ++state.rhiDestroyedCount;
+  });
+}
+
+void Scene::Data::initializePartialRhi()
+{
+  auto* priv = QQuickRenderControlPrivate::get(control);
+  auto* win = QQuickWindowPrivate::get(window);
+  auto* rc = qobject_cast<QSGDefaultRenderContext*>(priv->rc);
+  if (!rc || rc->isValid() || rc->rhi() || priv->rhi || priv->initialized || win->rhi ||
+      priv->window != window || win->renderControl != control || rc->thread() != QThread::currentThread() ||
+      priv->offscreenSurface != surface || priv->frameStatus != QQuickRenderControlPrivate::NotRecordingFrame ||
+      QOpenGLContext::currentContext() != context || control->thread() != QThread::currentThread() ||
+      context->thread() != QThread::currentThread()) { fail("invalid partial-RHI preconditions"); return; }
+  if (!priv->initRhi()) { fail("partial-RHI creation failed"); return; }
+  if (priv->rhi && priv->ownRhi) observeRhi(priv->rhi);
+  const auto* native = priv->rhi && priv->rhi->backend() == QRhi::OpenGLES2 ?
+    static_cast<const QRhiGles2NativeHandles*>(priv->rhi->nativeHandles()) : nullptr;
+  if (!priv->rhi || !priv->ownRhi || !native || native->context != context ||
+      priv->offscreenSurface != surface || priv->initialized || win->rhi || rc->isValid() || rc->rhi()) {
+    fail("invalid partial-RHI result"); return;
+  }
+  { QMutexLocker guard(&lock); state.partialRhiVerified = true; }
+  fail("injected after QRhi creation");
+}
+
 void Scene::Data::initializeWorker()
 {
-  { QMutexLocker guard(&lock); state.initThread = currentThread(); }
+  { QMutexLocker guard(&lock); state.initThread = currentThread(); state.renderThread = currentThread(); }
+  if (!state.renderThread || state.renderThread == state.guiThread) { fail("render worker identity invalid"); return; }
   if (failure == FailurePoint::AfterTransfer) { fail("injected after transfer"); return; }
   if (!context->makeCurrent(surface)) { fail("worker cannot make context current"); return; }
-  if (failure == FailurePoint::AfterRhiCreated) { fail("partial-init injection is unavailable"); return; }
+  window->setGraphicsDevice(QQuickGraphicsDevice::fromOpenGLContext(context));
+  if (failure == FailurePoint::AfterRhiCreated) { initializePartialRhi(); return; }
   target = new QOpenGLFramebufferObject(QSize(640, 360));
   if (!target->isValid()) { fail("framebuffer creation failed"); return; }
-  window->setGraphicsDevice(QQuickGraphicsDevice::fromOpenGLContext(context));
   window->setRenderTarget(QQuickRenderTarget::fromOpenGLTexture(target->texture(), target->size()));
   const bool initialized = control->initialize();
   auto* priv = QQuickRenderControlPrivate::get(control);
-  { QMutexLocker guard(&lock); state.rhiCreated = priv->rhi; state.rhiCreatedCount = priv->rhi ? 1 : 0; }
-  if (priv->rhi && priv->ownRhi)
-    priv->rhi->addCleanupCallback(this, [this](QRhi*) {
-      QMutexLocker guard(&lock);
-      state.rhiCleanupThread = currentThread();
-      ++state.rhiDestroyedCount;
-    });
+  if (priv->rhi && priv->ownRhi) observeRhi(priv->rhi);
   if (!initialized) { fail("render control initialization failed"); return; }
   if (!priv->ownRhi || !priv->rhi || priv->offscreenSurface != surface) { fail("unexpected QRhi ownership"); return; }
   { QMutexLocker guard(&lock); state.initialized = true; state.targetReady = true; }
