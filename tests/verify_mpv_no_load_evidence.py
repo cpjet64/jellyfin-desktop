@@ -19,9 +19,14 @@ def verify(directory):
     assert "activeAfterKnown true activeAfter 0 activeAfterError 0 overall fail" in console
     assert lifecycle["bound"] and lifecycle["renderer_ready"] and lifecycle["resources_settled"]
     assert not lifecycle["submission_attempted"] and not lifecycle["stop_attempted"]
+    assert lifecycle["submission_at"] == 0 and lifecycle["stop_entered"] == 0
+    assert lifecycle["stop_returned"] == 0 and lifecycle["stop_status"] == -1
     assert not lifecycle["operation_completed"] and lifecycle["canceled_count"] == 0
     assert lifecycle["ack_count"] == 1 and lifecycle["frees"] == 1
     assert lifecycle["binding_released"] and lifecycle["worker_joined"]
+    assert lifecycle["cleanup_count"] == 1 and lifecycle["context_destroyed"] and lifecycle["surface_destroyed"]
+    assert (0 < lifecycle["terminal_confirmed"] < lifecycle["retirement_requested"] <
+            lifecycle["retirement_acknowledged"] < lifecycle["shutdown_returned"])
     assert 0 < lifecycle["ack_order"] < lifecycle["item_order"] < lifecycle["core_order"]
     assert 0 < lifecycle["cleanup_ack_order"] < lifecycle["worker_join_order"] < lifecycle["surface_destroy_order"]
     terminal = lifecycle["properties"]
