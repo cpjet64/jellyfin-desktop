@@ -39,9 +39,10 @@ struct Scene::Data {
   bool started = false;
   bool transferred = false;
   bool synchronized = false;
+  bool pendingReadback = false;
   bool initializeGui(QString* error);
   void initializeWorker();
-  bool dispatch(const std::function<void()>& action, QString* error);
+  bool dispatch(const std::function<void()>& action, QString* error, bool allowClosed = false);
   void render();
   void cleanup();
   void fail(const QString& message);

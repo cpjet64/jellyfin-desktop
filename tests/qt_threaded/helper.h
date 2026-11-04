@@ -8,7 +8,7 @@
 class QQuickItem;
 
 namespace QtThreaded {
-enum class FailurePoint { None, WrongVersion, BeforeTransfer, AfterTransfer, AfterRhiCreated, AfterInit, BlockCleanup };
+enum class FailurePoint { None, WrongVersion, BeforeTransfer, AfterTransfer, AfterRhiCreated, AfterInit, BlockCleanup, HoldReadback };
 struct Frame { QImage image; quint64 sequence = 0; quintptr renderThread = 0; qint64 monotonicNs = 0; };
 qint64 monotonicNanos();
 struct Audit {
@@ -26,6 +26,7 @@ struct Audit {
   quint64 controlDestroyedCount = 0, contextDestroyedCount = 0, surfaceDestroyedCount = 0;
   quint64 requestsAdmitted = 0, requestsCompleted = 0, requestsCancelled = 0;
   quint64 framesStarted = 0, framesCompleted = 0;
+  quint64 readbacksAccepted = 0, readbacksCompleted = 0, readbacksCancelled = 0, readbacksRejected = 0;
   bool privateBoundaryEntered = false;
   QString error;
 };
@@ -39,6 +40,7 @@ public:
   QQuickItem* contentItem() const;
   bool sync(QString* error);
   QList<Frame> frames() const;
+  bool requestReadback();
   Audit audit() const;
   bool shutdown(QString* error);
 private:

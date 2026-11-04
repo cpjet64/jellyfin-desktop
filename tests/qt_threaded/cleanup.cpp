@@ -57,10 +57,18 @@ void Scene::Data::cleanup()
 
 bool Scene::shutdown(QString* error)
 {
+  if (data->started && !data->transferred && !data->state.workerJoined) {
+    data->thread.quit();
+    if (!data->thread.wait(10000)) { data->fail("untransferred worker did not join"); return false; }
+    data->state.workerJoined = true;
+    data->started = false;
+  }
   if (!data->started) {
     if (data->control && data->surface &&
-        QQuickRenderControlPrivate::get(data->control)->offscreenSurface == data->surface)
+        QQuickRenderControlPrivate::get(data->control)->offscreenSurface == data->surface) {
       QQuickRenderControlPrivate::get(data->control)->offscreenSurface = nullptr;
+      data->state.fallbackDetached = true;
+    }
     if (data->control) { delete data->control; data->control = nullptr;
       data->state.controlDestroyed = true; ++data->state.controlDestroyedCount; }
     delete data->window; data->window = nullptr;
@@ -73,7 +81,11 @@ bool Scene::shutdown(QString* error)
     return true;
   }
   if (data->state.workerJoined) return true;
-  if (!data->transferred || !data->dispatch([this] { data->cleanup(); }, error)) return false;
+  { QMutexLocker guard(&data->lock);
+    data->state.admissionClosed = true;
+    if (data->pendingReadback) { data->pendingReadback = false; ++data->state.readbacksCancelled; }
+  }
+  if (!data->transferred || !data->dispatch([this] { data->cleanup(); }, error, true)) return false;
   { QMutexLocker guard(&data->lock); if (!data->state.cleanupCount) return false; }
   data->thread.quit();
   if (!data->thread.wait(10000)) { data->fail("render worker did not join"); return false; }
