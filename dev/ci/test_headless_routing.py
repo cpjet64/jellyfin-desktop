@@ -131,6 +131,7 @@ class TestHeadlessRouting(unittest.TestCase):
         self.assertIn("'test_c2_error_terminal'", script)
         self.assertIn("'test_c2_fault_quiescence_policy'", script)
         self.assertIn("'test_c2_synthetic_service'", script)
+        self.assertIn("Run-Native $venvPython @('dev/ci/test_linux_qt_pc.py')", script)
         hold = script.index("fixture held before launch")
         for name in ("windows_mpv_loader_integration.py", "windows_packaging_runtime_test.py",
                      "windows_installer_compile_test.py", "dev/windows/package.py"):
