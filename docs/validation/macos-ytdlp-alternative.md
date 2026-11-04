@@ -39,3 +39,10 @@ alternative removes the need to build Deno, Rust, LLVM and their Cargo/V8
 closure **only for this helper**. It does not resolve the media source graph,
 SDK/Xcode requirement, or the source-lock and storage gaps for other components.
 No artifacts have been downloaded or installed.
+
+For scale, GitHub release metadata reports the reference Deno source archive
+at 37,035,922 bytes and LLVM 23.1.4 source archive at 179,272,572 bytes. These
+are only two source archives, not the size of their build closure or peak.
+They do not include Cargo/V8 inputs, Rust bootstrap, expansion, installed
+output or temporary build data. Source-build capacity therefore remains
+unknown even though the two published sizes are individually known.
