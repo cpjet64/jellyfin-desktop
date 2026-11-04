@@ -23,6 +23,10 @@ receiving a stuck-render message followed by no-render-context and VO-window
 initialization critical messages. Their records include the injected render
 failure, the matching retirement ACK, and a later end-file event with reason 4
 and error -15. No causal conclusion follows solely from message ordering.
+Both active-retirement logs contain the same three diagnostic categories;
+their first recorded failing assertion is the terminal check, before the later
+fatal-diagnostic assertion could run. The retained critical/stuck latch would
+also make the diagnostic gate fail.
 
 The active-retirement records now show the selected real callback held at
 unregistration entry, independent release, one free and matching generation-1
@@ -49,6 +53,10 @@ establish why the warning occurred.
 | Active retirement request to unregister entry | 11.8784 | 11.5142 |
 | Active retirement free entry to return | 214.8708 | 217.4319 |
 | Active retirement request to GUI ACK receipt | 230.2925 | 238.6784 |
+
+The callback record supplies ordered entry and release observations but no
+callback-entry timestamp, so its elapsed hold time cannot be calculated from
+these records. The free spans above are separately measured intervals.
 
 The byte-identical measured JSON files in the adjacent
 [`c2a-corrected-2026-11-04`](c2a-corrected-2026-11-04/) directory retain render
