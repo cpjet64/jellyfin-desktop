@@ -5,11 +5,14 @@
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
+#include <QMutex>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QFile>
 #include <QSGRendererInterface>
 #include <atomic>
+#include <cstdio>
 #include <vector>
 #include <MpvController>
 #include <mpv/client.h>
@@ -23,12 +26,27 @@
 
 namespace {
 std::atomic<bool> fatalDiagnostic{false};
+std::atomic<unsigned> diagnosticKinds{0};
+QMutex diagnosticLock;
+QJsonArray diagnosticRecords;
 QtMessageHandler previousHandler = nullptr;
 void watchMessage(QtMsgType type, const QMessageLogContext& context, const QString& text)
 {
-  if (type == QtCriticalMsg || type == QtFatalMsg || text.contains("not being called or stuck", Qt::CaseInsensitive) ||
-      text.contains("deadlock", Qt::CaseInsensitive))
+  unsigned kinds = 0;
+  if (type == QtCriticalMsg || type == QtFatalMsg) kinds |= 1;
+  if (text.contains("not being called or stuck", Qt::CaseInsensitive)) kinds |= 2;
+  if (text.contains("deadlock", Qt::CaseInsensitive)) kinds |= 4;
+  if (kinds) {
     fatalDiagnostic = true;
+    diagnosticKinds.fetch_or(kinds);
+    const qint64 received = QtThreaded::monotonicNanos();
+    { QMutexLocker guard(&diagnosticLock);
+      diagnosticRecords.append(QJsonObject{{"received_ns", received}, {"severity", int(type)}, {"text", text}}); }
+    const QByteArray encoded = text.toUtf8();
+    std::fprintf(stderr, "c2a diagnostic received_ns=%lld severity=%d: %s\n",
+                 static_cast<long long>(received), int(type), encoded.constData());
+    std::fflush(stderr);
+  }
   if (previousHandler) previousHandler(type, context, text);
 }
 bool saveCreateEvidence(const QString& evidence, const QJsonObject& observed,
@@ -56,8 +74,44 @@ class TestC2RetirementNative : public QObject
 {
   Q_OBJECT
 private slots:
+  void init();
+  void cleanup();
   void createFailure();
+  void guardSentinel();
 };
+
+void TestC2RetirementNative::init()
+{
+  fatalDiagnostic = false;
+  diagnosticKinds = 0;
+  { QMutexLocker guard(&diagnosticLock); diagnosticRecords = {}; }
+  previousHandler = qInstallMessageHandler(watchMessage);
+}
+
+void TestC2RetirementNative::cleanup()
+{
+  qInstallMessageHandler(previousHandler);
+  QJsonArray records;
+  { QMutexLocker guard(&diagnosticLock); records = diagnosticRecords; }
+  if (!records.isEmpty()) {
+    QFile file(qEnvironmentVariable("RECOVERY_EVIDENCE_DIR") + "/c2a-diagnostics.json");
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::NewOnly));
+    const QByteArray bytes = QJsonDocument(records).toJson();
+    QCOMPARE(file.write(bytes), qint64(bytes.size()));
+    QVERIFY(file.flush());
+  }
+  QVERIFY2(!fatalDiagnostic.load(), "critical, stuck or deadlock diagnostic observed");
+}
+
+void TestC2RetirementNative::guardSentinel()
+{
+  qCritical("controlled critical sentinel");
+  qWarning("controlled NOT BEING CALLED OR STUCK sentinel");
+  qWarning("controlled DeAdLoCk sentinel");
+  QCOMPARE(diagnosticKinds.load(), 7U);
+  QVERIFY(fatalDiagnostic.load());
+  // cleanup intentionally fails this isolated sentinel process.
+}
 
 void TestC2RetirementNative::createFailure()
 {
@@ -133,19 +187,18 @@ int main(int argc, char** argv)
   const QByteArray scenario = qgetenv("C2A_SCENARIO");
   const QHash<QByteArray, QByteArray> scenarios{{"create-failure", "createFailure"},
     {"render-failure", "renderFailure"}, {"active-retirement", "activeRetirement"},
-    {"terminal-retirement", "terminalRetirement"}, {"stop-hook", "stopWithPendingHook"}};
+    {"terminal-retirement", "terminalRetirement"}, {"stop-hook", "stopWithPendingHook"},
+    {"guard-sentinel", "guardSentinel"}};
   if (!scenarios.contains(scenario)) { qCritical("C2A_SCENARIO must select exactly one known case"); return 2; }
   if (argc != 3 || QByteArray(argv[1]) != "-o") { qCritical("Expected one QTest output argument"); return 2; }
   QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
   QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
   QGuiApplication app(argc, argv);
-  previousHandler = qInstallMessageHandler(watchMessage);
   TestC2RetirementNative test;
   QByteArray selected = scenarios.value(scenario);
   std::vector<char*> arguments(argv, argv + argc);
   arguments.push_back(selected.data());
   const int result = QTest::qExec(&test, int(arguments.size()), arguments.data());
-  qInstallMessageHandler(previousHandler);
   return result;
 }
 
