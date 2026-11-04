@@ -76,6 +76,7 @@ def validate_job(base, job, sha, ref):
         require_case(directory, f"containment/{scenario}", images)
     # No producer exists yet: missing real native-controls proof must fail closed.
     require_case(directory, "native-controls")
+    raise ValueError(f"{job}: native-controls receipt verification is not implemented")
 
 
 def main():
