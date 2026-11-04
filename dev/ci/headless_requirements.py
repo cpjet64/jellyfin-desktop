@@ -50,13 +50,13 @@ def mpv_found(prefixes):
     return False
 
 
-def missing_build_inputs(mode, environment, pkgconfig):
+def missing_build_inputs(mode, environment, pkgconfig, explicit_mpv=False):
     prefixes = known_prefixes(environment)
     qt_modules = ("Qt6Core", "Qt6Quick", "Qt6WebEngineQuick", "Qt6WebChannel", "Qt6Positioning")
     missing = []
     if not (pkg_exists(pkgconfig, qt_modules) or config_found(prefixes, "Qt6Config.cmake")):
         missing.append("Qt6 development modules in checked prefixes or pkg-config")
-    if not (pkg_exists(pkgconfig, ("mpv",)) or mpv_found(prefixes)):
+    if not (explicit_mpv or pkg_exists(pkgconfig, ("mpv",)) or mpv_found(prefixes)):
         missing.append("mpv development headers/library in checked prefixes or pkg-config")
     if mode == "system" and not config_found(prefixes, "MpvQtConfig.cmake"):
         missing.append("system MpvQtConfig.cmake in checked prefixes")

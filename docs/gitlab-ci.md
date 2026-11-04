@@ -83,6 +83,15 @@ the explicit `CI_QT_PREFIX` and `CI_MPV_PREFIX` paths. macOS requires its native
 tools and a separately authorized dedicated GUI session; inventory does not
 create or attest that session.
 
+The optional Linux split-SDK route requires all of `CI_MPV_DEV_DEB`,
+`CI_MPV_INCLUDE_DIR` (the extracted `usr/include`) and `CI_MPV_LIBRARY` (the
+installed real DSO). The job verifies the pinned development archive and
+extracted headers, checks the runtime package identity and version, then builds
+and runs a no-core API/linkage probe before configuring. Invalid explicit inputs
+fail without falling back to pkg-config. Supplying these inputs does not install
+or acquire either package, nor establish runtime or display acceptance. The
+system job still requires its independently supplied MpvQt package.
+
 System jobs use an independently installed mpvqt package. Windows builds
 MpvQt at pinned revision `2ebbd38` as a shared library in a job-owned prefix,
 applying the destructor compatibility patch only to the verified build copy; it

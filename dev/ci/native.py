@@ -16,6 +16,7 @@ from macos_session import verify_existing_session
 from headless_requirements import missing_build_inputs
 from linux_mpris_receipt import run_active_stop, update_obligation
 from evidence import update
+from explicit_mpv import explicit_inputs, cmake_options, verify_cache
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
@@ -83,6 +84,7 @@ def preflight():
         raise RuntimeError("BLOCKED: explicit native prefixes must be existing absolute directories")
     if unavailable:
         raise RuntimeError("BLOCKED: configured compiler unavailable: " + ", ".join(unavailable))
+    explicit = explicit_inputs(os.environ, system, ROOT)
     missing = [tool for tool, path in found.items() if not path]
     for tool in incompatible_tools(found):
         print(f"Tool {tool}: incompatible version", flush=True)
@@ -95,7 +97,7 @@ def preflight():
         raise RuntimeError("BLOCKED: missing host prerequisites: " + ", ".join(host_missing))
     bootstrap_missing = [name for name in missing if name in can_bootstrap]
     if bootstrap_missing:
-        absent = missing_build_inputs(mode, os.environ, found.get("pkg-config"))
+        absent = missing_build_inputs(mode, os.environ, found.get("pkg-config"), bool(explicit))
         if absent:
             raise RuntimeError("BLOCKED: build inputs not found before tool bootstrap: " + ", ".join(absent))
         job = os.environ.get("CI_JOB_ID", "")
@@ -123,6 +125,7 @@ def portable_checks():
     command("archive-safety-tests", [sys.executable, "dev/ci/test_safe_extract.py"])
     command("inventory-tests", [sys.executable, "dev/ci/test_native_inventory.py"])
     command("native-prerequisite-inventory-tests", [sys.executable, "dev/ci/test_native_prereq_inventory.py"])
+    command("explicit-mpv-tests", [sys.executable, "dev/ci/test_explicit_mpv.py"])
     command("qt-unix-manifest-tests", [sys.executable, "dev/ci/test_qt_unix_manifest.py"])
     command("mac-session-tests", [sys.executable, "dev/ci/test_macos_session.py"])
     command("headless-routing-tests", [sys.executable, "dev/ci/test_headless_routing.py"])
@@ -132,7 +135,15 @@ def portable_checks():
 def configure(system, mode):
     command("compiler-version", ["c++", "--version"])
     command("cmake-version", ["cmake", "--version"])
-    command("mpv-version", ["pkg-config", "--modversion", "mpv"])
+    explicit = explicit_inputs(os.environ, system, ROOT)
+    if explicit:
+        include, library = explicit
+        probe = BUILD / "mpv-link-probe"
+        command("mpv-probe-build", ["cc", str(ROOT / "dev/ci/mpv_link_probe.c"), "-I", str(include),
+                str(library), "-ldl", "-Wl,-rpath," + str(library.parent), "-o", str(probe)])
+        command("mpv-probe", [str(probe), str(library)])
+    else:
+        command("mpv-version", ["pkg-config", "--modversion", "mpv"])
     if system == "Linux":
         command("qt-versions", ["pkg-config", "--modversion", "Qt6Core", "Qt6WebEngineQuick", "Qt6WebChannel", "Qt6Positioning"])
     elif shutil.which("qmake6"):
@@ -147,11 +158,15 @@ def configure(system, mode):
     options = ["cmake", "-S", str(ROOT), "-B", str(BUILD), "-G", "Ninja",
                "-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-DUSE_STATIC_MPVQT=" + ("ON" if mode == "static" else "OFF"),
                "-DMPVQT_EXTERNAL_EVENTS=" + ("ON" if mode == "static" else "OFF")]
+    if explicit:
+        options.extend(cmake_options(explicit))
     prefixes = [os.environ[key] for key in ("CI_QT_PREFIX", "CI_MPV_PREFIX") if os.environ.get(key)]
     prefixes += [prefix for prefix in os.environ.get("CMAKE_PREFIX_PATH", "").split(os.pathsep) if prefix]
     if prefixes:
         options.append("-DCMAKE_PREFIX_PATH=" + ";".join(prefixes))
     command("configure", options, timeout=300)
+    if explicit:
+        verify_cache(BUILD / "CMakeCache.txt", explicit, mode)
     command("build", ["cmake", "--build", str(BUILD), "--parallel", "4"], timeout=1800)
 
 
