@@ -7,7 +7,8 @@ currently disabled, including the separate release synchronization workflow;
 the Git push mirror does not by itself copy release notes or assets. See
 [release mirroring](release-mirroring.md) for that workflow's design and status.
 
-The required GitLab pipeline has six native jobs: Windows x64, Linux x64, and
+The required GitLab pipeline has six native jobs and a separate product acceptance
+job. The native jobs cover Windows x64, Linux x64, and
 macOS Intel, each with a bundled static mpvqt configuration and a separately
 installed system mpvqt compatibility configuration. The static jobs require
 the pinned mpvqt submodule and set `USE_STATIC_MPVQT=ON` and
@@ -21,14 +22,14 @@ Protected refs, tags, schedules and other pipeline sources remain excluded
 pending the protected-resource policy. Jobs use unprotected runner boundaries
 and contain no signing, release, deployment, or registry publication step.
 
-Every job must pass native preflight and build checks, the required non-GUI
-CTest cases, input and bundle checks, and seven separate GUI processes: the
-WebEngine fixture and both renderer-loss and web-client containment fixtures
-for playing, paused, and held-hook scenarios. Reports must contain the required
-cases and successful, unskipped results. Playing and paused scenarios also
-require their before/after images. Static jobs additionally require the mpvqt
-event-ownership test; Linux requires the real MPRIS test on a private session
-bus. Failure or absence of a prerequisite or required result fails the job.
+The native jobs record build/core, offscreen rendering and desktop acceptance
+separately as passed, failed, blocked or not run. The offscreen test exercises
+the production video item with real OpenGL for playing, paused and held-hook
+scenarios; the playing case also requires a second post-fault frame. Reports
+and images are kept under the individual job's artifact namespace. A successful
+headless job does not establish desktop acceptance. The acceptance job requires
+all six matching evidence sets and currently fails closed because desktop
+receipt verification is not implemented.
 
 On Linux and macOS, the job first builds and runs an explicit headless set:
 system, logging, settings, display-manager mock, log rotation, Chromium flags,
@@ -37,11 +38,12 @@ application-less or QCoreApplication tests; the selection does not infer that
 every test without a `gui` label is nonvisual. Node and portable packaging
 fixtures also run before desktop verification. The remaining CTest cases,
 including QGuiApplication, Quick, mpv initialization, and MPRIS cases, are
-deferred until the platform's desktop prerequisites are checked. The job
-still fails if those prerequisites or any required GUI proof are missing; a
-passing headless subset is not a replacement for the complete native gate.
+deferred until the platform's runtime prerequisites are checked. Linux fails
+when its required display facilities are unavailable. On macOS the pure
+headless work is retained when an authorized existing session is unavailable,
+and the offscreen runtime and desktop obligations are recorded as blocked.
 
-Windows runs GUI fixtures through a task-owned hidden desktop and job object;
+Windows runs its offscreen fixture through a task-owned hidden desktop and job object;
 Linux uses job-owned Xvfb and private D-Bus sessions and records the rendering
 backend. macOS requires the explicitly authorized `runner` account on
 `tahoe-runner-114` (GitLab runner 12), a pre-existing GUI domain and matching

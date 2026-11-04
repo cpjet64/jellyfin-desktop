@@ -4,6 +4,7 @@ from contextlib import ExitStack, redirect_stdout
 import io
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -62,20 +63,23 @@ class TestHeadlessRouting(unittest.TestCase):
     def test_headless_evidence_precedes_missing_desktop_failure(self):
         events = []
         with ExitStack() as stack:
-            for name in ("configure", "headless_checks", "desktop_ctest", "gui"):
+            stack.enter_context(patch.dict(native.os.environ, {"CI_EVIDENCE_DIR": "unused"}))
+            stack.enter_context(patch.object(native, "update"))
+            for name in ("configure", "headless_checks", "desktop_ctest", "offscreen"):
                 stack.enter_context(patch.object(native, name, side_effect=lambda *a, n=name: events.append(n)))
             stack.enter_context(patch.object(native, "desktop_preflight", side_effect=RuntimeError("BLOCKED")))
-            with self.assertRaisesRegex(RuntimeError, "BLOCKED"):
-                native.run_stages("Darwin", "static", [])
+            native.run_stages("Darwin", "static", [])
         self.assertEqual(events, ["configure", "headless_checks"])
 
     def test_all_desktop_gates_still_run_when_available(self):
         events = []
         with ExitStack() as stack:
-            for name in ("configure", "headless_checks", "desktop_preflight", "desktop_ctest", "gui"):
+            stack.enter_context(patch.dict(native.os.environ, {"CI_EVIDENCE_DIR": "unused"}))
+            stack.enter_context(patch.object(native, "update"))
+            for name in ("configure", "headless_checks", "desktop_preflight", "desktop_ctest", "offscreen"):
                 stack.enter_context(patch.object(native, name, side_effect=lambda *a, n=name: events.append(n)))
             native.run_stages("Linux", "static", [])
-        self.assertEqual(events, ["configure", "headless_checks", "desktop_preflight", "desktop_ctest", "gui"])
+        self.assertEqual(events, ["configure", "headless_checks", "desktop_preflight", "desktop_ctest", "offscreen"])
 
     def test_missing_linux_display_is_still_a_failure(self):
         with self.assertRaisesRegex(RuntimeError, "xvfb-run"):
@@ -86,6 +90,26 @@ class TestHeadlessRouting(unittest.TestCase):
                 patch.object(native, "verify_existing_session") as verify:
             native.desktop_preflight("Darwin", [])
         verify.assert_called_once()
+
+    def test_offscreen_runs_all_scenarios_and_requires_second_playing_frame(self):
+        with tempfile.TemporaryDirectory(dir=native.ROOT / "deps") as temp:
+            results = Path(temp)
+            seen = []
+            def fake_command(name, args, **kwargs):
+                if name.endswith("-report"):
+                    return
+                scenario = kwargs["env"]["RECOVERY_SCENARIO"]
+                seen.append(scenario)
+                case = Path(kwargs["env"]["RECOVERY_EVIDENCE_DIR"])
+                (case / "qtest.txt").write_text("result")
+                if scenario != "held-hook":
+                    for image in ("offscreen-before.png", "offscreen-after.png"):
+                        (case / image).write_bytes(b"image")
+                if scenario == "playing":
+                    (case / "offscreen-after2.png").write_bytes(b"image")
+            with patch.object(native, "RESULTS", results), patch.object(native, "command", side_effect=fake_command):
+                native.run_scenarios("test_renderer_loss_offscreen", [], {}, results / "media")
+            self.assertEqual(seen, ["playing", "paused", "held-hook"])
 
     def test_missing_build_inputs_reported_before_bootstrap(self):
         with patch.object(headless_requirements, "known_prefixes", return_value=[]), \

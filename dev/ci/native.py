@@ -14,6 +14,7 @@ from native_bootstrap import bootstrap
 from native_inventory import incompatible_tools, inventory, prepare_process_paths, unavailable_compilers
 from macos_session import verify_existing_session
 from headless_requirements import missing_build_inputs
+from evidence import update
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
@@ -111,6 +112,8 @@ def preflight():
 
 def portable_checks():
     command("report-gate-tests", [sys.executable, "tests/test_ci_results.py"])
+    command("evidence-tests", [sys.executable, "dev/ci/test_evidence.py"])
+    command("acceptance-tests", [sys.executable, "dev/ci/test_acceptance.py"])
     command("archive-safety-tests", [sys.executable, "dev/ci/test_safe_extract.py"])
     command("inventory-tests", [sys.executable, "dev/ci/test_native_inventory.py"])
     command("mac-session-tests", [sys.executable, "dev/ci/test_macos_session.py"])
@@ -146,7 +149,7 @@ def configure(system, mode):
 
 def headless_checks():
     expression = "^(" + "|".join(HEADLESS_TESTS) + ")$"
-    report_path = RESULTS / "ctest.xml"
+    report_path = RESULTS / "headless-ctest.xml"
     command("headless-ctest", ["ctest", "--test-dir", str(BUILD), "-R", expression,
             "--output-on-failure", "--no-tests=error", "--timeout", "60", "--output-junit", str(report_path)], timeout=900)
     report = [sys.executable, "dev/ci/check_results.py", "junit", str(report_path)]
@@ -177,10 +180,11 @@ def desktop_preflight(system, desktop_missing):
 
 
 def desktop_ctest(system, mode):
-    prefix = ["dbus-run-session", "--"] if system == "Linux" else []
+    prefix = ["xvfb-run", "-a", "-s", "-screen 0 1280x800x24 +extension GLX",
+              "dbus-run-session", "--"] if system == "Linux" else []
     command("ctest", prefix + ["ctest", "--test-dir", str(BUILD), "-LE", "gui", "--output-on-failure",
-                               "--no-tests=error", "--timeout", "60", "--output-junit", str(RESULTS / "ctest.xml")], timeout=900)
-    report = [sys.executable, "dev/ci/check_results.py", "junit", str(RESULTS / "ctest.xml")]
+                               "--no-tests=error", "--timeout", "60", "--output-junit", str(RESULTS / "desktop-ctest.xml")], timeout=900)
+    report = [sys.executable, "dev/ci/check_results.py", "junit", str(RESULTS / "desktop-ctest.xml")]
     required = ["test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard", "test_mpv_test_bootstrap"]
     if mode == "static":
         required.extend(["test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state"])
@@ -209,6 +213,16 @@ def gui(system):
         run_scenarios(fixture, prefix, env, media)
 
 
+def offscreen(system):
+    env = os.environ.copy()
+    env.update({"QSG_INFO": "1", "QT_QPA_PLATFORM": "xcb" if system == "Linux" else "cocoa"})
+    prefix = ["xvfb-run", "-a", "-s", "-screen 0 1280x800x24 +extension GLX",
+              "dbus-run-session", "--"] if system == "Linux" else []
+    media = RESULTS / "recovery.y4m"
+    command("offscreen-media", [sys.executable, "tests/generate_recovery_media.py", str(media)])
+    run_scenarios("test_renderer_loss_offscreen", prefix, env, media)
+
+
 def run_scenarios(fixture, prefix, env, media):
     for scenario in ("playing", "paused", "held-hook"):
         evidence = RESULTS / fixture / scenario
@@ -226,14 +240,31 @@ def run_scenarios(fixture, prefix, env, media):
         if fixture == "test_webclient_containment" and scenario != "held-hook":
             if any(not (evidence / name).is_file() for name in ("containment-before.png", "containment-after.png")):
                 raise RuntimeError(f"Missing containment {scenario} image evidence")
+        if fixture == "test_renderer_loss_offscreen" and scenario != "held-hook":
+            images = ["offscreen-before.png", "offscreen-after.png"]
+            if scenario == "playing":
+                images.append("offscreen-after2.png")
+            if any(not (evidence / name).is_file() for name in images):
+                raise RuntimeError(f"Missing offscreen {scenario} image evidence")
 
 
 def run_stages(system, mode, desktop_missing):
     configure(system, mode)
     headless_checks()
-    desktop_preflight(system, desktop_missing)
+    directory = Path(os.environ["CI_EVIDENCE_DIR"])
+    update(directory, "build_core", "passed", "Native build and classified core checks passed")
+    update(directory, "offscreen", "not_run", "Checking native runtime prerequisites")
+    try:
+        desktop_preflight(system, desktop_missing)
+    except RuntimeError as error:
+        update(directory, "offscreen", "blocked", str(error))
+        if system == "Darwin":
+            print(f"BLOCKED: macOS offscreen runtime: {error}", flush=True)
+            return
+        raise
     desktop_ctest(system, mode)
-    gui(system)
+    offscreen(system)
+    update(directory, "offscreen", "passed", "All three native OpenGL scenarios passed")
 
 
 def main():
@@ -247,12 +278,18 @@ def main():
             path.mkdir(mode=0o700)
             os.environ[name] = str(path)
         run_stages(system, mode, desktop_missing)
-    print(f"PASS: {system} {mode}, WebEngine and 6 playback scenarios")
+    print(f"Completed {system} {mode} headless job; desktop acceptance remains blocked")
 
 
 if __name__ == "__main__":
     try:
         main()
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        if str(error).startswith("BLOCKED:") and os.environ.get("CI_EVIDENCE_DIR"):
+            path = Path(os.environ["CI_EVIDENCE_DIR"]) / "evidence.json"
+            import json
+            report = json.loads(path.read_text(encoding="utf-8"))
+            if report.get("active_phase"):
+                update(path.parent, report["active_phase"], "blocked", str(error))
         print(f"CI failure: {error}", file=sys.stderr)
         sys.exit(1)

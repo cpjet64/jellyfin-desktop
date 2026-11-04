@@ -8,7 +8,7 @@ workflow:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH'
     - if: '($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api") && $CI_COMMIT_BRANCH'
 
-stages: [verify]
+stages: [verify, acceptance]
 
 windows-x64:
   stage: verify
@@ -18,16 +18,16 @@ windows-x64:
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
   script:
-    - '& ./dev/windows/ci.ps1'
+    - 'python dev/ci/evidence.py'
   artifacts:
     when: always
     expire_in: 14 days
     paths:
-      - build/ci-results/
+      - build/ci-evidence/$CI_JOB_NAME/
       - build/JellyfinDesktop-*.exe
       - build/JellyfinDesktop-*.zip
     reports:
-      junit: build/ci-results/ctest.xml
+      junit: build/ci-evidence/$CI_JOB_NAME/headless-ctest.xml
 
 windows-system:
   extends: windows-x64
@@ -37,9 +37,9 @@ windows-system:
   artifacts:
     when: always
     expire_in: 14 days
-    paths: [build/ci-results/]
+    paths: [build/ci-evidence/$CI_JOB_NAME/]
     reports:
-      junit: build/ci-results/ctest.xml
+      junit: build/ci-evidence/$CI_JOB_NAME/headless-ctest.xml
 
 .unix-native:
   stage: verify
@@ -47,13 +47,13 @@ windows-system:
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
   script:
-    - python3 dev/ci/native.py
+    - python3 dev/ci/evidence.py
   artifacts:
     when: always
     expire_in: 14 days
-    paths: [build/ci-results/]
+    paths: [build/ci-evidence/$CI_JOB_NAME/]
     reports:
-      junit: build/ci-results/ctest.xml
+      junit: build/ci-evidence/$CI_JOB_NAME/headless-ctest.xml
 
 linux-static:
   extends: .unix-native
@@ -84,3 +84,23 @@ macos-system:
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
     CI_MPVQT_MODE: system
+
+product-acceptance:
+  stage: acceptance
+  when: always
+  tags: [win203-unprotected]
+  needs:
+    - job: windows-x64
+      artifacts: true
+    - job: windows-system
+      artifacts: true
+    - job: linux-static
+      artifacts: true
+    - job: linux-system
+      artifacts: true
+    - job: macos-static
+      artifacts: true
+    - job: macos-system
+      artifacts: true
+  script:
+    - python dev/ci/acceptance.py

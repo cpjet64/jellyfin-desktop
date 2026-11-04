@@ -84,6 +84,8 @@ Install-Mpv 'x86_64' "$build/mpv-fallback" $sevenZip $ci $mpvVersion 'D7F5621F42
 Run-Native $python @('-m', 'venv', "$ci/venv")
 $venvPython = Join-Path $ci 'venv/Scripts/python.exe'
 Run-Native $venvPython @('tests/test_ci_results.py')
+Run-Native $venvPython @('dev/ci/test_evidence.py')
+Run-Native $venvPython @('dev/ci/test_acceptance.py')
 Run-Native $venvPython @('dev/ci/test_safe_extract.py')
 Run-Native $venvPython @('dev/ci/test_macos_session.py')
 Run-Native 'powershell.exe' @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', 'dev/windows/test_ci_gui.ps1')
@@ -128,13 +130,16 @@ try {
 $env:APPDATA = "$testHome/roaming"
 $env:LOCALAPPDATA = "$testHome/local"
 $env:JELLYFIN_TEST_OWNED_ROOT = $build
-Run-Native 'ctest.exe' @('--test-dir', $build, '-LE', 'gui', '--no-tests=error', '--output-on-failure', '--timeout', '60', '--output-junit', "$results/ctest.xml")
-$reportArgs = @('dev/ci/check_results.py', 'junit', "$results/ctest.xml")
+Run-Native 'ctest.exe' @('--test-dir', $build, '-LE', 'gui', '--no-tests=error', '--output-on-failure', '--timeout', '60', '--output-junit', "$results/headless-ctest.xml")
+$reportArgs = @('dev/ci/check_results.py', 'junit', "$results/headless-ctest.xml")
 $required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard', 'test_mpv_test_bootstrap', 'test_mpv_test_bootstrap_pure')
 if ($mode -eq 'static') { $required += @('test_mpvqt_event_ownership', 'test_mpvqt_player_binding', 'test_player_released_state') }
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs
-Invoke-NativeGuiTests $build $results $venvPython
+Run-Native $venvPython @('dev/ci/evidence.py', 'build_core', 'passed', 'Native build and core tests passed')
+Run-Native $venvPython @('dev/ci/evidence.py', 'offscreen', 'not_run', 'Running native OpenGL scenarios')
+Invoke-OffscreenTests $build $results $venvPython
+Run-Native $venvPython @('dev/ci/evidence.py', 'offscreen', 'passed', 'All three native OpenGL scenarios passed')
 Run-Native $venvPython @('tests/windows_mpv_loader_integration.py')
 Run-Native $venvPython @('tests/windows_packaging_runtime_test.py')
 $env:ISCC = $found.Inno

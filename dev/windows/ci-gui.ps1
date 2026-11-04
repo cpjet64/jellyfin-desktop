@@ -27,6 +27,30 @@ function Invoke-NativeGuiTests {
     Invoke-NativeGuiSuite $Build $Results $Python
 }
 
+function Invoke-OffscreenTests {
+    param([string]$Build, [string]$Results, [string]$Python)
+    $helper = Join-Path $Build 'hidden-desktop-ci.exe'
+    Run-Native 'cl.exe' @('/nologo', '/std:c++14', '/EHsc', 'tests/windows_hidden_desktop.cpp', "/Fe:$helper", "/Fo:$Build/hidden-desktop-ci.obj", 'user32.lib')
+    $media = Join-Path $Results 'recovery.y4m'
+    Run-Native $Python @('tests/generate_recovery_media.py', $media)
+    $env:QSG_INFO = '1'
+    $env:QT_QPA_PLATFORM = 'windows'
+    foreach ($scenario in @('playing', 'paused', 'held-hook')) {
+        $evidence = Join-Path $Results "offscreen/$scenario"
+        $env:RECOVERY_SCENARIO = $scenario
+        $env:RECOVERY_MEDIA = $media
+        $env:RECOVERY_EVIDENCE_DIR = $evidence
+        Run-HiddenTest $helper "$Build/tests/test_renderer_loss_offscreen.exe" $evidence $Python
+        if ($scenario -ne 'held-hook') {
+            $images = @('offscreen-before.png', 'offscreen-after.png')
+            if ($scenario -eq 'playing') { $images += 'offscreen-after2.png' }
+            foreach ($image in $images) {
+                if (-not (Test-Path -LiteralPath "$evidence/$image" -PathType Leaf)) { throw "Missing offscreen $scenario image $image" }
+            }
+        }
+    }
+}
+
 function Invoke-NativeGuiSuite {
     param([string]$Build, [string]$Results, [string]$Python)
     $helper = Join-Path $Build 'hidden-desktop-ci.exe'
