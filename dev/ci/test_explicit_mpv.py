@@ -64,6 +64,10 @@ class ExplicitMpvTest(unittest.TestCase):
                 (directory / "client.h").write_bytes(b"altered")
                 with self.assertRaisesRegex(RuntimeError, "differs"):
                     explicit_mpv.verify_headers(root / "fixture.deb", root)
+                (directory / "client.h").write_bytes(b"client.h")
+                (directory / "render.h").unlink()
+                with self.assertRaisesRegex(RuntimeError, "missing extracted"):
+                    explicit_mpv.verify_headers(root / "fixture.deb", root)
             with patch.object(explicit_mpv.subprocess, "check_output", side_effect=["other: /lib/libmpv.so.2"]):
                 with self.assertRaisesRegex(RuntimeError, "not owned"):
                     explicit_mpv.verify_library(Path("/lib/libmpv.so.2"))
@@ -97,9 +101,13 @@ class ExplicitMpvTest(unittest.TestCase):
                 with patch.object(explicit_mpv.subprocess, "check_output", side_effect=["libmpv2:amd64: /lib/a", metadata]):
                     with self.assertRaisesRegex(RuntimeError, "not installed for amd64"):
                         explicit_mpv.verify_library(Path("/lib/a"))
+            with patch.object(explicit_mpv.subprocess, "check_output", side_effect=["libmpv2:amd64: /lib/a", "installed\namd64\n0.37.0-1ubuntu4"]), \
+                 patch.object(explicit_mpv, "verify_installed_bytes") as verify:
+                explicit_mpv.verify_library(Path("/lib/a"))
+            verify.assert_called_once_with(Path("/lib/a"), "libmpv2:amd64")
 
-    @unittest.skipUnless(shutil.which("cmake"), "cmake unavailable")
     def test_actual_findmpv_ignores_stale_pkg_selection_only_in_explicit_mode(self):
+        self.assertIsNotNone(shutil.which("cmake"), "cmake is required for this check")
         with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2]) as tmp:
             root = Path(tmp)
             module = (Path(__file__).resolve().parents[2] / "CMakeModules/FindMPV.cmake").as_posix()
@@ -126,6 +134,14 @@ endif()
             for explicit, want in (("ON", expected), ("OFF", other)):
                 subprocess.run(["cmake", "-DJELLYFIN_EXPLICIT_MPV=" + explicit, "-DWANT=" + want.as_posix(),
                                 "-P", str(script)], check=True, capture_output=True, text=True, timeout=30)
+
+    def test_default_route_rejects_cached_explicit_configuration(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2]) as tmp:
+            cache = Path(tmp) / "CMakeCache.txt"
+            self.assertEqual(explicit_mpv.default_options(cache), ["-DJELLYFIN_EXPLICIT_MPV=OFF"])
+            cache.write_text("JELLYFIN_EXPLICIT_MPV:UNINITIALIZED=ON\n")
+            with self.assertRaisesRegex(RuntimeError, "fresh build directory"):
+                explicit_mpv.default_options(cache)
 
 
 if __name__ == "__main__":

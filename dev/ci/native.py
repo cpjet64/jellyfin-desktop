@@ -16,7 +16,7 @@ from macos_session import verify_existing_session
 from headless_requirements import missing_build_inputs
 from linux_mpris_receipt import run_active_stop, update_obligation
 from evidence import update
-from explicit_mpv import explicit_inputs, cmake_options, verify_cache
+from explicit_mpv import explicit_inputs, cmake_options, default_options, verify_cache
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
@@ -160,6 +160,8 @@ def configure(system, mode):
                "-DMPVQT_EXTERNAL_EVENTS=" + ("ON" if mode == "static" else "OFF")]
     if explicit:
         options.extend(cmake_options(explicit))
+    else:
+        options.extend(default_options(BUILD / "CMakeCache.txt"))
     prefixes = [os.environ[key] for key in ("CI_QT_PREFIX", "CI_MPV_PREFIX") if os.environ.get(key)]
     prefixes += [prefix for prefix in os.environ.get("CMAKE_PREFIX_PATH", "").split(os.pathsep) if prefix]
     if prefixes:

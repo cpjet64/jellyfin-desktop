@@ -86,6 +86,14 @@ def cmake_options(paths):
             "-DLibmpv_INCLUDE_DIRS=" + str(include / "mpv"), "-DLibmpv_LIBRARIES=" + str(library)]
 
 
+def default_options(cache_path):
+    if cache_path.is_file():
+        for line in cache_path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("JELLYFIN_EXPLICIT_MPV:") and line.partition("=")[2] == "ON":
+                raise RuntimeError("BLOCKED: previous explicit mpv cache requires a fresh build directory")
+    return ["-DJELLYFIN_EXPLICIT_MPV=OFF"]
+
+
 def verify_cache(cache_path, paths, mode="system"):
     include, library = paths
     entries = {}
