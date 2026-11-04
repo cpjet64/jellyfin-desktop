@@ -4,6 +4,25 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+if(MPVQT_C2_DIAGNOSTIC_ONLY)
+  add_executable(test_c2_retirement_state test_c2_retirement_state.cpp)
+  target_include_directories(test_c2_retirement_state PRIVATE ${CMAKE_SOURCE_DIR})
+  target_link_libraries(test_c2_retirement_state PRIVATE Qt6::Core Qt6::Test Threads::Threads)
+  add_test(NAME test_c2_retirement_state COMMAND test_c2_retirement_state)
+  set_tests_properties(test_c2_retirement_state PROPERTIES TIMEOUT 60)
+  add_executable(test_c2_retirement_native test_c2_retirement_native.cpp
+    mpv_test_bootstrap.cpp mpv_test_profile.cpp "${CMAKE_BINARY_DIR}/src/qrc_resources.cpp")
+  add_dependencies(test_c2_retirement_native generate_resources)
+  target_include_directories(test_c2_retirement_native PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core ${CMAKE_SOURCE_DIR}/src/shared ${CMAKE_SOURCE_DIR}/external)
+  target_link_libraries(test_c2_retirement_native PRIVATE jmp_core Qt6::Test Qt6::Quick Qt6::OpenGL)
+  if(WIN32 AND MSVC)
+    get_filename_component(_c2_mpv_dir "${MPV_LIBRARY}" DIRECTORY)
+    add_custom_command(TARGET test_c2_retirement_native POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_c2_mpv_dir}/libmpv-2.dll" "$<TARGET_FILE_DIR:test_c2_retirement_native>/libmpv-2.dll")
+  endif()
+  return()
+endif()
+
 add_executable(test_mpv_test_bootstrap test_mpv_test_bootstrap.cpp mpv_test_bootstrap.cpp)
 target_link_libraries(test_mpv_test_bootstrap PRIVATE Qt6::Core Qt6::Test)
 set(_mpv_guard_pure absentAndExisting rejectLinksAndErrorsBeforeInitialization rootAndDescendantCases pathSyntax standardLocationSyntax)

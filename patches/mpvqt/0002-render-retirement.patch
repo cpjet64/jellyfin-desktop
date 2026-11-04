@@ -1,0 +1,143 @@
+diff --git a/src/mpvabstractitem.cpp b/src/mpvabstractitem.cpp
+index ffccf4a..9d09c24 100644
+--- a/src/mpvabstractitem.cpp
++++ b/src/mpvabstractitem.cpp
+@@ -11,0 +12,2 @@
++#include <QRunnable>
++#include <atomic>
+@@ -14,0 +17 @@
++#include "c2/DiagnosticFailureInjection.h"
+@@ -29,0 +33,2 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
++    static std::atomic<quint64> nextGeneration{1};
++    d_ptr->renderOwner = std::make_shared<DiagnosticRenderOwner>(nextGeneration.fetch_add(1), this);
+@@ -54 +59 @@ MpvAbstractItem::~MpvAbstractItem()
+-        mpv_render_context_free(d_ptr->m_mpv_gl);
++        qFatal("Diagnostic render context must retire before item destruction");
+@@ -63,0 +69,30 @@ MpvAbstractItem::~MpvAbstractItem()
++quint64 MpvAbstractItem::renderGeneration() const
++{
++    return d_ptr->renderOwner->generation;
++}
++
++void MpvAbstractItem::requestRenderRetirement(quint64 generation)
++{
++    auto owner = d_ptr->renderOwner;
++    if (!owner->state.request(generation) || !window()) return;
++    window()->scheduleRenderJob(QRunnable::create([this, owner, generation] {
++        const bool original = !DiagnosticFailureInjection::blockNextRetire.exchange(false) &&
++            owner->context && QThread::currentThread() == owner->originalThread &&
++            QOpenGLContext::currentContext() == owner->originalContext;
++        const auto result = owner->state.retire(generation, original,
++            [owner] { mpv_render_context_set_update_callback(owner->context, nullptr, nullptr); },
++            [this, owner] {
++                mpv_render_context_free(owner->context);
++                ++DiagnosticFailureInjection::frees;
++                owner->context = nullptr;
++                d_ptr->m_mpv_gl = nullptr;
++            });
++        if (result == RenderRetirementState::Result::Stale) return;
++        QMetaObject::invokeMethod(this, [this, generation, result] {
++            if (result == RenderRetirementState::Result::Retired) emit renderRetired(generation);
++            else emit renderRetirementBlocked(generation);
++        }, Qt::QueuedConnection);
++    }), QQuickWindow::BeforeRenderingStage);
++    update();
++}
++
+diff --git a/src/mpvabstractitem.h b/src/mpvabstractitem.h
+index 74ec427..6ad0dfd 100644
+--- a/src/mpvabstractitem.h
++++ b/src/mpvabstractitem.h
+@@ -23,0 +24,2 @@ public:
++    enum class RenderFailureStage { Create, Render };
++    Q_ENUM(RenderFailureStage)
+@@ -36,0 +39,2 @@ public:
++    quint64 renderGeneration() const;
++    void requestRenderRetirement(quint64 generation);
+@@ -41,0 +46,3 @@ Q_SIGNALS:
++    void renderFailure(quint64 generation, RenderFailureStage stage, int error);
++    void renderRetired(quint64 generation);
++    void renderRetirementBlocked(quint64 generation);
+diff --git a/src/mpvabstractitem_p.h b/src/mpvabstractitem_p.h
+index 5373630..3d5c445 100644
+--- a/src/mpvabstractitem_p.h
++++ b/src/mpvabstractitem_p.h
+@@ -10,0 +11,15 @@
++#include "c2/RenderRetirementState.h"
++#include <QOpenGLContext>
++#include <QThread>
++#include <memory>
++
++struct DiagnosticRenderOwner
++{
++    DiagnosticRenderOwner(quint64 id, MpvAbstractItem* target) : generation(id), state(id), item(target) {}
++    const quint64 generation;
++    RenderRetirementState state;
++    MpvAbstractItem* const item; // diagnostic fixture retains item until retirement
++    mpv_render_context* context = nullptr; // render thread only
++    QOpenGLContext* originalContext = nullptr; // render thread only
++    QThread* originalThread = nullptr; // render thread only
++};
+@@ -21,0 +37 @@ public:
++    std::shared_ptr<DiagnosticRenderOwner> renderOwner;
+diff --git a/src/mpvrenderer.cpp b/src/mpvrenderer.cpp
+index 46a6a00..b8487a1 100644
+--- a/src/mpvrenderer.cpp
++++ b/src/mpvrenderer.cpp
+@@ -10,0 +11 @@
++#include "c2/DiagnosticFailureInjection.h"
+@@ -15,0 +17 @@
++#include <thread>
+@@ -31 +33,15 @@ void on_mpv_redraw(void *ctx)
+-    QMetaObject::invokeMethod(static_cast<MpvAbstractItem *>(ctx), &MpvAbstractItem::update, Qt::QueuedConnection);
++    auto* owner = static_cast<DiagnosticRenderOwner*>(ctx);
++    const bool accepted = owner->state.enterCallback();
++    ++DiagnosticFailureInjection::callbacks;
++    if (DiagnosticFailureInjection::holdCallback.load()) {
++        DiagnosticFailureInjection::callbackWaiting = true;
++        while (DiagnosticFailureInjection::holdCallback.load()) std::this_thread::yield();
++    }
++    if (accepted) {
++        auto* item = owner->item;
++        const auto generation = owner->generation;
++        QMetaObject::invokeMethod(item, [item, owner, generation] {
++            if (owner->state.accepts(generation)) item->update();
++        }, Qt::QueuedConnection);
++    }
++    owner->state.leaveCallback();
+@@ -41,0 +58,2 @@ void MpvRenderer::render()
++    auto owner = m_mpvAItem->d_ptr->renderOwner;
++    if (!owner->context || !owner->state.accepts(owner->generation)) return;
+@@ -60 +78,8 @@ void MpvRenderer::render()
+-    mpv_render_context_render(m_mpvAItem->d_ptr->m_mpv_gl, params);
++    const int injected = DiagnosticFailureInjection::render.exchange(0);
++    const int result = injected ? injected : mpv_render_context_render(owner->context, params);
++    if (result < 0 && owner->state.failOnce(RenderRetirementState::Stage::Render, result)) {
++        auto* item = m_mpvAItem;
++        QMetaObject::invokeMethod(item, [item, owner, result] {
++            emit item->renderFailure(owner->generation, MpvAbstractItem::RenderFailureStage::Render, result);
++        }, Qt::QueuedConnection);
++    }
+@@ -66,0 +92,3 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
++        auto owner = m_mpvAItem->d_ptr->renderOwner;
++        if (!owner->state.accepts(owner->generation))
++            return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
+@@ -90 +118,2 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-        int result = mpv_render_context_create(&m_mpvAItem->d_ptr->m_mpv_gl, m_mpvAItem->d_ptr->m_mpv, params);
++        const int injected = DiagnosticFailureInjection::create.exchange(0);
++        int result = injected ? injected : mpv_render_context_create(&m_mpvAItem->d_ptr->m_mpv_gl, m_mpvAItem->d_ptr->m_mpv, params);
+@@ -92 +121,7 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-            qFatal("failed to initialize mpv GL context");
++            if (owner->state.failOnce(RenderRetirementState::Stage::Create, result)) {
++                auto* item = m_mpvAItem;
++                QMetaObject::invokeMethod(item, [item, owner, result] {
++                    emit item->renderFailure(owner->generation, MpvAbstractItem::RenderFailureStage::Create, result);
++                }, Qt::QueuedConnection);
++            }
++            return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
+@@ -95 +130,4 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-        mpv_render_context_set_update_callback(m_mpvAItem->d_ptr->m_mpv_gl, on_mpv_redraw, m_mpvAItem);
++        owner->context = m_mpvAItem->d_ptr->m_mpv_gl;
++        owner->originalContext = QOpenGLContext::currentContext();
++        owner->originalThread = QThread::currentThread();
++        mpv_render_context_set_update_callback(owner->context, on_mpv_redraw, owner.get());

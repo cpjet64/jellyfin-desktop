@@ -78,6 +78,16 @@ void PlayerComponent::releaseMpvController(MpvController* controller)
 
 void PlayerComponent::scheduleMpvHook(const std::function<void()>& resume)
 {
+#ifdef MPVQT_C2_DIAGNOSTIC_ONLY
+  if (m_c2HookDelayMs >= 0) {
+    ++m_c2HooksScheduled;
+    QTimer::singleShot(m_c2HookDelayMs, this, [this, resume] {
+      resume();
+      ++m_c2HooksCompleted;
+    });
+    return;
+  }
+#endif
   if (!switchDisplayFrameRate()) {
     resume();
     return;

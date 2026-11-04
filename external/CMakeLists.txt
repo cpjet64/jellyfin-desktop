@@ -9,6 +9,9 @@ endif(APPLE)
 if(USE_STATIC_MPVQT)
   if(MPVQT_EXTERNAL_EVENTS)
     include(PatchedMpvQt)
+    if(MPVQT_C2_DIAGNOSTIC_ONLY)
+      include(PatchedMpvQtC2)
+    endif()
     set(_mpvqt_src "${_mpvqt_patched}")
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/mpvqt_export.h" "${_mpvqt_src}/mpvqt_export.h" COPYONLY)
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/mpvrenderer-patched-wrapper.cpp.in"
@@ -24,6 +27,9 @@ if(USE_STATIC_MPVQT)
     ${_mpvqt_src}/mpvcontroller.cpp
     ${_mpvqt_wrapper}
   )
+  if(MPVQT_C2_DIAGNOSTIC_ONLY)
+    target_sources(MpvQt PRIVATE c2/DiagnosticFailureInjection.cpp)
+  endif()
   target_include_directories(MpvQt PUBLIC
     ${_mpvqt_src}
     ${CMAKE_CURRENT_SOURCE_DIR}

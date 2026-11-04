@@ -57,6 +57,9 @@ add_library(jmp_core STATIC ${ALL_SRCS})
 if(MPVQT_EXTERNAL_EVENTS)
   target_compile_definitions(jmp_core PUBLIC MPVQT_EXTERNAL_EVENTS)
 endif()
+if(MPVQT_C2_DIAGNOSTIC_ONLY)
+  target_compile_definitions(jmp_core PUBLIC MPVQT_C2_DIAGNOSTIC_ONLY)
+endif()
 
 file(GLOB_RECURSE RESOURCE_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/resources/*)
 file(GLOB_RECURSE NATIVE_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/native/*)
@@ -78,6 +81,7 @@ set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/qrc_resources.cpp PROPER
 
 list(APPEND RESOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/qrc_resources.cpp)
 
+if(NOT MPVQT_C2_DIAGNOSTIC_ONLY)
 set(MACOSX_BUNDLE_ICON_FILE jellyfin.icns)
 set(MACOSX_BUNDLE_SHORT_VERSION_STRING ${VERSION_STRING})
 set(MACOSX_BUNDLE_BUNDLE_NAME "Jellyfin")
@@ -169,6 +173,7 @@ qt_add_qml_module(${MAIN_TARGET}
   RESOURCES ${CMAKE_CURRENT_SOURCE_DIR}/ui/RendererLoss.js
   NO_RESOURCE_TARGET_PATH
 )
+endif()
 
 find_library(MINIZIP_LIBRARY minizip)
 if(WIN32)
@@ -237,6 +242,7 @@ if(WIN32 AND MSVC)
   target_link_options(jmp_core INTERFACE /DELAYLOAD:libmpv-2.dll)
 endif()
 
+if(NOT MPVQT_C2_DIAGNOSTIC_ONLY)
 target_link_libraries(${MAIN_TARGET} PRIVATE jmp_core)
 install(TARGETS ${MAIN_TARGET} DESTINATION ${INSTALL_BIN_DIR})
 
@@ -245,3 +251,4 @@ set(LIBPATH ${CMAKE_FIND_ROOT_PATH})
 set(SOURCE_ROOT ${CMAKE_SOURCE_DIR})
 
 include(CompleteBundle)
+endif()
