@@ -23,6 +23,22 @@ RUNTIME = ("test_fault_stop", "test_webclient_transport", "test_webclient_fault_
 STATIC = ("test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state")
 
 
+def clean_windows_helper(log):
+    log = log.replace("\r\n", "\n")
+    markers = (
+        r"^app wait 0 exit 0$",
+        r"^waitResult 0 waitError 0 exitKnown true exitError 0$",
+        r"^activeBeforeKnown true activeBefore 0 activeBeforeError 0$",
+        r"^terminationRequested false terminationSucceeded false terminationError 0$",
+        r"^activeAfterKnown true activeAfter 0 activeAfterError 0 overall pass$",
+        r"^forcedCleanup false; job active processes 0$",
+    )
+    prefixes = ("app wait ", "waitResult ", "activeBeforeKnown ", "terminationRequested ",
+                "activeAfterKnown ", "forcedCleanup ")
+    return (all(len(re.findall(marker, log, re.MULTILINE)) == 1 for marker in markers) and
+            all(sum(line.startswith(prefix) for line in log.splitlines()) == 1 for prefix in prefixes))
+
+
 def artifact(directory, relative):
     path = directory / relative
     root = directory.resolve(strict=True)
@@ -183,7 +199,7 @@ def validate_geometry(directory, report, record):
         matches = re.findall(r"(?m)^window bounds (-?\d+ -?\d+ -?\d+ -?\d+)\s*$", log)
         if len(matches) != 1 or matches[0] != result.get("bounds"):
             raise ValueError(f"windows_geometry: missing or inconsistent bounds geometry-{number}")
-        if "app wait 0 exit 0" not in log or "forcedCleanup false; job active processes 0" not in log:
+        if not clean_windows_helper(log):
             raise ValueError(f"windows_geometry: unclean geometry-{number}")
         if number == 1:
             for marker in ("F11 enter passed", "F11 restore passed", "Alt+Return enter passed",

@@ -262,7 +262,12 @@ class AcceptanceTest(unittest.TestCase):
             data = {"result.json": json.dumps({"case": f"geometry-{number}", "helperExit": 0,
                                                "failures": [], "bounds": "1 2 3 4", "observation": {"exitRequested": True}}),
                     "storage.json": json.dumps({"sections": {"state": {"XPosition": 1}}}),
-                    "console.log": "window bounds 1 2 3 4\napp wait 0 exit 0\nforcedCleanup false; job active processes 0\n" + markers}
+                    "console.log": "window bounds 1 2 3 4\napp wait 0 exit 0\n"
+                    "waitResult 0 waitError 0 exitKnown true exitError 0\n"
+                    "activeBeforeKnown true activeBefore 0 activeBeforeError 0\n"
+                    "terminationRequested false terminationSucceeded false terminationError 0\n"
+                    "activeAfterKnown true activeAfter 0 activeAfterError 0 overall pass\n"
+                    "forcedCleanup false; job active processes 0\n" + markers}
             for name, text in data.items():
                 path = directory / prefix / name
                 write(path, text)

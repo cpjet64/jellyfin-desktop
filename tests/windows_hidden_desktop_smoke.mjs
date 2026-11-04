@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
 import { once } from 'node:events';
+import { cleanHelperLog } from './windows_helper_log.mjs';
 
 const [helper, build, qt, mode] = process.argv.slice(2);
 if (![helper, build, qt].every(value => value && path.isAbsolute(value))) {
@@ -191,8 +192,7 @@ async function runCase(spec) {
 function checkCase(spec, result) {
   const failures = [];
   const { observation, log, helperExit } = result;
-  if ((helperExit !== 0 && !(spec.windowActions && helperExit === 7)) || !log.includes('app wait 0 exit 0') ||
-      !log.includes('forcedCleanup false; job active processes 0')) failures.push('unclean exit');
+  if (!cleanHelperLog(log, helperExit)) failures.push('unclean exit');
   if (observation.error) return [...failures, observation.error];
   if (observation.cleanupError || result.spawnError || result.helperSignal)
     failures.push(observation.cleanupError || result.spawnError || `helper signal ${result.helperSignal}`);

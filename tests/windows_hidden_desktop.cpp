@@ -1,6 +1,8 @@
 #include <windows.h>
 #include <cstdio>
 #include <string>
+#include "windows_helper_outcome.h"
+#include "windows_helper_winapi.h"
 
 struct WindowSearch { DWORD pid; HWND window; };
 
@@ -154,16 +156,57 @@ bool waitForReady()
   return false;
 }
 
-DWORD waitForJob(HANDLE job)
+HelperQuery waitForJob(const HelperWinApi& api, HANDLE job)
 {
-  JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting{};
+  HelperQuery accounting{};
   for (int i = 0; i < 50; ++i) {
-    if (!QueryInformationJobObject(job, JobObjectBasicAccountingInformation, &accounting, sizeof(accounting), nullptr))
-      return static_cast<DWORD>(-1);
-    if (accounting.ActiveProcesses == 0) return 0;
+    accounting = queryActive(api, job);
+    if (!accounting.known || accounting.value == 0) return accounting;
     Sleep(100);
   }
-  return accounting.ActiveProcesses;
+  return accounting;
+}
+
+bool finalizeProcess(HANDLE job, HANDLE process, DWORD timeout, bool actionsOk)
+{
+  HelperObservation outcome;
+  const HelperWinApi api;
+  const DWORD wait = WaitForSingleObject(process, timeout);
+  const DWORD waitError = wait == WAIT_FAILED ? GetLastError() : 0;
+  const HelperQuery exit = queryExit(api, process);
+  outcome.waitSignaled = wait == WAIT_OBJECT_0;
+  outcome.exitKnown = exit.known;
+  outcome.exitCode = exit.value;
+  if (exit.known) std::printf("app wait %lu exit %lu\n", wait, exit.value);
+  else std::printf("app wait %lu exit unknown\n", wait);
+  const HelperQuery before = waitForJob(api, job);
+  outcome.activeBeforeKnown = before.known;
+  outcome.activeBefore = before.value;
+  DWORD terminationError = 0;
+  if (needsTermination(outcome)) {
+    outcome.terminationRequested = true;
+    const HelperQuery termination = terminateOwnedJob(api, job);
+    outcome.terminationSucceeded = termination.known;
+    terminationError = termination.error;
+  }
+  const HelperQuery after = outcome.terminationRequested ? waitForJob(api, job) : before;
+  outcome.activeAfterKnown = after.known;
+  outcome.activeAfter = after.value;
+  const bool success = successfulOutcome(outcome) && actionsOk;
+  std::printf("waitResult %lu waitError %lu exitKnown %s exitError %lu\n", wait, waitError,
+              exit.known ? "true" : "false", exit.error);
+  std::printf("activeBeforeKnown %s activeBefore %lu activeBeforeError %lu\n",
+              before.known ? "true" : "false", before.value, before.error);
+  std::printf("terminationRequested %s terminationSucceeded %s terminationError %lu\n",
+              outcome.terminationRequested ? "true" : "false",
+              outcome.terminationSucceeded ? "true" : "false", terminationError);
+  std::printf("activeAfterKnown %s activeAfter %lu activeAfterError %lu overall %s\n",
+              after.known ? "true" : "false", after.value, after.error, success ? "pass" : "fail");
+  if (after.known)
+    std::printf("forcedCleanup %s; job active processes %lu\n", outcome.terminationRequested ? "true" : "false", after.value);
+  else std::printf("forcedCleanup %s; job active processes unknown\n", outcome.terminationRequested ? "true" : "false");
+  std::fflush(stdout);
+  return success;
 }
 
 int wmain(int argc, wchar_t **argv)
@@ -222,19 +265,7 @@ int wmain(int argc, wchar_t **argv)
     actionsOk = waitForReady() && checkWindowActions(desktop, process.dwProcessId, geometryOnly);
     std::printf("window actions %s\n", actionsOk ? "passed" : "failed"); std::fflush(stdout);
   }
-  const DWORD wait = WaitForSingleObject(process.hProcess, testExecutable ? 60000 : 12000);
-  DWORD exitCode = 0;
-  GetExitCodeProcess(process.hProcess, &exitCode);
-  std::printf("app wait %lu exit %lu\n", wait, exitCode); std::fflush(stdout);
-  DWORD active = waitForJob(job);
-  const bool success = wait == WAIT_OBJECT_0 && exitCode == 0 && active == 0;
-  const bool forced = !success;
-  if (forced) {
-    TerminateJobObject(job, 1);
-    active = waitForJob(job);
-  }
-  std::printf("forcedCleanup %s; job active processes %lu\n", forced ? "true" : "false", active);
-  std::fflush(stdout);
+  const bool success = finalizeProcess(job, process.hProcess, testExecutable ? 60000 : 12000, actionsOk);
   CloseHandle(process.hThread); CloseHandle(process.hProcess); CloseHandle(job); CloseDesktop(desktop);
-  return success && actionsOk ? 0 : 7;
+  return success ? 0 : 7;
 }
