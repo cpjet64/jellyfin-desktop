@@ -10,6 +10,12 @@ public:
   ~DeferredUpdateRelease() { DiagnosticFailureInjection::holdDeferredUpdate = false; }
 };
 
+struct ScopedActiveConnection
+{
+  QMetaObject::Connection value;
+  ~ScopedActiveConnection() { QObject::disconnect(value); }
+};
+
 class ActiveEndObserver
 {
 public:
@@ -98,6 +104,10 @@ void TestC2RetirementNative::exerciseActive(C2aFixture& fixture, PlayerComponent
   };
   QVERIFY(sameBinding());
   QSignalSpy retired(fixture.item, &MpvAbstractItem::renderRetired);
+  ScopedActiveConnection ackConnection{QObject::connect(fixture.item, &MpvAbstractItem::renderRetired,
+    fixture.item, [&hold, generation = fixture.generation](quint64 actual) {
+      if (actual == generation) hold.markAck(actual);
+    }, Qt::DirectConnection)};
   QSignalSpy canceled(&player, &PlayerComponent::canceled);
   QSignalSpy finished(&player, &PlayerComponent::finished);
   QSignalSpy playbackError(&player, &PlayerComponent::error);
@@ -107,20 +117,35 @@ void TestC2RetirementNative::exerciseActive(C2aFixture& fixture, PlayerComponent
   DiagnosticFailureInjection::holdDeferredUpdate = true;
   DiagnosticFailureInjection::deferNextQueuedUpdate = true;
   QTRY_COMPARE_WITH_TIMEOUT(DiagnosticFailureInjection::updatesDeferred.load(), 1, 5000);
-  hold.configure(evidence, fixture.scene.audit().renderThread, fixture.generation);
-  hold.arm();
-  QTRY_VERIFY_WITH_TIMEOUT(hold.entered(), 5000);
+  hold.configure(evidence, fixture.scene.audit().renderThread, fixture.generation, fixture.item->observed);
   hold.observeAndRelease(fixture.generation);
+  QTRY_VERIFY_WITH_TIMEOUT(hold.ready(), 5000);
+  QVERIFY(hold.arm());
+  while (!hold.entered() && !hold.released()) std::this_thread::yield();
+  const bool matchingEntry = hold.entered() &&
+    DiagnosticFailureInjection::callbackGeneration.load() == fixture.generation;
   const qint64 requestedAt = QtThreaded::monotonicNanos();
-  hold.markRequestEntered();
-  fixture.item->requestRenderRetirement(fixture.generation);
-  hold.markRequestReturned();
-  QTRY_COMPARE_WITH_TIMEOUT(retired.count(), 1, 10000);
-  hold.markAck();
-  const qint64 acknowledgedAt = QtThreaded::monotonicNanos();
+  if (matchingEntry && !hold.released()) {
+    hold.markRequestEntered();
+    fixture.item->requestRenderRetirement(fixture.generation);
+    hold.markRequestReturned();
+  }
+  while (!hold.released()) std::this_thread::yield();
+  if (matchingEntry) {
+    const auto accountingDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!DiagnosticFailureInjection::callbackExitedOrder.load() &&
+           std::chrono::steady_clock::now() < accountingDeadline) std::this_thread::yield();
+  }
   hold.join();
+  QVERIFY2(hold.snapshotBeforeAssert(), "Could not preserve pre-assert snapshot");
+  QVERIFY2(hold.workerSnapshotSucceeded(), "Could not preserve worker snapshot");
+  QVERIFY(matchingEntry);
+  QVERIFY(DiagnosticFailureInjection::callbackExitedOrder.load() > 0);
+  QVERIFY(hold.outcome.load() == C2aCallbackHold::Outcome::Observed);
+  QVERIFY(hold.heldAtUnregister.load());
+  QTRY_COMPARE_WITH_TIMEOUT(retired.count(), 1, 10000);
   hold.snapshotGui();
-  QVERIFY(hold.outcome.load() == C2aCallbackHold::Outcome::Observed && hold.heldAtUnregister.load());
+  const qint64 acknowledgedAt = QtThreaded::monotonicNanos();
   QCOMPARE(hold.observedGeneration.load(), fixture.generation);
   QVERIFY(hold.observedThread.load() && hold.observedUnregisterThread.load());
   QVERIFY(DiagnosticFailureInjection::callbackEnteredOrder.load() < DiagnosticFailureInjection::unregisterEnteredOrder.load());
