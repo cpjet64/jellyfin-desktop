@@ -24,6 +24,21 @@ This draft still requires independent review and publication before use. No
 large release asset was acquired and no helper was run. The CLI argument builder is for a direct
 invocation only, not mpv's unordered option map.
 
+The ZIP inventory prechecks the end record using at most 65,557 bytes and
+admits only a single-entry central directory of at most 8 MiB before Python's
+`ZipFile` parses it. This bounds declared central-directory bytes and entry
+count; it is not a streaming directory parser or a measured process-memory
+ceiling. Acquisition verifies the complete exact-size ZIP hash first.
+
+For a later serial macOS run, verify the actual Git root and common directory,
+commit and push this reviewed harness, inspect the exact checkout and its
+`.git` form, and choose a fresh empty directory under its ignored `deps` tree.
+Check its canonical ancestors, owner and private mode against the harness
+contract, account for all concurrent commitments and require at least 4 GiB
+remaining, then invoke the acquisition once with that measured reservation.
+Record the shared lease, exact paths and resulting hashes. Do not assume an
+existing checkout or directory already satisfies these conditions.
+
 Before acquisition, independently review serialized admission, at least 4 GiB
 free space after concurrent commitments, the 2 GiB complete workspace ceiling,
 the 96 MiB acquisition and 8 MiB metadata ceilings, and failure-safe publication.

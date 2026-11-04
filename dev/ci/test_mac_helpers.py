@@ -3,6 +3,7 @@ import io
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 import mac_helpers
@@ -78,9 +79,37 @@ class MacHelpersTests(unittest.TestCase):
             root = Path(directory)
             archive = root / "bad.zip"
             archive.write_bytes(b"not a zip")
-            with self.assertRaises(zipfile.BadZipFile):
+            with self.assertRaises(ValueError):
                 mac_helpers.extract_deno(archive, root / "stage", "0" * 64, 10)
             self.assertFalse((root / "stage").exists())
+
+    def test_zip_directory_admission_precedes_parser(self):
+        with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:
+            root = Path(directory)
+            archive = root / "deno.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("deno", b"x")
+            raw = bytearray(archive.read_bytes())
+            end = raw.rindex(b"PK\x05\x06")
+            raw[end + 10:end + 12] = b"\xff\xff"
+            archive.write_bytes(raw)
+            with patch.object(mac_helpers.zipfile, "ZipFile") as parser:
+                with self.assertRaises(ValueError):
+                    mac_helpers.extract_deno(archive, root / "stage", "0" * 64, 10)
+            parser.assert_not_called()
+            self.assertFalse((root / "stage").exists())
+
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("deno", b"x")
+                zf.writestr("other", b"y")
+            raw = bytearray(archive.read_bytes())
+            end = raw.rindex(b"PK\x05\x06")
+            raw[end + 8:end + 12] = b"\x01\x00\x01\x00"
+            archive.write_bytes(raw)
+            with patch.object(mac_helpers.zipfile, "ZipFile") as parser:
+                with self.assertRaises(ValueError):
+                    mac_helpers.extract_deno(archive, root / "stage", "0" * 64, 10)
+            parser.assert_not_called()
 
     def test_encrypted_and_existing_stage_are_rejected(self):
         with tempfile.TemporaryDirectory(dir=SCRATCH) as directory:

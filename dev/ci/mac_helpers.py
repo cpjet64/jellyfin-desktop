@@ -8,9 +8,37 @@ import errno
 import os
 from pathlib import Path
 import stat
+import struct
 import zipfile
 
 CHUNK = 1024 * 1024
+
+
+def check_zip_directory(archive):
+    """Reject large or multi-entry central directories before ZipFile parses."""
+    with open(archive, "rb") as source:
+        source.seek(0, os.SEEK_END)
+        length = source.tell()
+        source.seek(max(0, length - 65557))
+        tail = source.read(65557)
+    offset = tail.rfind(b"PK\x05\x06")
+    if offset < 0 or len(tail) - offset < 22:
+        raise ValueError("ZIP end record missing")
+    _, disk, directory_disk, disk_entries, entries, size, start, comment = struct.unpack_from(
+        "<4s4H2LH", tail, offset)
+    absolute_end = length - len(tail) + offset
+    if (disk or directory_disk or disk_entries != 1 or entries != 1 or
+            size > 8 * 1024 * 1024 or start + size != absolute_end or
+            offset + 22 + comment != len(tail)):
+        raise ValueError("ZIP directory exceeds bounded single-entry policy")
+    with open(archive, "rb") as source:
+        source.seek(start)
+        record = source.read(46)
+    if len(record) != 46 or record[:4] != b"PK\x01\x02":
+        raise ValueError("ZIP central directory record missing")
+    name_len, extra_len, comment_len = struct.unpack_from("<3H", record, 28)
+    if 46 + name_len + extra_len + comment_len != size:
+        raise ValueError("ZIP must contain exactly one central directory record")
 
 
 def storage_exhausted(exc):
@@ -55,6 +83,7 @@ def extract_deno(archive, stage, expected_sha256, max_expanded):
     stage.mkdir(mode=0o700)  # exclusive; parents must already exist
     destination = stage / "deno"
     try:
+        check_zip_directory(archive)
         with zipfile.ZipFile(archive) as zf:
             entries = zf.infolist()
             if len(entries) != 1:
