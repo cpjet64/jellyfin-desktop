@@ -237,6 +237,10 @@ void TestWindowsSmtcLifetime::retainedAfterClose()
       QVERIFY(taskbar.m_initialized);
       snapshot = controls->retained;
       weak = taskbar.m_admission;
+      taskbar.shutdownMediaTransportControls();
+      taskbar.shutdownMediaTransportControls();
+      QCOMPARE(controls->removes, 1);
+      QCOMPARE(controls->removed.value, 4812LL);
     }
     QCOMPARE(controls->removes, 1);
     QCOMPARE(controls->removed.value, 4812LL);
