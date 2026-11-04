@@ -8,8 +8,11 @@ proposal. The selected reference is Homebrew core commit
 
 ## Inputs and boundaries
 
-The observed host is x86_64 Darwin 25.6.0 with selected SDK 26.5 and Apple
-clang 21; C++ and Objective-C++ Foundation link probes passed. CMake 4.4.3,
+On 2026-11-04, the W403 probe observed x86_64 Darwin kernel 25.6.0 with selected
+SDK 26.5 and Apple clang 21; C++ and Objective-C++ Foundation link probes
+passed. A later W419 observation that day reported macOS product 26.6.2,
+build 25G83, and Darwin kernel 25.6.0. These are dated observations, not a
+fresh host-state claim. CMake 4.4.3,
 Ninja 1.13.2, pkg-config 3.0.6 and Python 3.13.15 were observed. These are
 external host build-tool candidates, not formula-version equivalence; their
 identities and suitability for each generator must be checked before use.
@@ -42,8 +45,10 @@ failure. Do not alter the host's global tools, configuration or services.
 [FFmpeg inputs](macos-library-ffmpeg-lock.md) record the discovered inputs.
 The local patch index includes candidates outside the helper-substituted graph;
 do not apply a patch merely because it appears there. The source and resource
-tables still need a formula-by-formula conditional review before becoming a
-complete lock. Ten selected Git archives have no published archive hash in the
+tables have undergone the four static Tahoe formula-condition audits linked
+below. Derived commands, prefix rewrites, build backends and source-contained
+subprojects still require review before they form a complete executable lock.
+Ten selected Git archives have no published archive hash in the
 formula; their bounded acquisition is described separately and remains held.
 
 Retain mpv's libmpv, JavaScript, LuaJIT, libarchive, uchardet and Vulkan
