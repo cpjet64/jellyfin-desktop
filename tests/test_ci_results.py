@@ -20,7 +20,14 @@ class TestQtReports(unittest.TestCase):
             RESULTS.check_qtest("unused")
 
     def test_valid_report_passes(self):
-        self.check("Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted\n********* Finished testing of Example *********\n")
+        self.check("PASS   : Example::initTestCase()\nPASS   : Example::test()\nPASS   : Example::cleanupTestCase()\n"
+                   "Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted\n********* Finished testing of Example *********\n")
+
+    def test_rejects_totals_pass_count_mismatch(self):
+        text = ("PASS   : Example::initTestCase()\nPASS   : Example::test()\nPASS   : Example::cleanupTestCase()\n"
+                "Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted\n********* Finished testing of Example *********\n")
+        with self.assertRaisesRegex(ValueError, "Incomplete or unsuccessful QTest"):
+            self.check(text)
 
     def test_failed_skipped_empty_and_short_reports_fail(self):
         for text in ("", "Totals: 2 passed, 0 failed, 0 skipped",

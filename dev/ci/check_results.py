@@ -12,9 +12,10 @@ def check_qtest(path):
     totals = re.findall(r"(?m)^Totals:\s*(\d+) passed,\s*(\d+) failed,\s*(\d+) skipped\b[^\r\n]*$", text)
     footer = r"\*{9} Finished testing of [A-Za-z_][A-Za-z_0-9]* \*{9}"
     failure = re.search(r"(?m)^(?:FAIL!|SKIP\s*:)", text)
+    passes = re.findall(r"(?m)^PASS\s*:\s*[^\r\n]+$", text)
     if (len(lines) < 2 or len(totals) != 1 or not lines[-2].startswith("Totals:") or
             not re.fullmatch(footer, lines[-1]) or failure or int(totals[0][0]) < 3 or
-            int(totals[0][1]) or int(totals[0][2])):
+            int(totals[0][1]) or int(totals[0][2]) or len(passes) != int(totals[0][0])):
         raise ValueError(f"Incomplete or unsuccessful QTest report: {path}")
 
 

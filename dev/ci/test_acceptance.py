@@ -178,6 +178,19 @@ class AcceptanceTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incorrect scenario evidence images"):
             self.validate()
 
+    def test_wrong_footer_extra_case_and_total_are_rejected(self):
+        path = self.base / "linux-static/offscreen/playing/qtest.txt"
+        original = path.read_text(encoding="utf-8")
+        examples = ((original.replace("Finished testing of TestRendererLossOffscreen", "Finished testing of WrongClass"),
+                     "Incorrect QTest footer"),
+                    (original.replace("Totals:", "PASS   : OtherClass::other()\nTotals:").replace("Totals: 3 passed", "Totals: 4 passed"),
+                     "Unexpected named QTest PASS"),
+                    (original.replace("Totals: 3 passed", "Totals: 4 passed"), "Incomplete or unsuccessful QTest"))
+        for text, expected in examples:
+            write(path, text)
+            with self.subTest(expected=expected), self.assertRaisesRegex(ValueError, expected):
+                self.validate()
+
     def test_build_manifest_rejects_missing_malformed_and_mismatched_provenance(self):
         path = self.base / "linux-static/build-manifest.json"
         original = json.loads(path.read_text())
