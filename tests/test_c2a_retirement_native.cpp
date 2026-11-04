@@ -19,6 +19,8 @@
 #include "c2/DiagnosticFailureInjection.h"
 #include "c2a_finalizer.h"
 #include "c2a_fixture.h"
+#include "c2a_callback_hold.h"
+#include "c2a_fixture.h"
 #include "mpv_test_bootstrap.h"
 #include "mpv_test_profile.h"
 #include "player/PlayerComponent.h"
@@ -70,6 +72,9 @@ bool saveCreateEvidence(const QString& evidence, const QJsonObject& observed,
 }
 }
 
+struct C2aRenderState;
+namespace { class ActiveEndObserver; }
+
 class TestC2RetirementNative : public QObject
 {
   Q_OBJECT
@@ -78,7 +83,25 @@ private slots:
   void cleanup();
   void createFailure();
   void guardSentinel();
+  void renderFailure();
+  void activeRetirement();
+  void terminalRetirement();
+  void stopWithPendingHook();
+private:
+  void verifyRenderFailure(C2aFixture&, PlayerComponent&, const QString&, const QString&);
+  void injectRenderFailure(C2aFixture&, PlayerComponent&, C2aRenderState&, const QString&);
+  void retireRenderFailure(C2aFixture&, PlayerComponent&, C2aRenderState&, const QString&);
+  void exerciseActive(C2aFixture&, PlayerComponent&, const QString&, const QString&);
+  void finishActive(C2aFixture&, PlayerComponent&, QSignalSpy&, QSignalSpy&, QSignalSpy&,
+                    const QString&, const C2aCallbackHold&, ActiveEndObserver&, qint64, qint64);
+  void runTerminalRetirement(PlayerComponent&, C2aFixture&, const QString&);
+  void runTerminalExperiment(C2aFixture&, const std::function<bool()>&, QJsonObject&, const QString&);
 };
+
+#include "c2a_render_case.h"
+#include "c2a_active_case.h"
+#include "c2a_terminal_case.h"
+#include "c2a_hook_case.h"
 
 void TestC2RetirementNative::init()
 {
