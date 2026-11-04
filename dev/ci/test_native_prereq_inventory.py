@@ -198,6 +198,26 @@ class InventoryTest(unittest.TestCase):
         self.assertEqual(result["uid"], 501)
         self.assertEqual(result["existing_gui_session"], "BLOCKED: no GUI")
 
+    def test_mac_metadata_queries_named_modules_without_updating(self):
+        calls = []
+        def query(args, timeout=15):
+            calls.append(args)
+            return {"exit": 1, "output": "unavailable"}
+        with patch.object(inventory.shutil, "which", side_effect=lambda name: "/usr/bin/" + name), \
+             patch.object(inventory, "mac_metadata_command", side_effect=query):
+            report = inventory.mac_build_metadata()
+        self.assertEqual(set(report["modules"]), set(inventory.MAC_MODULES))
+        self.assertIn(["/usr/bin/pkg-config", "--modversion", "libavcodec"], calls)
+        self.assertFalse(any("update" in arg or "install" in arg for call in calls for arg in call))
+        self.assertEqual(report["tools"]["meson"]["path"], "/usr/bin/meson")
+
+    def test_mac_metadata_respects_exhausted_budget(self):
+        with patch.object(inventory, "DEADLINE", 10), patch.object(inventory.time, "monotonic", return_value=11), \
+             patch.object(inventory.subprocess, "run") as launch:
+            result = inventory.mac_metadata_command(["/usr/bin/meson", "--version"])
+        self.assertEqual(result["error"], "collector_budget_exhausted")
+        launch.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

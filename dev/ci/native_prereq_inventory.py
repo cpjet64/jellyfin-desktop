@@ -19,6 +19,7 @@ PACKAGES = ("libmpv-dev", "libmpv2", "xvfb", "mesa-utils")
 GROUPS = {"runtime": ("libmpv2",), "development": ("libmpv-dev", "libmpv2"),
           "display": ("xvfb", "mesa-utils")}
 TOOLS = ("cc", "c++", "cmake", "ninja", "pkg-config")
+MAC_MODULES = ("libavcodec", "libavformat", "libavutil", "libswresample", "libswscale", "libass", "libplacebo")
 SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+:~_-]*$")
 BUDGET_SECONDS = 540
 DEADLINE = None
@@ -220,6 +221,41 @@ def linux_inventory():
     return result
 
 
+def mac_metadata_command(args, timeout=15):
+    remaining = remaining_budget()
+    if remaining is not None and remaining <= 0:
+        return {"exit": None, "error": "collector_budget_exhausted"}
+    try:
+        result = subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                timeout=min(timeout, remaining) if remaining is not None else timeout,
+                                env={**os.environ, "HOMEBREW_NO_AUTO_UPDATE": "1", "LC_ALL": "C"})
+        return {"exit": result.returncode, "output": result.stdout[:8192]}
+    except (OSError, subprocess.SubprocessError) as error:
+        return {"exit": None, "error": type(error).__name__}
+
+
+def mac_build_metadata():
+    result = {"tools": {}, "modules": {}}
+    for name in ("meson", "ninja", "pkg-config", "cc", "c++"):
+        path = shutil.which(name)
+        result["tools"][name] = {"path": path, "version": mac_metadata_command([path, "--version"]) if path else None}
+    pkg = shutil.which("pkg-config")
+    for name in MAC_MODULES:
+        entry = {}
+        if pkg:
+            for key, option in (("version", "--modversion"), ("include", "--variable=includedir"),
+                                ("library", "--variable=libdir"), ("metadata", "--variable=pcfiledir")):
+                entry[key] = mac_metadata_command([pkg, option, name])
+            library = entry["library"]
+            directory = Path(library.get("output", "").strip()) if library.get("exit") == 0 else None
+            if directory and directory.is_absolute() and directory.is_dir():
+                stem = name[3:] if name.startswith("lib") else name
+                entry["dylibs"] = [{"path": str(path), "architecture": mac_metadata_command(["lipo", "-archs", str(path)])}
+                                    for path in sorted(directory.glob("lib" + stem + "*.dylib"))[:16] if path.is_file()]
+        result["modules"][name] = entry if pkg else {"error": "pkg-config unavailable"}
+    return result
+
+
 def mac_inventory():
     result = {name: run(args) for name, args in {
         "os": ["sw_vers"], "architecture": ["arch"], "developer": ["xcode-select", "-p"],
@@ -227,6 +263,7 @@ def mac_inventory():
         "clt": ["pkgutil", "--pkg-info", "com.apple.pkg.CLTools_Executables"],
         "console_uid": ["stat", "-f", "%u", "/dev/console"]}.items()}
     result["uid"] = os.getuid()
+    result["build_dependencies"] = mac_build_metadata()
     remaining = remaining_budget()
     if remaining is not None and remaining < 31:
         result["existing_gui_session"] = "BLOCKED: insufficient collector budget for bounded GUI verification"
