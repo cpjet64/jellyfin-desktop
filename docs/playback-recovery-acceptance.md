@@ -18,13 +18,12 @@ not establish recovery from loss of the native OpenGL context or a GPU reset.
   fresh-controller AC3 correction preserves the old core and configures the new
   core exactly once. Renderer retirement must preserve the existing binding,
   event owner, hook continuations, and AC3 configuration.
-- C2a is an approved, controlled retirement experiment, not automatic recovery.
-  Its proposed build option must default to OFF and require bundled MpvQt with
+- C2a has accepted evidence for controlled retirement, not automatic recovery.
+  Its diagnostic build option defaults to OFF and requires bundled MpvQt with
   external event ownership. System MpvQt builds remain outside this capability.
-- C2a reports typed create/render failures and renderer generations. It accepts
-  an explicit retirement request and acknowledges only an actual, safe free.
-  Reconstructing a renderer, reloading media, and automatic retries need a later
-  reviewed implementation and acceptance evidence.
+- C2a reports typed create/render failures and renderer generations. Its
+  controlled retirement acknowledges only an actual, safe free. This evidence
+  does not demonstrate recovery from an actually lost context.
 - C2a runs only in a diagnostic build without application or package targets.
   The fixture retains the whole item, window, core, original GL context, and
   surface until retirement completes. It does not establish a production
@@ -62,6 +61,28 @@ of restored picture or continuity. Its callback setter invokes callbacks while
 holding the same lock used for callback replacement; application-queued work
 still needs its own lifetime and generation protection.
 
+## C2b diagnostic reconstruction obligations
+
+C2b is approved only as a diagnostic experiment: one explicit replacement of
+retired generation G1 with G2 and restoration of a locally generated clip. It
+does not authorize production automatic recovery or imply that a lost GL
+context can be recovered. Keep the existing core, C1 binding, event owner,
+and original GL context; G1 must be terminal and its shared owner retained
+until outstanding work is safe. Create G2 on the actual owning render thread.
+
+Before retirement, capture the local playback recipe, position, pause state,
+and latest user intent. Restore a paused clip first and verify its visible
+image and position before any requested resume. Permit one owned replay only
+when retirement actually made the original playback terminal; do not duplicate
+a still-active playback. Reject stale callbacks and events from G1, and honor
+Stop during retirement or restoration without restarting media. Verify the
+actual Player hook continuation returns; a secondary-client hook is not a
+substitute. Report failures once per generation and perform legal cleanup.
+
+Three static diagnostic jobs are forthcoming. They are distinct from the six
+required native platform/configuration obligations below, and neither set
+alone establishes the requested product behavior.
+
 Pinned source: [mpv render contract](https://github.com/mpv-player/mpv/blob/01e2533f3143b8940857ca419b0b367f583e05ca/include/mpv/render.h)
 and [render-context implementation](https://github.com/mpv-player/mpv/blob/01e2533f3143b8940857ca419b0b367f583e05ca/video/out/vo_libmpv.c).
 
@@ -95,6 +116,9 @@ different paths; neither silently substitutes for the other.
   permanently lost contexts, and a production restart policy remain unproved.
 - Restoration must later preserve playback identity and current user intent,
   including paused playback, Stop, and changes made while recovery is pending.
+- Adoption of an existing native session by a replacement web document remains
+  unresolved. So does the race between healthy web `removeMediaDialog` and a
+  native Stop; neither is established by the diagnostic experiment.
 - Shared Windows MpvQt imports libmpv eagerly. Its package does not inherit the
   bundled static build's non-AVX2 fallback claim.
 - Native Linux/macOS execution, desktop-control receipts, exact final CI proof,
