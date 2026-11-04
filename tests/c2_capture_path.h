@@ -25,7 +25,7 @@ inline C2PathValue c2PathValue(const QString& input, C2PathPlatform platform)
   bool fileUrl = false;
   if (input.startsWith(QStringLiteral("file:"), Qt::CaseInsensitive)) {
     const QUrl url = QUrl::fromEncoded(input.toUtf8(), QUrl::StrictMode);
-    if (!url.isValid() || !url.isLocalFile() || !url.host().isEmpty() || url.hasQuery() || url.hasFragment()) return {};
+    if (!url.isValid() || !url.isLocalFile() || !url.authority().isEmpty() || url.hasQuery() || url.hasFragment()) return {};
     path = url.path(QUrl::FullyDecoded);
     fileUrl = true;
     if (platform == C2PathPlatform::Windows && path.startsWith('/') && c2DrivePath(path.mid(1))) path.remove(0, 1);

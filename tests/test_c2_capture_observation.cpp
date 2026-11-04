@@ -30,11 +30,19 @@ void TestC2CaptureObservation::windowsPaths()
   QVERIFY(!c2SamePath("C:/x/a", "C:/y/a", P::Windows));
   QVERIFY(!c2SamePath("C:/x/a", "D:/x/a", P::Windows));
   QVERIFY(!c2SamePath("c:/x/a", "C:/x/a", P::Windows));
+  for (const auto& text : {QStringLiteral("file://user@/C:/x/a"), QStringLiteral("file://:80/C:/x/a")}) {
+    const QUrl url = QUrl::fromEncoded(text.toUtf8(), QUrl::StrictMode);
+    QVERIFY(url.isValid());
+    QVERIFY(url.isLocalFile());
+    QVERIFY(url.host().isEmpty());
+    QVERIFY(!url.authority().isEmpty());
+  }
   for (const QString& bad : {QStringLiteral("C:relative"), QStringLiteral("/rooted"),
        QStringLiteral("\\\\server\\share\\a"), QStringLiteral("\\\\?\\C:\\a"),
        QStringLiteral("//./C:/a"), QStringLiteral("file://server/share/a"),
        QStringLiteral("https://example/a"), QStringLiteral("C:/x/http://a"),
-       QStringLiteral("file:///C:/x/%00a")})
+       QStringLiteral("file:///C:/x/%00a"), QStringLiteral("file://user@/C:/x/a"),
+       QStringLiteral("file://:80/C:/x/a")})
     QVERIFY(!c2PathValue(bad, P::Windows).valid);
 #ifdef Q_OS_WIN
   QVERIFY(c2SamePath(QUrl::fromLocalFile(expected).toString(QUrl::FullyEncoded), native, P::Windows));
