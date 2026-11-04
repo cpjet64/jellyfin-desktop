@@ -206,7 +206,8 @@ class InventoryTest(unittest.TestCase):
         with patch.object(inventory.shutil, "which", side_effect=lambda name: "/usr/bin/" + name), \
              patch.object(inventory, "mac_metadata_command", side_effect=query):
             report = inventory.mac_build_metadata()
-        self.assertEqual(set(report["modules"]), set(inventory.MAC_MODULES))
+        self.assertEqual(set(report["modules"]), {"libavcodec", "libavformat", "libavutil", "libswresample",
+                                                   "libswscale", "libass", "libplacebo"})
         self.assertIn(["/usr/bin/pkg-config", "--modversion", "libavcodec"], calls)
         self.assertFalse(any("update" in arg or "install" in arg for call in calls for arg in call))
         self.assertEqual(report["tools"]["meson"]["path"], "/usr/bin/meson")
