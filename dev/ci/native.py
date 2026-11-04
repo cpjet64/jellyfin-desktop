@@ -196,6 +196,10 @@ def prepare_linux_sdk():
 
 
 def portable_checks():
+    command("qga-terminal-tests", [sys.executable, "dev/ci/test_qga_terminal.py"])
+    command("mac-sdist-static-tests", [sys.executable, "dev/ci/test_macos_sdist_static.py"])
+    command("mac-sdist-supervisor-tests", [sys.executable, "dev/ci/test_macos_sdist_supervise.py"])
+    command("linux-qt-cache-tests", [sys.executable, "dev/ci/test_linux_qt_cache.py"])
     command("mac-carchive-tests", [sys.executable, "dev/ci/test_mac_carchive.py"])
     command("mac-helper-tests", [sys.executable, "dev/ci/test_mac_helpers.py"])
     command("mac-helper-acquisition-tests", [sys.executable, "dev/ci/test_mac_helpers_acquire.py"])
