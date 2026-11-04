@@ -1,4 +1,5 @@
 import io
+import builtins
 import errno
 import gzip
 import hashlib
@@ -9,6 +10,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 import macos_sdist_static as subject
+
+
+def setUpModule():
+    (subject.REPO / "deps").mkdir(exist_ok=True)
+
+
+class SyntheticGroup(Exception):
+    def __init__(self, message, exceptions):
+        super().__init__(message)
+        self.exceptions = exceptions
 
 
 class StaticInspectionTests(unittest.TestCase):
@@ -27,7 +38,8 @@ class StaticInspectionTests(unittest.TestCase):
         outer.__cause__ = wrapped
         full.__context__ = outer
         self.assertTrue(subject.storage_failure(outer))
-        self.assertTrue(subject.storage_failure(ExceptionGroup("group", [RuntimeError("x"), full])))
+        group_type = getattr(builtins, "ExceptionGroup", SyntheticGroup)
+        self.assertTrue(subject.storage_failure(group_type("group", [RuntimeError("x"), full])))
         self.assertFalse(subject.storage_failure(urllib.error.URLError("TLS failure")))
 
     def archive(self, directory, entries):

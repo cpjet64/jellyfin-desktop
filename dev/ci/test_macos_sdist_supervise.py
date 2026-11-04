@@ -1,4 +1,5 @@
 import ast
+import builtins
 import errno
 import hashlib
 import json
@@ -8,6 +9,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 import macos_sdist_supervise as subject
+
+
+def setUpModule():
+    (subject.REPO / "deps").mkdir(exist_ok=True)
+
+
+class SyntheticGroup(Exception):
+    def __init__(self, message, exceptions):
+        super().__init__(message)
+        self.exceptions = exceptions
 
 
 class FakeProcess:
@@ -36,7 +47,8 @@ class SupervisorTests(unittest.TestCase):
         wrapped.__context__ = full
         full.__cause__ = wrapped
         self.assertTrue(subject.storage_failure(wrapped))
-        self.assertTrue(subject.storage_failure(ExceptionGroup("group", [RuntimeError("x"), full])))
+        group_type = getattr(builtins, "ExceptionGroup", SyntheticGroup)
+        self.assertTrue(subject.storage_failure(group_type("group", [RuntimeError("x"), full])))
         self.assertFalse(subject.storage_failure(RuntimeError("other")))
 
     def test_worker_has_no_process_or_dynamic_execution_calls(self):
@@ -53,8 +65,10 @@ class SupervisorTests(unittest.TestCase):
 
     def test_timeout_kills_and_reaps_exact_child(self):
         child = FakeProcess(True)
+        windows_no_window = 0x08000000
         with tempfile.TemporaryDirectory(dir=subject.REPO / "deps") as directory:
-            with patch.object(subject.subprocess, "Popen", return_value=child) as launch, \
+            with patch.object(subject.subprocess, "CREATE_NO_WINDOW", windows_no_window, create=True), \
+                    patch.object(subject.subprocess, "Popen", return_value=child) as launch, \
                     patch.object(subject.time, "monotonic", side_effect=[0, 181, 181]):
                 result = subject.run_worker(Path(directory))
         self.assertTrue(child.killed)
@@ -62,7 +76,7 @@ class SupervisorTests(unittest.TestCase):
         self.assertTrue(result["child_reaped"])
         self.assertEqual(result["child_pid"], 1234)
         self.assertEqual(launch.call_args.args[0][1:4], ["-I", "-S", "-B"])
-        self.assertEqual(launch.call_args.kwargs["creationflags"], subject.subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(launch.call_args.kwargs["creationflags"], windows_no_window)
 
     def test_storage_failure_writes_no_receipt_or_cleanup(self):
         with tempfile.TemporaryDirectory(dir=subject.REPO / "deps") as directory:
