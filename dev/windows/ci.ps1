@@ -153,7 +153,14 @@ $env:WINDOWS_VCREDIST_EXE = "$deps/vc_redist.x64.exe"
 Run-Native $venvPython @('tests/windows_installer_compile_test.py')
 Run-Native $venvPython @('tests/test_bundle_paths.py')
 Run-Native $venvPython @('tests/test_windows_package_freshness.py')
-Run-Native $venvPython @('tests/test_mpvqt_shared_patch.py')
+$previousMpvQtTestSource = $env:MPVQT_TEST_SOURCE
+try {
+    $env:MPVQT_TEST_SOURCE = "$root/external/mpvqt"
+    Run-Native $venvPython @('tests/test_mpvqt_shared_patch.py')
+    Run-Native $venvPython @('tests/test_mpvqt_c2_patch.py')
+} finally {
+    $env:MPVQT_TEST_SOURCE = $previousMpvQtTestSource
+}
 Run-Native $found.Node @('--test', 'tests/test_inputPlugin.js')
 Run-Native $found.Node @('--test', 'tests/test_windows_smoke_result.mjs')
 Run-Native $found.Node @('tests/windows_hidden_desktop_fixture.mjs')

@@ -11,7 +11,7 @@ import native
 
 class NativeOrderTest(unittest.TestCase):
     def exercise(self, available, blocked=False, system="Linux", mode="static", node_available=True,
-                 smoke_failed=False):
+                 smoke_failed=False, c2_failed=False, source_failed=False):
         events = []
         found = {key: "/tool" for key in ("cmake", "ctest", "ninja", "node", "pkg-config", "git", "c++")}
         found["cmake"] = "/tool" if available else None
@@ -20,6 +20,12 @@ class NativeOrderTest(unittest.TestCase):
             events.append(name)
             if name == "windows-smoke-result-tests" and smoke_failed:
                 raise RuntimeError("smoke regression failed")
+            if name == "c2-patch-tests" and c2_failed:
+                raise RuntimeError("c2 regression failed")
+        def verify_source():
+            events.append("verify-mpvqt-source")
+            if source_failed:
+                raise RuntimeError("missing mpvqt source")
         def bootstrap(requested, destination):
             events.append("bootstrap")
             expected = ({"cmake"} if not available else set()) | ({"node"} if not node_available else set())
@@ -41,6 +47,7 @@ class NativeOrderTest(unittest.TestCase):
              patch.object(native, "bootstrap", side_effect=bootstrap), \
              patch.object(native.shutil, "which", return_value="/job/bin/cmake"), \
              patch.object(native, "portable_checks", side_effect=lambda: events.append("portable")), \
+             patch.object(native, "verify_mpvqt_source", side_effect=verify_source), \
              patch.object(native, "command", side_effect=command), \
              patch.object(native, "run_stages", side_effect=lambda *_: events.append("stages")):
             if blocked:
@@ -49,16 +56,20 @@ class NativeOrderTest(unittest.TestCase):
             elif smoke_failed:
                 with self.assertRaisesRegex(RuntimeError, "smoke regression failed"):
                     native.main()
+            elif c2_failed or source_failed:
+                with self.assertRaisesRegex(RuntimeError, "c2 regression failed|missing mpvqt source"):
+                    native.main()
             else:
                 native.main()
         return events
 
     def test_bootstrap_before_required_cmake_check(self):
-        self.assertEqual(self.exercise(False), ["portable", "native-prereq-inventory", "bootstrap", "windows-smoke-result-tests",
+        self.assertEqual(self.exercise(False), ["portable", "native-prereq-inventory", "bootstrap", "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests", "windows-smoke-result-tests",
                                                 "explicit-mpv-cmake-tests", "stages"])
 
     def test_existing_cmake_still_runs_required_check(self):
         self.assertEqual(self.exercise(True), ["portable", "native-prereq-inventory",
+                                               "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests",
                                                "windows-smoke-result-tests",
                                                "explicit-mpv-cmake-tests", "stages"])
 
@@ -67,11 +78,11 @@ class NativeOrderTest(unittest.TestCase):
 
     def test_macos_system_still_runs_required_check(self):
         self.assertEqual(self.exercise(True, system="Darwin", mode="system"),
-                         ["portable", "native-prereq-inventory", "windows-smoke-result-tests", "explicit-mpv-cmake-tests", "stages"])
+                         ["portable", "native-prereq-inventory", "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests", "windows-smoke-result-tests", "explicit-mpv-cmake-tests", "stages"])
 
     def test_bootstrapped_node_precedes_required_smoke_test(self):
         self.assertEqual(self.exercise(True, node_available=False),
-                         ["portable", "native-prereq-inventory", "bootstrap", "windows-smoke-result-tests",
+                         ["portable", "native-prereq-inventory", "bootstrap", "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests", "windows-smoke-result-tests",
                           "explicit-mpv-cmake-tests", "stages"])
 
     def test_failed_node_bootstrap_blocks_smoke_test(self):
@@ -80,7 +91,13 @@ class NativeOrderTest(unittest.TestCase):
 
     def test_failed_smoke_test_blocks_cmake_check_and_stages(self):
         self.assertEqual(self.exercise(True, smoke_failed=True),
-                         ["portable", "native-prereq-inventory", "windows-smoke-result-tests"])
+                         ["portable", "native-prereq-inventory", "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests", "windows-smoke-result-tests"])
+
+    def test_missing_source_and_failed_c2_stop_later_checks(self):
+        self.assertEqual(self.exercise(True, source_failed=True),
+                         ["portable", "native-prereq-inventory", "verify-mpvqt-source"])
+        self.assertEqual(self.exercise(True, c2_failed=True),
+                         ["portable", "native-prereq-inventory", "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests"])
 
 
 if __name__ == "__main__":

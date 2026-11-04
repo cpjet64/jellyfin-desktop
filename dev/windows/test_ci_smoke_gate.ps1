@@ -23,4 +23,16 @@ $failed = $false
 try { Invoke-Expression $gate[0].Extent.Text }
 catch { $failed = $_.Exception.Message -match 'failed with exit code 19' }
 if (-not $failed) { throw 'Smoke-result failure did not propagate' }
+$c2gate = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
+    $node.GetCommandName() -eq 'Run-Native' -and $node.Extent.Text -match 'test_mpvqt_c2_patch\.py' }, $true)
+if ($c2gate.Count -ne 1) { throw 'Expected one C2 patch gate' }
+$venvPython = 'Invoke-FakeNode'
+$script:status = 0
+Invoke-Expression $c2gate[0].Extent.Text
+if (($script:seen -join '|') -ne 'tests/test_mpvqt_c2_patch.py') { throw 'Wrong C2 gate arguments' }
+$script:status = 19
+$failed = $false
+try { Invoke-Expression $c2gate[0].Extent.Text }
+catch { $failed = $_.Exception.Message -match 'failed with exit code 19' }
+if (-not $failed) { throw 'C2 patch failure did not propagate' }
 Write-Host 'Windows smoke-result gate propagates native failures'

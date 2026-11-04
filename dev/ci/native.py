@@ -130,7 +130,13 @@ def portable_checks():
     command("qt-unix-manifest-tests", [sys.executable, "dev/ci/test_qt_unix_manifest.py"])
     command("mac-session-tests", [sys.executable, "dev/ci/test_macos_session.py"])
     command("headless-routing-tests", [sys.executable, "dev/ci/test_headless_routing.py"])
-    command("shared-patch-tests", [sys.executable, "tests/test_mpvqt_shared_patch.py"])
+
+
+def verify_mpvqt_source():
+    command("mpvqt-source", ["git", "-C", "external/mpvqt", "rev-parse", "HEAD"])
+    sha = subprocess.check_output(["git", "-C", "external/mpvqt", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    if sha != "2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e":
+        raise RuntimeError("Unexpected mpvqt source revision")
 
 
 def configure(system, mode):
@@ -152,10 +158,7 @@ def configure(system, mode):
         command("qt-prefix", ["qmake6", "-query", "QT_INSTALL_PREFIX"])
     else:
         print("qmake6 unavailable; CMake configure records Qt version and modules", flush=True)
-    command("mpvqt-source", ["git", "-C", "external/mpvqt", "rev-parse", "HEAD"])
-    sha = subprocess.check_output(["git", "-C", "external/mpvqt", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    if sha != "2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e":
-        raise RuntimeError("Unexpected mpvqt source revision")
+    verify_mpvqt_source()
     options = ["cmake", "-S", str(ROOT), "-B", str(BUILD), "-G", "Ninja",
                "-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-DUSE_STATIC_MPVQT=" + ("ON" if mode == "static" else "OFF"),
                "-DMPVQT_EXTERNAL_EVENTS=" + ("ON" if mode == "static" else "OFF")]
@@ -291,6 +294,11 @@ def main():
     portable_checks()
     command("native-prereq-inventory", [sys.executable, "dev/ci/native_prereq_inventory.py"], timeout=600)
     system, mode, desktop_missing = preflight()
+    verify_mpvqt_source()
+    patch_env = os.environ.copy()
+    patch_env["MPVQT_TEST_SOURCE"] = str(ROOT / "external/mpvqt")
+    command("shared-patch-tests", [sys.executable, "tests/test_mpvqt_shared_patch.py"], env=patch_env)
+    command("c2-patch-tests", [sys.executable, "tests/test_mpvqt_c2_patch.py"], env=patch_env)
     command("windows-smoke-result-tests", ["node", "--test", "tests/test_windows_smoke_result.mjs"])
     command("explicit-mpv-cmake-tests", [sys.executable, "dev/ci/test_explicit_mpv_cmake.py"])
     with tempfile.TemporaryDirectory(prefix="ci-runtime-", dir=BUILD) as runtime:
