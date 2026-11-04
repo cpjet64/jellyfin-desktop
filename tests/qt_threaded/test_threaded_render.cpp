@@ -58,7 +58,8 @@ static bool validCleanupOrder(const QtThreaded::Audit& audit)
          audit.wrappersClearedOrder < audit.fallbackDetachedOrder &&
          audit.fallbackDetachedOrder < audit.rhiCleanupOrder &&
          audit.rhiCleanupOrder < audit.controlDestroyedOrder &&
-         audit.controlDestroyedOrder < audit.workerJoinedOrder &&
+         audit.controlDestroyedOrder < audit.cleanupAckOrder &&
+         audit.cleanupAckOrder < audit.workerJoinedOrder &&
          audit.workerJoinedOrder < audit.surfaceDestroyedOrder;
 }
 
