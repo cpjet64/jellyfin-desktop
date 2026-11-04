@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class ManifestTest(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(dir=ROOT / "deps", prefix="manifest-test-")
+        self.temp = tempfile.TemporaryDirectory(dir=ROOT, prefix="manifest-test-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
         self.build = self.root / "build"

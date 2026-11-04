@@ -13,7 +13,7 @@ MPVQT_SHA = "2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e"
 
 class EvidenceTest(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2] / "deps")
+        self.temp = tempfile.TemporaryDirectory(prefix="ci-evidence-test-", dir=Path(__file__).resolve().parents[2])
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.environment = {"CI_JOB_NAME": "linux-static", "CI_JOB_ID": "11",

@@ -95,7 +95,7 @@ class TestHeadlessRouting(unittest.TestCase):
         verify.assert_called_once()
 
     def test_offscreen_runs_all_scenarios_and_requires_second_playing_frame(self):
-        with tempfile.TemporaryDirectory(dir=native.ROOT / "deps") as temp:
+        with tempfile.TemporaryDirectory(prefix="ci-routing-test-", dir=native.ROOT) as temp:
             results = Path(temp)
             seen = []
             def fake_command(name, args, **kwargs):

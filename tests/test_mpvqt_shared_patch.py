@@ -16,8 +16,7 @@ SPEC.loader.exec_module(PATCH)
 
 class SharedPatchTest(unittest.TestCase):
     def setUp(self):
-        (ROOT / "build").mkdir(exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(prefix="mpvqt-shared-patch-", dir=ROOT / "build")
+        self.temp = tempfile.TemporaryDirectory(prefix="mpvqt-shared-patch-", dir=ROOT)
         self.addCleanup(self.temp.cleanup)
         self.copy = Path(self.temp.name)
         (self.copy / "src").mkdir()

@@ -19,9 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class TestArchiveBoundaries(unittest.TestCase):
     def setUp(self):
-        self.parent = ROOT / "deps"
-        self.parent.mkdir(exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(prefix="archive-test-", dir=self.parent)
+        self.temp = tempfile.TemporaryDirectory(prefix="archive-test-", dir=ROOT)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
 

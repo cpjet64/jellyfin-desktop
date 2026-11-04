@@ -85,8 +85,7 @@ def fixture(base, job):
 
 class AcceptanceTest(unittest.TestCase):
     def setUp(self):
-        (ROOT / "deps").mkdir(exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(dir=ROOT / "deps", prefix="acceptance-test-")
+        self.temp = tempfile.TemporaryDirectory(dir=ROOT, prefix="acceptance-test-")
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         for job in JOBS:
