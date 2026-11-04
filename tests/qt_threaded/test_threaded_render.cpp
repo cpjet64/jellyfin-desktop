@@ -1,6 +1,7 @@
 #include <QtTest/QtTest>
 #include <QGuiApplication>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -16,20 +17,28 @@ class TestThreadedRender : public QObject
 {
   Q_OBJECT
 private slots:
+  void init();
   void independentFrames();
   void initializationFailures_data();
   void initializationFailures();
   void blockedCleanupIsFailure();
 };
 
-static bool differentBrightFrames(const QList<QtThreaded::Frame>& frames)
+void TestThreadedRender::init()
+{
+  QTest::failOnWarning(QRegularExpression(
+    ".*(thread affinity|different thread|wrong thread|makeCurrent|current context|QObject::|QOpenGLContext).*",
+    QRegularExpression::CaseInsensitiveOption));
+}
+
+static bool differentBrightFrames(const QList<QtThreaded::Frame>& frames, quint64 baseline)
 {
   for (qsizetype i = 0; i < frames.size(); ++i) {
-    if (frames[i].image.isNull()) continue;
+    if (frames[i].sequence <= baseline || frames[i].image.isNull()) continue;
     const QColor a = frames[i].image.pixelColor(frames[i].image.width() / 2, frames[i].image.height() / 2);
     if (a.red() + a.green() + a.blue() < 150) continue;
     for (qsizetype j = i + 1; j < frames.size(); ++j) {
-      if (frames[j].image.isNull() || frames[j].sequence == frames[i].sequence) continue;
+      if (frames[j].sequence <= baseline || frames[j].image.isNull() || frames[j].sequence == frames[i].sequence) continue;
       const QColor b = frames[j].image.pixelColor(frames[j].image.width() / 2, frames[j].image.height() / 2);
       if (b.red() + b.green() + b.blue() >= 150 && a != b) return true;
     }
@@ -49,11 +58,14 @@ void TestThreadedRender::independentFrames()
   QVERIFY2(scene.sync(&error), qPrintable(error));
   QTRY_VERIFY_WITH_TIMEOUT(observation->calls.load() >= 2, 10000);
   const auto before = observation->calls.load();
+  const auto priorFrames = scene.frames();
+  quint64 baseline = 0;
+  for (const auto& frame : priorFrames) baseline = qMax(baseline, frame.sequence);
   QThread::msleep(350); // Deliberately withhold GUI event processing and synchronization.
   const auto after = observation->calls.load();
   QVERIFY(after >= before + 2);
   const auto frames = scene.frames();
-  QVERIFY(differentBrightFrames(frames));
+  QVERIFY(differentBrightFrames(frames, baseline));
   const auto audit = scene.audit();
   QVERIFY(audit.guiThread != audit.renderThread);
   QCOMPARE(observation->renderThread.load(), audit.renderThread);
@@ -122,7 +134,12 @@ void TestThreadedRender::blockedCleanupIsFailure()
   child.setProcessChannelMode(QProcess::MergedChannels);
   child.start(QCoreApplication::applicationFilePath(), {"--blocked-cleanup-child"});
   QVERIFY(child.waitForStarted(5000));
-  QVERIFY(child.waitForFinished(15000));
+  const bool finished = child.waitForFinished(15000);
+  if (!finished) {
+    child.kill();
+    child.waitForFinished(5000);
+  }
+  QVERIFY2(finished, "Blocked-cleanup child did not exit; the owned child was terminated");
   const auto output = child.readAll();
   QVERIFY(output.contains("BLOCKED_CLEANUP_OBSERVED"));
   QVERIFY(child.exitStatus() != QProcess::NormalExit || child.exitCode() != 0);
