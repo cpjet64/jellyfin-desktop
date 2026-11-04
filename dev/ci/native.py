@@ -126,6 +126,7 @@ def portable_checks():
     command("inventory-tests", [sys.executable, "dev/ci/test_native_inventory.py"])
     command("native-prerequisite-inventory-tests", [sys.executable, "dev/ci/test_native_prereq_inventory.py"])
     command("explicit-mpv-tests", [sys.executable, "dev/ci/test_explicit_mpv.py"])
+    command("native-order-tests", [sys.executable, "dev/ci/test_native_order.py"])
     command("qt-unix-manifest-tests", [sys.executable, "dev/ci/test_qt_unix_manifest.py"])
     command("mac-session-tests", [sys.executable, "dev/ci/test_macos_session.py"])
     command("headless-routing-tests", [sys.executable, "dev/ci/test_headless_routing.py"])
@@ -290,6 +291,7 @@ def main():
     portable_checks()
     command("native-prereq-inventory", [sys.executable, "dev/ci/native_prereq_inventory.py"], timeout=600)
     system, mode, desktop_missing = preflight()
+    command("explicit-mpv-cmake-tests", [sys.executable, "dev/ci/test_explicit_mpv_cmake.py"])
     with tempfile.TemporaryDirectory(prefix="ci-runtime-", dir=BUILD) as runtime:
         os.environ["JELLYFIN_TEST_OWNED_ROOT"] = str(BUILD)
         for name in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR"):
