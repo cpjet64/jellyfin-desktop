@@ -144,6 +144,16 @@ if(WIN32)
   target_compile_definitions(test_windows_native_controls PRIVATE ${TEST_COMPILE_DEFS})
 endif()
 
+if(APPLE)
+  add_executable(test_apple_native_controls apple_native_controls.mm
+    mpv_test_bootstrap.cpp mpv_test_profile.cpp "${CMAKE_BINARY_DIR}/src/qrc_resources.cpp")
+  set_source_files_properties(apple_native_controls.mm PROPERTIES COMPILE_OPTIONS "-fno-objc-arc")
+  add_dependencies(test_apple_native_controls generate_resources)
+  target_link_libraries(test_apple_native_controls jmp_core Qt6::Test Qt6::Quick)
+  target_include_directories(test_apple_native_controls PRIVATE ${TEST_INCLUDE_DIRS})
+  target_compile_definitions(test_apple_native_controls PRIVATE ${TEST_COMPILE_DEFS})
+endif()
+
 if(LINUX_DBUS)
   add_executable(test_mpris_fault test_mpris_fault.cpp)
   target_link_libraries(test_mpris_fault jmp_core Qt6::Test Qt6::DBus)
