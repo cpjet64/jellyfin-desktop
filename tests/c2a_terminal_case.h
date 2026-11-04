@@ -33,6 +33,12 @@ bool saveTerminalEvidence(const QString& path, const QJsonObject& record)
   return file.write(bytes) == bytes.size() && file.flush();
 }
 
+bool saveTerminalFrame(const QString& path, const QImage& image)
+{
+  QFile file(path);
+  return file.open(QIODevice::WriteOnly | QIODevice::NewOnly) && image.save(&file, "PNG") && file.flush();
+}
+
 void recordTerminalAudit(QJsonObject& record, const QtThreaded::Audit& paused,
                          const QtThreaded::Audit& resumed, const QtThreaded::Audit& settled)
 {
@@ -90,6 +96,18 @@ void TestC2RetirementNative::runTerminalRetirement(PlayerComponent& player, C2aF
   QJsonObject record{{"scenario", "terminal-retirement"}, {"generation", qint64(fixture.generation)},
     {"playback_advancing", playbackAdvancing}, {"stop_terminal", stopTerminal},
     {"canceled_count", canceled.count()}};
+  record.insert("playback_start_position", fixture.playbackStartPosition);
+  record.insert("playback_end_position", fixture.playbackEndPosition);
+  record.insert("first_frame_sequence", qint64(fixture.playbackFirstFrame.sequence));
+  record.insert("second_frame_sequence", qint64(fixture.playbackSecondFrame.sequence));
+  record.insert("first_frame_ns", fixture.playbackFirstFrame.monotonicNs);
+  record.insert("second_frame_ns", fixture.playbackSecondFrame.monotonicNs);
+  record.insert("stop_entered_ns", fixture.cleanup.stopEntered);
+  record.insert("stop_returned_ns", fixture.cleanup.stopReturned);
+  record.insert("stop_status", fixture.cleanup.stopStatus);
+  record.insert("stop_error", fixture.cleanup.stopError);
+  QVERIFY(saveTerminalFrame(evidence + "/c2a-terminal-first-frame.png", fixture.playbackFirstFrame.image));
+  QVERIFY(saveTerminalFrame(evidence + "/c2a-terminal-second-frame.png", fixture.playbackSecondFrame.image));
   QVERIFY(terminalProperties(fixture.core, record));
   const quint64 binding = player.m_mpvGeneration;
   const bool ac3 = player.m_doAc3Transcoding;
