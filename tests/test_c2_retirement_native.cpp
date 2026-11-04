@@ -272,7 +272,7 @@ void TestC2RetirementNative::retireAndVerify(Scene& scene, PlayerComponent& play
   const quint64 generation = scene.item->renderGeneration();
   const auto bindingGeneration = player.m_mpvGeneration;
   const bool ac3 = player.m_doAc3Transcoding;
-  const int rejectedBefore = DiagnosticFailureInjection::updatesRejected;
+  const int rejectedBefore = DiagnosticFailureInjection::deferredUpdatesRejected;
   const int deferredBefore = DiagnosticFailureInjection::updatesDeferred;
   if (scenario == "retire") {
     DiagnosticFailureInjection::deferNextQueuedUpdate = true;
@@ -311,7 +311,7 @@ void TestC2RetirementNative::retireAndVerify(Scene& scene, PlayerComponent& play
   QCOMPARE(retired.count(), 1);
   QCOMPARE(retired.at(0).at(0).toULongLong(), generation);
   if (scenario == "retire")
-    QTRY_VERIFY_WITH_TIMEOUT(DiagnosticFailureInjection::updatesRejected.load() > rejectedBefore, 12000);
+    QTRY_VERIFY_WITH_TIMEOUT(DiagnosticFailureInjection::deferredUpdatesRejected.load() > rejectedBefore, 12000);
   QCOMPARE(scene.item->controller(), controller);
   QCOMPARE(controller->mpv(), core);
   QCOMPARE(player.m_mpv, controller);

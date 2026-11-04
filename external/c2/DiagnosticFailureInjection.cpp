@@ -19,3 +19,4 @@ std::atomic<int> DiagnosticFailureInjection::updatesDelivered{0};
 std::atomic<int> DiagnosticFailureInjection::updatesRejected{0};
 std::atomic<bool> DiagnosticFailureInjection::deferNextQueuedUpdate{false};
 std::atomic<int> DiagnosticFailureInjection::updatesDeferred{0};
+std::atomic<int> DiagnosticFailureInjection::deferredUpdatesRejected{0};

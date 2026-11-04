@@ -31,7 +31,7 @@ if(MPVQT_C2_DIAGNOSTIC_ONLY)
     "mpvabstractitem.cpp|d38f0737ab1797ce8070273a5ff69bfe5b11d36a3f59be2bc338c7e06be9e946"
     "mpvabstractitem.h|8b4f5654f094c75fcf5d18ca6bc46eb6756fd6e70c19fe25e97ebc584a985332"
     "mpvabstractitem_p.h|4e03f64d520f591ca323f09151509514946a7161fc904b0f8923e9146a507368"
-    "mpvrenderer.cpp|dc1e922d5fb62589aeb0be037ade3a4d9e5c6c46fef3ac895620f747586ebb06")
+    "mpvrenderer.cpp|5dc338ba2031b6770d9544805c668656dd1a819babd1fa738a82c3bb286899bc")
   foreach(_entry IN LISTS _c2_output_hashes)
     string(REPLACE "|" ";" _pair "${_entry}")
     list(GET _pair 0 _name)

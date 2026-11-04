@@ -24,4 +24,5 @@ struct DiagnosticFailureInjection
   static std::atomic<int> updatesRejected;
   static std::atomic<bool> deferNextQueuedUpdate;
   static std::atomic<int> updatesDeferred;
+  static std::atomic<int> deferredUpdatesRejected;
 };
