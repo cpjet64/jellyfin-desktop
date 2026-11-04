@@ -31,6 +31,7 @@ public:
     qInfo() << "C2 closing secondary observer before core destruction";
     mpv_destroy(client);
     client = nullptr;
+    qInfo() << "C2 secondary observer close completed";
   }
 
   void drain()

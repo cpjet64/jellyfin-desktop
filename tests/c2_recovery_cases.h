@@ -317,10 +317,10 @@ void TestC2RetirementNative::finishRecovery(Scene& scene, PlayerComponent& playe
       if (QTest::currentTestFailed()) return;
     }
   }
+  observer.close();
+  QVERIFY(!observer.client);
   scene.item->requestRenderRetirement(scene.item->renderGeneration());
   QVERIFY(scene.waitFor([&] { return retired.count() == 2; }, 10000));
   scene.retired = true;
-  observer.close();
-  QVERIFY(!observer.client);
   QVERIFY(scene.destroyItem());
 }
