@@ -22,5 +22,6 @@ reentrant invocation during removal, a callback held before enqueue, repeated
 close, and an old delegate surviving a new registration. It is not evidence of
 the safety of the current production handler. Existing native-control coverage
 remains responsible for actual button mapping and playback behavior. The shared
-model is Qt-portable; native Linux and macOS coverage remains required before a
-cross-platform claim. Any production change requires separate review and proof.
+model has a platform-neutral QtTest target; Windows execution does not establish
+native Linux or macOS coverage, which remains required. Any production change
+requires separate review and proof.

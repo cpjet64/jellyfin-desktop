@@ -23,6 +23,11 @@ if(MPVQT_C2_DIAGNOSTIC_ONLY)
   return()
 endif()
 
+add_executable(test_smtc_admission_model test_smtc_admission_model.cpp)
+target_link_libraries(test_smtc_admission_model PRIVATE Qt6::Core Qt6::Test Threads::Threads)
+add_test(NAME test_smtc_admission_model COMMAND test_smtc_admission_model)
+set_tests_properties(test_smtc_admission_model PROPERTIES TIMEOUT 60)
+
 add_executable(test_mpv_test_bootstrap test_mpv_test_bootstrap.cpp mpv_test_bootstrap.cpp)
 target_link_libraries(test_mpv_test_bootstrap PRIVATE Qt6::Core Qt6::Test)
 set(_mpv_guard_pure absentAndExisting rejectLinksAndErrorsBeforeInitialization rootAndDescendantCases pathSyntax standardLocationSyntax)
