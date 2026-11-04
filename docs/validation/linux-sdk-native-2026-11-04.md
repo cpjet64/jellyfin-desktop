@@ -2,7 +2,8 @@
 
 **Status: blocked during Qt archive planning.** This checkpoint is not a Linux
 desktop build, SDK readiness, CI, release, or acceptance result. The native
-checks below ran on Linux x86_64 using isolated job-owned working directories.
+checks below ran on Linux x86_64 using isolated task-owned working directories,
+outside a CI job.
 
 ## Fixture and source checkpoints
 
