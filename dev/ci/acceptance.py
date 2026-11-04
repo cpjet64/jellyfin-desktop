@@ -205,6 +205,8 @@ def validate_named_receipt(directory, report, prefix, producer, scenario, expect
     required = {key: report[key] for key in ("sha", "ref", "job", "job_id", "pipeline_id", "platform", "mode")}
     required.update(producer=producer, scenario=scenario, executable_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
                     qtest_sha256=hashlib.sha256(artifact(directory, prefix + "/qtest.txt").read_bytes()).hexdigest())
+    required["images"] = {name: hashlib.sha256(artifact(directory, prefix + "/" + name).read_bytes()).hexdigest()
+                          for name in images}
     for key, expected_value in required.items():
         if record.get(key) != expected_value:
             raise ValueError(f"{prefix}: incorrect {key}")

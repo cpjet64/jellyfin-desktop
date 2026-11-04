@@ -177,6 +177,35 @@ class AcceptanceTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incorrect scenario evidence images"):
             self.validate()
 
+    def test_windowed_receipt_binds_exact_images_and_content(self):
+        directory = self.base / "windows-x64"
+        report = json.loads((directory / "evidence.json").read_text())
+        case = directory / "desktop-render/playing"
+        write(case / "qtest.txt", qtest("TestRendererLossPlayback", "actualPlayback", "playing"))
+        binary = directory / "desktop-executables/windowed-render-v1"
+        write(binary, "desktop binary")
+        names = ("before.png", "after.png", "after2.png")
+        record = {key: report[key] for key in ("sha", "ref", "job", "job_id", "pipeline_id", "platform", "mode")}
+        record.update(producer="windowed-render-v1", scenario="playing",
+                      executable_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                      qtest_sha256=hashlib.sha256((case / "qtest.txt").read_bytes()).hexdigest(),
+                      images={name: hashlib.sha256((case / name).read_bytes()).hexdigest() for name in names})
+        receipt = case / "case.json"
+        def check():
+            acceptance.validate_named_receipt(directory, report, "desktop-render/playing", "windowed-render-v1",
+                                               "playing", ("TestRendererLossPlayback", "actualPlayback"), names)
+        write(receipt, json.dumps(record))
+        check()
+        for images in ({}, {**record["images"], "extra.png": "0" * 64},
+                       {name: digest for name, digest in record["images"].items() if name != "after.png"}):
+            write(receipt, json.dumps(dict(record, images=images)))
+            with self.subTest(images=images), self.assertRaisesRegex(ValueError, "incorrect images"):
+                check()
+        write(receipt, json.dumps(record))
+        write(case / "after.png", "changed image bytes")
+        with self.assertRaisesRegex(ValueError, "incorrect images"):
+            check()
+
     def test_wrong_footer_extra_case_and_total_are_rejected(self):
         path = self.base / "linux-static/offscreen/playing/qtest.txt"
         original = path.read_text(encoding="utf-8")
