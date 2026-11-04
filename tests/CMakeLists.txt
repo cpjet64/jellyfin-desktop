@@ -155,6 +155,12 @@ target_compile_definitions(test_webclient_containment PRIVATE ${TEST_COMPILE_DEF
 # CI explicitly runs all three scenarios in isolated native desktop processes.
 
 if(WIN32)
+  add_executable(test_windows_smtc_lifetime windows_smtc_lifetime.cpp)
+  target_link_libraries(test_windows_smtc_lifetime jmp_core Qt6::Test Qt6::Quick)
+  target_include_directories(test_windows_smtc_lifetime PRIVATE ${TEST_INCLUDE_DIRS})
+  target_compile_definitions(test_windows_smtc_lifetime PRIVATE ${TEST_COMPILE_DEFS})
+  add_test(NAME test_windows_smtc_lifetime COMMAND test_windows_smtc_lifetime)
+  set_tests_properties(test_windows_smtc_lifetime PROPERTIES TIMEOUT 60)
   add_executable(test_windows_native_controls windows_native_controls.cpp
     mpv_test_bootstrap.cpp mpv_test_profile.cpp "${CMAKE_BINARY_DIR}/src/qrc_resources.cpp")
   add_dependencies(test_windows_native_controls generate_resources)

@@ -144,6 +144,7 @@ def validate_headless(base, job, sha, ref, pipeline_id):
     if expected_platform == "linux":
         required.append("test_mpris_fault")
     if expected_platform == "windows":
+        required.append("test_windows_smtc_lifetime")
         check_junit(artifact(directory, "headless-ctest.xml"), list(CORE) + required)
     else:
         check_junit(artifact(directory, "headless-ctest.xml"), CORE)

@@ -48,6 +48,8 @@ def fixture(base, job):
     runtime = list(RUNTIME) + (list(STATIC) if mode == "static" else [])
     if platform == "linux":
         runtime.append("test_mpris_fault")
+    if platform == "windows":
+        runtime.append("test_windows_smtc_lifetime")
     write(directory / "headless-ctest.xml", junit(list(CORE) + (runtime if platform == "windows" else [])))
     if platform != "windows":
         write(directory / "runtime-ctest.xml", junit(runtime))
@@ -277,6 +279,8 @@ class AcceptanceTest(unittest.TestCase):
             required = list(RUNTIME) + (list(STATIC) if mode in ("x64", "static") else [])
             if platform == "linux":
                 required.append("test_mpris_fault")
+            if platform == "windows":
+                required.append("test_windows_smtc_lifetime")
             for case in CORE:
                 path = self.base / job / "headless-ctest.xml"
                 headless = list(CORE) + (required if platform == "windows" else [])
