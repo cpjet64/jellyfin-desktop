@@ -5,8 +5,10 @@
 
 #include <wrl.h>
 #include <Windows.Media.h>
+#include <memory>
 
 #include "TaskbarComponent.h"
+#include "SmtcAdmission.h"
 
 class TaskbarComponentWin : public TaskbarComponent
 {
@@ -36,6 +38,7 @@ private:
 
   HRESULT buttonPressed(ABI::Windows::Media::ISystemMediaTransportControls* sender,
     ABI::Windows::Media::ISystemMediaTransportControlsButtonPressedEventArgs* args);
+  static void dispatchButton(QObject* receiver, int button);
 
   QWinTaskbarButton* m_button;
   QWinThumbnailToolBar* m_toolbar;
@@ -44,6 +47,8 @@ private:
   QWinThumbnailToolButton* m_next;
 
   bool m_initialized = false;
+  bool m_initializing = false;
+  std::shared_ptr<SmtcAdmission> m_admission;
   EventRegistrationToken m_buttonPressedToken;
   Microsoft::WRL::ComPtr<ABI::Windows::Media::ISystemMediaTransportControls> m_systemControls;
   Microsoft::WRL::ComPtr<ABI::Windows::Media::ISystemMediaTransportControlsDisplayUpdater> m_displayUpdater;

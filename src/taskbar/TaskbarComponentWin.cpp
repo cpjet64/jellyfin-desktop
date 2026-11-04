@@ -1,6 +1,8 @@
 #include <QApplication>
 #include <QStyle>
 #include <QUrlQuery>
+#include <QScopedValueRollback>
+#include <utility>
 
 #include <Windows.Foundation.h>
 #include <systemmediatransportcontrolsinterop.h>
@@ -24,9 +26,12 @@ using ABI::Windows::Storage::Streams::IRandomAccessStreamReferenceStatics;
 /////////////////////////////////////////////////////////////////////////////////////////
 TaskbarComponentWin::~TaskbarComponentWin()
 {
-  if (m_initialized)
+  if (m_admission) m_admission->close();
+  const bool registered = std::exchange(m_initialized, false);
+  if (registered)
   {
-    m_systemControls->remove_ButtonPressed(m_buttonPressedToken);
+    const HRESULT hr = m_systemControls->remove_ButtonPressed(m_buttonPressedToken);
+    if (FAILED(hr)) qWarning() << "Failed to remove media control callback:" << Qt::hex << hr;
     m_displayUpdater->ClearAll();
   }
 }
@@ -175,6 +180,7 @@ void TaskbarComponentWin::setPaused(bool value)
 /////////////////////////////////////////////////////////////////////////////////////////
 void TaskbarComponentWin::initializeMediaTransport(HWND hwnd)
 {
+  if (m_initialized) return;
   ComPtr<ISystemMediaTransportControlsInterop> interop;
   auto hr = GetActivationFactory(HStringReference(RuntimeClass_Windows_Media_SystemMediaTransportControls).Get(), &interop);
   if (FAILED(hr))
@@ -183,21 +189,29 @@ void TaskbarComponentWin::initializeMediaTransport(HWND hwnd)
     return;
   }
 
-  hr = interop->GetForWindow(hwnd, IID_PPV_ARGS(&m_systemControls));
+  ComPtr<ISystemMediaTransportControls> controls;
+  hr = interop->GetForWindow(hwnd, IID_PPV_ARGS(&controls));
   if (FAILED(hr))
   {
     qWarning() << "Failed to GetForWindow";
     return;
   }
+  if (m_initialized || m_initializing) return;
+  m_systemControls = controls;
   initializeMediaTransportControls();
 }
 
 void TaskbarComponentWin::initializeMediaTransportControls()
 {
+  if (m_initialized || m_initializing) return;
+  QScopedValueRollback<bool> initializing(m_initializing, true);
+  auto admission = std::make_shared<SmtcAdmission>(this);
+  m_admission = admission;
   auto hr = m_systemControls->get_DisplayUpdater(&m_displayUpdater);
   if (FAILED(hr))
   {
     qWarning() << "Failed to get Display updater";
+    admission->close();
     return;
   }
 
@@ -216,13 +230,18 @@ void TaskbarComponentWin::initializeMediaTransportControls()
     ITypedEventHandler<
       SystemMediaTransportControls*,
       SystemMediaTransportControlsButtonPressedEventArgs*>>(
-    [this](ISystemMediaTransportControls* sender, ISystemMediaTransportControlsButtonPressedEventArgs* args) -> HRESULT {
-      return buttonPressed(sender, args);
+    [admission](ISystemMediaTransportControls*, ISystemMediaTransportControlsButtonPressedEventArgs* args) -> HRESULT {
+      SystemMediaTransportControlsButton button;
+      const HRESULT result = args->get_Button(&button);
+      if (FAILED(result)) return result;
+      SmtcAdmission::enqueue(admission, static_cast<int>(button), &TaskbarComponentWin::dispatchButton);
+      return S_OK;
     });
   hr = m_systemControls->add_ButtonPressed(handler.Get(), &m_buttonPressedToken);
   if (FAILED(hr))
   {
     qWarning() << "Failed to add callback handler";
+    admission->close();
     return;
   }
 
@@ -438,7 +457,13 @@ HRESULT TaskbarComponentWin::buttonPressed(ISystemMediaTransportControls* sender
     qWarning() << "Failed to get the pressed button";
     return hr;
   }
+  dispatchButton(this, static_cast<int>(button));
+  return S_OK;
+}
 
+void TaskbarComponentWin::dispatchButton(QObject*, int value)
+{
+  const auto button = static_cast<SystemMediaTransportControlsButton>(value);
   switch (button)
   {
     case SystemMediaTransportControlsButton::SystemMediaTransportControlsButton_Play:
@@ -482,5 +507,4 @@ HRESULT TaskbarComponentWin::buttonPressed(ISystemMediaTransportControls* sender
       break;
   }
 
-  return S_OK;
 }
