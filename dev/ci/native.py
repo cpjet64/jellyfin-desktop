@@ -16,7 +16,7 @@ from macos_session import verify_existing_session
 from headless_requirements import missing_build_inputs
 from linux_mpris_receipt import run_active_stop, update_obligation
 from evidence import update
-from explicit_mpv import explicit_inputs, cmake_options, verify_cache
+from explicit_mpv import explicit_inputs, cmake_options, verify_cache, require_no_pkgconfig_mpv
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
@@ -138,6 +138,7 @@ def configure(system, mode):
     explicit = explicit_inputs(os.environ, system, ROOT)
     if explicit:
         include, library = explicit
+        require_no_pkgconfig_mpv("pkg-config")
         probe = BUILD / "mpv-link-probe"
         command("mpv-probe-build", ["cc", str(ROOT / "dev/ci/mpv_link_probe.c"), "-I", str(include),
                 str(library), "-ldl", "-Wl,-rpath," + str(library.parent), "-o", str(probe)])

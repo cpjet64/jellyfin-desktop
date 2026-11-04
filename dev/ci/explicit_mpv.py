@@ -62,6 +62,13 @@ def verify_library(library):
         raise RuntimeError("BLOCKED: mpv runtime package version mismatch")
 
 
+def require_no_pkgconfig_mpv(program):
+    result = subprocess.run([program, "--exists", "mpv"], stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, timeout=15)
+    if result.returncode != 1:
+        raise RuntimeError("BLOCKED: explicit mpv route requires absent pkg-config mpv metadata")
+
+
 def cmake_options(paths):
     include, library = paths
     return ["-DMPV_INCLUDE_DIR=" + str(include), "-DMPV_LIBRARY_mpv=" + str(library),

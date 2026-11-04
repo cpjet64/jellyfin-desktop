@@ -80,6 +80,15 @@ class ExplicitMpvTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "MPV_LIBRARY_mpv"):
                 explicit_mpv.verify_cache(cache, (include, library))
 
+    def test_explicit_route_rejects_existing_or_broken_mpv_pkgconfig(self):
+        for code in (0, 2):
+            with self.subTest(returncode=code), \
+                 patch.object(explicit_mpv.subprocess, "run", return_value=SimpleNamespace(returncode=code)):
+                with self.assertRaisesRegex(RuntimeError, "absent pkg-config"):
+                    explicit_mpv.require_no_pkgconfig_mpv("pkg-config")
+        with patch.object(explicit_mpv.subprocess, "run", return_value=SimpleNamespace(returncode=1)):
+            explicit_mpv.require_no_pkgconfig_mpv("pkg-config")
+
 
 if __name__ == "__main__":
     unittest.main()
