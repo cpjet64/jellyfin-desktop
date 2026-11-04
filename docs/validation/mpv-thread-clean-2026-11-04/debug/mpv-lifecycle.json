@@ -1,0 +1,74 @@
+{
+    "ack_count": 1,
+    "ack_order": 5,
+    "album_art_log": [
+        "AlbumArtProvider: Cache enabled, max size: 10485760 bytes, dir: \"E:/CursorAI/JellyfinDesktop/deps/worktrees/integration/deps/w310-mpv-proof/debug-case/cache/profiles//albumart\""
+    ],
+    "binding_released": true,
+    "bound": true,
+    "canceled_count": 1,
+    "canceled_received": 23885154787800,
+    "cleanup_ack_order": 6,
+    "cleanup_count": 1,
+    "context_destroyed": true,
+    "core_order": 7,
+    "diagnostics": [
+    ],
+    "frees": 1,
+    "generation": 1,
+    "idle_status": 0,
+    "idle_value": 1,
+    "item_order": 6,
+    "operation_completed": true,
+    "properties": {
+        "before_current_vo": {
+            "received": 23885153537800,
+            "status": 0,
+            "value": "libmpv"
+        },
+        "before_force_window": {
+            "received": 23885153514800,
+            "status": 0,
+            "value": "yes"
+        },
+        "before_vo_configured": {
+            "received": 23885153552400,
+            "status": 0,
+            "value": 1
+        },
+        "force_window_set_no_returned": 23885153626400,
+        "force_window_set_no_status": 0,
+        "terminal_current_vo": {
+            "received": 23885154839200,
+            "status": -10,
+            "value": ""
+        },
+        "terminal_force_window": {
+            "received": 23885154817000,
+            "status": 0,
+            "value": "no"
+        },
+        "terminal_idle": {
+            "received": 23885154856700,
+            "status": 0,
+            "value": 1
+        }
+    },
+    "renderer_ready": true,
+    "resources_settled": true,
+    "retirement_acknowledged": 23885198291100,
+    "retirement_requested": 23885154891200,
+    "shutdown_returned": 23885207973300,
+    "stop_attempted": true,
+    "stop_entered": 23885153580000,
+    "stop_error": 0,
+    "stop_returned": 23885153585100,
+    "stop_status": 1,
+    "submission_at": 23884084265500,
+    "submission_attempted": true,
+    "surface_destroy_order": 8,
+    "surface_destroyed": true,
+    "terminal_confirmed": 23885154890200,
+    "worker_join_order": 7,
+    "worker_joined": true
+}

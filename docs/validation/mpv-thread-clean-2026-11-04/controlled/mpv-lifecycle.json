@@ -1,0 +1,74 @@
+{
+    "ack_count": 1,
+    "ack_order": 5,
+    "album_art_log": [
+        "AlbumArtProvider: Cache enabled, max size: 10485760 bytes, dir: \"E:/CursorAI/JellyfinDesktop/deps/worktrees/integration/deps/w310-mpv-proof/controlled-case/cache/profiles//albumart\""
+    ],
+    "binding_released": true,
+    "bound": true,
+    "canceled_count": 0,
+    "canceled_received": 0,
+    "cleanup_ack_order": 6,
+    "cleanup_count": 1,
+    "context_destroyed": true,
+    "core_order": 7,
+    "diagnostics": [
+    ],
+    "frees": 1,
+    "generation": 1,
+    "idle_status": 0,
+    "idle_value": 1,
+    "item_order": 6,
+    "operation_completed": false,
+    "properties": {
+        "before_current_vo": {
+            "received": 23777560846500,
+            "status": 0,
+            "value": "libmpv"
+        },
+        "before_force_window": {
+            "received": 23777560820100,
+            "status": 0,
+            "value": "yes"
+        },
+        "before_vo_configured": {
+            "received": 23777560861300,
+            "status": 0,
+            "value": 1
+        },
+        "force_window_set_no_returned": 23777574393800,
+        "force_window_set_no_status": 0,
+        "terminal_current_vo": {
+            "received": 23777574995800,
+            "status": -10,
+            "value": ""
+        },
+        "terminal_force_window": {
+            "received": 23777574969400,
+            "status": 0,
+            "value": "no"
+        },
+        "terminal_idle": {
+            "received": 23777575021900,
+            "status": 0,
+            "value": 1
+        }
+    },
+    "renderer_ready": true,
+    "resources_settled": true,
+    "retirement_acknowledged": 23777617716700,
+    "retirement_requested": 23777575060900,
+    "shutdown_returned": 23777628538800,
+    "stop_attempted": false,
+    "stop_entered": 0,
+    "stop_error": 0,
+    "stop_returned": 0,
+    "stop_status": -1,
+    "submission_at": 0,
+    "submission_attempted": false,
+    "surface_destroy_order": 8,
+    "surface_destroyed": true,
+    "terminal_confirmed": 23777575059500,
+    "worker_join_order": 7,
+    "worker_joined": true
+}
