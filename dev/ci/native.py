@@ -24,7 +24,7 @@ RESULTS = BUILD / "ci-results"
 # Mpv initialization, QTEST_MAIN, QGuiApplication and QQuickWindow stay out.
 HEADLESS_TESTS = ("test_systemcomponent", "test_log", "test_settings", "test_displaymanager",
                   "test_log_rotation", "test_chromiumflags", "test_webclient_transport",
-                  "test_mpv_test_bootstrap_pure")
+                  "test_mpv_test_bootstrap_pure", "test_smtc_admission_model")
 LINUX_DESKTOP_TOOLS = frozenset(("xvfb-run", "xauth", "dbus-run-session", "glxinfo"))
 
 

@@ -40,7 +40,7 @@ runtime report does not prove desktop or native-controls acceptance.
 
 On Linux and macOS, the job first builds and runs an explicit headless set:
 system, logging, settings, display-manager mock, log rotation, Chromium flags,
-WebChannel transport, and the pure mpv test-bootstrap checks. These are
+WebChannel transport, the SMTC admission model, and the pure mpv test-bootstrap checks. These are
 application-less or QCoreApplication tests; the selection does not infer that
 every test without a `gui` label is nonvisual. Node and portable packaging
 fixtures also run before desktop verification. The remaining CTest cases,
