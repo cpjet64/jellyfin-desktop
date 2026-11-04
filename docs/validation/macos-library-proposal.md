@@ -16,7 +16,11 @@ identities and suitability for each generator must be checked before use.
 Meson 1.12.1 and NASM 3.02 are source inputs. Python 3.15 remains in the
 library graph for VapourSynth and the gobject scanner; host Python 3.13 must
 not silently replace it. The full Xcode requirement for MoltenVK is not
-established by the compiler probe. The deployment target is not selected.
+established by the compiler probe. Propose deployment target **12.0** for
+Intel, following the repository's documented macOS 12+ minimum; compatibility
+with SDK 26.5 and every selected source is unproven and is a hard pre-build
+gate. The reference Python formula instead targets the host OS version; using
+12.0 is a deliberate difference that requires compatibility verification.
 Qt 6.9.3 is a separate job-owned input and not part of this closure.
 
 Use one new job-owned root with distinct `sources/`, `build/`, `prefix/`,
@@ -73,12 +77,19 @@ validated. In particular, dependency names alone conceal this required stage:
    [FFmpeg](macos-library-ffmpeg-lock.md) and
    [mpv](macos-library-mpv-lock.md) notes give formula-derived settings.
 
-The candidate option index records literal formula install lines, including
+The [four static formula audits](macos-library-audit-a.md) cover the selected
+Tahoe conditions; see also [B](macos-library-audit-b.md),
+[C](macos-library-audit-c.md) and [D](macos-library-audit-d.md). The candidate
+option index records literal formula install lines, including
 inactive branches; it is not a command specification. The custom prefix must
 replace Homebrew-specific paths and shims with explicit equivalent options,
 particularly Python frameworks, libplacebo resource staging and Vulkan registry,
 MoltenVK Xcode projects, `mpv.pc`, trust stores and runtime search paths. Review
 all derived commands and their source and patch inputs before execution.
+The [build conventions](macos-library-build-conventions.md) specify common
+configure, Meson, CMake, SDK, architecture, deployment target and offline
+settings and identify their separately pinned helper reference. Per-component
+overrides, package-specific rewrites and Python backend still need review.
 
 ## Capacity and proof gates
 
