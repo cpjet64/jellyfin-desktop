@@ -19,4 +19,9 @@ struct DiagnosticFailureInjection
   static std::atomic<int> ackOrder;
   static std::atomic<int> itemOrder;
   static std::atomic<int> coreOrder;
+  static std::atomic<int> updatesQueued;
+  static std::atomic<int> updatesDelivered;
+  static std::atomic<int> updatesRejected;
+  static std::atomic<bool> deferNextQueuedUpdate;
+  static std::atomic<int> updatesDeferred;
 };

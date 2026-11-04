@@ -14,3 +14,8 @@ std::atomic<int> DiagnosticFailureInjection::clearedOrder{0};
 std::atomic<int> DiagnosticFailureInjection::ackOrder{0};
 std::atomic<int> DiagnosticFailureInjection::itemOrder{0};
 std::atomic<int> DiagnosticFailureInjection::coreOrder{0};
+std::atomic<int> DiagnosticFailureInjection::updatesQueued{0};
+std::atomic<int> DiagnosticFailureInjection::updatesDelivered{0};
+std::atomic<int> DiagnosticFailureInjection::updatesRejected{0};
+std::atomic<bool> DiagnosticFailureInjection::deferNextQueuedUpdate{false};
+std::atomic<int> DiagnosticFailureInjection::updatesDeferred{0};

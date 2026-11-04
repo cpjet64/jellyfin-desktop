@@ -145,6 +145,23 @@ struct CallbackRelease
 {
   ~CallbackRelease() { DiagnosticFailureInjection::holdCallback = false; }
 };
+
+bool holdNativeCallback(mpv_handle* core, std::thread& release)
+{
+  DiagnosticFailureInjection::holdCallback = true;
+  const char* command[] = {"set", "pause", "yes", nullptr};
+  if (mpv_command_async(core, 0, command) < 0) return false;
+  QElapsedTimer deadline;
+  deadline.start();
+  while (!DiagnosticFailureInjection::callbackWaiting.load() && deadline.elapsed() < 5000)
+    QTest::qWait(10);
+  if (!DiagnosticFailureInjection::callbackWaiting.load()) return false;
+  release = std::thread([] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    DiagnosticFailureInjection::holdCallback = false;
+  });
+  return true;
+}
 }
 
 class TestC2RetirementNative : public QObject
@@ -255,9 +272,22 @@ void TestC2RetirementNative::retireAndVerify(Scene& scene, PlayerComponent& play
   const quint64 generation = scene.item->renderGeneration();
   const auto bindingGeneration = player.m_mpvGeneration;
   const bool ac3 = player.m_doAc3Transcoding;
+  const int rejectedBefore = DiagnosticFailureInjection::updatesRejected;
+  const int deferredBefore = DiagnosticFailureInjection::updatesDeferred;
+  if (scenario == "retire") {
+    DiagnosticFailureInjection::deferNextQueuedUpdate = true;
+    const int queuedBefore = DiagnosticFailureInjection::updatesQueued;
+    QElapsedTimer pending;
+    pending.start();
+    // Do not pump the GUI queue: retain a real libmpv callback's posted update.
+    while (DiagnosticFailureInjection::updatesQueued.load() == queuedBefore && pending.elapsed() < 5000)
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    QVERIFY(DiagnosticFailureInjection::updatesQueued.load() > queuedBefore);
+  }
   DiagnosticFailureInjection::blockNextRetire = true;
   scene.item->requestRenderRetirement(generation);
   QVERIFY(scene.waitFor([&] { return !blocked.isEmpty(); }, 10000));
+  if (scenario == "retire") QVERIFY(DiagnosticFailureInjection::updatesDeferred.load() > deferredBefore);
   QVERIFY(retired.isEmpty());
   QCOMPARE(DiagnosticFailureInjection::frees.load(), 0);
   QCOMPARE(scene.item->controller(), controller);
@@ -271,16 +301,7 @@ void TestC2RetirementNative::retireAndVerify(Scene& scene, PlayerComponent& play
   }
   CallbackRelease release;
   std::thread callbackRelease;
-  if (scenario == "retire") {
-    DiagnosticFailureInjection::holdCallback = true;
-    const char* command[] = {"set", "pause", "yes", nullptr};
-    QCOMPARE(mpv_command_async(core, 0, command), 0);
-    QTRY_VERIFY_WITH_TIMEOUT(DiagnosticFailureInjection::callbackWaiting.load(), 5000);
-    callbackRelease = std::thread([] {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      DiagnosticFailureInjection::holdCallback = false;
-    });
-  }
+  if (scenario == "retire") QVERIFY(holdNativeCallback(core, callbackRelease));
   scene.item->requestRenderRetirement(generation);
   const bool completed = scene.waitFor([&] { return !retired.isEmpty(); }, 10000);
   if (callbackRelease.joinable()) callbackRelease.join();
@@ -289,6 +310,8 @@ void TestC2RetirementNative::retireAndVerify(Scene& scene, PlayerComponent& play
   QCOMPARE(DiagnosticFailureInjection::frees.load(), 1);
   QCOMPARE(retired.count(), 1);
   QCOMPARE(retired.at(0).at(0).toULongLong(), generation);
+  if (scenario == "retire")
+    QTRY_VERIFY_WITH_TIMEOUT(DiagnosticFailureInjection::updatesRejected.load() > rejectedBefore, 12000);
   QCOMPARE(scene.item->controller(), controller);
   QCOMPARE(controller->mpv(), core);
   QCOMPARE(player.m_mpv, controller);
