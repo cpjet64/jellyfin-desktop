@@ -21,6 +21,7 @@ private slots:
   void independentFrames();
   void initializationFailures_data();
   void initializationFailures();
+  void pendingReadbackCancelled();
   void blockedCleanupIsFailure();
 };
 
@@ -60,6 +61,10 @@ void TestThreadedRender::independentFrames()
   item->setSize(QSizeF(128, 128));
   const auto observation = item->observation();
   QVERIFY2(scene.sync(&error), qPrintable(error));
+  QVERIFY(scene.requestReadback());
+  QTRY_COMPARE_WITH_TIMEOUT(scene.audit().readbacksCompleted, quint64(1), 10000);
+  QCOMPARE(scene.audit().readbacksAccepted, quint64(1));
+  QCOMPARE(scene.audit().readbacksCancelled, quint64(0));
   QTRY_VERIFY_WITH_TIMEOUT(observation->calls.load() >= 2, 10000);
   const auto before = observation->calls.load();
   const auto priorFrames = scene.frames();
@@ -73,7 +78,10 @@ void TestThreadedRender::independentFrames()
   const auto frames = scene.frames();
   QVERIFY(differentBrightFrames(frames, baseline, startNs, endNs));
   const auto audit = scene.audit();
+  QVERIFY(audit.guiThread != 0 && audit.renderThread != 0);
   QVERIFY(audit.guiThread != audit.renderThread);
+  QCOMPARE(audit.initThread, audit.renderThread);
+  QCOMPARE(audit.renderThreadObserved, audit.renderThread);
   QCOMPARE(observation->renderThread.load(), audit.renderThread);
   QVERIFY(observation->context.load() != 0);
   QVERIFY(!observation->wrongContext.load());
@@ -94,6 +102,7 @@ void TestThreadedRender::independentFrames()
   QCOMPARE(end.surfaceDestroyedCount, quint64(1));
   QCOMPARE(observation->destructorThread.load(), audit.renderThread);
   QCOMPARE(end.cleanupThread, audit.renderThread);
+  QCOMPARE(end.rhiCleanupThread, audit.renderThread);
   QCOMPARE(end.contextDestructionThread, audit.renderThread);
   QCOMPARE(end.surfaceDestructionThread, audit.guiThread);
   const auto finalCalls = observation->calls.load();
@@ -122,9 +131,9 @@ void TestThreadedRender::initializationFailures()
   QVERIFY2(scene.shutdown(&error), qPrintable(error));
   QVERIFY2(scene.shutdown(&error), qPrintable(error));
   const auto audit = scene.audit();
-  if (failure == static_cast<int>(QtThreaded::FailurePoint::WrongVersion) ||
-      failure == static_cast<int>(QtThreaded::FailurePoint::BeforeTransfer)) {
+  if (failure == static_cast<int>(QtThreaded::FailurePoint::WrongVersion)) {
     QVERIFY(!audit.workerReady && !audit.transferred && !audit.rhiCreated);
+    QVERIFY(!audit.privateBoundaryEntered);
     QVERIFY(!audit.workerJoined && !audit.surfaceDestroyed && !audit.contextDestroyed);
     QCOMPARE(audit.rhiCreatedCount, quint64(0));
     QCOMPARE(audit.cleanupCount, quint64(0));
@@ -133,16 +142,60 @@ void TestThreadedRender::initializationFailures()
     QCOMPARE(audit.surfaceDestroyedCount, quint64(0));
     return;
   }
+  if (failure == static_cast<int>(QtThreaded::FailurePoint::BeforeTransfer)) {
+    QVERIFY(audit.workerReady && audit.workerJoined && !audit.transferred && !audit.rhiCreated);
+    QVERIFY(audit.contextDestroyed && audit.surfaceDestroyed && audit.controlDestroyed);
+    QCOMPARE(audit.contextDestroyedCount, quint64(1));
+    QCOMPARE(audit.surfaceDestroyedCount, quint64(1));
+    QCOMPARE(audit.controlDestroyedCount, quint64(1));
+    QCOMPARE(audit.contextDestructionThread, audit.guiThread);
+    QCOMPARE(audit.surfaceDestructionThread, audit.guiThread);
+    QCOMPARE(audit.rhiCreatedCount, quint64(0));
+    QCOMPARE(audit.cleanupCount, quint64(0));
+    return;
+  }
   QVERIFY(audit.workerJoined && audit.surfaceDestroyed);
+  QVERIFY(audit.renderThread != 0 && audit.renderThread != audit.guiThread);
+  QCOMPARE(audit.initThread, audit.renderThread);
   if (failure == static_cast<int>(QtThreaded::FailurePoint::AfterRhiCreated)) {
     QVERIFY(audit.rhiCreated);
     QCOMPARE(audit.rhiCreatedCount, quint64(1));
     QCOMPARE(audit.rhiDestroyedCount, quint64(1));
+    QCOMPARE(audit.rhiCleanupThread, audit.renderThread);
+    QVERIFY(!audit.initialized && !audit.targetReady);
+    QCOMPARE(audit.frames, quint64(0));
   }
   if (failure == static_cast<int>(QtThreaded::FailurePoint::AfterInit)) {
     QVERIFY(audit.initialized);
     QCOMPARE(audit.frames, quint64(0));
   }
+}
+
+void TestThreadedRender::pendingReadbackCancelled()
+{
+  QtThreaded::Scene scene(QtThreaded::FailurePoint::HoldReadback);
+  QString error;
+  QVERIFY2(scene.initialize(&error), qPrintable(error));
+  auto* item = new ColorItem(scene.contentItem());
+  item->setSize(QSizeF(128, 128));
+  QVERIFY2(scene.sync(&error), qPrintable(error));
+  QVERIFY(scene.requestReadback());
+  const auto pending = scene.audit();
+  QCOMPARE(pending.readbacksAccepted, quint64(1));
+  QCOMPARE(pending.readbacksCompleted, quint64(0));
+  QCOMPARE(pending.readbacksCancelled, quint64(0));
+  QVERIFY2(scene.shutdown(&error), qPrintable(error));
+  QVERIFY2(scene.shutdown(&error), qPrintable(error));
+  const auto settled = scene.audit();
+  QCOMPARE(settled.readbacksAccepted, quint64(1));
+  QCOMPARE(settled.readbacksCompleted, quint64(0));
+  QCOMPARE(settled.readbacksCancelled, quint64(1));
+  QCOMPARE(settled.cleanupCount, quint64(1));
+  QVERIFY(!scene.requestReadback());
+  const auto rejected = scene.audit();
+  QCOMPARE(rejected.readbacksRejected, settled.readbacksRejected + 1);
+  QCOMPARE(rejected.readbacksAccepted, quint64(1));
+  QCOMPARE(rejected.readbacksCancelled, quint64(1));
 }
 
 void TestThreadedRender::blockedCleanupIsFailure()
