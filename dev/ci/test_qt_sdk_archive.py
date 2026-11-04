@@ -60,6 +60,28 @@ class QtArchiveTest(unittest.TestCase):
             plan_entries([(ROOT, [Entry("a", "symlink", mode=0o777, link="b"),
                                  Entry("b", "symlink", mode=0o777, link="a")])], 100, ROOT)
 
+    def test_directory_trailing_separator_is_narrowly_normalized(self):
+        entry = Entry("payload/", "directory", mode=0o755)
+        plan = plan_entries([(ROOT, [entry, Entry("payload", "directory", mode=0o755)])], 100, ROOT)
+        self.assertEqual(plan[0][0], plan[1][0])
+        self.assertEqual(plan[0][1].path, "payload/")
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            result = stage_entries([(ROOT, [entry, file_entry("payload/file")])],
+                                   parent / "stage", parent / "ready", 100, ROOT)
+            self.assertEqual((result / ROOT / "payload/file").read_bytes(), b"ok")
+        for name in ("", "/", "//", "payload//", "./", "../", "/absolute/", "a/../", "a/./", "a\\b/"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                plan_entries([(ROOT, [Entry(name, "directory", mode=0o755)])], 100, ROOT)
+        for kind in ("file", "symlink"):
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                plan_entries([(ROOT, [Entry("payload/", kind, mode=0o777,
+                                            open_data=lambda: io.BytesIO())])], 100, ROOT)
+        with self.assertRaises(ValueError):
+            plan_entries([(ROOT, [entry, Entry("payload", "directory", mode=0o700)])], 100, ROOT)
+        with self.assertRaises(ValueError):
+            plan_entries([(ROOT, [entry, file_entry("payload")])], 100, ROOT)
+
     def test_overlay_link_permissions_and_publication(self):
         entries = [Entry("bin", "directory", mode=0o755), file_entry("bin/tool"),
                    Entry("bin/alias", "symlink", mode=0o777, link="tool")]

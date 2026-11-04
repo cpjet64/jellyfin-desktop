@@ -157,7 +157,10 @@ def plan_entries(groups, expansion_limit, sdk_root):
         if root not in (base, *base.parents):
             raise ValueError("archive destination escapes SDK prefix")
         for entry in entries:
-            path = base / relative(entry.path)
+            name = entry.path
+            if entry.kind == "directory" and isinstance(name, str) and name.endswith("/"):
+                name = name[:-1]
+            path = base / relative(name)
             if entry.kind not in ("file", "directory", "symlink"):
                 raise ValueError(f"unsupported archive entry: {path}")
             if type(entry.mode) is not int or entry.mode < 0 or entry.mode & ~0o777:

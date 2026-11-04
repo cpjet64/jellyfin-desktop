@@ -87,6 +87,10 @@ class PlanTest(unittest.TestCase):
             pass
         with self.assertRaises(ValueError):
             extra.finish()
+        raw_path = Replay(FakeReader([Entry("payload", "directory", mode=0o755)]),
+                          [Entry("payload/", "directory", mode=0o755)])
+        with self.assertRaisesRegex(ValueError, "metadata changed"):
+            raw_path.finish()
 
     def test_scan_rejects_oversized_declared_file_before_staging(self):
         class ContextReader(FakeReader):
