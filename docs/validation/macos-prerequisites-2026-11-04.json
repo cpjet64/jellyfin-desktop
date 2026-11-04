@@ -1,0 +1,33 @@
+{
+  "observed_at_utc": "2026-11-04T09:44:54Z",
+  "source": "bounded read-only native metadata probe",
+  "probe_sha256": "a86ff0e16f21dc052cdf542530128da06aa50b1cd83a876be0e7c784ca7aec9c",
+  "private_report_sha256": "277f728b1d450ce5758f8fe3e26680c76f1c7087c57eb5f23902ae1405e89199",
+  "platform": "Darwin",
+  "architecture": "x86_64",
+  "os_release": "25.6.0",
+  "tools": {
+    "cmake": "4.4.3",
+    "ninja": "1.13.2",
+    "pkg-config": "3.0.6",
+    "cc": "Apple clang 21.0.0",
+    "c++": "not reported by direct-binary guard",
+    "meson": "not found on selected PATH",
+    "qmake6": "not found on selected PATH",
+    "qtpaths6": "not found on selected PATH"
+  },
+  "pkg_config_not_found": [
+    "Qt6Core", "Qt6Positioning", "Qt6Quick", "Qt6WebChannel", "Qt6WebEngineQuick",
+    "libass", "libavcodec", "libavfilter", "libavformat", "libavutil", "libplacebo",
+    "libswresample", "libswscale", "mpv"
+  ],
+  "checked_prefixes": [
+    "/usr", "/usr/local", "/usr/local/opt/qt", "/usr/local/opt/mpv",
+    "/opt/homebrew", "/opt/homebrew/opt/qt", "/opt/homebrew/opt/mpv"
+  ],
+  "selected_qt_mpv_files_found": false,
+  "gui_session_query_exit": 125,
+  "console_owner_uid": 0,
+  "deadline_exhausted": false,
+  "invoked_process_groups_settled": true
+}
