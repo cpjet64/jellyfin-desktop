@@ -41,7 +41,7 @@ private:
   QWinThumbnailToolButton* m_prev;
   QWinThumbnailToolButton* m_next;
 
-  bool m_initialized;
+  bool m_initialized = false;
   EventRegistrationToken m_buttonPressedToken;
   Microsoft::WRL::ComPtr<ABI::Windows::Media::ISystemMediaTransportControls> m_systemControls;
   Microsoft::WRL::ComPtr<ABI::Windows::Media::ISystemMediaTransportControlsDisplayUpdater> m_displayUpdater;

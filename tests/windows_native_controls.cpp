@@ -165,7 +165,6 @@ void TestWindowsNativeControls::callbackPath()
   QVERIFY(player.load(QUrl::fromLocalFile(media).toString(), {{"autoplay", true}}, {{"type", "video"}}));
   QTRY_VERIFY_WITH_TIMEOUT(player.getPosition() > 500, 10000);
   TaskbarComponentWin taskbar;
-  taskbar.m_initialized = false; // No OS registration was made by this fixture.
   auto& input = InputComponent::Get();
   healthy(taskbar, input);
   QVERIFY(!QTest::currentTestFailed());
