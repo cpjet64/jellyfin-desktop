@@ -91,6 +91,10 @@ class PlanTest(unittest.TestCase):
                           [Entry("payload/", "directory", mode=0o755)])
         with self.assertRaisesRegex(ValueError, "metadata changed"):
             raw_path.finish()
+        link = Entry("alias", "symlink", mode=0o755, link="target")
+        changed_link = Replay(FakeReader([replace(link, mode=0o777)]), [link])
+        with self.assertRaisesRegex(ValueError, "metadata changed"):
+            changed_link.finish()
 
     def test_scan_rejects_oversized_declared_file_before_staging(self):
         class ContextReader(FakeReader):
@@ -134,12 +138,20 @@ class PlanTest(unittest.TestCase):
             root = Path(temporary).resolve()
             prefix = root / "qt-candidate" / ROOT
             prefix.mkdir(parents=True)
+            (root / "qt-link-modes.json").write_text('[{"archive_mode": 493, "native_mode": 511}]\n')
             candidate = linux_qt_archive.Candidate(root, prefix, linux_qt_archive.manifest_hash())
             environment = {"PKG_CONFIG_PATH": str(prefix / "lib/pkgconfig"),
                            "LD_LIBRARY_PATH": str(prefix / "lib")}
             with self.assertRaises(ValueError):
                 linux_qt_archive.complete_qt(candidate, {"environment": {}})
             self.assertFalse((root / "qt-sdk-ready.json").exists())
+            inventory = root / "qt-link-modes.json"
+            original_inventory = inventory.read_text()
+            inventory.write_text('{}')
+            with self.assertRaises(ValueError):
+                linux_qt_archive.complete_qt(candidate, {"environment": environment})
+            self.assertFalse((root / "qt-sdk-ready.json").exists())
+            inventory.write_text(original_inventory)
             def fake_link(source, target, **kwargs):
                 if target.exists():
                     raise FileExistsError(target)
@@ -149,6 +161,9 @@ class PlanTest(unittest.TestCase):
                 self.assertTrue((root / "qt-sdk-ready.json").is_file())
                 receipt = json.loads((root / "qt-sdk-ready.json").read_text())
                 self.assertEqual(receipt["decoder_limits"], linux_qt_archive.decoder_limits())
+                self.assertEqual(receipt["symlink_count"], 1)
+                self.assertEqual(receipt["symlink_inventory_sha256"],
+                                 __import__("hashlib").sha256((root / "qt-link-modes.json").read_bytes()).hexdigest())
                 self.assertTrue(prefix.is_dir())
                 with self.assertRaises(FileExistsError):
                     linux_qt_archive.complete_qt(candidate, {"environment": environment})

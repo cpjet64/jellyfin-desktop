@@ -97,7 +97,7 @@ def stage_qt(workspace):
     workspace = Path(workspace).resolve(strict=True)
     run_worker(workspace)
     prefix = workspace / "qt-candidate" / "6.9.3/gcc_64"
-    if not prefix.is_dir():
+    if not prefix.is_dir() or not (workspace / "qt-link-modes.json").is_file():
         raise ValueError("Qt worker did not create a complete candidate")
     return Candidate(workspace, prefix.resolve(strict=True), manifest_hash())
 
@@ -121,14 +121,21 @@ def prepare(workspace):
     with ExitStack() as stack:
         readers = [stack.enter_context(Reader(path, library, item)) for item, path in archives]
         replay_groups, replays = attach_replays(groups, readers)
+        link_records = []
 
         def verify(stage):
             for replay in replays:
                 replay.finish()
             stack.close()
+            inventory = workspace / "qt-link-modes.json"
+            with inventory.open("x", encoding="utf-8") as output:
+                json.dump(link_records, output, ensure_ascii=True, sort_keys=True)
+                output.write("\n")
+                output.flush()
+                os.fsync(output.fileno())
 
         stage_entries(replay_groups, workspace / "qt-stage", workspace / "qt-candidate",
-                      MAX_EXPANSION, root, verify)
+                      MAX_EXPANSION, root, verify, link_records)
 
 
 def complete_qt(candidate, report):
@@ -140,10 +147,15 @@ def complete_qt(candidate, report):
     expected = {"PKG_CONFIG_PATH": str(prefix / "lib/pkgconfig"), "LD_LIBRARY_PATH": str(prefix / "lib")}
     if not isinstance(report, dict) or report.get("environment") != expected:
         raise ValueError("Qt SDK probe did not validate the candidate")
+    inventory = (candidate.workspace / "qt-link-modes.json").read_bytes()
+    links = json.loads(inventory)
+    if not isinstance(links, list):
+        raise ValueError("invalid Qt symlink mode inventory")
     receipt = candidate.workspace / "qt-sdk-ready.json"
     temporary = candidate.workspace / "qt-sdk-ready.pending"
     payload = json.dumps({"prefix": str(prefix), "manifest_sha256": candidate.manifest_sha256,
-                          "decoder_limits": decoder_limits()}, sort_keys=True)
+                          "decoder_limits": decoder_limits(), "symlink_count": len(links),
+                          "symlink_inventory_sha256": hashlib.sha256(inventory).hexdigest()}, sort_keys=True)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     with os.fdopen(os.open(temporary, flags, 0o600), "w", encoding="utf-8") as output:
         output.write(payload + "\n")

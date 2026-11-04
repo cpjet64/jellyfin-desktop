@@ -1,8 +1,10 @@
 """Backend-independent validation and staging for the pinned Linux Qt SDK.
 
 The archive reader must provide Entry records and a fresh binary stream for
-each regular file. It must reject hard links and undecodable names, preserve
-the entry type and permissions, and surface reader errors. The caller must
+each regular file. It must reject hard links and undecodable names, retain
+the entry type and archived permissions, and surface reader errors. Linux
+materializes ordinary symlinks as mode 0777, independently of archived mode.
+The caller must
 verify every archive before reading any entry. This module deliberately does
 not select or invoke an archive reader.
 """
@@ -14,6 +16,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
 import sys
 import urllib.parse
 import urllib.request
@@ -176,8 +179,6 @@ def plan_entries(groups, expansion_limit, sdk_root):
                 if total > expansion_limit:
                     raise ValueError("listed expansion exceeds configured limit")
             elif entry.kind == "symlink":
-                if entry.mode != 0o777:
-                    raise ValueError(f"unsupported symlink permissions: {path}")
                 validate_link(path, entry.link, root)
             previous = kinds.setdefault(path, entry.kind)
             if previous != entry.kind:
@@ -229,7 +230,14 @@ def publish_stage(stage, published):
         raise RuntimeError("atomic no-replace publication unavailable on this platform")
 
 
-def stage_entries(groups, stage, published, expansion_limit, sdk_root, verify_stage=None):
+def verify_materialized_link(path, target):
+    mode = os.lstat(path).st_mode
+    if not stat.S_ISLNK(mode) or stat.S_IMODE(mode) != 0o777 or os.readlink(path) != target:
+        raise ValueError(f"materialized symlink verification failed: {path}")
+    return stat.S_IMODE(mode)
+
+
+def stage_entries(groups, stage, published, expansion_limit, sdk_root, verify_stage=None, link_records=None):
     """Create a fresh stage and publish only after all entries are validated."""
     planned = plan_entries(groups, expansion_limit, sdk_root)
     stage, published = Path(stage), Path(published)
@@ -262,7 +270,12 @@ def stage_entries(groups, stage, published, expansion_limit, sdk_root, verify_st
                 seen[path] = identity
     for path, identity in seen.items():
         if identity[0] == "symlink":
-            os.symlink(identity[2], stage.joinpath(*path.parts))
+            target = stage.joinpath(*path.parts)
+            os.symlink(identity[2], target)
+            native_mode = verify_materialized_link(target, identity[2])
+            if link_records is not None:
+                link_records.append({"path": path.as_posix(), "target": identity[2],
+                                     "archive_mode": identity[1], "native_mode": native_mode})
     for path, identity in sorted(seen.items(), key=lambda item: len(item[0].parts), reverse=True):
         if identity[0] == "directory":
             stage.joinpath(*path.parts).chmod(identity[1])

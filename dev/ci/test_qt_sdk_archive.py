@@ -1,12 +1,15 @@
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
+import stat
 import tempfile
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from qt_sdk_archive import Entry, check_storage, download_archive, plan_entries, stage_entries, validate_manifest, verify_archive
+from qt_sdk_archive import Entry, check_storage, download_archive, plan_entries, stage_entries, validate_manifest, verify_archive, verify_materialized_link
 
 
 ROOT = "6.9.3/gcc_64"
@@ -116,7 +119,7 @@ class QtArchiveTest(unittest.TestCase):
     def test_directory_and_link_modes(self):
         directory = Entry("bin", "directory", mode=0o755)
         for other in (Entry("bin", "directory", mode=0o700),
-                      Entry("alias", "symlink", mode=0o700, link="bin")):
+                      Entry("alias", "symlink", mode=0o755, link="bin")):
             first = directory if other.kind == "directory" else Entry("alias", "symlink", mode=0o777, link="bin")
             with self.subTest(other=other), self.assertRaises(ValueError):
                 plan_entries([(ROOT, [first, other])], 20, ROOT)
@@ -130,6 +133,66 @@ class QtArchiveTest(unittest.TestCase):
             self.assertEqual(applied.call_args_list[-1].args[1], 0o755)
             if __import__("os").name != "nt":
                 self.assertEqual((result / ROOT / "bin").stat().st_mode & 0o777, 0o755)
+
+    def test_materialized_link_requires_type_mode_and_exact_target(self):
+        path = Path("link")
+        for mode, target in ((stat.S_IFREG | 0o777, "real"), (stat.S_IFLNK | 0o755, "real"),
+                             (stat.S_IFLNK | 0o777, "other")):
+            with self.subTest(mode=mode, target=target), \
+                    patch("qt_sdk_archive.os.lstat", return_value=SimpleNamespace(st_mode=mode)), \
+                    patch("qt_sdk_archive.os.readlink", return_value=target), self.assertRaises(ValueError):
+                verify_materialized_link(path, "real")
+        with patch("qt_sdk_archive.os.lstat", return_value=SimpleNamespace(st_mode=stat.S_IFLNK | 0o777)), \
+                patch("qt_sdk_archive.os.readlink", return_value="real"):
+            self.assertEqual(verify_materialized_link(path, "real"), 0o777)
+
+    def test_link_archive_modes_are_recorded_without_chmod_on_link(self):
+        entries = [file_entry("real", mode=0o644), Entry("link755", "symlink", mode=0o755, link="real"),
+                   Entry("link777", "symlink", mode=0o777, link="real")]
+        records = []
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            chmod = Path.chmod
+            with patch("qt_sdk_archive.os.symlink") as create, \
+                    patch("qt_sdk_archive.verify_materialized_link", return_value=0o777) as verify, \
+                    patch.object(Path, "chmod", autospec=True, side_effect=chmod) as modes:
+                stage_entries([(ROOT, entries)], parent / "stage", parent / "ready", 100, ROOT,
+                              link_records=records)
+            self.assertEqual(create.call_count, 2)
+            self.assertEqual(verify.call_count, 2)
+            self.assertEqual([(r["archive_mode"], r["native_mode"]) for r in records],
+                             [(0o755, 0o777), (0o777, 0o777)])
+            self.assertEqual([call.args[1] for call in modes.call_args_list], [0o644])
+            self.assertEqual((parent / "ready" / ROOT / "real").read_bytes(), b"ok")
+
+    def test_failed_materialized_link_never_publishes(self):
+        entries = [file_entry("real"), Entry("link1", "symlink", mode=0o755, link="real"),
+                   Entry("link2", "symlink", mode=0o777, link="real")]
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            verify_stage = Mock()
+            with patch("qt_sdk_archive.os.symlink"), \
+                    patch("qt_sdk_archive.verify_materialized_link", side_effect=[0o777, ValueError("invalid link")]) as verify:
+                with self.assertRaisesRegex(ValueError, "invalid link"):
+                    stage_entries([(ROOT, entries)], parent / "stage", parent / "qt-candidate", 100, ROOT,
+                                  verify_stage)
+            self.assertEqual(verify.call_count, 2)
+            verify_stage.assert_not_called()
+            self.assertFalse((parent / "qt-candidate").exists())
+            self.assertFalse((parent / "qt-sdk-ready.json").exists())
+
+    @unittest.skipUnless(os.name == "posix", "requires native POSIX symbolic links")
+    def test_real_link_materialization_preserves_target_mode(self):
+        entries = [file_entry("real", mode=0o640), Entry("link", "symlink", mode=0o755, link="real")]
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            records = []
+            result = stage_entries([(ROOT, entries)], parent / "stage", parent / "ready", 100, ROOT,
+                                   link_records=records)
+            self.assertEqual(stat.S_IMODE(os.lstat(result / ROOT / "link").st_mode), 0o777)
+            self.assertEqual(stat.S_IMODE((result / ROOT / "real").stat().st_mode), 0o640)
+            self.assertEqual(records[0]["archive_mode"], 0o755)
+            self.assertEqual(records[0]["native_mode"], 0o777)
 
     def test_conflicting_overlay_never_publishes(self):
         for second in (file_entry("file", b"different"), file_entry("file", mode=0o644)):
