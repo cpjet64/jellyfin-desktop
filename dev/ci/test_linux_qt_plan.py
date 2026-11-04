@@ -1,6 +1,7 @@
 from dataclasses import replace
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -115,8 +116,9 @@ class PlanTest(unittest.TestCase):
         groups, replays = attach_replays([(ROOT, [entry])], [reader])
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            result = stage_entries(groups, root / "stage", root / "ready", 100, ROOT,
-                                   lambda stage: replays[0].finish())
+            with patch("qt_sdk_archive.publish_stage", side_effect=os.rename):
+                result = stage_entries(groups, root / "stage", root / "ready", 100, ROOT,
+                                       lambda stage: replays[0].finish())
             self.assertEqual((result / ROOT / "x").read_bytes(), b"abc")
             self.assertGreaterEqual(len(reader.read_sizes), 2)
             self.assertTrue(all(size > 0 for size in reader.read_sizes))
