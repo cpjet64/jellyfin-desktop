@@ -75,9 +75,12 @@ def verify_installed_bytes(library, package, metadata_dir=Path("/var/lib/dpkg/in
         digest, separator, name = line.partition("  ")
         if separator and (system_root / name).resolve() == library:
             matches.append(digest)
-    if len(matches) != 1 or hashlib.md5(library.read_bytes(), usedforsecurity=False).hexdigest() != matches[0]:
+    data = library.read_bytes()
+    if len(matches) != 1 or hashlib.md5(data, usedforsecurity=False).hexdigest() != matches[0]:
         raise RuntimeError("BLOCKED: mpv runtime bytes differ from installed package metadata")
-    print("Verified installed mpv DSO sha256=" + hashlib.sha256(library.read_bytes()).hexdigest(), flush=True)
+    if len(data) < 20 or data[:6] != b"\x7fELF\x02\x01" or int.from_bytes(data[18:20], "little") != 62:
+        raise RuntimeError("BLOCKED: mpv runtime DSO is not x86_64 ELF")
+    print("Verified installed mpv DSO sha256=" + hashlib.sha256(data).hexdigest(), flush=True)
 
 
 def cmake_options(paths):

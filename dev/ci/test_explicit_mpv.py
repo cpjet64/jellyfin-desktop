@@ -90,12 +90,18 @@ class ExplicitMpvTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2]) as tmp:
             root = Path(tmp)
             library = root / "libmpv.so.2"
-            library.write_bytes(b"correct")
-            digest = hashlib.md5(b"correct", usedforsecurity=False).hexdigest()
+            image = b"\x7fELF\x02\x01" + bytes(12) + b"\x3e\x00" + b"fixture"
+            library.write_bytes(image)
+            digest = hashlib.md5(image, usedforsecurity=False).hexdigest()
             (root / "libmpv2.md5sums").write_text(digest + "  libmpv.so.2\n")
             explicit_mpv.verify_installed_bytes(library, "libmpv2", root, root)
             library.write_bytes(b"altered")
             with self.assertRaisesRegex(RuntimeError, "bytes differ"):
+                explicit_mpv.verify_installed_bytes(library, "libmpv2", root, root)
+            wrong_arch = image[:18] + b"\xb7\x00" + image[20:]
+            library.write_bytes(wrong_arch)
+            (root / "libmpv2.md5sums").write_text(hashlib.md5(wrong_arch, usedforsecurity=False).hexdigest() + "  libmpv.so.2\n")
+            with self.assertRaisesRegex(RuntimeError, "not x86_64 ELF"):
                 explicit_mpv.verify_installed_bytes(library, "libmpv2", root, root)
             for metadata in ("installed\narm64\n0.37.0-1ubuntu4", "not-installed\namd64\n0.37.0-1ubuntu4"):
                 with patch.object(explicit_mpv.subprocess, "check_output", side_effect=["libmpv2:amd64: /lib/a", metadata]):
