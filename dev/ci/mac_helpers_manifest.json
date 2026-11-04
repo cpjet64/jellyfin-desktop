@@ -1,0 +1,6 @@
+{
+  "yt_dlp": {"version": "2026.10.26", "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_macos", "size": 37466304, "sha256": "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa"},
+  "deno_zip": {"version": "2.9.8", "url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-apple-darwin.zip", "size": 42797031, "sha256": "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c"},
+  "deno_executable": {"member": "deno", "sha256": "5d206ba69742549cc161db06e86f1d93c5622e1dbc8ba9d15a618e538fbc92f4", "checksum_url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-apple-darwin.sha256sum", "checksum_bytes": 71, "checksum_sha256": "4af009c8722536813a381182ce8afcd2504ccb8ef59dca34854bae72bec4562d"},
+  "limits": {"metadata": 8388608, "acquisition": 100663296, "deno_expanded": 536870912, "yt_dlp_extraction": 536870912, "workspace": 2147483648, "free_space": 4294967296}
+}
