@@ -19,6 +19,7 @@ JOBS = ("windows-x64", "windows-system", "linux-static", "linux-system", "macos-
 CORE = ("test_systemcomponent", "test_log", "test_settings", "test_displaymanager", "test_log_rotation",
         "test_chromiumflags", "test_webclient_transport", "test_mpv_test_bootstrap_pure")
 RUNTIME = ("test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard", "test_mpv_test_bootstrap", "test_windowmanager")
+MPVQT_SHA = "2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e"
 STATIC = ("test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state")
 SCENARIOS = ("playing", "paused", "held-hook")
 
@@ -37,7 +38,8 @@ def fixture(base, job):
     platform, mode = job.split("-", 1)
     mode = "static" if mode == "x64" else mode
     report = dict(sha="abc", ref="branch", job=job, platform=platform, mode=mode,
-                  job_id="123", pipeline_id="456", build_core="passed", offscreen="passed", desktop="passed")
+                  job_id="123", pipeline_id="456", source_sha="abc", source_dir="/checkout", mpvqt_sha=MPVQT_SHA,
+                  build_core="passed", offscreen="passed", desktop="passed")
     names = ["webengine", "windowed_playback", "containment"]
     names += {"windows": ["windows_geometry", "windows_callback"],
               "linux": ["linux_mpris_fault", "linux_active_stop"], "macos": ["macos_media_callback"]}[platform]
@@ -50,6 +52,14 @@ def fixture(base, job):
     if platform != "windows":
         write(directory / "runtime-ctest.xml", junit(runtime))
     write(directory / "offscreen-executable", "binary")
+    options = "ON" if mode == "static" else "OFF"
+    cache = dict(CMAKE_HOME_DIRECTORY="/checkout", USE_STATIC_MPVQT=options, MPVQT_EXTERNAL_EVENTS=options,
+                 Qt6_DIR="/qt", MPV_INCLUDE_DIR="/mpv/include", MPV_LIBRARY="/mpv/lib")
+    manifest = dict(source_sha="abc", source_dir="/checkout", mpvqt_sha=MPVQT_SHA, mode=mode, cmake=cache,
+                    executable_sha256=hashlib.sha256(b"binary").hexdigest())
+    if mode == "static":
+        manifest.update(c1_patch_sha256="a" * 64, c1_controller_sha256="b" * 64)
+    write(directory / "build-manifest.json", json.dumps(manifest))
     for prefix in ("offscreen", "desktop-render", "containment"):
         for scenario in SCENARIOS:
             case = directory / prefix / scenario
@@ -166,6 +176,24 @@ class AcceptanceTest(unittest.TestCase):
         path = self.base / "linux-static/offscreen/playing/offscreen-after2.png"
         write(path, "different image")
         with self.assertRaisesRegex(ValueError, "incorrect scenario evidence images"):
+            self.validate()
+
+    def test_build_manifest_rejects_missing_malformed_and_mismatched_provenance(self):
+        path = self.base / "linux-static/build-manifest.json"
+        original = json.loads(path.read_text())
+        for field, value, diagnostic in (("source_sha", "wrong", "incorrect source_sha"),
+                                          ("source_dir", "/other", "incorrect source_dir"),
+                                          ("mode", "system", "incorrect mode"),
+                                          ("executable_sha256", "wrong", "incorrect executable hash"),
+                                          ("cmake", {}, "incorrect CMake source directory")):
+            write(path, json.dumps(dict(original, **{field: value})))
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, diagnostic):
+                self.validate()
+        write(path, "{")
+        with self.assertRaises(json.JSONDecodeError):
+            self.validate()
+        path.unlink()
+        with self.assertRaisesRegex(OSError, "build-manifest.json"):
             self.validate()
 
     def test_geometry_requires_all_three_clean_launches_and_snapshots(self):

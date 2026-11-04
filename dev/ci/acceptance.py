@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 
 from check_results import check_junit, check_qtest
 from desktop_policy import COMMON, PLATFORM
+from build_manifest import found
 
 JOBS = ("windows-x64", "windows-system", "linux-static", "linux-system",
         "macos-static", "macos-system")
@@ -91,6 +92,34 @@ def check_offscreen_metadata(directory, report):
                 raise ValueError(f"{scenario}: incorrect scenario evidence {key}")
 
 
+def validate_build_manifest(directory, report):
+    manifest = json.loads(artifact(directory, "build-manifest.json").read_text(encoding="utf-8"))
+    for key in ("source_sha", "source_dir", "mpvqt_sha", "mode"):
+        if not report.get(key) or manifest.get(key) != report[key]:
+            raise ValueError(f"build manifest: incorrect {key}")
+    if report["source_sha"] != report["sha"]:
+        raise ValueError("build manifest: source SHA differs from pipeline")
+    if report["mpvqt_sha"] != "2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e":
+        raise ValueError("build manifest: unexpected MpvQt revision")
+    if report["mode"] == "static" and any(not re.fullmatch(r"[0-9a-f]{64}", str(manifest.get(key, "")))
+                                          for key in ("c1_patch_sha256", "c1_controller_sha256")):
+        raise ValueError("build manifest: missing patched MpvQt identifiers")
+    cache = manifest.get("cmake")
+    if not isinstance(cache, dict):
+        raise ValueError("build manifest: missing CMake evidence")
+    normalize = lambda value: value.replace("\\", "/").rstrip("/").casefold() if report["platform"] == "windows" else value.rstrip("/")
+    if normalize(cache.get("CMAKE_HOME_DIRECTORY", "")) != normalize(report["source_dir"]):
+        raise ValueError("build manifest: incorrect CMake source directory")
+    expected = "ON" if report["mode"] == "static" else "OFF"
+    if any(cache.get(key) != expected for key in ("USE_STATIC_MPVQT", "MPVQT_EXTERNAL_EVENTS")):
+        raise ValueError("build manifest: incorrect CMake mode")
+    if not found(cache.get("Qt6_DIR")) or not found(cache.get("MPV_INCLUDE_DIR")) or not any(found(cache.get(key)) for key in ("MPV_LIBRARY", "MPV_LIBRARY_mpv")):
+        raise ValueError("build manifest: missing Qt or mpv evidence")
+    binary = artifact(directory, "offscreen-executable")
+    if manifest.get("executable_sha256") != hashlib.sha256(binary.read_bytes()).hexdigest():
+        raise ValueError("build manifest: incorrect executable hash")
+
+
 def validate_headless(base, job, sha, ref, pipeline_id):
     directory = base / job
     if directory.is_symlink() or directory.resolve(strict=True).parent != base.resolve(strict=True):
@@ -119,6 +148,7 @@ def validate_headless(base, job, sha, ref, pipeline_id):
     else:
         check_junit(artifact(directory, "headless-ctest.xml"), CORE)
         check_junit(artifact(directory, "runtime-ctest.xml"), required)
+    validate_build_manifest(directory, report)
     require_render(directory, "offscreen", "offscreen-before.png", "offscreen-after.png", "offscreen-after2.png",
                    ("TestRendererLossOffscreen", "actualPlayback"))
     check_offscreen_metadata(directory, report)

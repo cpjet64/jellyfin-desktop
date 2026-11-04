@@ -15,6 +15,25 @@ PHASES = ("build_core", "offscreen", "desktop")
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def verify_source(root, expected):
+    def git(*args):
+        result = subprocess.run(["git", *args], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                text=True, timeout=60, check=True)
+        return result.stdout
+    actual = git("rev-parse", "HEAD").strip()
+    if actual != expected:
+        raise ValueError("source HEAD does not match CI_COMMIT_SHA")
+    if git("status", "--porcelain", "--untracked-files=no", "--ignore-submodules=none").strip():
+        raise ValueError("tracked source or submodule worktree is dirty")
+    submodules = git("submodule", "status", "--recursive").splitlines()
+    if any(not line.startswith(" ") for line in submodules):
+        raise ValueError("submodule is missing, conflicted, or differs from its recorded commit")
+    mpvqt = git("-C", "external/mpvqt", "rev-parse", "HEAD").strip()
+    if mpvqt != "2ebbd38bf65d01be9c55d673ecd43c8bb9a6fc8e":
+        raise ValueError("unexpected MpvQt source revision")
+    return actual, mpvqt
+
+
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -61,6 +80,14 @@ def run_job():
                   desktop="blocked", desktop_reason="Desktop obligations not run by the headless job",
                   obligations=blocked_obligations(platform))
     (directory / "evidence.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    try:
+        report["source_sha"], report["mpvqt_sha"] = verify_source(ROOT, report["sha"])
+        report["source_dir"] = str(ROOT.resolve())
+        (directory / "evidence.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        update(directory, "build_core", "failed", str(error))
+        print(f"Source verification failed: {error}", file=sys.stderr)
+        return 1
     env = os.environ.copy()
     env["CI_EVIDENCE_DIR"] = str(directory)
     command = (["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy",

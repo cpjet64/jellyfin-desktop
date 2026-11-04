@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 import headless_requirements
+import build_manifest
 import native
 
 
@@ -65,6 +66,7 @@ class TestHeadlessRouting(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(patch.dict(native.os.environ, {"CI_EVIDENCE_DIR": "unused"}))
             stack.enter_context(patch.object(native, "update"))
+            stack.enter_context(patch.object(build_manifest, "capture"))
             for name in ("configure", "headless_checks", "runtime_ctest", "offscreen"):
                 stack.enter_context(patch.object(native, name, side_effect=lambda *a, n=name: events.append(n)))
             stack.enter_context(patch.object(native, "desktop_preflight", side_effect=RuntimeError("BLOCKED")))
@@ -76,6 +78,7 @@ class TestHeadlessRouting(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(patch.dict(native.os.environ, {"CI_EVIDENCE_DIR": "unused"}))
             stack.enter_context(patch.object(native, "update"))
+            stack.enter_context(patch.object(build_manifest, "capture"))
             for name in ("configure", "headless_checks", "desktop_preflight", "runtime_ctest", "offscreen"):
                 stack.enter_context(patch.object(native, name, side_effect=lambda *a, n=name: events.append(n)))
             native.run_stages("Linux", "static", [])

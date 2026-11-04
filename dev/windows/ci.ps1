@@ -85,6 +85,7 @@ Run-Native $python @('-m', 'venv', "$ci/venv")
 $venvPython = Join-Path $ci 'venv/Scripts/python.exe'
 Run-Native $venvPython @('tests/test_ci_results.py')
 Run-Native $venvPython @('dev/ci/test_evidence.py')
+Run-Native $venvPython @('dev/ci/test_build_manifest.py')
 Run-Native $venvPython @('dev/ci/test_acceptance.py')
 Run-Native $venvPython @('dev/ci/test_safe_extract.py')
 Run-Native $venvPython @('dev/ci/test_macos_session.py')
@@ -114,6 +115,8 @@ if ($mode -eq 'system') {
 }
 Run-Native 'cmake.exe' $configure
 Run-Native 'cmake.exe' @('--build', $build, '--parallel', '4')
+$env:CI_EVIDENCE_EXECUTABLE = "$build/tests/test_renderer_loss_offscreen.exe"
+Run-Native $venvPython @('dev/ci/build_manifest.py')
 if ($mode -eq 'system') {
     & dumpbin.exe /dependents "$build/src/Jellyfin Desktop.exe" | Set-Content "$results/system-mpvqt-dependents.txt"
     if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect system MpvQt linkage' }

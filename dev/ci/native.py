@@ -113,6 +113,7 @@ def preflight():
 def portable_checks():
     command("report-gate-tests", [sys.executable, "tests/test_ci_results.py"])
     command("evidence-tests", [sys.executable, "dev/ci/test_evidence.py"])
+    command("build-manifest-tests", [sys.executable, "dev/ci/test_build_manifest.py"])
     command("acceptance-tests", [sys.executable, "dev/ci/test_acceptance.py"])
     command("archive-safety-tests", [sys.executable, "dev/ci/test_safe_extract.py"])
     command("inventory-tests", [sys.executable, "dev/ci/test_native_inventory.py"])
@@ -252,6 +253,8 @@ def run_scenarios(fixture, prefix, env, media):
 
 def run_stages(system, mode, desktop_missing):
     configure(system, mode)
+    from build_manifest import capture
+    capture(ROOT, Path(os.environ["CI_EVIDENCE_DIR"]), BUILD / "tests/test_renderer_loss_offscreen")
     headless_checks()
     directory = Path(os.environ["CI_EVIDENCE_DIR"])
     update(directory, "build_core", "passed", "Native build and classified core checks passed")
