@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -21,6 +22,13 @@ def file_entry(path, data=b"ok", mode=0o755, size=None):
 
 
 class QtArchiveTest(unittest.TestCase):
+    def setUp(self):
+        # Exercise staging policy independently of the native publication API.
+        publisher = patch("qt_sdk_archive.publish_stage", side_effect=os.rename)
+        publisher.start()
+        self.publisher = publisher
+        self.addCleanup(publisher.stop)
+
     def test_manifest(self):
         manifest = json.loads(Path(__file__).with_name("qt-6.9.3-unix.json").read_text())
         linux = manifest["platforms"]["linux"]
@@ -85,6 +93,7 @@ class QtArchiveTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             plan_entries([(ROOT, [entry, file_entry("payload")])], 100, ROOT)
 
+    @unittest.skipUnless(sys.platform == "linux", "requires native Linux symlinks")
     def test_overlay_link_permissions_and_publication(self):
         entries = [Entry("bin", "directory", mode=0o755), file_entry("bin/tool"),
                    Entry("bin/alias", "symlink", mode=0o777, link="tool")]
@@ -147,7 +156,8 @@ class QtArchiveTest(unittest.TestCase):
             self.assertEqual(verify_materialized_link(path, "real"), 0o777)
 
     def test_link_archive_modes_are_recorded_without_chmod_on_link(self):
-        entries = [file_entry("real", mode=0o644), Entry("link755", "symlink", mode=0o755, link="real"),
+        link = Entry("link755", "symlink", mode=0o755, link="real")
+        entries = [file_entry("real", mode=0o644), link, link,
                    Entry("link777", "symlink", mode=0o777, link="real")]
         records = []
         with tempfile.TemporaryDirectory() as directory:
@@ -181,7 +191,7 @@ class QtArchiveTest(unittest.TestCase):
             self.assertFalse((parent / "qt-candidate").exists())
             self.assertFalse((parent / "qt-sdk-ready.json").exists())
 
-    @unittest.skipUnless(os.name == "posix", "requires native POSIX symbolic links")
+    @unittest.skipUnless(sys.platform == "linux", "requires native Linux symbolic links")
     def test_real_link_materialization_preserves_target_mode(self):
         entries = [file_entry("real", mode=0o640), Entry("link", "symlink", mode=0o755, link="real")]
         with tempfile.TemporaryDirectory() as directory:
@@ -193,6 +203,17 @@ class QtArchiveTest(unittest.TestCase):
             self.assertEqual(stat.S_IMODE((result / ROOT / "real").stat().st_mode), 0o640)
             self.assertEqual(records[0]["archive_mode"], 0o755)
             self.assertEqual(records[0]["native_mode"], 0o777)
+
+    @unittest.skipUnless(sys.platform in ("win32", "linux"),
+                         "native publisher supports Windows and Linux")
+    def test_native_publication(self):
+        self.publisher.stop()
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            result = stage_entries([(ROOT, [file_entry("tool")])], parent / "stage",
+                                   parent / "ready", 20, ROOT)
+            self.assertEqual((result / ROOT / "tool").read_bytes(), b"ok")
+            self.assertFalse((parent / "stage").exists())
 
     def test_conflicting_overlay_never_publishes(self):
         for second in (file_entry("file", b"different"), file_entry("file", mode=0o644)):
