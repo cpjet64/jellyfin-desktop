@@ -4,8 +4,13 @@ The approved runtime and display package transactions completed separately.
 The runtime transaction installed 77 new packages, with no upgrades. The
 display transaction installed three new packages and upgraded the five
 specified packages. The approved package identities, versions, architectures,
-and archive hashes are recorded in [the transaction manifest](linux-provisioning-transaction.json),
-SHA-256 `d1bff39e461582a2c26649c9658a45ba0710167eb386988216a52ef654411cad`.
+and archive hashes are recorded in [the transaction manifest](linux-provisioning-transaction.json).
+The published Git blob with LF line endings has SHA-256
+`04e2a4c2885514f2828b004127619051fdeec14cfcedec2992c3117b9ae21719`.
+The exact CRLF bytes supplied to the transactions have SHA-256
+`d1bff39e461582a2c26649c9658a45ba0710167eb386988216a52ef654411cad`.
+Normalizing those transaction bytes to LF was verified to reproduce the Git
+blob bytes.
 
 Both transactions ended successfully. The retained post-install checks
 confirmed each package delta against the manifest, the runtime after-state
