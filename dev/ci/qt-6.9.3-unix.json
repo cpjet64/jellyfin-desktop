@@ -17,43 +17,50 @@
               "url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qtbase-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qtbase-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z.mirrorlist",
               "bytes": 26134345,
-              "sha256": "2f02d19183df1b011fd7fe57aa2a1e9073b981f5bda7a8f9c96a6c64b8b7b06c"
+              "sha256": "2f02d19183df1b011fd7fe57aa2a1e9073b981f5bda7a8f9c96a6c64b8b7b06c",
+              "extract_subdirectory": "6.9.3/gcc_64"
             },
             {
               "url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qtsvg-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qtsvg-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z.mirrorlist",
               "bytes": 286401,
-              "sha256": "02466f4028c14a9c49f82153d17367fd5a2bde26b6d19b72fe9da9245483da76"
+              "sha256": "02466f4028c14a9c49f82153d17367fd5a2bde26b6d19b72fe9da9245483da76",
+              "extract_subdirectory": "6.9.3/gcc_64"
             },
             {
               "url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qtdeclarative-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qtdeclarative-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z.mirrorlist",
               "bytes": 133336687,
-              "sha256": "0542599fa56a548c98bde3d683ad83a3423266ce530e8b544a7eb0a96b63a4ea"
+              "sha256": "0542599fa56a548c98bde3d683ad83a3423266ce530e8b544a7eb0a96b63a4ea",
+              "extract_subdirectory": "6.9.3/gcc_64"
             },
             {
               "url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qttools-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qttools-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z.mirrorlist",
               "bytes": 42752371,
-              "sha256": "77ff4d0085def2fc62efb93c0c2c93961433b1ed1bb30f230ee1b7c1ef90d116"
+              "sha256": "77ff4d0085def2fc62efb93c0c2c93961433b1ed1bb30f230ee1b7c1ef90d116",
+              "extract_subdirectory": "6.9.3/gcc_64"
             },
             {
               "url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qttranslations-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qttranslations-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z.mirrorlist",
               "bytes": 1904615,
-              "sha256": "12f042e7cf059e390ee695d71db01cfbd3e9c9ac4957b318ea1c2729795026f6"
+              "sha256": "12f042e7cf059e390ee695d71db01cfbd3e9c9ac4957b318ea1c2729795026f6",
+              "extract_subdirectory": "6.9.3/gcc_64"
             },
             {
               "url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qtwayland-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207qtwayland-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z.mirrorlist",
               "bytes": 645521,
-              "sha256": "34376670dbb3bec66e7962301110ae7d63e68c1b0ff079ba286c5dfc8649a75c"
+              "sha256": "34376670dbb3bec66e7962301110ae7d63e68c1b0ff079ba286c5dfc8649a75c",
+              "extract_subdirectory": "6.9.3/gcc_64"
             },
             {
               "url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207icu-linux-Rhel8.6-x86_64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.linux_gcc_64/6.9.3-0-202509261207icu-linux-Rhel8.6-x86_64.7z.mirrorlist",
               "bytes": 9660622,
-              "sha256": "419bf0ce8db44ce83b309564c1686bd897a8b36ae0c6a78498905ba4c30a0439"
+              "sha256": "419bf0ce8db44ce83b309564c1686bd897a8b36ae0c6a78498905ba4c30a0439",
+              "extract_subdirectory": "6.9.3/gcc_64/lib"
             }
           ]
         },
@@ -68,7 +75,8 @@
               "url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.addons.qtwebchannel.linux_gcc_64/6.9.3-0-202509261207qtwebchannel-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.addons.qtwebchannel.linux_gcc_64/6.9.3-0-202509261207qtwebchannel-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z.mirrorlist",
               "bytes": 121884,
-              "sha256": "de6427681038757469123a2d1f48519aa355272e53c1415e54fd90e8547673c2"
+              "sha256": "de6427681038757469123a2d1f48519aa355272e53c1415e54fd90e8547673c2",
+              "extract_subdirectory": "6.9.3/gcc_64"
             }
           ]
         },
@@ -83,7 +91,8 @@
               "url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.addons.qtpositioning.linux_gcc_64/6.9.3-0-202509261207qtpositioning-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_693/qt6_693/qt.qt6.693.addons.qtpositioning.linux_gcc_64/6.9.3-0-202509261207qtpositioning-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z.mirrorlist",
               "bytes": 397823,
-              "sha256": "de169084ac54216da7f7030ae37c077c0be3620d52826416b379a99769e399cd"
+              "sha256": "de169084ac54216da7f7030ae37c077c0be3620d52826416b379a99769e399cd",
+              "extract_subdirectory": "6.9.3/gcc_64"
             }
           ]
         },
@@ -98,7 +107,8 @@
               "url": "https://download.qt.io/online/qtsdkrepository/linux_x64/extensions/qtwebengine/693/x86_64/extensions.qtwebengine.693.linux_gcc_64/6.9.3-0-202509261208qtwebengine-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/linux_x64/extensions/qtwebengine/693/x86_64/extensions.qtwebengine.693.linux_gcc_64/6.9.3-0-202509261208qtwebengine-Linux-RHEL_8_10-GCC-Linux-RHEL_8_10-X86_64.7z.mirrorlist",
               "bytes": 123249885,
-              "sha256": "8ac7e13152a1d3415e8d274a905c692633152286d815b165378d42a829801236"
+              "sha256": "8ac7e13152a1d3415e8d274a905c692633152286d815b165378d42a829801236",
+              "extract_subdirectory": "6.9.3/gcc_64"
             }
           ]
         }
@@ -121,31 +131,36 @@
               "url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.clang_64/6.9.3-0-202509261207qtbase-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.clang_64/6.9.3-0-202509261207qtbase-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z.mirrorlist",
               "bytes": 34052196,
-              "sha256": "805144e619b7c7b0e9c985d929e1f290241d88b884218db3ad7d56bd579d6b4a"
+              "sha256": "805144e619b7c7b0e9c985d929e1f290241d88b884218db3ad7d56bd579d6b4a",
+              "extract_subdirectory": "6.9.3/macos"
             },
             {
               "url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.clang_64/6.9.3-0-202509261207qtdeclarative-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.clang_64/6.9.3-0-202509261207qtdeclarative-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z.mirrorlist",
               "bytes": 115285690,
-              "sha256": "151f3329dbda9ffe42022556497c65885fb20411541397c31dacd5d278b67e74"
+              "sha256": "151f3329dbda9ffe42022556497c65885fb20411541397c31dacd5d278b67e74",
+              "extract_subdirectory": "6.9.3/macos"
             },
             {
               "url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.clang_64/6.9.3-0-202509261207qtsvg-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.clang_64/6.9.3-0-202509261207qtsvg-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z.mirrorlist",
               "bytes": 385231,
-              "sha256": "fee0f11aa637d754333e3ec480b87641828607ba8a76d6dc46121846d701a11a"
+              "sha256": "fee0f11aa637d754333e3ec480b87641828607ba8a76d6dc46121846d701a11a",
+              "extract_subdirectory": "6.9.3/macos"
             },
             {
               "url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.clang_64/6.9.3-0-202509261207qttools-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.clang_64/6.9.3-0-202509261207qttools-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z.mirrorlist",
               "bytes": 63624518,
-              "sha256": "e5fdf08f13e2056cb99c8e57be046bb24e2bf4e1c678ad4ac85a29ebfdf06d20"
+              "sha256": "e5fdf08f13e2056cb99c8e57be046bb24e2bf4e1c678ad4ac85a29ebfdf06d20",
+              "extract_subdirectory": "6.9.3/macos"
             },
             {
               "url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.clang_64/6.9.3-0-202509261207qttranslations-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.clang_64/6.9.3-0-202509261207qttranslations-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z.mirrorlist",
               "bytes": 1965729,
-              "sha256": "17e09c770a0fbccd9256361793ccf790b69874cc77e881860f6ebcb91f42464b"
+              "sha256": "17e09c770a0fbccd9256361793ccf790b69874cc77e881860f6ebcb91f42464b",
+              "extract_subdirectory": "6.9.3/macos"
             }
           ]
         },
@@ -160,7 +175,8 @@
               "url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.addons.qtwebchannel.clang_64/6.9.3-0-202509261207qtwebchannel-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.addons.qtwebchannel.clang_64/6.9.3-0-202509261207qtwebchannel-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z.mirrorlist",
               "bytes": 169767,
-              "sha256": "76d7fe5806c7e594c4f35aa97ab99228f016ce6b2bae644bf4e30ff56514a72e"
+              "sha256": "76d7fe5806c7e594c4f35aa97ab99228f016ce6b2bae644bf4e30ff56514a72e",
+              "extract_subdirectory": "6.9.3/macos"
             }
           ]
         },
@@ -175,7 +191,8 @@
               "url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.addons.qtpositioning.clang_64/6.9.3-0-202509261207qtpositioning-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_693/qt6_693/qt.qt6.693.addons.qtpositioning.clang_64/6.9.3-0-202509261207qtpositioning-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z.mirrorlist",
               "bytes": 555701,
-              "sha256": "29648d4c248da878dc3ff7c1ff7c96aea804c192e3e4d17f27dba4519f4dacfc"
+              "sha256": "29648d4c248da878dc3ff7c1ff7c96aea804c192e3e4d17f27dba4519f4dacfc",
+              "extract_subdirectory": "6.9.3/macos"
             }
           ]
         },
@@ -190,7 +207,8 @@
               "url": "https://download.qt.io/online/qtsdkrepository/mac_x64/extensions/qtwebengine/693/clang_64/extensions.qtwebengine.693.clang_64/6.9.3-0-202509261208qtwebengine-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z",
               "checksum_source_url": "https://download.qt.io/online/qtsdkrepository/mac_x64/extensions/qtwebengine/693/clang_64/extensions.qtwebengine.693.clang_64/6.9.3-0-202509261208qtwebengine-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z.mirrorlist",
               "bytes": 145987781,
-              "sha256": "95a1fc974e50936dfe15f74007748c11de030397f419ad5b4f09766374d1648d"
+              "sha256": "95a1fc974e50936dfe15f74007748c11de030397f419ad5b4f09766374d1648d",
+              "extract_subdirectory": "6.9.3/macos"
             }
           ]
         }
