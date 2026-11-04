@@ -2,6 +2,7 @@
 // until retirement ACK. Run each C2_SCENARIO in a separate contained process.
 #include <QtTest/QtTest>
 #include <QDir>
+#include <QColor>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -27,120 +28,11 @@
 #include "settings/SettingsComponent.h"
 #include "mpv_test_bootstrap.h"
 #include "mpv_test_profile.h"
+#include "c2_event_observer.h"
+#include "c2_replay_recipe.h"
+#include "c2_scene.h"
 
 namespace {
-class Scene
-{
-public:
-  bool init();
-  bool frame();
-  bool waitFor(const std::function<bool()>& predicate, int ms);
-  bool destroyItem();
-  ~Scene();
-  QOpenGLContext context;
-  QOffscreenSurface surface;
-  std::unique_ptr<QQuickRenderControl> control;
-  std::unique_ptr<QQuickWindow> window;
-  std::unique_ptr<QOpenGLFramebufferObject> target;
-  MpvVideoItem* item = nullptr;
-  bool mayHaveContext = false;
-  bool retired = false;
-};
-
-bool Scene::init()
-{
-  if (!context.create() || context.isOpenGLES()) return false;
-  surface.setFormat(context.format());
-  surface.create();
-  if (!surface.isValid() || !context.makeCurrent(&surface)) return false;
-  target = std::make_unique<QOpenGLFramebufferObject>(QSize(640, 360));
-  if (!target->isValid()) return false;
-  control = std::make_unique<QQuickRenderControl>();
-  window = std::make_unique<QQuickWindow>(control.get());
-  window->resize(640, 360);
-  window->setGraphicsDevice(QQuickGraphicsDevice::fromOpenGLContext(&context));
-  window->setRenderTarget(QQuickRenderTarget::fromOpenGLTexture(target->texture(), target->size()));
-  item = new MpvVideoItem(window->contentItem());
-  item->setParent(window->contentItem());
-  item->setObjectName("video");
-  item->setSize(QSizeF(640, 360));
-  return control->initialize();
-}
-
-bool Scene::frame()
-{
-  if (!context.makeCurrent(&surface)) return false;
-  control->polishItems();
-  control->beginFrame();
-  control->sync();
-  control->render();
-  control->endFrame();
-  return true;
-}
-
-bool Scene::waitFor(const std::function<bool()>& predicate, int ms)
-{
-  QElapsedTimer deadline;
-  deadline.start();
-  while (!predicate() && deadline.elapsed() < ms) {
-    if (!frame()) return false;
-    QTest::qWait(20);
-  }
-  return predicate();
-}
-
-bool Scene::destroyItem()
-{
-  if (!retired || !context.makeCurrent(&surface)) return false;
-  control->invalidate();
-  if (!context.makeCurrent(&surface)) return false;
-  delete item;
-  item = nullptr;
-  return true;
-}
-
-Scene::~Scene()
-{
-  if (mayHaveContext && !retired) std::_Exit(EXIT_FAILURE);
-  if ((target || item) && !context.makeCurrent(&surface)) std::_Exit(EXIT_FAILURE);
-  if (control) control->invalidate();
-  if ((target || item) && !context.makeCurrent(&surface)) std::_Exit(EXIT_FAILURE);
-  delete item;
-  item = nullptr;
-  window.reset();
-  control.reset();
-  target.reset();
-  context.doneCurrent();
-}
-
-bool propertyFlag(mpv_handle* handle, const char* name)
-{
-  int value = 0;
-  return mpv_get_property(handle, name, MPV_FORMAT_FLAG, &value) >= 0 && value;
-}
-
-class Observer
-{
-public:
-  explicit Observer(mpv_handle* core) : client(mpv_create_client(core, "c2-observer"))
-  {
-    if (client) mpv_observe_property(client, 1, "vo-configured", MPV_FORMAT_FLAG);
-  }
-  ~Observer() { if (client) mpv_destroy(client); }
-  void drain()
-  {
-    while (client) {
-      mpv_event* event = mpv_wait_event(client, 0);
-      if (!event || event->event_id == MPV_EVENT_NONE) break;
-      if (event->event_id == MPV_EVENT_VIDEO_RECONFIG) ++videoReconfigs;
-      if (event->event_id == MPV_EVENT_PROPERTY_CHANGE) ++propertyEvents;
-    }
-  }
-  mpv_handle* client = nullptr;
-  int videoReconfigs = 0;
-  int propertyEvents = 0;
-};
-
 struct CallbackRelease
 {
   ~CallbackRelease() { DiagnosticFailureInjection::holdCallback = false; }
@@ -169,11 +61,28 @@ class TestC2RetirementNative : public QObject
   Q_OBJECT
 private slots:
   void retirement();
+  void recovery();
 private:
   void runScenario(Scene& scene, PlayerComponent& player, const QString& scenario, const QString& media);
   void retireAndVerify(Scene& scene, PlayerComponent& player, const QString& scenario,
-                       QSignalSpy& blocked, QSignalSpy& retired, Observer& observer);
+                       QSignalSpy& blocked, QSignalSpy& retired, C2EventObserver& observer);
+  void recoverScenario(Scene& scene, PlayerComponent& player, const QString& scenario,
+                       const QString& media, const QString& evidence);
+  void verifyRecovery(Scene& scene, PlayerComponent& player, C2ReplayRecipe& recipe,
+                      const QString& scenario, const QString& evidence);
+  void holdStaleCallback();
+  void verifyStaleCallback(Scene& scene, PlayerComponent& player, MpvController* controller,
+                           quint64 binding, int destroyedBefore, int rejectedBefore, QSignalSpy& retired);
+  void verifyStopped(Scene& scene, C2ReplayRecipe& recipe, C2EventObserver& observer,
+                     mpv_handle* core, bool previousAttempt);
+  void verifyFailedCreate(Scene& scene, quint64 first, QSignalSpy& failed,
+                          QSignalSpy& noContext, QSignalSpy& created);
+  void finishRecovery(Scene& scene, PlayerComponent& player, C2ReplayRecipe& recipe,
+                      C2EventObserver& observer, const QString& scenario, const QString& evidence,
+                      QSignalSpy& failed, QSignalSpy& retired);
 };
+
+#include "c2_recovery_cases.h"
 
 void TestC2RetirementNative::retirement()
 {
@@ -245,7 +154,7 @@ void TestC2RetirementNative::runScenario(Scene& scene, PlayerComponent& player,
   QVERIFY(!ready.isEmpty());
   QVERIFY(DiagnosticFailureInjection::callbacks.load() > 0);
   QVERIFY(core);
-  Observer observer(core);
+  C2EventObserver observer(core);
   QVERIFY(observer.client);
   QVERIFY(player.requestNativeStop().status == PlayerComponent::NativeStopResult::Status::Accepted);
   if (scenario == "render-failure") DiagnosticFailureInjection::render = MPV_ERROR_UNSUPPORTED;
@@ -265,7 +174,7 @@ void TestC2RetirementNative::runScenario(Scene& scene, PlayerComponent& player,
 
 void TestC2RetirementNative::retireAndVerify(Scene& scene, PlayerComponent& player,
                                              const QString& scenario, QSignalSpy& blocked,
-                                             QSignalSpy& retired, Observer& observer)
+                                             QSignalSpy& retired, C2EventObserver& observer)
 {
   auto* controller = scene.item->controller();
   mpv_handle* core = controller->mpv();
@@ -328,19 +237,30 @@ void TestC2RetirementNative::retireAndVerify(Scene& scene, PlayerComponent& play
   QCOMPARE(player.m_doAc3Transcoding, ac3);
   QTest::qWait(150);
   observer.drain();
+  const auto idleAfterRetire = observer.flag("idle-active");
+  const auto videoAfterRetire = observer.flag("vo-configured");
+  QCOMPARE(idleAfterRetire.error, 0);
+  QCOMPARE(videoAfterRetire.error, 0);
   qInfo() << "C2 immediately after retirement; Stop already requested:" << (scenario == "stop-hook")
-          << "idle-active:" << propertyFlag(core, "idle-active")
-          << "vo-configured:" << propertyFlag(core, "vo-configured")
-          << "video reconfigs:" << observer.videoReconfigs << "property events:" << observer.propertyEvents;
+          << "idle-active:" << idleAfterRetire.value << "vo-configured:" << videoAfterRetire.value
+          << "observed events:" << observer.events.size();
   if (scenario != "stop-hook")
     QCOMPARE(player.requestNativeStop().status, PlayerComponent::NativeStopResult::Status::Accepted);
   QTest::qWait(3500);
-  if (scenario == "stop-hook") QVERIFY(player.m_c2HooksCompleted > 0);
-  QVERIFY(propertyFlag(core, "idle-active"));
+  if (scenario == "stop-hook") {
+    QVERIFY(player.m_c2HooksCompleted > 0);
+    QCOMPARE(player.m_c2HookContinueCalls, 1);
+    QCOMPARE(player.m_c2LastScheduledHookId, player.m_c2LastContinuedHookId);
+    QCOMPARE(player.m_c2LastHookContinueResult, 0);
+  }
+  const auto idleAfterStop = observer.flag("idle-active");
+  QCOMPARE(idleAfterStop.error, 0);
+  QVERIFY(idleAfterStop.value);
   observer.drain();
-  qInfo() << "C2 actual mpv idle-active:" << propertyFlag(core, "idle-active")
-          << "vo-configured:" << propertyFlag(core, "vo-configured")
-          << "video reconfigs:" << observer.videoReconfigs << "property events:" << observer.propertyEvents;
+  const auto videoAfterStop = observer.flag("vo-configured");
+  QCOMPARE(videoAfterStop.error, 0);
+  qInfo() << "C2 actual mpv idle-active:" << idleAfterStop.value
+          << "vo-configured:" << videoAfterStop.value << "observed events:" << observer.events.size();
   scene.item->requestRenderRetirement(generation);
   QVERIFY(scene.frame());
   QTest::qWait(50);
@@ -353,7 +273,12 @@ int main(int argc, char** argv)
   QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
   QGuiApplication app(argc, argv);
   TestC2RetirementNative test;
-  return QTest::qExec(&test, argc, argv);
+  QVector<QByteArray> arguments;
+  for (int i = 0; i < argc; ++i) arguments.append(argv[i]);
+  arguments.append(qEnvironmentVariableIsEmpty("C2_RECOVERY_SCENARIO") ? "retirement" : "recovery");
+  QVector<char*> pointers;
+  for (auto& argument : arguments) pointers.append(argument.data());
+  return QTest::qExec(&test, pointers.size(), pointers.data());
 }
 
 #include "test_c2_retirement_native.moc"
