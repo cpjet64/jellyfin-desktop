@@ -8,6 +8,12 @@ import acceptance
 
 ROOT = Path(__file__).resolve().parents[2]
 QTEST = "Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted\n"
+JOBS = ("windows-x64", "windows-system", "linux-static", "linux-system", "macos-static", "macos-system")
+CORE = ("test_systemcomponent", "test_log", "test_settings", "test_displaymanager", "test_log_rotation",
+        "test_chromiumflags", "test_webclient_transport", "test_mpv_test_bootstrap_pure")
+RUNTIME = ("test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard", "test_mpv_test_bootstrap")
+STATIC = ("test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state")
+SCENARIOS = ("playing", "paused", "held-hook")
 
 
 def write(path, data="evidence"):
@@ -26,13 +32,13 @@ def fixture(base, job):
     report = dict(sha="abc", ref="branch", job=job, platform=platform, mode=mode,
                   job_id="123", build_core="passed", offscreen="passed", desktop="passed")
     write(directory / "evidence.json", json.dumps(report))
-    write(directory / "headless-ctest.xml", junit(acceptance.CORE))
-    runtime = list(acceptance.RUNTIME) + (list(acceptance.STATIC) if mode == "static" else [])
+    write(directory / "headless-ctest.xml", junit(CORE))
+    runtime = list(RUNTIME) + (list(STATIC) if mode == "static" else [])
     if platform == "linux":
         runtime.append("test_mpris_fault")
     write(directory / "desktop-ctest.xml", junit(runtime))
     for prefix in ("offscreen", "desktop-render", "containment"):
-        for scenario in acceptance.SCENARIOS:
+        for scenario in SCENARIOS:
             case = directory / prefix / scenario
             write(case / "qtest.txt", QTEST)
             if scenario == "held-hook":
@@ -55,14 +61,15 @@ class AcceptanceTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(dir=ROOT / "deps", prefix="acceptance-test-")
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
-        for job in acceptance.JOBS:
+        for job in JOBS:
             fixture(self.base, job)
 
     def validate(self, job="linux-static"):
         acceptance.validate_job(self.base, job, "abc", "branch")
 
     def test_complete_six_jobs(self):
-        for job in acceptance.JOBS:
+        self.assertEqual(set(acceptance.JOBS), set(JOBS))
+        for job in JOBS:
             with self.assertRaisesRegex(ValueError, "receipt verification is not implemented"):
                 self.validate(job)
 
@@ -76,24 +83,42 @@ class AcceptanceTest(unittest.TestCase):
             with self.subTest(key=key, value=value):
                 changed = dict(original, **{key: value})
                 write(path, json.dumps(changed))
-                with self.assertRaises(ValueError):
+                if key == "job_id":
+                    diagnostic = "missing job identity"
+                elif key in ("build_core", "offscreen", "desktop"):
+                    diagnostic = f"invalid {key} status" if value == "unknown" else f"{key} is {value}"
+                else:
+                    diagnostic = f"incorrect or missing {key}"
+                with self.assertRaisesRegex(ValueError, diagnostic):
                     self.validate()
+        write(path, json.dumps(original))
+        for key in ("sha", "ref", "job", "platform", "mode", "job_id", "build_core", "offscreen", "desktop"):
+            changed = dict(original)
+            del changed[key]
+            write(path, json.dumps(changed))
+            diagnostic = ("missing job identity" if key == "job_id" else
+                          f"invalid {key} status" if key in ("build_core", "offscreen", "desktop") else
+                          f"incorrect or missing {key}")
+            with self.subTest(missing=key), self.assertRaisesRegex(ValueError, diagnostic):
+                self.validate()
         write(path, json.dumps(original))
 
     def test_missing_required_cases_and_failed_junit(self):
         path = self.base / "linux-static/desktop-ctest.xml"
-        for text in (junit(acceptance.RUNTIME),
-                     '<testsuite><testcase name="test_fault_stop"><failure/></testcase></testsuite>',
-                     '<testsuite><testcase name="test_fault_stop"><skipped/></testcase></testsuite>'):
+        for text, diagnostic in ((junit(RUNTIME), "Missing CTest cases"),
+                     ('<testsuite><testcase name="test_fault_stop"><failure/></testcase></testsuite>', "failed, or skipped"),
+                     ('<testsuite><testcase name="test_fault_stop"><skipped/></testcase></testsuite>', "failed, or skipped")):
             write(path, text)
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, diagnostic):
                 self.validate()
 
     def test_missing_failed_skipped_scenario_and_native_controls(self):
         path = self.base / "linux-static/offscreen/held-hook/qtest.txt"
-        for text in ("Totals: 3 passed, 1 failed, 0 skipped", "Totals: 3 passed, 0 failed, 1 skipped", ""):
+        for text, diagnostic in (("Totals: 3 passed, 1 failed, 0 skipped", "Incomplete or unsuccessful QTest"),
+                                 ("Totals: 3 passed, 0 failed, 1 skipped", "Incomplete or unsuccessful QTest"),
+                                 ("", "empty artifact")):
             write(path, text)
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, diagnostic):
                 self.validate()
         write(path, QTEST)
         (self.base / "linux-static/native-controls/qtest.txt").unlink()
@@ -106,6 +131,38 @@ class AcceptanceTest(unittest.TestCase):
             self.validate()
         with self.assertRaises(OSError):
             self.validate("missing-job")
+
+    def test_required_cases_cannot_be_removed_from_contract(self):
+        for job in JOBS:
+            platform, mode = job.split("-", 1)
+            required = list(RUNTIME) + (list(STATIC) if mode in ("x64", "static") else [])
+            if platform == "linux":
+                required.append("test_mpris_fault")
+            for case in CORE:
+                path = self.base / job / "headless-ctest.xml"
+                write(path, junit([item for item in CORE if item != case]))
+                with self.subTest(job=job, case=case), self.assertRaisesRegex(ValueError, f"Missing CTest cases: {case}"):
+                    self.validate(job)
+                write(path, junit(CORE))
+            for case in required:
+                path = self.base / job / "desktop-ctest.xml"
+                write(path, junit([item for item in required if item != case]))
+                with self.subTest(job=job, case=case), self.assertRaisesRegex(ValueError, f"Missing CTest cases: {case}"):
+                    self.validate(job)
+                write(path, junit(required))
+
+    def test_headless_evidence_passes_its_independent_checks(self):
+        directory = self.base / "linux-static"
+        acceptance.check_junit(directory / "headless-ctest.xml", CORE)
+        acceptance.require_render(directory, "offscreen", "offscreen-before.png", "offscreen-after.png", "offscreen-after2.png")
+
+    def test_each_offscreen_scenario_report_is_required(self):
+        for scenario in SCENARIOS:
+            path = self.base / "linux-static/offscreen" / scenario / "qtest.txt"
+            path.unlink()
+            with self.subTest(scenario=scenario), self.assertRaisesRegex(OSError, "qtest.txt"):
+                self.validate()
+            write(path, QTEST)
 
 
 if __name__ == "__main__":
