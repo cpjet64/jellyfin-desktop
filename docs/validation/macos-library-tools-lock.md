@@ -16,6 +16,10 @@ closure have not been verified by this document.
 
 The separately reported host Python 3.13 and probed tools are potential build
 tools, not substitutes for formula Python 3.15 without compatibility testing.
+The pinned [Meson 1.12.1 launcher](https://github.com/mesonbuild/meson/blob/1.12.1/meson.py)
+rejects Python versions below 3.10, so observed Python 3.13.15 satisfies that
+specific version gate. This does not verify the interpreter, Meson imports,
+build backend, isolation behavior or any project's generators.
 The earlier bounded prerequisite observation recorded Ninja 1.13.2 and
 pkg-config 3.0.6, and did not find Meson on its selected PATH; these are
 historical observations, not a present host inventory. Verify exact paths,
@@ -62,6 +66,37 @@ resolve the GLib/Cairo/introspection cycle in the documented staged order.
 Disabling introspection, Cairo, X11 or other features to reduce the graph is
 a profile change requiring explicit comparison and Desktop behavior evidence;
 it is not established by the helper's exclusions.
+
+Additional formula install stages and relocation-sensitive details:
+
+- Fontconfig 2.18.3 source SHA-256 is
+  `9ae01e1d53acdef56010c5451cd34aa41d325b2faccd8606448d8fa01b2496b3`.
+  It depends on FreeType and builds with gettext, Meson, Ninja, pkgconf,
+  macOS gperf and Python; macOS expat is used. Its formula enables both library
+  types and tools, disables docs, tests, build-time cache and additional font
+  directories, and selects system, local, user and newest matching MobileAsset
+  font directories. The post-install `fc-cache --force --really-force
+  --verbose` is a host-mutating operation, not authorized by this assessment.
+- GLib adds its staging pkg-config directory and binaries to the environment
+  before bootstrapping introspection. It rewrites GIO and GLib pkg-config
+  paths, including gettext paths on macOS, and declares a post-install GIO
+  module directory. A private prefix needs equivalent path and relocation
+  verification. FreeType explicitly uses `--with-brotli --without-harfbuzz`
+  and rewrites its installed config and pkg-config prefixes.
+- The separate introspection formula installs its resources in a virtualenv,
+  disables the scanner cache, rewrites scanner paths and shebangs, and uses an
+  inline patch to implement `extra_library_paths`. Unpatched source with that
+  option is not formula parity. Capture the patch and verify private paths.
+- Python's macOS configure additionally uses `--without-ensurepip`,
+  `--with-system-expat`, `--with-system-libmpdec`, `--with-readline=editline`,
+  `--with-lto`, `--with-dtrace`, `--with-dbmliborder=ndbm`, a selected OpenSSL
+  prefix and a deployment target tied to the build host. It selects `x64` for
+  Intel libmpdec and conditionally enables the tail-call interpreter based on
+  Apple Clang. It then creates a local flit-core/pip wheel environment, replaces
+  the bundled pip wheel, and runs ensurepip and a no-index pip install.
+  Framework paths, sysconfig, ctypes fallback paths, certificates and generated
+  shebangs need review for a relocatable private prefix. These stages remain
+  open; metadata does not prove that a different Python build is equivalent.
 
 Formula flags are intended settings, not proof of successful autodetection or
 linkage. The host probe selected SDK 26.5 and Apple clang 21. Remaining inputs include deployment target, all
