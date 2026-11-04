@@ -37,8 +37,8 @@ class MacHelpersTests(unittest.TestCase):
         for value in (None, "non-exception", OSError(-1, "unrelated"),
                       urllib.error.URLError(ssl.SSLCertVerificationError("certificate"))):
             self.assertFalse(mac_helpers.storage_exhausted(value))
-        with patch.object(mac_helpers.errno, "EDQUOT", create=True):
-            delattr(mac_helpers.errno, "EDQUOT")
+        with patch.dict(vars(mac_helpers.errno)):
+            vars(mac_helpers.errno).pop("EDQUOT", None)
             self.assertFalse(mac_helpers.storage_exhausted(OSError(-1, "unrelated")))
 
     def test_storage_classifier_handles_cycles_and_shared_branches(self):
