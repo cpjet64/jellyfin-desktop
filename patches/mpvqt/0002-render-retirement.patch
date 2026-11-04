@@ -15,7 +15,7 @@ index ffccf4a..2223149 100644
 @@ -54 +60 @@ MpvAbstractItem::~MpvAbstractItem()
 -        mpv_render_context_free(d_ptr->m_mpv_gl);
 +        qFatal("Diagnostic render context must retire before item destruction");
-@@ -61,0 +68,42 @@ MpvAbstractItem::~MpvAbstractItem()
+@@ -61,0 +68,43 @@ MpvAbstractItem::~MpvAbstractItem()
 +    DiagnosticFailureInjection::coreOrder = ++DiagnosticFailureInjection::order;
 +}
 +
@@ -37,6 +37,7 @@ index ffccf4a..2223149 100644
 +            QOpenGLContext::currentContext() == owner->originalContext;
 +        const auto result = owner->state.retire(generation, original,
 +            [owner] {
++                DiagnosticFailureInjection::unregisterEnteredOrder = ++DiagnosticFailureInjection::order;
 +                mpv_render_context_set_update_callback(owner->context, nullptr, nullptr);
 +                DiagnosticFailureInjection::unregisteredOrder = ++DiagnosticFailureInjection::order;
 +            },
@@ -103,13 +104,17 @@ index 46a6a00..b4726e9 100644
 @@ -15,0 +17,2 @@
 +#include <QTimer>
 +#include <thread>
-@@ -31 +34,28 @@ void on_mpv_redraw(void *ctx)
+@@ -31 +34,34 @@ void on_mpv_redraw(void *ctx)
 -    QMetaObject::invokeMethod(static_cast<MpvAbstractItem *>(ctx), &MpvAbstractItem::update, Qt::QueuedConnection);
 +    auto* owner = static_cast<DiagnosticRenderOwner*>(ctx);
 +    const bool accepted = owner->state.enterCallback();
 +    ++DiagnosticFailureInjection::callbacks;
++    bool observedHeldCallback = false;
 +    if (DiagnosticFailureInjection::holdCallback.load()) {
-+        DiagnosticFailureInjection::callbackWaiting = true;
++        int empty = 0;
++        const int entered = ++DiagnosticFailureInjection::order;
++        observedHeldCallback = DiagnosticFailureInjection::callbackEnteredOrder.compare_exchange_strong(empty, entered);
++        if (observedHeldCallback) DiagnosticFailureInjection::callbackWaiting = true;
 +        while (DiagnosticFailureInjection::holdCallback.load()) std::this_thread::yield();
 +    }
 +    if (accepted) {
@@ -133,6 +138,8 @@ index 46a6a00..b4726e9 100644
 +        ++DiagnosticFailureInjection::updatesQueued;
 +    }
 +    owner->state.leaveCallback();
++    if (observedHeldCallback)
++        DiagnosticFailureInjection::callbackExitedOrder = ++DiagnosticFailureInjection::order;
 @@ -41,0 +72,2 @@ void MpvRenderer::render()
 +    auto owner = m_mpvAItem->d_ptr->renderOwner;
 +    if (!owner->context || !owner->state.accepts(owner->generation)) return;
