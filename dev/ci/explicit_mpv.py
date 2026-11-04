@@ -7,6 +7,7 @@ import tarfile
 
 SHA = "c9cfd0b2f60e6377f0d339ef298a0772753ce7dc7310d250573a3ea9c0b9701e"
 VERSION = "0.37.0-1ubuntu4"
+PINNED_DSO_SHA = "f2aa472878adee5f44419b6cce90ccecc43bf81595ac16dbf223de190cdead0a"
 KEYS = ("CI_MPV_DEV_DEB", "CI_MPV_INCLUDE_DIR", "CI_MPV_LIBRARY")
 
 
@@ -31,6 +32,9 @@ def explicit_inputs(environment, system, root):
         raise RuntimeError("BLOCKED: mpv development package SHA mismatch")
     verify_headers(archive, include)
     verify_library(library)
+    if environment.get("CI_MPV_PINNED_RUNTIME") == "1":
+        if hashlib.sha256(library.read_bytes()).hexdigest() != PINNED_DSO_SHA:
+            raise RuntimeError("BLOCKED: pinned mpv runtime SHA mismatch")
     return include, library
 
 
