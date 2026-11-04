@@ -155,7 +155,7 @@ def prepare_linux_sdk():
     if unavailable_compilers(os.environ) or not all(shutil.which(name) for name in ("cc", "c++", "pkg-config", "git")):
         raise RuntimeError("BLOCKED: native compiler and host tools required")
     try:
-        from linux_qt_archive import stage_qt
+        from linux_qt_archive import stage_qt, complete_qt
         from linux_mpv_payload import acquire_mpv
         from linux_sdk_probe import probe_sdk
     except ImportError as error:
@@ -169,7 +169,8 @@ def prepare_linux_sdk():
     if missing:
         bins = bootstrap(missing, workspace / "native-tools")
         os.environ["PATH"] = os.pathsep.join([str(path) for path in bins] + [os.environ.get("PATH", "")])
-    qt_prefix = Path(stage_qt(workspace)).resolve(strict=True)
+    candidate = stage_qt(workspace)
+    qt_prefix = Path(candidate.prefix).resolve(strict=True)
     try:
         qt_prefix.relative_to(workspace.resolve(strict=True))
     except ValueError as error:
@@ -186,6 +187,9 @@ def prepare_linux_sdk():
     if (Path(updates["PKG_CONFIG_PATH"]).resolve() != qt_prefix / "lib/pkgconfig" or
             Path(updates["LD_LIBRARY_PATH"]).resolve() != qt_prefix / "lib"):
         raise RuntimeError("BLOCKED: SDK probe returned paths outside the selected Qt prefix")
+    complete_qt(candidate, report)
+    if Path(candidate.prefix).resolve(strict=True) != qt_prefix:
+        raise RuntimeError("BLOCKED: Qt prefix changed after the SDK probe")
     os.environ.update({"CI_QT_PREFIX": str(qt_prefix), **mpv_paths, **updates})
 
 

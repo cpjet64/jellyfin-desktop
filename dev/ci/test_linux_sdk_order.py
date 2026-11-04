@@ -26,10 +26,29 @@ class LinuxSdkOrderTest(unittest.TestCase):
                         raise RuntimeError("stage failed")
                     return result
                 return run
-            modules = {"linux_qt_archive": SimpleNamespace(stage_qt=step("qt", sdk)),
+            candidate = SimpleNamespace(prefix=sdk)
+            def complete(value, report):
+                events.append("complete")
+                self.assertIs(value, candidate)
+                self.assertEqual(report["environment"]["LD_LIBRARY_PATH"], str(sdk / "lib"))
+                self.assertNotIn("CI_QT_PREFIX", os.environ)
+                if fail == "complete":
+                    raise RuntimeError("stage failed")
+                (sdk / "ready").write_text("ok")
+            def probe(prefix, workspace, supplied):
+                events.append("probe")
+                self.assertEqual(prefix, sdk)
+                self.assertEqual(workspace, root)
+                self.assertEqual(supplied, paths)
+                self.assertNotIn("CI_QT_PREFIX", os.environ)
+                self.assertFalse((sdk / "ready").exists())
+                if fail == "probe":
+                    raise RuntimeError("stage failed")
+                return {"environment": {"PKG_CONFIG_PATH": str(sdk / "lib/pkgconfig"),
+                                        "LD_LIBRARY_PATH": str(sdk / "lib")}}
+            modules = {"linux_qt_archive": SimpleNamespace(stage_qt=step("qt", candidate), complete_qt=complete),
                        "linux_mpv_payload": SimpleNamespace(acquire_mpv=step("mpv", paths)),
-                       "linux_sdk_probe": SimpleNamespace(probe_sdk=step("probe", {"environment": {
-                           "PKG_CONFIG_PATH": str(sdk / "lib/pkgconfig"), "LD_LIBRARY_PATH": str(sdk / "lib")}}))}
+                       "linux_sdk_probe": SimpleNamespace(probe_sdk=probe)}
             found = {"cmake": None, "ctest": None, "ninja": "/ninja", "node": "/node"}
             with patch.dict(os.environ, {"CI_JOB_ID": "42", "CI_MPVQT_MODE": "static"}, clear=True), \
                  patch.dict(sys.modules, modules), patch.object(native, "ROOT", root), \
@@ -48,17 +67,19 @@ class LinuxSdkOrderTest(unittest.TestCase):
                         native.prepare_linux_sdk()
                     self.assertNotIn("CI_QT_PREFIX", os.environ)
                     self.assertNotIn("CI_MPV_DEV_DEB", os.environ)
+                    self.assertFalse((sdk / "ready").exists())
                 else:
                     native.prepare_linux_sdk()
                     self.assertEqual(os.environ["CI_QT_PREFIX"], str(sdk))
                     self.assertEqual(os.environ["CI_MPV_PINNED_RUNTIME"], "1")
+                    self.assertTrue((sdk / "ready").is_file())
             return events
 
     def test_missing_qt_reaches_preparation_in_order(self):
-        self.assertEqual(self.stage(), ["bootstrap", "qt", "mpv", "mpv-verify", "probe"])
+        self.assertEqual(self.stage(), ["bootstrap", "qt", "mpv", "mpv-verify", "probe", "complete"])
 
     def test_failed_acquisition_or_probe_never_publishes(self):
-        for name in ("qt", "mpv", "probe"):
+        for name in ("qt", "mpv", "probe", "complete"):
             with self.subTest(step=name):
                 self.assertEqual(self.stage(name)[-1], name)
 
