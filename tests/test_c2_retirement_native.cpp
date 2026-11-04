@@ -78,7 +78,8 @@ private:
   void verifyStopped(Scene& scene, C2ReplayRecipe& recipe, C2EventObserver& observer,
                      mpv_handle* core, bool previousAttempt);
   void verifyFailedCreate(Scene& scene, quint64 first, QSignalSpy& failed,
-                          QSignalSpy& noContext, QSignalSpy& created, QSignalSpy& retired);
+                          QSignalSpy& noContext, QSignalSpy& created, QSignalSpy& retired,
+                          C2EventObserver& observer);
   void finishRecovery(Scene& scene, PlayerComponent& player, C2ReplayRecipe& recipe,
                       C2EventObserver& observer, const QString& scenario, const QString& evidence,
                       QSignalSpy& failed, QSignalSpy& retired);

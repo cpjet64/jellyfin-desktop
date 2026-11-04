@@ -79,6 +79,7 @@ inline bool Scene::destroyItem()
   if ((!retired && !noContextConfirmed) || !context.makeCurrent(&surface)) return false;
   control->invalidate();
   if (!context.makeCurrent(&surface)) return false;
+  qInfo() << "C2 destroying item and core after secondary client teardown";
   delete item;
   item = nullptr;
   return true;

@@ -21,9 +21,17 @@ public:
 
   explicit C2EventObserver(mpv_handle* core)
     : client(mpv_create_client(core, "c2-observer")) {}
-  ~C2EventObserver() { if (client) mpv_destroy(client); }
+  ~C2EventObserver() { close(); }
   C2EventObserver(const C2EventObserver&) = delete;
   C2EventObserver& operator=(const C2EventObserver&) = delete;
+
+  void close()
+  {
+    if (!client) return;
+    qInfo() << "C2 closing secondary observer before core destruction";
+    mpv_destroy(client);
+    client = nullptr;
+  }
 
   void drain()
   {

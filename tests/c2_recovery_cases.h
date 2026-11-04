@@ -1,5 +1,6 @@
 void TestC2RetirementNative::verifyFailedCreate(Scene& scene, quint64 first, QSignalSpy& failed,
-                                                QSignalSpy& noContext, QSignalSpy& created, QSignalSpy& retired)
+                                                QSignalSpy& noContext, QSignalSpy& created, QSignalSpy& retired,
+                                                C2EventObserver& observer)
 {
   QCOMPARE(failed.count(), 1);
   QCOMPARE(failed.at(0).at(1).value<MpvAbstractItem::RenderFailureStage>(), MpvAbstractItem::RenderFailureStage::Create);
@@ -22,6 +23,8 @@ void TestC2RetirementNative::verifyFailedCreate(Scene& scene, quint64 first, QSi
   QCOMPARE(retired.count(), 1);
   QCOMPARE(DiagnosticFailureInjection::frees.load(), 1);
   scene.noContextConfirmed = true;
+  observer.close();
+  QVERIFY(!observer.client);
   QVERIFY(scene.destroyItem());
 }
 void TestC2RetirementNative::verifyStopped(Scene& scene, C2ReplayRecipe& recipe,
@@ -245,7 +248,7 @@ void TestC2RetirementNative::recreate(Scene& scene, PlayerComponent& player, C2R
   QVERIFY(scene.waitFor([&] { return !created.isEmpty() || !failed.isEmpty(); }, 15000));
   qInfo() << "C2 phase after G2 frame wait" << created.count() << failed.count();
   if (scenario == "create-failure") {
-    verifyFailedCreate(scene, first, failed, noContext, created, retired);
+    verifyFailedCreate(scene, first, failed, noContext, created, retired, observer);
     return;
   }
   QVERIFY(!created.isEmpty());
@@ -317,5 +320,7 @@ void TestC2RetirementNative::finishRecovery(Scene& scene, PlayerComponent& playe
   scene.item->requestRenderRetirement(scene.item->renderGeneration());
   QVERIFY(scene.waitFor([&] { return retired.count() == 2; }, 10000));
   scene.retired = true;
+  observer.close();
+  QVERIFY(!observer.client);
   QVERIFY(scene.destroyItem());
 }
