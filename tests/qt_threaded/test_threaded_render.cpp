@@ -19,6 +19,7 @@ class TestThreadedRender : public QObject
 private slots:
   void init();
   void independentFrames();
+  void framePumpPauseResume();
   void initializationFailures_data();
   void initializationFailures();
   void pendingReadbackCancelled();
@@ -30,6 +31,49 @@ void TestThreadedRender::init()
   QTest::failOnWarning(QRegularExpression(
     ".*(thread affinity|different thread|wrong thread|makeCurrent|current context|QObject::|QOpenGLContext).*",
     QRegularExpression::CaseInsensitiveOption));
+}
+
+void TestThreadedRender::framePumpPauseResume()
+{
+  QtThreaded::Scene scene;
+  QString error;
+  QVERIFY(!scene.pauseFramePump(&error));
+  QVERIFY(!scene.resumeFramePump(&error));
+  QVERIFY2(scene.initialize(&error), qPrintable(error));
+  auto* item = new ColorItem(scene.contentItem());
+  item->setSize(QSizeF(640, 360));
+  auto observation = item->observation();
+  QVERIFY2(scene.sync(&error), qPrintable(error));
+  QTRY_VERIFY_WITH_TIMEOUT(observation->calls.load() >= 3, 10000);
+  QVERIFY2(scene.pauseFramePump(&error), qPrintable(error));
+  const auto paused = scene.audit();
+  QVERIFY(paused.framePumpPaused);
+  QCOMPARE(paused.pauseAcks, quint64(1));
+  QCOMPARE(paused.pauseAckThread, paused.renderThread);
+  QCOMPARE(paused.pauseAckContext, observation->context.load());
+  QCOMPARE(paused.framesStarted, paused.framesCompleted);
+  const auto calls = observation->calls.load();
+  QTest::qWait(250);
+  QCOMPARE(observation->calls.load(), calls);
+  QCOMPARE(scene.audit().framesStarted, paused.framesStarted);
+  QVERIFY(!scene.sync(&error));
+  QVERIFY(!scene.pauseFramePump(&error));
+  QVERIFY2(scene.resumeFramePump(&error), qPrintable(error));
+  const auto resumed = scene.audit();
+  QVERIFY(!resumed.framePumpPaused);
+  QCOMPARE(resumed.resumeAcks, quint64(1));
+  QCOMPARE(resumed.resumeAckThread, paused.pauseAckThread);
+  QCOMPARE(resumed.resumeAckContext, paused.pauseAckContext);
+  QTRY_VERIFY_WITH_TIMEOUT(observation->calls.load() > calls, 10000);
+  QVERIFY(!scene.resumeFramePump(&error));
+  QVERIFY2(scene.pauseFramePump(&error), qPrintable(error));
+  QVERIFY2(scene.shutdown(&error), qPrintable(error));
+  const auto closed = scene.audit();
+  QVERIFY(closed.workerJoined && closed.contextDestroyed && closed.surfaceDestroyed);
+  QCOMPARE(closed.pauseAcks, quint64(2));
+  QCOMPARE(closed.resumeAcks, quint64(1));
+  QVERIFY(!scene.resumeFramePump(&error));
+  QVERIFY(!scene.pauseFramePump(&error));
 }
 
 static bool differentBrightFrames(const QList<QtThreaded::Frame>& frames, quint64 baseline,
@@ -257,9 +301,10 @@ int main(int argc, char** argv)
     QtThreaded::Scene scene(QtThreaded::FailurePoint::BlockCleanup);
     QString error;
     if (!scene.initialize(&error)) return 3;
+    if (!scene.pauseFramePump(&error)) return 6;
     if (scene.shutdown(&error)) return 4;
     const auto audit = scene.audit();
-    if (audit.contextDestroyed || audit.workerJoined) return 5;
+    if (!audit.framePumpPaused || audit.pauseAcks != 1 || audit.contextDestroyed || audit.workerJoined) return 5;
     fprintf(stderr, "BLOCKED_CLEANUP_OBSERVED\n");
     fflush(stderr);
     return 0; // Scene destructor must report unsuccessful containment.

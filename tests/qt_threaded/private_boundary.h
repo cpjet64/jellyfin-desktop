@@ -41,6 +41,7 @@ struct Scene::Data {
   bool started = false;
   bool transferred = false;
   bool synchronized = false;
+  bool framePumpPaused = false; // worker thread only
   bool pendingReadback = false;
   quint64 order = 0;
   bool initializeGui(QString* error);
@@ -49,6 +50,7 @@ struct Scene::Data {
   void observeRhi(QRhi* rhi);
   bool dispatch(const std::function<void()>& action, QString* error, bool allowClosed = false);
   void render();
+  bool changeFramePump(bool pause, QString* error);
   void cleanup();
   void fail(const QString& message);
 };

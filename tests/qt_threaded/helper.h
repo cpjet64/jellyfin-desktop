@@ -27,6 +27,10 @@ struct Audit {
   quint64 controlDestroyedCount = 0, contextDestroyedCount = 0, surfaceDestroyedCount = 0;
   quint64 requestsAdmitted = 0, requestsCompleted = 0, requestsCancelled = 0;
   quint64 framesStarted = 0, framesCompleted = 0;
+  bool framePumpPaused = false;
+  quint64 pauseAcks = 0, resumeAcks = 0;
+  quintptr pauseAckThread = 0, resumeAckThread = 0;
+  quintptr pauseAckContext = 0, resumeAckContext = 0;
   quint64 readbacksAccepted = 0, readbacksCompleted = 0, readbacksCancelled = 0, readbacksRejected = 0;
   bool privateBoundaryEntered = false;
   bool privateStateRejected = false;
@@ -44,6 +48,8 @@ public:
   bool initialize(QString* error);
   QQuickItem* contentItem() const;
   bool sync(QString* error);
+  bool pauseFramePump(QString* error);
+  bool resumeFramePump(QString* error);
   QList<Frame> frames() const;
   bool requestReadback();
   Audit audit() const;

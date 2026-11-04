@@ -189,7 +189,7 @@ bool Scene::initialize(QString* error)
 
 void Scene::Data::render()
 {
-  if (!synchronized) return;
+  if (!synchronized || framePumpPaused) return;
   if (!context->makeCurrent(surface)) { fail("render context unavailable"); return; }
   control->beginFrame();
   if (QQuickRenderControlPrivate::get(control)->frameStatus != QQuickRenderControlPrivate::RecordingFrame) {
@@ -215,7 +215,7 @@ void Scene::Data::render()
 bool Scene::sync(QString* error)
 {
   { QMutexLocker guard(&data->lock);
-    if (data->state.admissionClosed || !data->state.initialized) {
+    if (data->state.admissionClosed || !data->state.initialized || data->state.framePumpPaused) {
       ++data->state.requestsCancelled;
       if (error) *error = "scene is not available for synchronization";
       return false;
@@ -252,6 +252,52 @@ bool Scene::sync(QString* error)
   if (error) *error = data->state.error;
   return data->state.error.isEmpty();
 }
+
+bool Scene::Data::changeFramePump(bool pause, QString* error)
+{
+  {
+    QMutexLocker guard(&lock);
+    if (currentThread() != state.guiThread || state.admissionClosed || !state.initialized ||
+        state.framePumpPaused == pause) {
+      if (error) *error = "frame pump request rejected in current state";
+      return false;
+    }
+  }
+  bool completed = false;
+  const bool dispatched = dispatch([this, pause, &completed] {
+    if (QThread::currentThread() != &thread || !timer || !context || !surface ||
+        !context->makeCurrent(surface) || QOpenGLContext::currentContext() != context ||
+        QQuickRenderControlPrivate::get(control)->frameStatus != QQuickRenderControlPrivate::NotRecordingFrame) {
+      fail("frame pump worker or original context unavailable");
+      return;
+    }
+    {
+      QMutexLocker guard(&lock);
+      if (state.framesStarted != state.framesCompleted) {
+        state.error = "frame pump acknowledgement encountered an unfinished frame";
+        return;
+      }
+    }
+    if (pause) timer->stop(); else timer->start();
+    framePumpPaused = pause;
+    QMutexLocker guard(&lock);
+    state.framePumpPaused = pause;
+    if (pause) {
+      ++state.pauseAcks;
+      state.pauseAckThread = currentThread();
+      state.pauseAckContext = reinterpret_cast<quintptr>(context);
+    } else {
+      ++state.resumeAcks;
+      state.resumeAckThread = currentThread();
+      state.resumeAckContext = reinterpret_cast<quintptr>(context);
+    }
+    completed = true;
+  }, error);
+  return dispatched && completed;
+}
+
+bool Scene::pauseFramePump(QString* error) { return data->changeFramePump(true, error); }
+bool Scene::resumeFramePump(QString* error) { return data->changeFramePump(false, error); }
 
 QQuickItem* Scene::contentItem() const { return data->window ? data->window->contentItem() : nullptr; }
 QList<Frame> Scene::frames() const { QMutexLocker guard(&data->lock); return data->history; }
