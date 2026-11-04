@@ -15,7 +15,7 @@ index ffccf4a..2223149 100644
 @@ -54 +60 @@ MpvAbstractItem::~MpvAbstractItem()
 -        mpv_render_context_free(d_ptr->m_mpv_gl);
 +        qFatal("Diagnostic render context must retire before item destruction");
-@@ -61,0 +68,48 @@ MpvAbstractItem::~MpvAbstractItem()
+@@ -61,0 +68,53 @@ MpvAbstractItem::~MpvAbstractItem()
 +    DiagnosticFailureInjection::coreOrder = ++DiagnosticFailureInjection::order;
 +}
 +
@@ -39,7 +39,9 @@ index ffccf4a..2223149 100644
 +            [owner] {
 +                DiagnosticFailureInjection::unregisterThread = reinterpret_cast<std::uintptr_t>(QThread::currentThreadId());
 +                DiagnosticFailureInjection::unregisterEnteredOrder = ++DiagnosticFailureInjection::order;
++                DiagnosticFailureInjection::unregisterEnteredNs = DiagnosticFailureInjection::monotonicNanos();
 +                mpv_render_context_set_update_callback(owner->context, nullptr, nullptr);
++                DiagnosticFailureInjection::unregisterReturnedNs = DiagnosticFailureInjection::monotonicNanos();
 +                DiagnosticFailureInjection::unregisteredOrder = ++DiagnosticFailureInjection::order;
 +            },
 +            [this, owner] {
@@ -47,7 +49,9 @@ index ffccf4a..2223149 100644
 +                DiagnosticFailureInjection::freeCurrentContext = reinterpret_cast<std::uintptr_t>(QOpenGLContext::currentContext());
 +                DiagnosticFailureInjection::freeOriginalContext = reinterpret_cast<std::uintptr_t>(owner->originalContext);
 +                DiagnosticFailureInjection::freeGeneration = owner->generation;
++                DiagnosticFailureInjection::freeEnteredNs = DiagnosticFailureInjection::monotonicNanos();
 +                mpv_render_context_free(owner->context);
++                DiagnosticFailureInjection::freeReturnedNs = DiagnosticFailureInjection::monotonicNanos();
 +                ++DiagnosticFailureInjection::frees;
 +                DiagnosticFailureInjection::freedOrder = ++DiagnosticFailureInjection::order;
 +                owner->context = nullptr;
@@ -58,6 +62,7 @@ index ffccf4a..2223149 100644
 +        QMetaObject::invokeMethod(this, [this, generation, result] {
 +            if (result == RenderRetirementState::Result::Retired) {
 +                DiagnosticFailureInjection::ackOrder = ++DiagnosticFailureInjection::order;
++                DiagnosticFailureInjection::ackEmittedNs = DiagnosticFailureInjection::monotonicNanos();
 +                emit renderRetired(generation);
 +            }
 +            else emit renderRetirementBlocked(generation);
@@ -153,26 +158,27 @@ index 46a6a00..b4726e9 100644
 @@ -41,0 +83,2 @@ void MpvRenderer::render()
 +    auto owner = m_mpvAItem->d_ptr->renderOwner;
 +    if (!owner->context || !owner->state.accepts(owner->generation)) return;
-@@ -60 +103,9 @@ void MpvRenderer::render()
+@@ -60 +103,10 @@ void MpvRenderer::render()
 -    mpv_render_context_render(m_mpvAItem->d_ptr->m_mpv_gl, params);
 +    const int injected = DiagnosticFailureInjection::render.exchange(0);
 +    const int result = injected ? injected : mpv_render_context_render(owner->context, params);
 +    if (result < 0 && owner->state.failOnce(RenderRetirementState::Stage::Render, result)) {
 +        auto* item = m_mpvAItem;
++        DiagnosticFailureInjection::failurePublishedNs = DiagnosticFailureInjection::monotonicNanos();
 +        QMetaObject::invokeMethod(item, [item, owner, result] {
 +            if (owner->state.failurePending(owner->generation))
 +                emit item->renderFailure(owner->generation, MpvAbstractItem::RenderFailureStage::Render, result);
 +        }, Qt::QueuedConnection);
 +    }
-@@ -66,0 +118,3 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -66,0 +119,3 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 +        auto owner = m_mpvAItem->d_ptr->renderOwner;
 +        if (!owner->state.accepts(owner->generation))
 +            return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
-@@ -90 +144,2 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -90 +145,2 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -        int result = mpv_render_context_create(&m_mpvAItem->d_ptr->m_mpv_gl, m_mpvAItem->d_ptr->m_mpv, params);
 +        const int injected = DiagnosticFailureInjection::create.exchange(0);
 +        int result = injected ? injected : mpv_render_context_create(&m_mpvAItem->d_ptr->m_mpv_gl, m_mpvAItem->d_ptr->m_mpv, params);
-@@ -92 +147,8 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -92 +148,8 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -            qFatal("failed to initialize mpv GL context");
 +            if (owner->state.failOnce(RenderRetirementState::Stage::Create, result)) {
 +                auto* item = m_mpvAItem;
@@ -182,7 +188,7 @@ index 46a6a00..b4726e9 100644
 +                }, Qt::QueuedConnection);
 +            }
 +            return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
-@@ -95 +157,4 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -95 +158,4 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -        mpv_render_context_set_update_callback(m_mpvAItem->d_ptr->m_mpv_gl, on_mpv_redraw, m_mpvAItem);
 +        owner->context = m_mpvAItem->d_ptr->m_mpv_gl;
 +        owner->originalContext = QOpenGLContext::currentContext();
@@ -205,9 +211,9 @@ index 2223149..d1985a5 100644
 @@ -80 +82 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
 -    auto owner = d_ptr->renderOwner;
 +    auto owner = std::atomic_load(&d_ptr->renderOwner);
-@@ -109,0 +112 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
+@@ -113,0 +116 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
 +                d_ptr->retirementAcknowledged = true;
-@@ -117,0 +121,33 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
+@@ -122,0 +126,33 @@ void MpvAbstractItem::requestRenderRetirement(quint64 generation)
 +MpvAbstractItem::CreationRequest MpvAbstractItem::requestRenderCreation(quint64 generation)
 +{
 +    if (!d_ptr->retirementAcknowledged || generation != d_ptr->visibleGeneration.load())
@@ -297,7 +303,7 @@ index b4726e9..a36e84b 100644
 @@ -83 +94 @@ void MpvRenderer::render()
 -    auto owner = m_mpvAItem->d_ptr->renderOwner;
 +    auto owner = std::atomic_load(&m_mpvAItem->d_ptr->renderOwner);
-@@ -116,5 +127,9 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -117,5 +128,9 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -    // init mpv_gl:
 -    if (!m_mpvAItem->d_ptr->m_mpv_gl) {
 -        auto owner = m_mpvAItem->d_ptr->renderOwner;
@@ -312,19 +318,19 @@ index b4726e9..a36e84b 100644
 +{
 +        auto owner = std::atomic_load(&d_ptr->renderOwner);
 +        if (!owner->state.accepts(owner->generation)) return MPV_ERROR_GENERIC;
-@@ -145 +160 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -146 +161 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -        int result = injected ? injected : mpv_render_context_create(&m_mpvAItem->d_ptr->m_mpv_gl, m_mpvAItem->d_ptr->m_mpv, params);
 +        int result = injected ? injected : mpv_render_context_create(&d_ptr->m_mpv_gl, d_ptr->m_mpv, params);
-@@ -148 +163 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -149 +164 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -                auto* item = m_mpvAItem;
 +                auto* item = this;
-@@ -154 +169 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -155 +170 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -            return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
 +            return result;
-@@ -157 +172 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -158 +173 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -        owner->context = m_mpvAItem->d_ptr->m_mpv_gl;
 +        owner->context = d_ptr->m_mpv_gl;
-@@ -161,4 +176 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -162,4 +177 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -        Q_EMIT m_mpvAItem->ready();
 -    }
 -

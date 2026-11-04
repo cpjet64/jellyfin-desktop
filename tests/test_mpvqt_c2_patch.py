@@ -50,6 +50,17 @@ class DiagnosticPatchTest(unittest.TestCase):
                 actual_hashes = {name: digest((copy / "src" / name).read_bytes())
                                  for name in expected_hashes}
                 self.assertEqual(actual_hashes, expected_hashes, patch_name)
+                if patch_name == "0002-render-retirement.patch":
+                    item = (copy / "src/mpvabstractitem.cpp").read_text(encoding="utf-8")
+                    for before, call, after in (
+                        ("unregisterEnteredNs", "mpv_render_context_set_update_callback(owner->context, nullptr, nullptr)", "unregisterReturnedNs"),
+                        ("freeEnteredNs", "mpv_render_context_free(owner->context)", "freeReturnedNs"),
+                    ):
+                        self.assertLess(item.index(before), item.index(call))
+                        self.assertLess(item.index(call), item.index(after))
+                    self.assertLess(item.index("ackEmittedNs"), item.index("emit renderRetired(generation)"))
+                    renderer = (copy / "src/mpvrenderer.cpp").read_text(encoding="utf-8")
+                    self.assertLess(renderer.index("failurePublishedNs"), renderer.index("QMetaObject::invokeMethod(item", renderer.index("failurePublishedNs")))
 
 
 if __name__ == "__main__":

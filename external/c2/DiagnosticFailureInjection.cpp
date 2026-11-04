@@ -1,4 +1,18 @@
 #include "DiagnosticFailureInjection.h"
+#include <chrono>
+
+std::int64_t DiagnosticFailureInjection::monotonicNanos()
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+std::atomic<std::int64_t> DiagnosticFailureInjection::failurePublishedNs{0};
+std::atomic<std::int64_t> DiagnosticFailureInjection::unregisterEnteredNs{0};
+std::atomic<std::int64_t> DiagnosticFailureInjection::unregisterReturnedNs{0};
+std::atomic<std::int64_t> DiagnosticFailureInjection::freeEnteredNs{0};
+std::atomic<std::int64_t> DiagnosticFailureInjection::freeReturnedNs{0};
+std::atomic<std::int64_t> DiagnosticFailureInjection::ackEmittedNs{0};
 std::atomic<int> DiagnosticFailureInjection::create{0};
 std::atomic<int> DiagnosticFailureInjection::render{0};
 std::atomic<bool> DiagnosticFailureInjection::blockNextRetire{false};

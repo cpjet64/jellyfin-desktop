@@ -5,6 +5,13 @@
 // Linked only by the diagnostic build. Zero means use the real libmpv call.
 struct DiagnosticFailureInjection
 {
+  static std::int64_t monotonicNanos();
+  static std::atomic<std::int64_t> failurePublishedNs;
+  static std::atomic<std::int64_t> unregisterEnteredNs;
+  static std::atomic<std::int64_t> unregisterReturnedNs;
+  static std::atomic<std::int64_t> freeEnteredNs;
+  static std::atomic<std::int64_t> freeReturnedNs;
+  static std::atomic<std::int64_t> ackEmittedNs;
   static std::atomic<int> create;
   static std::atomic<int> render;
   static std::atomic<bool> blockNextRetire;
