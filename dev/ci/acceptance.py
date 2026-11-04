@@ -229,6 +229,19 @@ def validate_windowed(directory, report, name):
         validate_named_receipt(directory, report, f"{prefix}/{scenario}", producer, scenario, expected, images)
 
 
+def validate_linux_active_stop(directory, report):
+    prefix = "linux-mpris-active-stop"
+    validate_named_receipt(directory, report, prefix, "linux-mpris-active-stop-v1", "single",
+                           ("TestMprisActiveStop", "activeStop"), ("active-before.png", "active-after.png"))
+    record = json.loads(artifact(directory, prefix + "/case.json").read_text(encoding="utf-8"))
+    required = {"source_sha": report["source_sha"], "launcher": "xvfb-private-dbus-v1", "exit_code": 0,
+                "media_sha256": hashlib.sha256(artifact(directory, "recovery.y4m").read_bytes()).hexdigest(),
+                "build_manifest_sha256": hashlib.sha256(artifact(directory, "build-manifest.json").read_bytes()).hexdigest()}
+    for key, value in required.items():
+        if record.get(key) != value:
+            raise ValueError(f"linux_active_stop: incorrect {key}")
+
+
 def validate_desktop(directory, report):
     platform = report.get("platform")
     if platform not in PLATFORM:
@@ -245,13 +258,15 @@ def validate_desktop(directory, report):
         elif status != "passed":
             reason = record.get("reason")
             errors.append(f"{name}: {status}: {reason or 'missing reason'}")
-        elif name in COMMON or name in ("windows_geometry", "linux_mpris_fault"):
+        elif name in COMMON or name in ("windows_geometry", "linux_mpris_fault", "linux_active_stop"):
             try:
                 if name == "windows_geometry":
                     validate_geometry(directory, report, record)
                 elif name == "linux_mpris_fault":
                     validate_named_receipt(directory, report, "linux-mpris-fault", "linux-mpris-fault-v1", "single",
                                            ("TestMprisFault", "faultRejectsSeek"))
+                elif name == "linux_active_stop":
+                    validate_linux_active_stop(directory, report)
                 else:
                     validate_windowed(directory, report, name)
             except (OSError, ValueError, KeyError) as error:

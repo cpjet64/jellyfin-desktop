@@ -14,6 +14,7 @@ from native_bootstrap import bootstrap
 from native_inventory import incompatible_tools, inventory, prepare_process_paths, unavailable_compilers
 from macos_session import verify_existing_session
 from headless_requirements import missing_build_inputs
+from linux_mpris_receipt import run_active_stop, update_obligation
 from evidence import record_case, update
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -113,6 +114,7 @@ def preflight():
 def portable_checks():
     command("report-gate-tests", [sys.executable, "tests/test_ci_results.py"])
     command("evidence-tests", [sys.executable, "dev/ci/test_evidence.py"])
+    command("linux-mpris-receipt-tests", [sys.executable, "dev/ci/test_linux_mpris_receipt.py"])
     command("build-manifest-tests", [sys.executable, "dev/ci/test_build_manifest.py"])
     command("acceptance-tests", [sys.executable, "dev/ci/test_acceptance.py"])
     command("archive-safety-tests", [sys.executable, "dev/ci/test_safe_extract.py"])
@@ -263,6 +265,8 @@ def run_stages(system, mode, desktop_missing):
         desktop_preflight(system, desktop_missing)
     except RuntimeError as error:
         update(directory, "offscreen", "blocked", str(error))
+        if system == "Linux":
+            update_obligation(directory, "blocked", str(error))
         if system == "Darwin":
             print(f"BLOCKED: macOS offscreen runtime: {error}", flush=True)
             return
@@ -270,6 +274,13 @@ def run_stages(system, mode, desktop_missing):
     runtime_ctest(system, mode)
     offscreen(system)
     update(directory, "offscreen", "passed", "All three native OpenGL scenarios passed")
+    if system == "Linux":
+        try:
+            run_active_stop(BUILD, RESULTS, directory, command)
+        except (OSError, RuntimeError, ValueError, KeyError) as error:
+            update_obligation(directory, "failed", str(error))
+            raise
+        update_obligation(directory, "passed", "Private D-Bus active playback Stop reached idle")
 
 
 def main():

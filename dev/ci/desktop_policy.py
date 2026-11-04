@@ -11,7 +11,7 @@ REASONS = {
     "windows_geometry": "Windowed geometry producer was not run in this headless job",
     "windows_callback": "Reviewed taskbar callback producer is not available",
     "linux_mpris_fault": "Named private-bus MPRIS case receipt was not captured",
-    "linux_active_stop": "Active playback MPRIS stop-to-idle producer is not available",
+    "linux_active_stop": "Private D-Bus active-playback Stop case has not run",
     "macos_media_callback": "Reviewed media delegate callback producer is not available",
 }
 

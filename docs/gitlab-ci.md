@@ -63,6 +63,12 @@ The runner must already have the required GUI/session facilities; the jobs do
 not install host packages or change runner settings. Resource groups serialize
 each platform's project jobs; they do not establish host-wide isolation.
 
+Each Linux configuration also runs the active-playback MPRIS Stop fixture in
+its own Xvfb and private D-Bus session. Its receipt binds the named QTest,
+generated clip, executable, build manifest and before/after frames to that job
+and pipeline. Missing display, D-Bus or build prerequisites remain blocked;
+the receipt is emitted only after the contained process and its checks succeed.
+
 Windows requires Python with venv, Windows tar and curl, VS 2022 x64 C++ tools
 and redistributable, and at least 20 GiB free. It bootstraps missing 7-Zip,
 CMake, Ninja, Node, and Inno Setup into the checkout from pinned downloads;
