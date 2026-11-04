@@ -195,6 +195,7 @@ def prepare_linux_sdk():
 
 
 def portable_checks():
+    command("mac-carchive-tests", [sys.executable, "dev/ci/test_mac_carchive.py"])
     command("mac-helper-tests", [sys.executable, "dev/ci/test_mac_helpers.py"])
     command("mac-helper-acquisition-tests", [sys.executable, "dev/ci/test_mac_helpers_acquire.py"])
     command("report-gate-tests", [sys.executable, "tests/test_ci_results.py"])

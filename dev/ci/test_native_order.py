@@ -108,13 +108,14 @@ class NativeOrderTest(unittest.TestCase):
                      "dev/ci/test_qt_sdk_archive.py", "dev/ci/test_linux_qt_plan.py",
                      "dev/ci/test_libarchive_reader_contract.py", "dev/ci/test_linux_qt_pc.py",
                      "dev/ci/test_mac_helpers.py",
-                     "dev/ci/test_mac_helpers_acquire.py"):
+                     "dev/ci/test_mac_helpers_acquire.py", "dev/ci/test_mac_carchive.py"):
             self.assertEqual(paths.count(path), 1)
         self.assertNotIn("dev/ci/test_linux_sdk_cmake.py", paths)
 
     def test_windows_gate_registers_mac_helper_suites_once(self):
         script = (Path(__file__).resolve().parents[2] / "dev/windows/ci.ps1").read_text(encoding="utf-8")
-        for path in ("dev/ci/test_mac_helpers.py", "dev/ci/test_mac_helpers_acquire.py"):
+        for path in ("dev/ci/test_mac_helpers.py", "dev/ci/test_mac_helpers_acquire.py",
+                     "dev/ci/test_mac_carchive.py"):
             self.assertEqual(script.count(path), 1)
 
 
