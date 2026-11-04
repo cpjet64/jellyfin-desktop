@@ -1,6 +1,8 @@
 import hashlib
 import io
 from pathlib import Path
+import shutil
+import subprocess
 import tarfile
 import tempfile
 from types import SimpleNamespace
@@ -37,7 +39,7 @@ class ExplicitMpvTest(unittest.TestCase):
             headers.assert_called_once_with(archive.resolve(), include.resolve())
             runtime.assert_called_once_with(library.resolve())
             self.assertEqual(explicit_mpv.cmake_options(paths), [
-                "-DMPV_INCLUDE_DIR=" + str(include.resolve()), "-DMPV_LIBRARY_mpv=" + str(library.resolve()),
+                "-DJELLYFIN_EXPLICIT_MPV=ON", "-DMPV_INCLUDE_DIR=" + str(include.resolve()), "-DMPV_LIBRARY_mpv=" + str(library.resolve()),
                 "-DLibmpv_INCLUDE_DIRS=" + str(include.resolve() / "mpv"),
                 "-DLibmpv_LIBRARIES=" + str(library.resolve())])
             library.unlink()
@@ -65,7 +67,7 @@ class ExplicitMpvTest(unittest.TestCase):
             with patch.object(explicit_mpv.subprocess, "check_output", side_effect=["other: /lib/libmpv.so.2"]):
                 with self.assertRaisesRegex(RuntimeError, "not owned"):
                     explicit_mpv.verify_library(Path("/lib/libmpv.so.2"))
-            with patch.object(explicit_mpv.subprocess, "check_output", side_effect=["libmpv2:amd64: /lib/libmpv.so.2", "wrong"]):
+            with patch.object(explicit_mpv.subprocess, "check_output", side_effect=["libmpv2:amd64: /lib/libmpv.so.2", "installed\namd64\nwrong"]):
                 with self.assertRaisesRegex(RuntimeError, "version mismatch"):
                     explicit_mpv.verify_library(Path("/lib/libmpv.so.2"))
 
@@ -80,14 +82,50 @@ class ExplicitMpvTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "MPV_LIBRARY_mpv"):
                 explicit_mpv.verify_cache(cache, (include, library))
 
-    def test_explicit_route_rejects_existing_or_broken_mpv_pkgconfig(self):
-        for code in (0, 2):
-            with self.subTest(returncode=code), \
-                 patch.object(explicit_mpv.subprocess, "run", return_value=SimpleNamespace(returncode=code)):
-                with self.assertRaisesRegex(RuntimeError, "absent pkg-config"):
-                    explicit_mpv.require_no_pkgconfig_mpv("pkg-config")
-        with patch.object(explicit_mpv.subprocess, "run", return_value=SimpleNamespace(returncode=1)):
-            explicit_mpv.require_no_pkgconfig_mpv("pkg-config")
+    def test_runtime_package_integrity_architecture_and_status(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2]) as tmp:
+            root = Path(tmp)
+            library = root / "libmpv.so.2"
+            library.write_bytes(b"correct")
+            digest = hashlib.md5(b"correct", usedforsecurity=False).hexdigest()
+            (root / "libmpv2.md5sums").write_text(digest + "  libmpv.so.2\n")
+            explicit_mpv.verify_installed_bytes(library, "libmpv2", root, root)
+            library.write_bytes(b"altered")
+            with self.assertRaisesRegex(RuntimeError, "bytes differ"):
+                explicit_mpv.verify_installed_bytes(library, "libmpv2", root, root)
+            for metadata in ("installed\narm64\n0.37.0-1ubuntu4", "not-installed\namd64\n0.37.0-1ubuntu4"):
+                with patch.object(explicit_mpv.subprocess, "check_output", side_effect=["libmpv2:amd64: /lib/a", metadata]):
+                    with self.assertRaisesRegex(RuntimeError, "not installed for amd64"):
+                        explicit_mpv.verify_library(Path("/lib/a"))
+
+    @unittest.skipUnless(shutil.which("cmake"), "cmake unavailable")
+    def test_actual_findmpv_ignores_stale_pkg_selection_only_in_explicit_mode(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2]) as tmp:
+            root = Path(tmp)
+            module = (Path(__file__).resolve().parents[2] / "CMakeModules/FindMPV.cmake").as_posix()
+            include, expected, other = (root / name for name in ("include", "mpv.lib", "other.lib"))
+            include.mkdir()
+            expected.touch()
+            other.touch()
+            script = root / "check.cmake"
+            script.write_text('''set(WIN32 FALSE)
+set(PKG_CONFIG_FOUND TRUE)
+macro(pkg_check_modules)
+  set(PC_MPV_LIBRARIES other)
+endmacro()
+set(PC_MPV_LIBRARIES other)
+set(MPV_INCLUDE_DIR "@INCLUDE@")
+set(MPV_LIBRARY_mpv "@EXPECTED@")
+set(MPV_LIBRARY_other "@OTHER@")
+include("@MODULE@")
+if(NOT MPV_LIBRARY STREQUAL WANT)
+  message(FATAL_ERROR "unexpected effective library: ${MPV_LIBRARY}")
+endif()
+'''.replace("@INCLUDE@", include.as_posix()).replace("@EXPECTED@", expected.as_posix())
+               .replace("@OTHER@", other.as_posix()).replace("@MODULE@", module))
+            for explicit, want in (("ON", expected), ("OFF", other)):
+                subprocess.run(["cmake", "-DJELLYFIN_EXPLICIT_MPV=" + explicit, "-DWANT=" + want.as_posix(),
+                                "-P", str(script)], check=True, capture_output=True, text=True, timeout=30)
 
 
 if __name__ == "__main__":

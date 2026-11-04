@@ -57,21 +57,32 @@ def verify_library(library):
     package = owner.split(": ", 1)[0]
     if package not in ("libmpv2", "libmpv2:amd64"):
         raise RuntimeError("BLOCKED: mpv runtime is not owned by libmpv2")
-    version = subprocess.check_output(["dpkg-query", "-W", "-f=${Version}", package], text=True, timeout=15).strip()
-    if version != VERSION:
+    metadata = subprocess.check_output(["dpkg-query", "-W", "-f=${db:Status-Status}\n${Architecture}\n${Version}", package], text=True, timeout=15).splitlines()
+    if len(metadata) != 3 or metadata[0] != "installed" or metadata[1] != "amd64":
+        raise RuntimeError("BLOCKED: mpv runtime is not installed for amd64")
+    if metadata[2] != VERSION:
         raise RuntimeError("BLOCKED: mpv runtime package version mismatch")
+    verify_installed_bytes(library, package)
 
 
-def require_no_pkgconfig_mpv(program):
-    result = subprocess.run([program, "--exists", "mpv"], stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL, timeout=15)
-    if result.returncode != 1:
-        raise RuntimeError("BLOCKED: explicit mpv route requires absent pkg-config mpv metadata")
+def verify_installed_bytes(library, package, metadata_dir=Path("/var/lib/dpkg/info"), system_root=Path("/")):
+    sums = metadata_dir / (package + ".md5sums")
+    if not sums.is_file() and package == "libmpv2":
+        sums = metadata_dir / "libmpv2:amd64.md5sums"
+    entries = sums.read_text(encoding="utf-8").splitlines()
+    matches = []
+    for line in entries:
+        digest, separator, name = line.partition("  ")
+        if separator and (system_root / name).resolve() == library:
+            matches.append(digest)
+    if len(matches) != 1 or hashlib.md5(library.read_bytes(), usedforsecurity=False).hexdigest() != matches[0]:
+        raise RuntimeError("BLOCKED: mpv runtime bytes differ from installed package metadata")
+    print("Verified installed mpv DSO sha256=" + hashlib.sha256(library.read_bytes()).hexdigest(), flush=True)
 
 
 def cmake_options(paths):
     include, library = paths
-    return ["-DMPV_INCLUDE_DIR=" + str(include), "-DMPV_LIBRARY_mpv=" + str(library),
+    return ["-DJELLYFIN_EXPLICIT_MPV=ON", "-DMPV_INCLUDE_DIR=" + str(include), "-DMPV_LIBRARY_mpv=" + str(library),
             "-DLibmpv_INCLUDE_DIRS=" + str(include / "mpv"), "-DLibmpv_LIBRARIES=" + str(library)]
 
 

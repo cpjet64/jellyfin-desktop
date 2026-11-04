@@ -88,9 +88,9 @@ The optional Linux split-SDK route requires all of `CI_MPV_DEV_DEB`,
 installed real DSO). The job verifies the pinned development archive and
 extracted headers, checks the runtime package identity and version, then builds
 and runs a no-core API/linkage probe before configuring. Invalid explicit inputs
-fail without falling back to pkg-config. The explicit route also requires mpv
-pkg-config metadata to be absent, preventing it from redirecting CMake's library
-selection. Probe identity describes the probe, not the eventual application or
+fail without falling back to pkg-config. The explicit route bypasses mpv
+pkg-config discovery for the Desktop library selection. Probe identity describes
+the probe, not the eventual application or
 the system MpvQt package. Supplying these inputs does not install
 or acquire either package, nor establish runtime or display acceptance. The
 system job still requires its independently supplied MpvQt package.
