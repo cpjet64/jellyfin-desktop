@@ -10,10 +10,12 @@
 #include <QFile>
 #include <QSGRendererInterface>
 #include <atomic>
+#include <vector>
 #include <MpvController>
 #include <mpv/client.h>
 #include "c2/DiagnosticFailureInjection.h"
 #include "c2a_finalizer.h"
+#include "c2a_fixture.h"
 #include "mpv_test_bootstrap.h"
 #include "mpv_test_profile.h"
 #include "player/PlayerComponent.h"
@@ -128,12 +130,21 @@ void TestC2RetirementNative::createFailure()
 
 int main(int argc, char** argv)
 {
+  const QByteArray scenario = qgetenv("C2A_SCENARIO");
+  const QHash<QByteArray, QByteArray> scenarios{{"create-failure", "createFailure"},
+    {"render-failure", "renderFailure"}, {"active-retirement", "activeRetirement"},
+    {"terminal-retirement", "terminalRetirement"}, {"stop-hook", "stopWithPendingHook"}};
+  if (!scenarios.contains(scenario)) { qCritical("C2A_SCENARIO must select exactly one known case"); return 2; }
+  if (argc != 3 || QByteArray(argv[1]) != "-o") { qCritical("Expected one QTest output argument"); return 2; }
   QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
   QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
   QGuiApplication app(argc, argv);
   previousHandler = qInstallMessageHandler(watchMessage);
   TestC2RetirementNative test;
-  const int result = QTest::qExec(&test, argc, argv);
+  QByteArray selected = scenarios.value(scenario);
+  std::vector<char*> arguments(argv, argv + argc);
+  arguments.push_back(selected.data());
+  const int result = QTest::qExec(&test, int(arguments.size()), arguments.data());
   qInstallMessageHandler(previousHandler);
   return result;
 }
