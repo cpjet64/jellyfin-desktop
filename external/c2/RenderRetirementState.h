@@ -46,6 +46,12 @@ public:
     return true;
   }
 
+  bool failurePending(std::uint64_t generation)
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_failed && !m_retired && generation == m_generation;
+  }
+
   bool request(std::uint64_t generation)
   {
     std::lock_guard<std::mutex> lock(m_mutex);

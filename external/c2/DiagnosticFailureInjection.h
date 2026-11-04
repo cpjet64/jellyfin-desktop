@@ -11,4 +11,12 @@ struct DiagnosticFailureInjection
   static std::atomic<int> callbacks;
   static std::atomic<bool> holdCallback;
   static std::atomic<bool> callbackWaiting;
+  static std::atomic<int> order;
+  static std::atomic<int> closedOrder;
+  static std::atomic<int> unregisteredOrder;
+  static std::atomic<int> freedOrder;
+  static std::atomic<int> clearedOrder;
+  static std::atomic<int> ackOrder;
+  static std::atomic<int> itemOrder;
+  static std::atomic<int> coreOrder;
 };

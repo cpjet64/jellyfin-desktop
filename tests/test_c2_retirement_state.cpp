@@ -6,7 +6,7 @@
 #include <mutex>
 #include <thread>
 
-#include "external/c2/RenderRetirementState.h"
+#include "c2/RenderRetirementState.h"
 
 using State = RenderRetirementState;
 using namespace std::chrono_literals;
@@ -18,6 +18,7 @@ private slots:
   void immediateCallbackAndFailure();
   void staleAndBlockedRetirement();
   void waitsForInflightCallbacks();
+  void missingJobDoesNotAcknowledge();
 };
 
 void TestC2RetirementState::immediateCallbackAndFailure()
@@ -33,11 +34,15 @@ void TestC2RetirementState::immediateCallbackAndFailure()
   QVERIFY(state.accepts(41));
   QVERIFY(!state.accepts(40));
   QVERIFY(state.failOnce(State::Stage::Create, -7));
+  QVERIFY(state.failurePending(41));
   QVERIFY(!state.failOnce(State::Stage::Render, -8));
   QVERIFY(!state.accepts(41));
   const bool admittedAfterFailure = state.enterCallback();
   state.leaveCallback();
   QVERIFY(!admittedAfterFailure);
+  QVERIFY(state.request(41));
+  QCOMPARE(state.retire(41, true, [] {}, [] {}), State::Result::Retired);
+  QVERIFY(!state.failurePending(41));
 }
 
 void TestC2RetirementState::staleAndBlockedRetirement()
@@ -69,6 +74,21 @@ void TestC2RetirementState::staleAndBlockedRetirement()
   QVERIFY(!state.request(42));
   QCOMPARE(unregisters, 1);
   QCOMPARE(frees, 1);
+}
+
+void TestC2RetirementState::missingJobDoesNotAcknowledge()
+{
+  State state(44);
+  std::atomic<int> acknowledged{0};
+  QVERIFY(state.request(44));
+  {
+    // A discarded render job owns no completion side effect.
+    auto job = [&] { ++acknowledged; };
+    Q_UNUSED(job);
+  }
+  QTest::qWait(50);
+  QCOMPARE(acknowledged.load(), 0);
+  QVERIFY(!state.accepts(44));
 }
 
 void TestC2RetirementState::waitsForInflightCallbacks()

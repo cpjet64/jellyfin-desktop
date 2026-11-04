@@ -6,7 +6,7 @@ find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
 if(MPVQT_C2_DIAGNOSTIC_ONLY)
   add_executable(test_c2_retirement_state test_c2_retirement_state.cpp)
-  target_include_directories(test_c2_retirement_state PRIVATE ${CMAKE_SOURCE_DIR})
+  target_include_directories(test_c2_retirement_state PRIVATE ${CMAKE_SOURCE_DIR}/external)
   target_link_libraries(test_c2_retirement_state PRIVATE Qt6::Core Qt6::Test Threads::Threads)
   add_test(NAME test_c2_retirement_state COMMAND test_c2_retirement_state)
   set_tests_properties(test_c2_retirement_state PROPERTIES TIMEOUT 60)

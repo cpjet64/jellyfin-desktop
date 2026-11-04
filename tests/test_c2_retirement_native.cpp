@@ -35,6 +35,7 @@ public:
   bool init();
   bool frame();
   bool waitFor(const std::function<bool()>& predicate, int ms);
+  bool destroyItem();
   ~Scene();
   QOpenGLContext context;
   QOffscreenSurface surface;
@@ -86,6 +87,16 @@ bool Scene::waitFor(const std::function<bool()>& predicate, int ms)
     QTest::qWait(20);
   }
   return predicate();
+}
+
+bool Scene::destroyItem()
+{
+  if (!retired || !context.makeCurrent(&surface)) return false;
+  control->invalidate();
+  if (!context.makeCurrent(&surface)) return false;
+  delete item;
+  item = nullptr;
+  return true;
 }
 
 Scene::~Scene()
@@ -167,13 +178,27 @@ void TestC2RetirementNative::retirement()
   QVERIFY2(MpvTestBootstrap::prepareMpvTestEnvironment(ownedRoot, &error), qPrintable(error));
   QVERIFY2(prepareMpvTestProfile(evidence, &error), qPrintable(error));
   QVERIFY(SettingsComponent::Get().componentInitialize());
+  PlayerComponent player;
+  QVERIFY(player.componentInitialize());
   Scene scene;
   QVERIFY2(scene.init(), "Could not initialize diagnostic OpenGL scene");
   QVERIFY(!scene.window->isVisible());
-  PlayerComponent player;
-  QVERIFY(player.componentInitialize());
   player.setWindow(scene.window.get());
   runScenario(scene, player, scenario, media);
+  if (scene.retired) {
+    QVERIFY(scene.destroyItem());
+    const int closed = DiagnosticFailureInjection::closedOrder;
+    const int unregistered = DiagnosticFailureInjection::unregisteredOrder;
+    const int freed = DiagnosticFailureInjection::freedOrder;
+    const int cleared = DiagnosticFailureInjection::clearedOrder;
+    const int ack = DiagnosticFailureInjection::ackOrder;
+    const int item = DiagnosticFailureInjection::itemOrder;
+    const int core = DiagnosticFailureInjection::coreOrder;
+    qInfo() << "C2 retirement order close/unregister/free/clear/ack/item/core:"
+            << closed << unregistered << freed << cleared << ack << item << core;
+    QVERIFY(closed > 0 && closed < unregistered && unregistered < freed && freed < cleared &&
+            cleared < ack && ack < item && item < core);
+  }
 }
 
 void TestC2RetirementNative::runScenario(Scene& scene, PlayerComponent& player,
@@ -269,6 +294,12 @@ void TestC2RetirementNative::retireAndVerify(Scene& scene, PlayerComponent& play
   QCOMPARE(player.m_mpv, controller);
   QCOMPARE(player.m_mpvGeneration, bindingGeneration);
   QCOMPARE(player.m_doAc3Transcoding, ac3);
+  QTest::qWait(150);
+  observer.drain();
+  qInfo() << "C2 immediately after retirement; Stop already requested:" << (scenario == "stop-hook")
+          << "idle-active:" << propertyFlag(core, "idle-active")
+          << "vo-configured:" << propertyFlag(core, "vo-configured")
+          << "video reconfigs:" << observer.videoReconfigs << "property events:" << observer.propertyEvents;
   if (scenario != "stop-hook")
     QCOMPARE(player.requestNativeStop().status, PlayerComponent::NativeStopResult::Status::Accepted);
   QTest::qWait(3500);
