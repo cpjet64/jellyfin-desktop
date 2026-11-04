@@ -57,7 +57,10 @@ def validate_link(path, target, root):
 
 def validate_link_graph(planned, root):
     links = {}
+    available = {root}
     for path, entry in planned:
+        available.add(path)
+        available.update(parent for parent in path.parents if root in (parent, *parent.parents))
         if entry.kind == "symlink":
             if path in links and links[path] != entry.link:
                 raise ValueError(f"conflicting symlink overlay: {path}")
@@ -81,6 +84,8 @@ def validate_link_graph(planned, root):
                     raise ValueError(f"cyclic symlink graph: {path}")
                 parts.pop()
                 pending = linked.split("/") + pending
+        if PurePosixPath(*parts) not in available:
+            raise ValueError(f"symlink target missing from SDK: {path}")
 
 
 def validate_manifest(platform):
@@ -159,6 +164,8 @@ def plan_entries(groups, expansion_limit, sdk_root):
                 raise ValueError(f"unsupported permissions: {path}")
             if type(entry.size) is not int or entry.size < 0:
                 raise ValueError(f"invalid entry size: {path}")
+            if entry.kind != "file" and entry.size != 0:
+                raise ValueError(f"non-file payload rejected: {path}")
             if entry.kind == "file":
                 if not callable(entry.open_data):
                     raise ValueError(f"missing file reader: {path}")
@@ -186,7 +193,8 @@ def plan_entries(groups, expansion_limit, sdk_root):
 
 def copy_entry(entry, target, remaining):
     digest, total = hashlib.sha256(), 0
-    with entry.open_data() as source, target.open("xb") as output:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    with entry.open_data() as source, os.fdopen(os.open(target, flags, 0o600), "wb") as output:
         while chunk := source.read(min(1024 * 1024, remaining - total + 1)):
             total += len(chunk)
             if total > entry.size or total > remaining:
@@ -218,7 +226,7 @@ def publish_stage(stage, published):
         raise RuntimeError("atomic no-replace publication unavailable on this platform")
 
 
-def stage_entries(groups, stage, published, expansion_limit, sdk_root):
+def stage_entries(groups, stage, published, expansion_limit, sdk_root, verify_stage=None):
     """Create a fresh stage and publish only after all entries are validated."""
     planned = plan_entries(groups, expansion_limit, sdk_root)
     stage, published = Path(stage), Path(published)
@@ -255,5 +263,7 @@ def stage_entries(groups, stage, published, expansion_limit, sdk_root):
     for path, identity in sorted(seen.items(), key=lambda item: len(item[0].parts), reverse=True):
         if identity[0] == "directory":
             stage.joinpath(*path.parts).chmod(identity[1])
+    if verify_stage is not None:
+        verify_stage(stage)
     publish_stage(stage, published)
     return published.resolve()
