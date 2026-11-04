@@ -20,6 +20,12 @@ GROUPS = {"runtime": ("libmpv2",), "development": ("libmpv-dev", "libmpv2"),
           "display": ("xvfb", "mesa-utils")}
 TOOLS = ("cc", "c++", "cmake", "ninja", "pkg-config")
 SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+:~_-]*$")
+BUDGET_SECONDS = 540
+DEADLINE = None
+
+
+def remaining_budget():
+    return None if DEADLINE is None else max(0.0, DEADLINE - time.monotonic())
 
 
 def run(args, timeout=60):
@@ -48,6 +54,11 @@ def run(args, timeout=60):
         raise ValueError("unexpected metadata arguments")
     if args[0] == "xcrun" and args[1:] not in (["--show-sdk-path"], ["--show-sdk-version"]):
         raise ValueError("unexpected SDK metadata request")
+    remaining = remaining_budget()
+    if remaining is not None and remaining <= 0:
+        return {"command": args, "exit": None, "error": "collector_budget_exhausted"}
+    if remaining is not None:
+        timeout = min(timeout, remaining)
     try:
         result = subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 timeout=timeout, env={**os.environ, "LC_ALL": "C"})
@@ -120,8 +131,14 @@ def enrich_transaction(changes, query):
 def summarize_transaction(simulation, query):
     result = {"simulation": simulation}
     if simulation.get("exit") != 0:
+        if simulation.get("error") == "collector_budget_exhausted":
+            simulation["blocked"] = "collector time budget exhausted before simulation"
         return result
-    changes = transaction(simulation["output"])
+    try:
+        changes = transaction(simulation["output"])
+    except (KeyError, ValueError) as error:
+        result["transaction_error"] = str(error)
+        return result
     enrich_transaction(changes, query)
     result["transaction"] = changes
     changed_names = {item["package"] for item in changes}
@@ -157,19 +174,26 @@ def constrained_operands(exact, changes):
 
 def solve_group(names, candidates, query):
     if any(not candidates.get(name) for name in names):
-        return {"simulation": {"blocked": "one or more exact candidates unavailable"}}
+        reason = "collector time budget exhausted" if remaining_budget() == 0 else "one or more exact candidates unavailable"
+        return {"simulation": {"blocked": reason}, "constrained": {"blocked": "baseline unavailable", "preserves_installed": None}}
     if names == GROUPS["development"] and candidates["libmpv-dev"] != candidates["libmpv2"]:
-        return {"simulation": {"blocked": "libmpv-dev and libmpv2 candidate versions differ"}}
+        return {"simulation": {"blocked": "libmpv-dev and libmpv2 candidate versions differ"},
+                "constrained": {"blocked": "baseline unavailable", "preserves_installed": None}}
     exact = [f"{name}={candidates[name]}" for name in names]
     prefix = ["apt-get", "--simulate", "--no-install-recommends", "install"]
     result = summarize_transaction(run(prefix + exact, 60), query)
     changes = result.get("transaction")
-    if changes is None or not any(item["action"] in ("upgrade", "downgrade", "remove", "unknown") for item in changes):
+    if changes is None:
+        result["constrained"] = {"blocked": "baseline simulation did not succeed", "preserves_installed": None}
+        return result
+    if not any(item["action"] in ("upgrade", "downgrade", "remove", "unknown") for item in changes):
+        result["constrained"] = {"not_run": "baseline did not change installed versions",
+                                 "preserves_installed": None if result.get("additional_configure") else True}
         return result
     try:
         frozen, overrides = constrained_operands(exact, changes)
     except ValueError as error:
-        result["constrained"] = {"blocked": str(error)}
+        result["constrained"] = {"blocked": str(error), "preserves_installed": None}
         return result
     constrained = summarize_transaction(run(prefix + frozen, 60), query)
     constrained["requested_operands"] = exact
@@ -203,6 +227,10 @@ def mac_inventory():
         "clt": ["pkgutil", "--pkg-info", "com.apple.pkg.CLTools_Executables"],
         "console_uid": ["stat", "-f", "%u", "/dev/console"]}.items()}
     result["uid"] = os.getuid()
+    remaining = remaining_budget()
+    if remaining is not None and remaining < 31:
+        result["existing_gui_session"] = "BLOCKED: insufficient collector budget for bounded GUI verification"
+        return result
     session_log = io.StringIO()
     try:
         with contextlib.redirect_stdout(session_log):
@@ -226,6 +254,8 @@ def prefix_metadata(name):
 
 
 def main():
+    global DEADLINE
+    DEADLINE = time.monotonic() + BUDGET_SECONDS
     system = platform.system()
     if system not in ("Linux", "Darwin"):
         raise RuntimeError("native Unix runner required")
@@ -237,6 +267,8 @@ def main():
               "compiler_and_tool_paths": {name: shutil.which(name) for name in TOOLS},
               "explicit_prefixes": prefixes,
               "details": linux_inventory() if system == "Linux" else mac_inventory()}
+    report["budget_seconds"] = BUDGET_SECONDS
+    report["budget_exhausted"] = remaining_budget() == 0
     print(json.dumps(report, indent=2, sort_keys=True))
 
 

@@ -1,4 +1,8 @@
 import unittest
+import io
+import json
+from contextlib import redirect_stdout
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import native_prereq_inventory as inventory
@@ -29,6 +33,39 @@ class InventoryTest(unittest.TestCase):
                         ["stat", "-f", "%u", "/etc/passwd"]):
             with self.subTest(command=command), self.assertRaises(ValueError):
                 inventory.run(command)
+
+    def test_expired_budget_never_launches_and_still_checks_allowlist(self):
+        with patch.object(inventory, "DEADLINE", 10), patch.object(inventory.time, "monotonic", return_value=11), \
+                patch.object(inventory.subprocess, "run") as launch:
+            result = inventory.run(["apt-cache", "policy", "libmpv2"])
+            self.assertEqual(result["error"], "collector_budget_exhausted")
+            with self.assertRaises(ValueError):
+                inventory.run(["apt-get", "update"])
+            launch.assert_not_called()
+
+    def test_subprocess_timeout_is_capped_by_remaining_budget(self):
+        with patch.object(inventory, "DEADLINE", 20), patch.object(inventory.time, "monotonic", return_value=17.5), \
+                patch.object(inventory.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="")) as launch:
+            inventory.run(["apt-cache", "policy", "libmpv2"], timeout=60)
+        self.assertEqual(launch.call_args.kwargs["timeout"], 2.5)
+
+    def test_exhaustion_emits_complete_partial_json_without_subprocess(self):
+        output = io.StringIO()
+        with patch.object(inventory, "DEADLINE", None), patch.object(inventory.time, "monotonic", side_effect=[0] + [600] * 100), \
+                patch.object(inventory.platform, "system", return_value="Linux"), \
+                patch.object(inventory.platform, "machine", return_value="x86_64"), \
+                patch.object(inventory.os, "getuid", return_value=1, create=True), \
+                patch.object(inventory.shutil, "disk_usage", return_value=SimpleNamespace(free=1)), \
+                patch.object(inventory.shutil, "which", return_value=None), \
+                patch.object(inventory, "index_metadata", return_value={}), \
+                patch.object(inventory.subprocess, "run") as launch, redirect_stdout(output):
+            inventory.main()
+        report = json.loads(output.getvalue())
+        self.assertTrue(report["budget_exhausted"])
+        for group in report["details"]["groups"].values():
+            self.assertIn("budget exhausted", group["simulation"]["blocked"])
+            self.assertIsNone(group["constrained"]["preserves_installed"])
+        launch.assert_not_called()
 
     def test_exact_candidates_and_missing_metadata_are_honest(self):
         calls = []
@@ -123,6 +160,28 @@ class InventoryTest(unittest.TestCase):
         operands, overrides = inventory.constrained_operands(["libmpv2=2", "xvfb=3"], changes)
         self.assertEqual(operands, ["libmpv2=1", "xvfb=3"])
         self.assertEqual(overrides, [{"package": "libmpv2", "requested": "2", "frozen": "1"}])
+
+    def test_failed_baseline_does_not_claim_preserved_packages_or_retry(self):
+        with patch.object(inventory, "run", return_value={"exit": 100, "output": "conflict"}) as run:
+            result = inventory.solve_group(("libmpv2",), {"libmpv2": "2"}, lambda *_: {})
+        self.assertEqual(run.call_count, 1)
+        self.assertIn("baseline simulation did not succeed", result["constrained"]["blocked"])
+        self.assertIsNone(result["constrained"]["preserves_installed"])
+
+    def test_unexecuted_constrained_solve_is_blocked_and_unknown(self):
+        calls = []
+        def fake(args, timeout=60):
+            calls.append(args)
+            if args[0] == "dpkg":
+                return {"exit": 0 if args[3] == "gt" else 1}
+            if "shared=1" in args:
+                return {"exit": None, "error": "collector_budget_exhausted"}
+            return {"exit": 0, "output": "Inst shared [1] (2 repo [amd64])\n"}
+        with patch.object(inventory, "run", side_effect=fake):
+            result = inventory.solve_group(("libmpv2",), {"libmpv2": "2"}, lambda *_: {"output": ""})
+        self.assertIn("budget exhausted", result["constrained"]["simulation"]["blocked"])
+        self.assertIsNone(result["constrained"]["preserves_installed"])
+        self.assertEqual(sum(args[0] == "apt-get" for args in calls), 2)
 
     def test_development_candidates_must_match(self):
         with patch.object(inventory, "run") as run:
