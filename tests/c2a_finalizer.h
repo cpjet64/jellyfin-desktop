@@ -10,6 +10,7 @@
 #include "c2/DiagnosticFailureInjection.h"
 #include "mpv_thread_probe.h"
 #include "player/PlayerComponent.h"
+#include "c2_event_observer.h"
 
 // A failed or ambiguous teardown remains contained in the fixture process.
 class C2aFinalizer
@@ -40,6 +41,7 @@ public:
     return true;
   }
   Phase currentPhase() const { return phase; }
+  bool wasStopAttempted() const { return stopAttempted; }
   bool requestRetirement(quint64 generation, const std::function<bool()>& sameBinding)
   {
     if (retirementAttempted || phase != Phase::Live || !item || !sameBinding()) return false;
@@ -89,6 +91,42 @@ public:
     }
     return false;
   }
+  bool confirmErrorTerminal(mpv_handle* core, C2EventObserver& observer, int64_t entry,
+                            const std::function<bool()>& sameBinding)
+  {
+    if (errorTerminalAttempted || terminalObserved || phase != Phase::Retired || !core ||
+        !observer.client || !sameBinding()) return false;
+    errorTerminalAttempted = true;
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < 10000) {
+      QCoreApplication::processEvents();
+      observer.drain();
+      if (c2ErrorCleanupEligible(phase == Phase::Retired, sameBinding(), observer.terminalEvents(), entry)) break;
+      QThread::msleep(10);
+    }
+    if (!c2ErrorCleanupEligible(phase == Phase::Retired, sameBinding(), observer.terminalEvents(), entry)) return false;
+    if (mpv_set_property_string(core, "force-window", "no") < 0) return false;
+    timer.restart();
+    while (timer.elapsed() < 10000) {
+      QCoreApplication::processEvents();
+      observer.drain();
+      if (!c2ErrorCleanupEligible(phase == Phase::Retired, sameBinding(), observer.terminalEvents(), entry)) return false;
+      int idle = 0;
+      char* vo = nullptr;
+      char* force = nullptr;
+      const int idleStatus = mpv_get_property(core, "idle-active", MPV_FORMAT_FLAG, &idle);
+      const int voStatus = mpv_get_property(core, "current-vo", MPV_FORMAT_STRING, &vo);
+      const int forceStatus = mpv_get_property(core, "force-window", MPV_FORMAT_STRING, &force);
+      const bool terminal = c2ErrorTerminalProperties(idleStatus, idle, voStatus, forceStatus,
+                                                       force && QByteArray(force) == "no");
+      if (vo) mpv_free(vo);
+      if (force) mpv_free(force);
+      if (terminal) { terminalObserved = true; errorStopNotNeeded = true; return true; }
+      QThread::msleep(10);
+    }
+    return false;
+  }
   bool finish()
   {
     if (attempted) return resourcesSettled && valid;
@@ -117,10 +155,12 @@ private:
   bool valid = false;
   bool retirementAttempted = false;
   bool terminalObserved = false;
+  bool errorTerminalAttempted = false;
   bool stopAttempted = false;
 public:
   qint64 stopEntered = 0;
   qint64 stopReturned = 0;
   int stopStatus = -1;
   int stopError = 0;
+  bool errorStopNotNeeded = false;
 };

@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QUrl>
 #include "c2_event_observer.h"
+#include "c2_error_verdict.h"
 #include "c2a_fixture.h"
 
 namespace {
@@ -120,6 +121,7 @@ struct C2aRenderState
   mpv_handle* core;
   quint64 generation;
   quint64 binding = 0;
+  int64_t fixtureEntry = 0;
   bool ac3 = false;
   qint64 positionBefore = 0;
   MpvRenderEvent render;
@@ -143,6 +145,26 @@ struct C2aRenderState
 };
 
 namespace {
+bool cleanupRenderError(C2aFixture& fixture, C2aRenderState& state, const QString& evidence,
+                        const std::function<bool()>& sameBinding)
+{
+  if (!c2ErrorEntry(state.observer.terminalEvents(), state.fixtureEntry)) return false;
+  QJsonArray events;
+  for (const auto& event : state.observer.events)
+    events.append(QJsonObject{{"kind", int(event.kind)}, {"entry", qint64(event.playlistId)},
+      {"reason", event.reason}, {"error", event.error}, {"insert_id", qint64(event.insertId)},
+      {"insert_count", event.insertCount}});
+  if (!saveRenderEvidence(evidence, "c2a-render-error-observed.json",
+      {{"entry", qint64(state.fixtureEntry)}, {"events", events}, {"phases", state.phases},
+       {"stop_attempted", fixture.cleanup.wasStopAttempted()}, {"stop_status", fixture.cleanup.stopStatus},
+       {"stop_error", fixture.cleanup.stopError}})) return false;
+  if (!fixture.cleanup.confirmErrorTerminal(state.core, state.observer, state.fixtureEntry, sameBinding)) return false;
+  state.observer.close();
+  if (!fixture.cleanup.finish()) return false;
+  return saveRenderEvidence(evidence, "c2a-render-error-terminal.json",
+    {{"termination_reason", "ERROR"}, {"cleanup_stop_not_needed", true}});
+}
+
 QJsonObject renderTiming(const C2aRenderState& state)
 {
   return {{"clock", "std::chrono::steady_clock nanoseconds since epoch"},
@@ -191,6 +213,9 @@ void TestC2RetirementNative::verifyRenderFailure(C2aFixture& fixture, PlayerComp
   QVERIFY(state.observer.client);
   QVERIFY(fixture.startPlayback(player, media));
   QVERIFY(fixture.proveAdvancing(player));
+  state.observer.drain();
+  state.fixtureEntry = state.observer.latestLoadedEntry();
+  QVERIFY(state.fixtureEntry > 0);
   QVERIFY(savePreFaultFrames(fixture.scene.frames(), evidence));
   const auto renderEvents = fixture.item->observed->snapshot();
   QVERIFY(!renderEvents.isEmpty());
@@ -274,6 +299,12 @@ void TestC2RetirementNative::retireRenderFailure(C2aFixture& fixture, PlayerComp
   QVERIFY(saveRenderEvidence(evidence, "c2a-render-retired.json", {{"phases", state.phases},
     {"player_errors", errorMessages(state.playerError)}, {"finished", state.finished.count()},
     {"canceled", state.canceled.count()}}));
+  if (fatalDiagnostic.load() || state.playerError.count() ||
+      c2ErrorEntry(state.observer.terminalEvents(), state.fixtureEntry)) {
+    finishErrorCase(fatalDiagnostic, [&] { return cleanupRenderError(fixture, state, evidence, sameBinding) &&
+      player.m_mpv == nullptr && player.m_mpvGeneration > state.binding; });
+    return;
+  }
   QVERIFY(!fatalDiagnostic.load());
   QVERIFY(fixture.cleanup.stopToTerminal(player, state.core, state.canceled));
   state.phases.append(observeMpvPhase(state.observer, state.core, "after-terminal-stop"));

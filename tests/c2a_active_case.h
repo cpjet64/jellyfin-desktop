@@ -2,6 +2,8 @@
 
 #include "c2a_callback_hold.h"
 #include "c2a_fixture.h"
+#include "c2_error_verdict.h"
+#include <QJsonArray>
 
 namespace {
 class DeferredUpdateRelease
@@ -19,23 +21,22 @@ struct ScopedActiveConnection
 class ActiveEndObserver
 {
 public:
-  explicit ActiveEndObserver(mpv_handle* core) : client(mpv_create_client(core, "c2a-active-observer")) {}
+  explicit ActiveEndObserver(mpv_handle* core) : observer(core), client(observer.client) {}
   ~ActiveEndObserver() { close(); }
   void drain()
   {
-    while (client) {
-      mpv_event* event = mpv_wait_event(client, 0);
-      if (!event || event->event_id == MPV_EVENT_NONE) break;
-      if (event->event_id == MPV_EVENT_END_FILE && event->data) {
-        const auto* end = static_cast<mpv_event_end_file*>(event->data);
-        ++endCount;
-        reason = int(end->reason);
-        error = end->error;
-      }
+    observer.drain();
+    endCount = 0;
+    for (const auto& event : observer.events) if (event.kind == MPV_EVENT_END_FILE) {
+      ++endCount; reason = event.reason; error = event.error;
     }
   }
-  void close() { if (client) { mpv_destroy(client); client = nullptr; } }
+  void close() { observer.close(); client = nullptr; }
+  C2EventObserver observer;
   mpv_handle* client = nullptr;
+  int64_t entry = 0;
+  quint64 binding = 0;
+  bool ac3 = false;
   int endCount = 0, reason = -1, error = 0;
 };
 
@@ -64,6 +65,31 @@ bool saveActiveEvidence(const QString& evidence, const QString& name, const QJso
   if (!file.open(QIODevice::WriteOnly | QIODevice::NewOnly)) return false;
   const QByteArray bytes = QJsonDocument(record).toJson();
   return file.write(bytes) == bytes.size() && file.flush();
+}
+
+QJsonArray activeEvents(const ActiveEndObserver& observer)
+{
+  QJsonArray events;
+  for (const auto& event : observer.observer.events)
+    events.append(QJsonObject{{"kind", int(event.kind)}, {"entry", qint64(event.playlistId)},
+      {"reason", event.reason}, {"error", event.error}, {"insert_id", qint64(event.insertId)},
+      {"insert_count", event.insertCount}});
+  return events;
+}
+
+bool cleanupActiveError(C2aFixture& fixture, ActiveEndObserver& observer, const QString& evidence,
+                        const std::function<bool()>& sameBinding)
+{
+  if (!c2ErrorEntry(observer.observer.terminalEvents(), observer.entry)) return false;
+  if (!saveActiveEvidence(evidence, "c2a-active-error-observed.json", {{"entry", qint64(observer.entry)},
+      {"events", activeEvents(observer)},
+      {"stop_attempted", fixture.cleanup.wasStopAttempted()}, {"stop_status", fixture.cleanup.stopStatus},
+      {"stop_error", fixture.cleanup.stopError}})) return false;
+  if (!fixture.cleanup.confirmErrorTerminal(fixture.core, observer.observer, observer.entry, sameBinding)) return false;
+  observer.close();
+  if (!fixture.cleanup.finish()) return false;
+  return saveActiveEvidence(evidence, "c2a-active-error-terminal.json",
+    {{"termination_reason", "ERROR"}, {"cleanup_stop_not_needed", true}});
 }
 }
 
@@ -113,6 +139,11 @@ void TestC2RetirementNative::exerciseActive(C2aFixture& fixture, PlayerComponent
   QSignalSpy playbackError(&player, &PlayerComponent::error);
   QVERIFY(fixture.startPlayback(player, media));
   QVERIFY(fixture.proveAdvancing(player));
+  observer.drain();
+  observer.entry = observer.observer.latestLoadedEntry();
+  observer.binding = bindingGeneration;
+  observer.ac3 = ac3;
+  QVERIFY(observer.entry > 0);
   QVERIFY(saveActiveFrames(fixture, evidence));
   DiagnosticFailureInjection::holdDeferredUpdate = true;
   DiagnosticFailureInjection::deferNextQueuedUpdate = true;
@@ -174,7 +205,7 @@ void TestC2RetirementNative::finishActive(C2aFixture& fixture, PlayerComponent& 
   const int finishedBeforeCleanup = finished.count();
   const int errorsBeforeCleanup = playbackError.count();
   int idle = 0;
-  QCOMPARE(mpv_get_property(fixture.core, "idle-active", MPV_FORMAT_FLAG, &idle), 0);
+  const int idleStatus = mpv_get_property(fixture.core, "idle-active", MPV_FORMAT_FLAG, &idle);
   const QJsonObject observed{{"generation", qint64(fixture.generation)},
     {"request_ns", requestedAt}, {"ack_ns", acknowledgedAt},
     {"core", QString::number(reinterpret_cast<quintptr>(fixture.core), 16)},
@@ -199,10 +230,22 @@ void TestC2RetirementNative::finishActive(C2aFixture& fixture, PlayerComponent& 
     {"pointer_cleared_order", DiagnosticFailureInjection::clearedOrder.load()},
     {"gui_ack_order", DiagnosticFailureInjection::ackOrder.load()},
     {"deferred_rejected", DiagnosticFailureInjection::deferredUpdatesRejected.load()},
-    {"idle_before_cleanup", idle}, {"canceled_before_cleanup", canceledBeforeCleanup},
+    {"idle_before_cleanup", idle}, {"idle_status_before_cleanup", idleStatus}, {"canceled_before_cleanup", canceledBeforeCleanup},
     {"finished_before_cleanup", finishedBeforeCleanup}, {"errors_before_cleanup", errorsBeforeCleanup},
-    {"end_events_before_cleanup", observer.endCount}, {"end_reason", observer.reason}, {"end_error", observer.error}};
+    {"end_events_before_cleanup", observer.endCount}, {"end_reason", observer.reason}, {"end_error", observer.error},
+    {"fixture_entry", qint64(observer.entry)}, {"raw_events", activeEvents(observer)}};
   QVERIFY(saveActiveEvidence(evidence, "c2a-active-observed.json", observed));
+  QCOMPARE(idleStatus, 0);
+  const auto sameBinding = [&] { return player.m_mpv == fixture.controller &&
+    fixture.controller->mpv() == fixture.core && player.m_mpvGeneration == observer.binding &&
+    player.m_doAc3Transcoding == observer.ac3 &&
+    fixture.controller->eventMode() == MpvController::EventMode::External; };
+  if (fatalDiagnostic.load() || errorsBeforeCleanup ||
+      c2ErrorEntry(observer.observer.terminalEvents(), observer.entry)) {
+    finishErrorCase(fatalDiagnostic, [&] { return cleanupActiveError(fixture, observer, evidence, sameBinding) &&
+      player.m_mpv == nullptr && player.m_mpvGeneration > observer.binding; });
+    return;
+  }
   if (canceledBeforeCleanup == 0) QVERIFY(fixture.cleanup.stopToTerminal(player, fixture.core, canceled));
   else {
     QCOMPARE(mpv_set_property_string(fixture.core, "force-window", "no"), 0);

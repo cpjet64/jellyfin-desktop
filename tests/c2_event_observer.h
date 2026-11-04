@@ -3,6 +3,7 @@
 #include <mpv/client.h>
 #include <QDebug>
 #include <vector>
+#include "c2_error_terminal.h"
 
 // Separate mpv client: it observes broadcast events and never consumes the
 // PlayerComponent client's events or registers/continues its hooks.
@@ -97,6 +98,14 @@ public:
         qInfo() << "C2 file event" << event.kind << event.playlistId << event.reason
                 << event.error << event.insertId << event.insertCount;
     }
+  }
+
+  std::vector<C2TerminalEvent> terminalEvents() const
+  {
+    std::vector<C2TerminalEvent> result;
+    for (const auto& event : events)
+      result.push_back({event.kind, event.playlistId, event.reason, event.error, event.insertId, event.insertCount});
+    return result;
   }
 
   mpv_handle* client = nullptr;
