@@ -1,0 +1,51 @@
+{
+    "ack_count_at_snapshot": 0,
+    "canceled": 0,
+    "failure_receipt_ns": 30787538873300,
+    "failure_unwound_ns": 30787580380800,
+    "finished": 0,
+    "generation": 1,
+    "handler_return_boundary_ns": 30787538876800,
+    "injected_error": -18,
+    "phases": [
+        {
+            "current_vo": "libmpv",
+            "current_vo_status": 0,
+            "events": [
+                {
+                    "entry_id": 1,
+                    "error": 0,
+                    "insert_count": 0,
+                    "insert_id": 0,
+                    "kind": 6,
+                    "reason": 0
+                }
+            ],
+            "idle": false,
+            "idle_status": 0,
+            "phase": "before-injection",
+            "properties_sampled": true
+        },
+        {
+            "events": [
+                {
+                    "entry_id": 1,
+                    "error": 0,
+                    "insert_count": 0,
+                    "insert_id": 0,
+                    "kind": 6,
+                    "reason": 0
+                }
+            ],
+            "phase": "after-failure-handler",
+            "properties_sampled": false
+        }
+    ],
+    "player_errors": [
+    ],
+    "reported_error": -18,
+    "reported_stage": 1,
+    "request_entered_ns": 30787538873600,
+    "request_returned_ns": 30787538876700,
+    "scenario": "render-failure"
+}

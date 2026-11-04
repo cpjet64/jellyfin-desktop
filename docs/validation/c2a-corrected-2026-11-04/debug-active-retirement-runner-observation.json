@@ -1,0 +1,53 @@
+{
+  "helper_exit": 7,
+  "timed_out": false,
+  "app_wait_exit": [
+    [
+      "0",
+      "1"
+    ]
+  ],
+  "active_before": [
+    [
+      "true",
+      "0",
+      "0"
+    ]
+  ],
+  "active_after": [
+    [
+      "true",
+      "0",
+      "0",
+      "fail"
+    ]
+  ],
+  "termination": [
+    [
+      "false",
+      "false",
+      "0"
+    ]
+  ],
+  "exit_query": [
+    [
+      "0",
+      "0",
+      "true",
+      "0"
+    ]
+  ],
+  "safe": true,
+  "source_sha": "8cff80c61420ca708fc3050e4d2e910ec6405470",
+  "mode": "debug",
+  "scenario": "active-retirement",
+  "started_ns": 1793784462843500500,
+  "finished_ns": 1793784475639887100,
+  "executable_sha256": "60fc8537028055fabadcfbd53c13584474f0c7765316a5919b40f6281058debb",
+  "helper_sha256": "706e0a939b4dff4b2f2996996863943c3d3a5dfba6dc46e96578f4fb73bd7a42",
+  "qtest_exists": true,
+  "qtest_footer": false,
+  "qtest_totals": [],
+  "qtest_sha256": "9487f0292605bcf827af2232c5ad5bf6e55148fa86419d2eed6279fc2822fd52",
+  "test_pass": false
+}

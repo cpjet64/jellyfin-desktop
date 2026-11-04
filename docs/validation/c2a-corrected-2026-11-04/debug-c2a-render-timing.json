@@ -1,0 +1,19 @@
+{
+    "ack_emitted_ns": 30772762609600,
+    "clock": "std::chrono::steady_clock nanoseconds since epoch",
+    "failure_queued_for_gui_ns": 30772556569000,
+    "failure_received_gui_ns": 30772567462800,
+    "failure_unwound_ns": 30772597474500,
+    "free_entered_ns": 30772572060900,
+    "free_returned_ns": 30772758999900,
+    "generation": 1,
+    "handler_return_boundary_ns": 30772567479100,
+    "matching_ack_count": 1,
+    "matching_ack_on_gui": true,
+    "matching_ack_received_ns": 30772762629200,
+    "request_entered_ns": 30772567463200,
+    "request_returned_ns": 30772567479100,
+    "sample_note": "atomic fields loaded independently at fixture return; zero means not observed",
+    "unregister_entered_ns": 30772572059600,
+    "unregister_returned_ns": 30772572060200
+}
