@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QQuickWindow>
+#include <QScopeGuard>
 #include <QSGRendererInterface>
 #include <QSignalSpy>
 #include <QThread>
@@ -39,8 +40,9 @@
 class DelegateRegistration
 {
 public:
-  explicit DelegateRegistration(MediaKeysDelegate* delegate)
-      : delegate(delegate), oldEnabled([MPRemoteCommandCenter sharedCommandCenter].changePlaybackPositionCommand.enabled) {}
+  explicit DelegateRegistration(void*& owner)
+      : owner(owner), delegate((__bridge MediaKeysDelegate*)owner),
+        oldEnabled([MPRemoteCommandCenter sharedCommandCenter].changePlaybackPositionCommand.enabled) {}
   ~DelegateRegistration()
   {
     MPRemoteCommandCenter* center = [MPRemoteCommandCenter sharedCommandCenter];
@@ -52,8 +54,11 @@ public:
 #undef REMOVE_COMMAND
     [center.changePlaybackPositionCommand removeTarget:delegate action:@selector(gotPlaybackPosition:)];
     center.changePlaybackPositionCommand.enabled = oldEnabled;
+    [delegate release];
+    owner = nullptr;
   }
 private:
+  void*& owner;
   MediaKeysDelegate* delegate;
   BOOL oldEnabled;
 };
@@ -140,16 +145,20 @@ void AppleNativeControls::delegatePath()
   auto* mapping = input.findChild<InputMapping*>();
   QVERIFY(mapping && mapping->loadMappings());
   InputAppleMediaKeys source;
+  source.SetNowPlayingVisibility = nullptr;
+  source.GetLocalOrigin = nullptr;
+  source.SetCanBeNowPlayingApplication = nullptr;
   QVERIFY(source.initInput());
   MediaKeysDelegate* delegate = (__bridge MediaKeysDelegate*)source.m_delegate;
   QVERIFY(delegate);
-  DelegateRegistration registration(delegate);
+  DelegateRegistration registration(source.m_delegate);
   bool dispatched = false;
-  QObject::connect(&source, &InputBase::receivedInput, &input,
+  const auto connection = QObject::connect(&source, &InputBase::receivedInput, &input,
                    [&](const QString& name, const QString& key, InputBase::InputkeyState state) {
     dispatched = QMetaObject::invokeMethod(&input, "remapInput", Qt::DirectConnection,
         Q_ARG(QString, name), Q_ARG(QString, key), Q_ARG(InputBase::InputkeyState, state));
   });
+  const auto disconnect = qScopeGuard([connection]() { QObject::disconnect(connection); });
   QQuickWindow window;
   window.resize(640, 360);
   auto* video = new MpvVideoItem(window.contentItem());
