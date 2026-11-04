@@ -1,0 +1,28 @@
+{
+  "source": "c12313b99693e5d6ee94a8550cf2801dc8f00ce4",
+  "headers": 11662,
+  "metadata_bytes": 606051,
+  "symlink_modes": {"0755": 8, "0777": 148},
+  "archives_verified": [
+    {"file": "00.7z", "bytes": 26134345, "sha256": "2f02d19183df1b011fd7fe57aa2a1e9073b981f5bda7a8f9c96a6c64b8b7b06c"},
+    {"file": "01.7z", "bytes": 286401, "sha256": "02466f4028c14a9c49f82153d17367fd5a2bde26b6d19b72fe9da9245483da76"},
+    {"file": "02.7z", "bytes": 133336687, "sha256": "0542599fa56a548c98bde3d683ad83a3423266ce530e8b544a7eb0a96b63a4ea"},
+    {"file": "03.7z", "bytes": 42752371, "sha256": "77ff4d0085def2fc62efb93c0c2c93961433b1ed1bb30f230ee1b7c1ef90d116"},
+    {"file": "04.7z", "bytes": 1904615, "sha256": "12f042e7cf059e390ee695d71db01cfbd3e9c9ac4957b318ea1c2729795026f6"},
+    {"file": "05.7z", "bytes": 645521, "sha256": "34376670dbb3bec66e7962301110ae7d63e68c1b0ff079ba286c5dfc8649a75c"},
+    {"file": "06.7z", "bytes": 9660622, "sha256": "419bf0ce8db44ce83b309564c1686bd897a8b36ae0c6a78498905ba4c30a0439"},
+    {"file": "07.7z", "bytes": 121884, "sha256": "de6427681038757469123a2d1f48519aa355272e53c1415e54fd90e8547673c2"},
+    {"file": "08.7z", "bytes": 397823, "sha256": "de169084ac54216da7f7030ae37c077c0be3620d52826416b379a99769e399cd"},
+    {"file": "09.7z", "bytes": 123249885, "sha256": "8ac7e13152a1d3415e8d274a905c692633152286d815b165378d42a829801236"}
+  ],
+  "non_0777_links": [
+    {"archive": "09.7z", "mode": "0755", "raw_mode": "0120755", "path": "lib/libQt6WebEngineWidgets.so", "target": "libQt6WebEngineWidgets.so.6"},
+    {"archive": "09.7z", "mode": "0755", "raw_mode": "0120755", "path": "lib/libQt6WebEngineQuick.so.6", "target": "libQt6WebEngineQuick.so.6.9.3"},
+    {"archive": "09.7z", "mode": "0755", "raw_mode": "0120755", "path": "lib/libQt6WebEngineQuickDelegatesQml.so.6", "target": "libQt6WebEngineQuickDelegatesQml.so.6.9.3"},
+    {"archive": "09.7z", "mode": "0755", "raw_mode": "0120755", "path": "lib/libQt6WebEngineCore.so.6", "target": "libQt6WebEngineCore.so.6.9.3"},
+    {"archive": "09.7z", "mode": "0755", "raw_mode": "0120755", "path": "lib/libQt6WebEngineQuickDelegatesQml.so", "target": "libQt6WebEngineQuickDelegatesQml.so.6"},
+    {"archive": "09.7z", "mode": "0755", "raw_mode": "0120755", "path": "lib/libQt6WebEngineCore.so", "target": "libQt6WebEngineCore.so.6"},
+    {"archive": "09.7z", "mode": "0755", "raw_mode": "0120755", "path": "lib/libQt6WebEngineWidgets.so.6", "target": "libQt6WebEngineWidgets.so.6.9.3"},
+    {"archive": "09.7z", "mode": "0755", "raw_mode": "0120755", "path": "lib/libQt6WebEngineQuick.so", "target": "libQt6WebEngineQuick.so.6"}
+  ]
+}
