@@ -1,0 +1,67 @@
+{
+    "canceled": 0,
+    "finished": 0,
+    "phases": [
+        {
+            "current_vo": "libmpv",
+            "current_vo_status": 0,
+            "events": [
+                {
+                    "entry_id": 1,
+                    "error": 0,
+                    "insert_count": 0,
+                    "insert_id": 0,
+                    "kind": 6,
+                    "reason": 0
+                }
+            ],
+            "idle": false,
+            "idle_status": 0,
+            "phase": "before-injection",
+            "properties_sampled": true
+        },
+        {
+            "events": [
+                {
+                    "entry_id": 1,
+                    "error": 0,
+                    "insert_count": 0,
+                    "insert_id": 0,
+                    "kind": 6,
+                    "reason": 0
+                }
+            ],
+            "phase": "after-render-failure-before-retirement",
+            "properties_sampled": false
+        },
+        {
+            "current_vo": "",
+            "current_vo_status": -10,
+            "events": [
+                {
+                    "entry_id": 1,
+                    "error": 0,
+                    "insert_count": 0,
+                    "insert_id": 0,
+                    "kind": 6,
+                    "reason": 0
+                },
+                {
+                    "entry_id": 1,
+                    "error": -15,
+                    "insert_count": 0,
+                    "insert_id": 0,
+                    "kind": 7,
+                    "reason": 4
+                }
+            ],
+            "idle": true,
+            "idle_status": 0,
+            "phase": "after-retirement-before-stop",
+            "properties_sampled": true
+        }
+    ],
+    "player_errors": [
+        "video output initialization failed"
+    ]
+}

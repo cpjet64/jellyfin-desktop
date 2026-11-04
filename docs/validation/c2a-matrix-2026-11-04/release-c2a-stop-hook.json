@@ -1,0 +1,32 @@
+{
+    "ac3": false,
+    "ack_order": 6,
+    "binding_generation": "1",
+    "completed_count": 1,
+    "continue_count": 1,
+    "continue_result": 0,
+    "continued_hook_id": "10",
+    "continued_observed_ns": "28318243334600",
+    "free_count": 1,
+    "generation": "1",
+    "gui_thread": "f65c",
+    "hook_id": "10",
+    "pending_at_accepted_stop": true,
+    "render_context": "11ba1c9c7f0",
+    "render_thread": "11d48",
+    "retirement_observed_ns": "28318286890600",
+    "scenario": "stop-with-pending-hook",
+    "scheduled_count": 1,
+    "scheduled_observed_ns": "28315234240700",
+    "stop_error": 0,
+    "stop_observed_ns": "28315234247700",
+    "terminal": {
+        "canceled_count": 1,
+        "current_vo_status": -10,
+        "force_window": "no",
+        "force_window_status": 0,
+        "idle_active": 1,
+        "idle_status": 0
+    },
+    "terminal_observed_ns": "28318243385800"
+}

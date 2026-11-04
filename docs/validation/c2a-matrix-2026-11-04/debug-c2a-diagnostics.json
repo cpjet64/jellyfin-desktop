@@ -1,0 +1,17 @@
+[
+    {
+        "received_ns": 28214828819000,
+        "severity": 2,
+        "text": "controlled critical sentinel"
+    },
+    {
+        "received_ns": 28214832808800,
+        "severity": 1,
+        "text": "controlled NOT BEING CALLED OR STUCK sentinel"
+    },
+    {
+        "received_ns": 28214835031800,
+        "severity": 1,
+        "text": "controlled DeAdLoCk sentinel"
+    }
+]
