@@ -32,11 +32,12 @@ def fixture(base, job):
     report = dict(sha="abc", ref="branch", job=job, platform=platform, mode=mode,
                   job_id="123", build_core="passed", offscreen="passed", desktop="passed")
     write(directory / "evidence.json", json.dumps(report))
-    write(directory / "headless-ctest.xml", junit(CORE))
     runtime = list(RUNTIME) + (list(STATIC) if mode == "static" else [])
     if platform == "linux":
         runtime.append("test_mpris_fault")
-    write(directory / "desktop-ctest.xml", junit(runtime))
+    write(directory / "headless-ctest.xml", junit(list(CORE) + (runtime if platform == "windows" else [])))
+    if platform != "windows":
+        write(directory / "runtime-ctest.xml", junit(runtime))
     for prefix in ("offscreen", "desktop-render", "containment"):
         for scenario in SCENARIOS:
             case = directory / prefix / scenario
@@ -104,7 +105,7 @@ class AcceptanceTest(unittest.TestCase):
         write(path, json.dumps(original))
 
     def test_missing_required_cases_and_failed_junit(self):
-        path = self.base / "linux-static/desktop-ctest.xml"
+        path = self.base / "linux-static/runtime-ctest.xml"
         for text, diagnostic in ((junit(RUNTIME), "Missing CTest cases"),
                      ('<testsuite><testcase name="test_fault_stop"><failure/></testcase></testsuite>', "failed, or skipped"),
                      ('<testsuite><testcase name="test_fault_stop"><skipped/></testcase></testsuite>', "failed, or skipped")):
@@ -140,21 +141,36 @@ class AcceptanceTest(unittest.TestCase):
                 required.append("test_mpris_fault")
             for case in CORE:
                 path = self.base / job / "headless-ctest.xml"
-                write(path, junit([item for item in CORE if item != case]))
+                headless = list(CORE) + (required if platform == "windows" else [])
+                write(path, junit([item for item in headless if item != case]))
                 with self.subTest(job=job, case=case), self.assertRaisesRegex(ValueError, f"Missing CTest cases: {case}"):
                     self.validate(job)
-                write(path, junit(CORE))
+                write(path, junit(headless))
             for case in required:
-                path = self.base / job / "desktop-ctest.xml"
-                write(path, junit([item for item in required if item != case]))
+                path = self.base / job / ("headless-ctest.xml" if platform == "windows" else "runtime-ctest.xml")
+                names = list(CORE) + required if platform == "windows" else required
+                write(path, junit([item for item in names if item != case]))
                 with self.subTest(job=job, case=case), self.assertRaisesRegex(ValueError, f"Missing CTest cases: {case}"):
                     self.validate(job)
-                write(path, junit(required))
+                write(path, junit(names))
 
     def test_headless_evidence_passes_its_independent_checks(self):
-        directory = self.base / "linux-static"
-        acceptance.check_junit(directory / "headless-ctest.xml", CORE)
-        acceptance.require_render(directory, "offscreen", "offscreen-before.png", "offscreen-after.png", "offscreen-after2.png")
+        for job in JOBS:
+            with self.subTest(job=job):
+                acceptance.validate_headless(self.base, job, "abc", "branch")
+
+    def test_blocked_desktop_does_not_hide_bad_headless_evidence(self):
+        path = self.base / "linux-static/evidence.json"
+        report = json.loads(path.read_text())
+        report["desktop"] = "blocked"
+        report["sha"] = "wrong"
+        write(path, json.dumps(report))
+        with self.assertRaisesRegex(ValueError, "incorrect or missing sha"):
+            self.validate()
+        report["sha"] = "abc"
+        write(path, json.dumps(report))
+        with self.assertRaisesRegex(ValueError, "desktop is blocked"):
+            self.validate()
 
     def test_each_offscreen_scenario_report_is_required(self):
         for scenario in SCENARIOS:

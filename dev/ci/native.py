@@ -179,12 +179,12 @@ def desktop_preflight(system, desktop_missing):
         verify_existing_session(os.environ)
 
 
-def desktop_ctest(system, mode):
+def runtime_ctest(system, mode):
     prefix = ["xvfb-run", "-a", "-s", "-screen 0 1280x800x24 +extension GLX",
               "dbus-run-session", "--"] if system == "Linux" else []
     command("ctest", prefix + ["ctest", "--test-dir", str(BUILD), "-LE", "gui", "--output-on-failure",
-                               "--no-tests=error", "--timeout", "60", "--output-junit", str(RESULTS / "desktop-ctest.xml")], timeout=900)
-    report = [sys.executable, "dev/ci/check_results.py", "junit", str(RESULTS / "desktop-ctest.xml")]
+                               "--no-tests=error", "--timeout", "60", "--output-junit", str(RESULTS / "runtime-ctest.xml")], timeout=900)
+    report = [sys.executable, "dev/ci/check_results.py", "junit", str(RESULTS / "runtime-ctest.xml")]
     required = ["test_fault_stop", "test_webclient_transport", "test_webclient_fault_guard", "test_mpv_test_bootstrap"]
     if mode == "static":
         required.extend(["test_mpvqt_event_ownership", "test_mpvqt_player_binding", "test_player_released_state"])
@@ -262,7 +262,7 @@ def run_stages(system, mode, desktop_missing):
             print(f"BLOCKED: macOS offscreen runtime: {error}", flush=True)
             return
         raise
-    desktop_ctest(system, mode)
+    runtime_ctest(system, mode)
     offscreen(system)
     update(directory, "offscreen", "passed", "All three native OpenGL scenarios passed")
 

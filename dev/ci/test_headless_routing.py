@@ -65,7 +65,7 @@ class TestHeadlessRouting(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(patch.dict(native.os.environ, {"CI_EVIDENCE_DIR": "unused"}))
             stack.enter_context(patch.object(native, "update"))
-            for name in ("configure", "headless_checks", "desktop_ctest", "offscreen"):
+            for name in ("configure", "headless_checks", "runtime_ctest", "offscreen"):
                 stack.enter_context(patch.object(native, name, side_effect=lambda *a, n=name: events.append(n)))
             stack.enter_context(patch.object(native, "desktop_preflight", side_effect=RuntimeError("BLOCKED")))
             native.run_stages("Darwin", "static", [])
@@ -76,10 +76,10 @@ class TestHeadlessRouting(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(patch.dict(native.os.environ, {"CI_EVIDENCE_DIR": "unused"}))
             stack.enter_context(patch.object(native, "update"))
-            for name in ("configure", "headless_checks", "desktop_preflight", "desktop_ctest", "offscreen"):
+            for name in ("configure", "headless_checks", "desktop_preflight", "runtime_ctest", "offscreen"):
                 stack.enter_context(patch.object(native, name, side_effect=lambda *a, n=name: events.append(n)))
             native.run_stages("Linux", "static", [])
-        self.assertEqual(events, ["configure", "headless_checks", "desktop_preflight", "desktop_ctest", "offscreen"])
+        self.assertEqual(events, ["configure", "headless_checks", "desktop_preflight", "runtime_ctest", "offscreen"])
 
     def test_missing_linux_display_is_still_a_failure(self):
         with self.assertRaisesRegex(RuntimeError, "xvfb-run"):

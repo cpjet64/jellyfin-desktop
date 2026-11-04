@@ -44,7 +44,7 @@ def require_render(directory, prefix, before, after, after2):
         require_case(directory, f"{prefix}/{scenario}", images)
 
 
-def validate_job(base, job, sha, ref):
+def validate_headless(base, job, sha, ref):
     directory = base / job
     if directory.is_symlink() or directory.resolve(strict=True).parent != base.resolve(strict=True):
         raise ValueError(f"{job}: invalid artifact namespace")
@@ -57,18 +57,31 @@ def validate_job(base, job, sha, ref):
             raise ValueError(f"{job}: incorrect or missing {key}")
     if not str(report.get("job_id", "")).isdecimal():
         raise ValueError(f"{job}: missing job identity")
-    for obligation in ("build_core", "offscreen", "desktop"):
+    for obligation in ("build_core", "offscreen"):
         status = report.get(obligation)
         if status not in STATUSES:
             raise ValueError(f"{job}: invalid {obligation} status")
         if status != "passed":
             raise ValueError(f"{job}: {obligation} is {status}")
-    check_junit(artifact(directory, "headless-ctest.xml"), CORE)
     required = list(RUNTIME) + (list(STATIC) if expected_mode == "static" else [])
     if expected_platform == "linux":
         required.append("test_mpris_fault")
-    check_junit(artifact(directory, "desktop-ctest.xml"), required)
+    if expected_platform == "windows":
+        check_junit(artifact(directory, "headless-ctest.xml"), list(CORE) + required)
+    else:
+        check_junit(artifact(directory, "headless-ctest.xml"), CORE)
+        check_junit(artifact(directory, "runtime-ctest.xml"), required)
     require_render(directory, "offscreen", "offscreen-before.png", "offscreen-after.png", "offscreen-after2.png")
+    return report, directory
+
+
+def validate_job(base, job, sha, ref):
+    report, directory = validate_headless(base, job, sha, ref)
+    status = report.get("desktop")
+    if status not in STATUSES:
+        raise ValueError(f"{job}: invalid desktop status")
+    if status != "passed":
+        raise ValueError(f"{job}: desktop is {status}")
     require_case(directory, "webengine")
     require_render(directory, "desktop-render", "before.png", "after.png", "after2.png")
     for scenario in SCENARIOS:

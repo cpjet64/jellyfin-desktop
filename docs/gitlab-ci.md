@@ -31,6 +31,11 @@ headless job does not establish desktop acceptance. The acceptance job requires
 all six matching evidence sets and currently fails closed because desktop
 receipt verification is not implemented.
 
+Windows records its core and runtime CTest cases together in
+`headless-ctest.xml`. Linux and macOS record the pure core selection there and
+the additional guarded runtime cases separately in `runtime-ctest.xml`. The
+runtime report does not prove desktop or native-controls acceptance.
+
 On Linux and macOS, the job first builds and runs an explicit headless set:
 system, logging, settings, display-manager mock, log rotation, Chromium flags,
 WebChannel transport, and the pure mpv test-bootstrap checks. These are
