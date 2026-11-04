@@ -18,7 +18,11 @@ class MpvThreadCleanup
 {
 public:
   MpvThreadCleanup(PlayerComponent& owner, QtThreaded::Scene& output) : player(owner), scene(output) {}
-  ~MpvThreadCleanup() { if (!finish()) std::_Exit(EXIT_FAILURE); }
+  ~MpvThreadCleanup()
+  {
+    if (!attempted) finish();
+    if (!resourcesSettled) std::_Exit(EXIT_FAILURE);
+  }
   void attach(ProbeItem* value, mpv_handle* handle, const std::function<bool()>& verify)
   {
     item = value;
@@ -31,11 +35,12 @@ public:
   { beforeStop = before; afterStop = after; }
   bool finish()
   {
-    if (done) return true;
+    if (attempted) return resourcesSettled && clean;
+    attempted = true;
     if (item && !stopAndRetire()) return false;
     QString error;
     if (!scene.shutdown(&error)) { qCritical() << "scene shutdown failed" << error; return false; }
-    done = true;
+    resourcesSettled = true;
     shutdownAt = QtThreaded::monotonicNanos();
     return clean;
   }
@@ -99,7 +104,8 @@ private:
   std::function<bool()> sameBinding;
   std::function<bool()> beforeStop, afterStop;
   std::unique_ptr<QSignalSpy> retired;
-  bool done = false;
+  bool attempted = false;
+  bool resourcesSettled = false;
   bool clean = true;
   qint64 stopEntered = 0, stopReturned = 0, idleAt = 0, retirementAt = 0, ackAt = 0, shutdownAt = 0;
   int stopStatus = -1, stopError = 0, idleStatus = MPV_ERROR_GENERIC, idleValue = 0, ackCount = 0;
