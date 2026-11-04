@@ -4,8 +4,9 @@ This is discovery evidence, not an approved build lock or a recipe to execute.
 The requested full source closure, feature-difference matrix, verified storage
 budget and toolchain selection remain open. Do not start downloads or builds
 from this document. The independent Qt 6.9.3 job-owned prefix is a separate
-input. The selected macOS SDK, deployment target, compiler and C++ link probe
-must be established by the toolchain investigation before choosing a build.
+input. The subsequent toolchain probe selected SDK 26.5 and Apple clang 21 and
+passed x86_64 C++ and Objective-C++ link probes. The build deployment target,
+full Xcode availability and compatibility with this dependency graph remain open.
 
 ## Reference and observed inputs
 
@@ -64,8 +65,8 @@ not declare an archive SHA-256. The
 uses six pinned git resources without archive SHA-256 values and requires
 Xcode. A source-byte digest needs trusted published digest evidence or reading
 the chosen source archives; the latter is outside the authorized metadata-only
-discovery. The SDK, Xcode availability, compiler and target must also be
-established by the separate host probe. These are specific missing inputs,
+discovery. Full Xcode availability and the build deployment target must also be
+established. These are specific missing inputs,
 not evidence that the source route is impossible.
 
 The existing [bounded host observation](macos-prerequisites-2026-11-04.md)

@@ -5,7 +5,7 @@ The reference is Homebrew core commit `c38a4a58b06912c3e64e5afd7f7dfe8aedd84dc5`
 `https://raw.githubusercontent.com/Homebrew/homebrew-core/c38a4a58b06912c3e64e5afd7f7dfe8aedd84dc5/Formula/`.
 No source archives, patches, builds, or runtime behavior were verified here.
 
-The proposed Desktop profile retains yt-dlp because users can override the application's default `ytdl=false` setting. It excludes docutils and HTML documentation, a proposed difference from the reference formula. A custom build must explicitly disable HTML generation. FFmpeg is tracked separately. All reference runtime dependencies remain candidates.
+The proposed Desktop profile retains yt-dlp because users can override the application's requested `ytdl=false` setting; its return value is unchecked. It excludes docutils and HTML documentation, a proposed difference from the reference formula. A custom build must explicitly disable HTML generation. FFmpeg is tracked separately. All reference runtime dependencies remain candidates.
 
 ## mpv
 
@@ -69,4 +69,4 @@ Stable MoltenVK resources are Git revisions, not archive SHA-256 values:
 
 A static filtered traversal is not an evaluated Homebrew dependency graph. It includes build dependencies and does not establish a minimal bundle or installation order. System dependencies, nested platform conditions, implicit build downloads, resources and patches across the entire transitive graph need authoritative evaluation and acquisition. Git revisions do not supply hashes for separately generated archive bytes. Versions, URLs, hashes and patch contents for all other direct and transitive components must be recorded and verified; local Homebrew patch files and embedded `:DATA` patches also need immutable identities. The Python, GLib and gobject-introspection paths include further build resources and patches.
 
-No Tahoe Intel build, feature equivalence, ABI compatibility, packaging, license compliance, or playback acceptance has been demonstrated. System SDK and Xcode identities, platform availability, offline acquisition, complete build order, reproducibility, and bundled library relocation remain open. Related discovery is in `macos-media-source-index.md` and `macos-media-graph-discovery.md`.
+No Tahoe Intel build, feature equivalence, ABI compatibility, packaging, license compliance, or playback acceptance has been demonstrated. The bounded host probe selected SDK 26.5 and Apple clang 21 and passed C++ and Objective-C++ link probes. Full Xcode availability, exact build-tool compatibility, offline acquisition, complete build order, reproducibility, and bundled library relocation remain open. Related discovery is in `macos-media-source-index.md` and `macos-media-graph-discovery.md`.

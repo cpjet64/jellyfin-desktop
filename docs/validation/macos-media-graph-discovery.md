@@ -1,7 +1,7 @@
 # Media graph discovery, Intel macOS stable branches
 
 This is a static formula declaration walk, not a complete evaluated lock.
-The selected SDK and deployment target remain open; macOS version changes
+The host probe selected SDK 26.5; the build deployment target remains open, and macOS version changes
 conditional edges. The graph below assumes Sequoia or newer for its system
 Python expat selection. It excludes HEAD, Linux, ARM and test-only branches.
 System-provided libraries and tools still require independent SDK/host checks.

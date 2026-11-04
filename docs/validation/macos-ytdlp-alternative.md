@@ -3,8 +3,8 @@
 For Pro review only: use official upstream Intel-compatible release artifacts
 for the **separate yt-dlp helper**, while continuing to source-build libmpv and
 its media libraries. This is a binary-input exception to the proposed all-source
-closure and needs separate user approval. It does not establish feature parity.
-Desktop defaults to `ytdl=false`, but manual settings can enable it; preserving
+closure and needs Pro route approval. It does not establish feature parity.
+Desktop requests `ytdl=false` without checking the return value, and manual settings can enable it; preserving
 that custom capability requires the helper and JavaScript runtime to be
 discoverable by mpv. Neither may be silently removed from acceptance.
 

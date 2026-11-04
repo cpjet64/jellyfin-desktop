@@ -2,8 +2,9 @@
 
 This is a source-metadata assessment for x86_64 macOS Tahoe, not an installed
 dependency lock or a successful build. The comparison baseline is Homebrew
-core commit `c38a4a58b06912c3e64e5afd7f7dfe8aedd84dc5`; the captured formula
-text is in the local, ignored `deps/w405-formula-metadata.json`. Formula source,
+core commit `c38a4a58b06912c3e64e5afd7f7dfe8aedd84dc5`; the
+[pinned formula tree](https://github.com/Homebrew/homebrew-core/tree/c38a4a58b06912c3e64e5afd7f7dfe8aedd84dc5/Formula)
+is the public reference. Formula source,
 patches, resources, build tools, SDK and actual output all need independent
 identity and closure verification before a reproducible build can be claimed.
 
@@ -32,7 +33,8 @@ captured formula text; a complete lock must enumerate and verify each one.
 
 ## yt-dlp and its build graph
 
-The mpv formula declares yt-dlp 2026.10.26. Its formula declares Deno 2.9.8,
+The mpv formula declares yt-dlp. The pinned yt-dlp formula selects version
+2026.10.26 and declares Deno 2.9.8,
 Python 3.15, certifi, cffi and pycparser, plus these source resources: Brotli
 1.2.1, charset-normalizer 3.5.2, curl-cffi 0.17.0, idna 3.20, mutagen 1.48.1,
 pycryptodomex 3.24.1, requests 2.34.2, urllib3 2.8.0, websockets 17.3 and
@@ -54,8 +56,9 @@ formula invokes Cargo and enables V8, so a finite offline package/vendor and V8
 resource manifest must be resolved before a no-fallback build can be approved.
 The ten archive digest proposals elsewhere do not cover those inputs.
 
-At Desktop integration commit `f9cd456`, the player sets `ytdl` to false, but
-subsequently applies user-supplied manual mpv properties. Excluding yt-dlp may
+At Desktop integration commit `f9cd456`, the player requests `ytdl=false` without
+checking the return value, then applies user-supplied manual mpv properties.
+The effective default is unverified. Excluding yt-dlp may
 be reasonable for the default Desktop playback scope only; it changes the
 declared Homebrew dependency closure and leaves custom yt-dlp use unproven.
 Document that scope and do not represent it as full formula parity. Conversely,

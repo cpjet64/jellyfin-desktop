@@ -10,8 +10,8 @@ authorized by this document.
 The existing macOS CI invokes unpinned `brew install mpv`; it does not identify
 an Intel Tahoe artifact. The pinned Homebrew core commit is a discovery and
 feature reference, not a build lock. Desktop links libmpv and uses embedded
-rendering, audio, subtitle and network behavior. It defaults to `ytdl=false`
-but applies manual settings later, so an enabled helper is a possible custom
+rendering, audio, subtitle and network behavior. It requests `ytdl=false`
+without checking the return value, then applies manual settings later, so an enabled helper is a possible custom
 configuration. The full expected behavior and tests are in the
 [feature matrix](macos-media-feature-matrix.md).
 
