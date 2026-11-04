@@ -4,6 +4,7 @@
 #include <QOpenGLContext>
 #include <QThread>
 #include <QVector>
+#include <atomic>
 #include <memory>
 #include "mpvrenderer.h"
 #include "player/MpvVideoItem.h"
@@ -18,6 +19,9 @@ struct MpvRenderEvent {
 };
 
 struct MpvRenderObservation {
+  std::atomic<quint64> enteredSequence{0}, returnedSequence{0};
+  std::atomic<qint64> enteredNs{0}, returnedNs{0};
+  std::atomic<quintptr> enteredThread{0}, enteredContext{0};
   QMutex mutex;
   QVector<MpvRenderEvent> events;
   void append(const MpvRenderEvent& event)
@@ -45,8 +49,14 @@ public:
     event.thread = reinterpret_cast<quintptr>(QThread::currentThreadId());
     event.context = reinterpret_cast<quintptr>(QOpenGLContext::currentContext());
     event.renderer = reinterpret_cast<quintptr>(this);
+    observed->enteredNs = event.entered;
+    observed->enteredThread = event.thread;
+    observed->enteredContext = event.context;
+    const quint64 sequence = observed->enteredSequence.fetch_add(1) + 1;
     MpvRenderer::render();
     event.returned = QtThreaded::monotonicNanos();
+    observed->returnedNs = event.returned;
+    observed->returnedSequence = sequence;
     observed->append(event);
     update();
   }
