@@ -58,7 +58,7 @@ void TestThreadedRender::independentFrames()
   QVERIFY(!scene.sync(&error));
   QVERIFY2(scene.initialize(&error), qPrintable(error));
   auto* item = new ColorItem(scene.contentItem());
-  item->setSize(QSizeF(128, 128));
+  item->setSize(QSizeF(640, 360));
   const auto observation = item->observation();
   QVERIFY2(scene.sync(&error), qPrintable(error));
   QVERIFY(scene.requestReadback());
@@ -159,6 +159,7 @@ void TestThreadedRender::initializationFailures()
   QCOMPARE(audit.initThread, audit.renderThread);
   if (failure == static_cast<int>(QtThreaded::FailurePoint::AfterRhiCreated)) {
     QVERIFY(audit.rhiCreated);
+    QVERIFY(audit.partialRhiVerified);
     QCOMPARE(audit.rhiCreatedCount, quint64(1));
     QCOMPARE(audit.rhiDestroyedCount, quint64(1));
     QCOMPARE(audit.rhiCleanupThread, audit.renderThread);
