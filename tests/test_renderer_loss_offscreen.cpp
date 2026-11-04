@@ -264,6 +264,17 @@ void TestRendererLossOffscreen::verifyPlayback(PlayerComponent& player, mpv_hand
   if (scenario == "playing") {
     QVERIFY(afterPosition > beforePosition + 500);
     QVERIFY(before != after);
+    QVERIFY2(brightPixels(after) > 100, "First post-fault frame lacks video content");
+    wait.restart();
+    while (wait.elapsed() < 500) {
+      QVERIFY(scene.frame());
+      QTest::qWait(20);
+    }
+    const QImage after2 = scene.image();
+    QVERIFY(after2.save(evidence + "/offscreen-after2.png"));
+    QVERIFY2(brightPixels(after2) > 100, "Second post-fault frame lacks video content");
+    QVERIFY(after != after2);
+    QVERIFY(player.getPosition() > afterPosition + 200);
   } else {
     QVERIFY(qAbs(afterPosition - beforePosition) < 100);
     QCOMPARE(before, after);

@@ -177,6 +177,13 @@ void TestRendererLossPlayback::verifyPlayback(PlayerComponent& player, mpv_handl
   if (scenario == "playing") {
     QVERIFY(afterPosition > beforePosition + 500);
     QVERIFY(before != after);
+    QVERIFY2(brightPixels(after) > 100, "First post-fault frame lacks video content");
+    QTest::qWait(500);
+    const QImage after2 = window.grabWindow();
+    QVERIFY(after2.save(evidence + "/after2.png"));
+    QVERIFY2(brightPixels(after2) > 100, "Second post-fault frame lacks video content");
+    QVERIFY(after != after2);
+    QVERIFY(player.getPosition() > afterPosition + 200);
   } else {
     QVERIFY(qAbs(afterPosition - beforePosition) < 100);
     QCOMPARE(before, after);
