@@ -104,7 +104,10 @@ void TestC2RetirementNative::syntheticRestore()
   QVERIFY(control.moving(player, evidence + "/c2-restore-g1", 0));
   QVERIFY(control.wait([&] { return player.getPosition() >= 1900; }));
   C2ReplayRecipe recipe;
-  QVERIFY(recipe.capture(control.core, mediaPath, C2ReplayRecipe::Intent::Playing, control.entry));
+  C2CaptureObservation capture;
+  const bool captured = recipe.capture(control.core, mediaPath, C2ReplayRecipe::Intent::Playing, control.entry, &capture);
+  QVERIFY(control.save(evidence + "/c2-restore-capture-observation.json", capture.record()));
+  QVERIFY(captured);
   QVERIFY(!recipe.wasPaused && recipe.position >= 1.9 && recipe.position <= 2.5);
   const auto renders = control.item->observed->snapshot();
   QVERIFY(!renders.isEmpty());

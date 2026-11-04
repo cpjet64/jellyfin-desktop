@@ -5,6 +5,7 @@
 #include <cmath>
 #include <mpv/client.h>
 #include "c2_event_observer.h"
+#include "c2_capture_observation.h"
 
 // Test-only recipe: one local clip and one possible recovery load. It never
 // owns the player, controller, render generation, or mpv event consumer.
@@ -14,24 +15,43 @@ public:
   enum class Intent { Playing, Paused, Stopped };
   enum class Outcome { Continued, LoadAccepted, Cancelled, Failed };
 
-  bool capture(mpv_handle* core, const QString& localFile, Intent latest, int64_t playlistId)
+  static C2CaptureObservation observeCapture(mpv_handle* core, const QString& localFile, int64_t playlistId)
   {
-    const QByteArray encoded = localFile.toUtf8();
-    char* path = mpv_get_property_string(core, "path");
-    if (!path) return false;
-    const QString actual = QString::fromUtf8(path);
-    const QUrl url(actual);
-    const bool same = (url.isLocalFile() ? url.toLocalFile() : actual) == localFile;
-    mpv_free(path);
-    int paused = 0;
-    if (!same || playlistId <= 0 || mpv_get_property(core, "time-pos", MPV_FORMAT_DOUBLE, &position) < 0 ||
-        mpv_get_property(core, "pause", MPV_FORMAT_FLAG, &paused) < 0 ||
-        !std::isfinite(position) || position < 0) return false;
-    file = encoded;
-    wasPaused = paused != 0;
+    C2CaptureObservation observation;
+    observation.expectedPath = localFile;
+    observation.entry = playlistId;
+    char* path = nullptr;
+    observation.pathStatus = mpv_get_property(core, "path", MPV_FORMAT_STRING, &path);
+    observation.pathPresent = path != nullptr;
+    if (path) {
+      int size = 0;
+      while (size < 4097 && path[size]) ++size;
+      observation.pathTruncated = size > 4096;
+      observation.rawPath = QString::fromUtf8(path, qMin(size, 4096));
+      mpv_free(path);
+    }
+    observation.timeStatus = mpv_get_property(core, "time-pos", MPV_FORMAT_DOUBLE, &observation.position);
+    observation.pauseStatus = mpv_get_property(core, "pause", MPV_FORMAT_FLAG, &observation.paused);
+    return observation;
+  }
+
+  bool captureObservation(const C2CaptureObservation& observation, Intent latest)
+  {
+    if (!observation.accepted()) return false;
+    file = observation.expectedPath.toUtf8();
+    position = observation.position;
+    wasPaused = observation.paused != 0;
     intent = latest;
-    entryId = playlistId;
+    entryId = observation.entry;
     return true;
+  }
+
+  bool capture(mpv_handle* core, const QString& localFile, Intent latest, int64_t playlistId,
+               C2CaptureObservation* recorded = nullptr)
+  {
+    const auto observation = observeCapture(core, localFile, playlistId);
+    if (recorded) *recorded = observation;
+    return captureObservation(observation, latest);
   }
 
   void stop() { intent = Intent::Stopped; }
@@ -42,8 +62,7 @@ public:
     if (!raw) return false;
     const QString actual = QString::fromUtf8(raw);
     mpv_free(raw);
-    const QUrl url(actual);
-    return (url.isLocalFile() ? url.toLocalFile() : actual) == QString::fromUtf8(file);
+    return c2SamePath(actual, QString::fromUtf8(file), c2HostPathPlatform());
   }
 
   Outcome afterReady(mpv_handle* core, C2EventObserver& observer)
