@@ -20,6 +20,8 @@
   InputAppleMediaKeys* input;
 }
 -(instancetype)initWithInput:(InputAppleMediaKeys*)input;
+-(MPRemoteCommandHandlerStatus)handleCommand:(MPRemoteCommand *)command;
+-(MPRemoteCommandHandlerStatus)handlePlaybackPosition:(double)seconds;
 @end
 
 @implementation MediaKeysDelegate
@@ -49,8 +51,12 @@
 
 -(MPRemoteCommandHandlerStatus)gotCommand:(MPRemoteCommandEvent *)event
 {
+  return [self handleCommand:[event command]];
+}
+
+-(MPRemoteCommandHandlerStatus)handleCommand:(MPRemoteCommand *)command
+{
   QString keyPressed;
-  MPRemoteCommand* command = [event command];
 
 #define CMD(name) [MPRemoteCommandCenter sharedCommandCenter].name ## Command
   if (command == CMD(play)) {
@@ -75,8 +81,12 @@
 
 -(MPRemoteCommandHandlerStatus)gotPlaybackPosition:(MPChangePlaybackPositionCommandEvent *)event
 {
+  return [self handlePlaybackPosition:event.positionTime];
+}
+
+-(MPRemoteCommandHandlerStatus)handlePlaybackPosition:(double)seconds
+{
   if (QThread::currentThread() != input->thread()) return MPRemoteCommandHandlerStatusCommandFailed;
-  const double seconds = event.positionTime;
   if (!std::isfinite(seconds) || seconds < 0 || seconds >= std::numeric_limits<qint64>::max() / 1000.0)
     return MPRemoteCommandHandlerStatusCommandFailed;
   const auto result = PlayerComponent::Get().requestNativeSeek(static_cast<qint64>(seconds * 1000));

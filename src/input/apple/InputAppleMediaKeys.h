@@ -25,6 +25,7 @@ private slots:
   void handleAlbumArtUnavailable();
 
 private:
+  friend class AppleNativeControls;
   void* m_delegate;
 
   typedef void (*SetNowPlayingVisibilityFunc)(void* origin, int visibility);
