@@ -146,7 +146,7 @@ def plan_entries(groups, expansion_limit, sdk_root):
     root = relative(sdk_root)
     if root.parts[0].startswith(".qt-entry-"):
         raise ValueError("reserved staging path")
-    planned, kinds, total = [], {}, 0
+    planned, kinds, modes, total = [], {}, {}, 0
     for destination, entries in groups:
         base = relative(destination)
         if root not in (base, *base.parents):
@@ -166,10 +166,16 @@ def plan_entries(groups, expansion_limit, sdk_root):
                 if total > expansion_limit:
                     raise ValueError("listed expansion exceeds configured limit")
             elif entry.kind == "symlink":
+                if entry.mode != 0o777:
+                    raise ValueError(f"unsupported symlink permissions: {path}")
                 validate_link(path, entry.link, root)
             previous = kinds.setdefault(path, entry.kind)
             if previous != entry.kind:
                 raise ValueError(f"conflicting entry types: {path}")
+            if entry.kind in ("directory", "symlink"):
+                old_mode = modes.setdefault(path, entry.mode)
+                if old_mode != entry.mode:
+                    raise ValueError(f"conflicting overlay permissions: {path}")
             planned.append((path, entry))
     for path in kinds:
         if any(kinds.get(parent) not in (None, "directory") for parent in path.parents):
@@ -225,11 +231,12 @@ def stage_entries(groups, stage, published, expansion_limit, sdk_root):
         target.parent.mkdir(parents=True, exist_ok=True)
         if entry.kind == "directory":
             target.mkdir(exist_ok=True)
+            seen[path] = ("directory", entry.mode)
         elif entry.kind == "symlink":
             prior = seen.get(path)
-            if prior is not None and prior != ("symlink", entry.link):
+            if prior is not None and prior != ("symlink", entry.mode, entry.link):
                 raise ValueError(f"conflicting overlay: {path}")
-            seen[path] = ("symlink", entry.link)
+            seen[path] = ("symlink", entry.mode, entry.link)
         else:
             temporary = stage / f".qt-entry-{index}"
             count, digest = copy_entry(entry, temporary, expansion_limit - actual)
@@ -244,6 +251,9 @@ def stage_entries(groups, stage, published, expansion_limit, sdk_root):
                 seen[path] = identity
     for path, identity in seen.items():
         if identity[0] == "symlink":
-            os.symlink(identity[1], stage.joinpath(*path.parts))
+            os.symlink(identity[2], stage.joinpath(*path.parts))
+    for path, identity in sorted(seen.items(), key=lambda item: len(item[0].parts), reverse=True):
+        if identity[0] == "directory":
+            stage.joinpath(*path.parts).chmod(identity[1])
     publish_stage(stage, published)
     return published.resolve()

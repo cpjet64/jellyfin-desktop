@@ -46,23 +46,23 @@ class QtArchiveTest(unittest.TestCase):
     def test_rejects_unsafe_members_before_writes(self):
         entries = [Entry("../escape", "file", 0, open_data=lambda: io.BytesIO()),
                    Entry("/absolute", "directory"), Entry("a", "device"),
-                   Entry("link", "symlink", link="../../../outside"),
-                   Entry("a", "symlink", link="target")]
+                   Entry("link", "symlink", mode=0o777, link="../../../outside"),
+                   Entry("a", "symlink", mode=0o777, link="target")]
         for entry in entries[:-1]:
             with self.subTest(entry=entry), self.assertRaises(ValueError):
                 plan_entries([(ROOT, [entry])], 100, ROOT)
         with self.assertRaises(ValueError):
             plan_entries([(ROOT, [entries[-1], file_entry("a/child")])], 100, ROOT)
         with self.assertRaises(ValueError):
-            plan_entries([(ROOT, [Entry("a", "symlink", link="."),
-                                 Entry("b", "symlink", link="a/../outside")])], 100, ROOT)
+            plan_entries([(ROOT, [Entry("a", "symlink", mode=0o777, link="."),
+                                 Entry("b", "symlink", mode=0o777, link="a/../outside")])], 100, ROOT)
         with self.assertRaises(ValueError):
-            plan_entries([(ROOT, [Entry("a", "symlink", link="b"),
-                                 Entry("b", "symlink", link="a")])], 100, ROOT)
+            plan_entries([(ROOT, [Entry("a", "symlink", mode=0o777, link="b"),
+                                 Entry("b", "symlink", mode=0o777, link="a")])], 100, ROOT)
 
     def test_overlay_link_permissions_and_publication(self):
-        entries = [Entry("bin", "directory"), file_entry("bin/tool"),
-                   Entry("bin/alias", "symlink", link="tool")]
+        entries = [Entry("bin", "directory", mode=0o755), file_entry("bin/tool"),
+                   Entry("bin/alias", "symlink", mode=0o777, link="tool")]
         with tempfile.TemporaryDirectory() as directory:
             parent = Path(directory)
             if not hasattr(__import__("os"), "symlink"):
@@ -82,14 +82,32 @@ class QtArchiveTest(unittest.TestCase):
             self.assertFalse((parent / "stage").exists())
 
     def test_valid_relative_link_graph_and_regular_publication(self):
-        plan_entries([(ROOT, [file_entry("lib/real"), Entry("lib/soname", "symlink", link="real"),
-                              Entry("lib/name", "symlink", link="soname")])], 20, ROOT)
+        plan_entries([(ROOT, [file_entry("lib/real"), Entry("lib/soname", "symlink", mode=0o777, link="real"),
+                              Entry("lib/name", "symlink", mode=0o777, link="soname")])], 20, ROOT)
         with tempfile.TemporaryDirectory() as directory:
             parent = Path(directory)
             result = stage_entries([(ROOT, [file_entry("bin/tool"), file_entry("bin/tool")])],
                                    parent / "stage", parent / "ready", 20, ROOT)
             self.assertEqual((result / ROOT / "bin/tool").read_bytes(), b"ok")
             self.assertFalse((parent / "stage").exists())
+
+    def test_directory_and_link_modes(self):
+        directory = Entry("bin", "directory", mode=0o755)
+        for other in (Entry("bin", "directory", mode=0o700),
+                      Entry("alias", "symlink", mode=0o700, link="bin")):
+            first = directory if other.kind == "directory" else Entry("alias", "symlink", mode=0o777, link="bin")
+            with self.subTest(other=other), self.assertRaises(ValueError):
+                plan_entries([(ROOT, [first, other])], 20, ROOT)
+        with tempfile.TemporaryDirectory() as workspace:
+            parent = Path(workspace)
+            chmod = Path.chmod
+            with patch.object(Path, "chmod", autospec=True, side_effect=chmod) as applied:
+                result = stage_entries([(ROOT, [directory, directory, file_entry("bin/tool")])],
+                                       parent / "stage", parent / "ready", 20, ROOT)
+            self.assertEqual(applied.call_args_list[-1].args[0].name, "bin")
+            self.assertEqual(applied.call_args_list[-1].args[1], 0o755)
+            if __import__("os").name != "nt":
+                self.assertEqual((result / ROOT / "bin").stat().st_mode & 0o777, 0o755)
 
     def test_conflicting_overlay_never_publishes(self):
         for second in (file_entry("file", b"different"), file_entry("file", mode=0o644)):
