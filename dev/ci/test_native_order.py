@@ -65,25 +65,25 @@ class NativeOrderTest(unittest.TestCase):
 
     def test_bootstrap_before_required_cmake_check(self):
         self.assertEqual(self.exercise(False), ["portable", "native-prereq-inventory", "bootstrap", "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests", "windows-smoke-result-tests",
-                                                "explicit-mpv-cmake-tests", "stages"])
+                                                "explicit-mpv-cmake-tests", "linux-sdk-cmake-tests", "stages"])
 
     def test_existing_cmake_still_runs_required_check(self):
         self.assertEqual(self.exercise(True), ["portable", "native-prereq-inventory",
                                                "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests",
                                                "windows-smoke-result-tests",
-                                               "explicit-mpv-cmake-tests", "stages"])
+                                               "explicit-mpv-cmake-tests", "linux-sdk-cmake-tests", "stages"])
 
     def test_failed_bootstrap_blocks_check_and_stages(self):
         self.assertEqual(self.exercise(False, blocked=True), ["portable", "native-prereq-inventory", "bootstrap"])
 
     def test_macos_system_still_runs_required_check(self):
         self.assertEqual(self.exercise(True, system="Darwin", mode="system"),
-                         ["portable", "native-prereq-inventory", "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests", "windows-smoke-result-tests", "explicit-mpv-cmake-tests", "stages"])
+                         ["portable", "native-prereq-inventory", "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests", "windows-smoke-result-tests", "explicit-mpv-cmake-tests", "linux-sdk-cmake-tests", "stages"])
 
     def test_bootstrapped_node_precedes_required_smoke_test(self):
         self.assertEqual(self.exercise(True, node_available=False),
                          ["portable", "native-prereq-inventory", "bootstrap", "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests", "windows-smoke-result-tests",
-                          "explicit-mpv-cmake-tests", "stages"])
+                          "explicit-mpv-cmake-tests", "linux-sdk-cmake-tests", "stages"])
 
     def test_failed_node_bootstrap_blocks_smoke_test(self):
         self.assertEqual(self.exercise(True, blocked=True, node_available=False),
@@ -98,6 +98,17 @@ class NativeOrderTest(unittest.TestCase):
                          ["portable", "native-prereq-inventory", "verify-mpvqt-source"])
         self.assertEqual(self.exercise(True, c2_failed=True),
                          ["portable", "native-prereq-inventory", "verify-mpvqt-source", "shared-patch-tests", "c2-patch-tests"])
+
+    def test_sdk_pure_checks_are_early_and_cmake_check_is_not(self):
+        calls = []
+        with patch.object(native, "command", side_effect=lambda name, args, **kwargs: calls.append((name, args))):
+            native.portable_checks()
+        paths = [args[-1] for _, args in calls]
+        for path in ("dev/ci/test_linux_sdk_order.py", "dev/ci/test_linux_sdk_inputs.py",
+                     "dev/ci/test_qt_sdk_archive.py", "dev/ci/test_linux_qt_plan.py",
+                     "dev/ci/test_libarchive_reader_contract.py"):
+            self.assertEqual(paths.count(path), 1)
+        self.assertNotIn("dev/ci/test_linux_sdk_cmake.py", paths)
 
 
 if __name__ == "__main__":

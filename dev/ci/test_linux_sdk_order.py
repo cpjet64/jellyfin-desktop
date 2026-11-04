@@ -113,6 +113,9 @@ class LinuxSdkOrderTest(unittest.TestCase):
             native.main()
         preflight.assert_called_once_with(prepared_tools=True)
         self.assertEqual(events[:5], ["portable", "native-prereq-inventory", "prepare", "full-preflight", "source"])
+        self.assertEqual(events.count("linux-sdk-cmake-tests"), 1)
+        self.assertLess(events.index("full-preflight"), events.index("linux-sdk-cmake-tests"))
+        self.assertLess(events.index("linux-sdk-cmake-tests"), events.index("configure"))
         self.assertEqual(events[-1], "configure")
 
     def test_preparation_failure_never_reaches_preflight_or_build(self):

@@ -205,6 +205,10 @@ def portable_checks():
     command("explicit-mpv-tests", [sys.executable, "dev/ci/test_explicit_mpv.py"])
     command("native-order-tests", [sys.executable, "dev/ci/test_native_order.py"])
     command("linux-sdk-order-tests", [sys.executable, "dev/ci/test_linux_sdk_order.py"])
+    command("linux-sdk-input-tests", [sys.executable, "dev/ci/test_linux_sdk_inputs.py"])
+    command("qt-sdk-archive-tests", [sys.executable, "dev/ci/test_qt_sdk_archive.py"])
+    command("linux-qt-plan-tests", [sys.executable, "dev/ci/test_linux_qt_plan.py"])
+    command("libarchive-reader-contract-tests", [sys.executable, "dev/ci/test_libarchive_reader_contract.py"])
     command("qt-unix-manifest-tests", [sys.executable, "dev/ci/test_qt_unix_manifest.py"])
     command("mac-session-tests", [sys.executable, "dev/ci/test_macos_session.py"])
     command("headless-routing-tests", [sys.executable, "dev/ci/test_headless_routing.py"])
@@ -386,6 +390,7 @@ def main():
     command("c2-patch-tests", [sys.executable, "tests/test_mpvqt_c2_patch.py"], env=patch_env)
     command("windows-smoke-result-tests", ["node", "--test", "tests/test_windows_smoke_result.mjs"])
     command("explicit-mpv-cmake-tests", [sys.executable, "dev/ci/test_explicit_mpv_cmake.py"])
+    command("linux-sdk-cmake-tests", [sys.executable, "dev/ci/test_linux_sdk_cmake.py"])
     with tempfile.TemporaryDirectory(prefix="ci-runtime-", dir=BUILD) as runtime:
         os.environ["JELLYFIN_TEST_OWNED_ROOT"] = str(BUILD)
         for name in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR"):

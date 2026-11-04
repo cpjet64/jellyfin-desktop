@@ -35,4 +35,24 @@ $failed = $false
 try { Invoke-Expression $c2gate[0].Extent.Text }
 catch { $failed = $_.Exception.Message -match 'failed with exit code 19' }
 if (-not $failed) { throw 'C2 patch failure did not propagate' }
+$install = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
+    $node.GetCommandName() -eq 'Install-CiTools' }, $true)
+if ($install.Count -ne 1) { throw 'Expected one tool bootstrap' }
+foreach ($test in @('test_linux_sdk_order.py', 'test_linux_sdk_inputs.py', 'test_qt_sdk_archive.py',
+                    'test_linux_qt_plan.py', 'test_libarchive_reader_contract.py', 'test_linux_sdk_cmake.py')) {
+    $path = "dev/ci/$test"
+    $matches = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq 'Run-Native' -and $node.Extent.Text.Contains($path) }, $true)
+    if ($matches.Count -ne 1 -or $matches[0].Extent.StartOffset -le $install[0].Extent.EndOffset) {
+        throw "Expected mandatory post-bootstrap SDK check: $path"
+    }
+    $script:status = 0
+    Invoke-Expression $matches[0].Extent.Text
+    if (($script:seen -join '|') -ne $path) { throw "Wrong SDK check arguments: $path" }
+    $script:status = 19
+    $failed = $false
+    try { Invoke-Expression $matches[0].Extent.Text }
+    catch { $failed = $_.Exception.Message -match 'failed with exit code 19' }
+    if (-not $failed) { throw "SDK check failure did not propagate: $path" }
+}
 Write-Host 'Windows smoke-result gate propagates native failures'
