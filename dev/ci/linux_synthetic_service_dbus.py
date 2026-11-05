@@ -17,6 +17,8 @@ DBUS = 'org.freedesktop.DBus'
 DBUS_PATH = '/org/freedesktop/DBus'
 PROPERTIES = 'org.freedesktop.DBus.Properties'
 MAX_JOBS = 1024
+REPLIES = {'GetNameOwner': 's', 'AddMatch': '', 'Subscribe': '', 'StartTransientUnit': 'o',
+           'StopUnit': 'o', 'GetUnit': 'o', 'GetAll': 'a{sv}', 'UnrefUnit': ''}
 
 
 class DbusNextClient:
@@ -56,6 +58,10 @@ class DbusNextClient:
         reply = self.loop.run_until_complete(asyncio.wait_for(self.bus.call(message), timeout))
         if reply is None or reply.message_type != self.MessageType.METHOD_RETURN:
             raise model.Unconfirmed('bus call failed or reply absent')
+        if reply.signature != REPLIES[member]:
+            if job_reply and len(reply.body) == 1:
+                raise model.JobReplyUnconfirmed(reply.body[0])
+            raise model.Unconfirmed('bus reply signature mismatch')
         try:
             self._connected()
         except model.Unconfirmed as error:
@@ -75,7 +81,8 @@ class DbusNextClient:
 
     def _signal(self, message):
         if (message.message_type != self.MessageType.SIGNAL or message.sender != self.owner or
-                message.interface != MANAGER or message.member != 'JobRemoved' or message.path != PATH):
+                message.interface != MANAGER or message.member != 'JobRemoved' or message.path != PATH or
+                message.signature != 'uoss'):
             return
         row = message.body
         if (len(row) != 4 or not isinstance(row[0], int) or isinstance(row[0], bool) or
@@ -148,9 +155,9 @@ class DbusNextClient:
         self._assert_owner(deadline)
         return value
 
-    def capture_evidence(self, identity, deadline):
+    def capture_evidence(self, unit, cursor, deadline):
         self._assert_owner(deadline)
-        value = self.observer.capture(identity, deadline)
+        value = self.observer.capture(unit, cursor, deadline)
         self._assert_owner(deadline)
         return value
 

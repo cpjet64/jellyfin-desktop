@@ -52,13 +52,15 @@ class BufferedClient:
         self.calls.append(('cursor', self.cursor))
         return self.cursor
 
-    def capture_evidence(self, identity, deadline):
+    def capture_evidence(self, unit, cursor, deadline):
         self.calls.append(('capture', self.cursor))
         self.capture_count += 1
         if self.capture_count == 1:
             self.cursor += 1  # A change arrives after the cursor but during capture.
         active = not self.stopped
-        return {**identity, 'reference_held': not self.lost_reference, 'state': 'active' if active else 'inactive',
+        return {'unit': unit, 'job': START, 'invocation': 'b' * 32, 'cgroup': '/system.slice/' + unit,
+                'watch_cursor': cursor, 'provenance': 'independent-observer', 'observation_revision': self.capture_count,
+                'reference_held': not self.lost_reference, 'state': 'active' if active else 'inactive',
                 'job_terminal': True, 'cgroup_empty': not active, 'descendants_absent': not active,
                 'evidence_saved': True, 'fixture_ready': self.capture_count > 1, 'fixture_mode': 'stopped-child',
                 'fixture_result': None if active else 'passed'}
@@ -114,6 +116,38 @@ class AdapterTest(unittest.TestCase):
         with self.assertRaises(model.Unconfirmed):
             model.SyntheticService(adapter.SystemdAdapter(client), clock=lambda: 100).run(TASK, 'stopped-child', True)
         self.assertNotIn('stop', [call[0] for call in client.calls])
+        self.assertNotIn('unref', [call[0] for call in client.calls])
+
+    def test_fresh_observation_rejects_changed_or_stale_evidence_before_action(self):
+        for field, bad in (('invocation', 'c' * 32), ('cgroup', '/other'),
+                           ('reference_held', False), ('observation_revision', 1),
+                           ('fixture_mode', 'ordinary'), ('watch_cursor', -1)):
+            for capture_number, forbidden in ((3, 'stop'), (5, 'unref')):
+                with self.subTest(field=field, capture=capture_number):
+                    client = BufferedClient()
+                    original = client.capture_evidence
+                    def capture(unit, cursor, deadline):
+                        value = original(unit, cursor, deadline)
+                        if client.capture_count == capture_number:
+                            value[field] = bad
+                        return value
+                    client.capture_evidence = capture
+                    with self.assertRaises(model.Unconfirmed):
+                        model.SyntheticService(adapter.SystemdAdapter(client), clock=lambda: 100).run(
+                            TASK, 'stopped-child', True)
+                    self.assertNotIn(forbidden, [call[0] for call in client.calls])
+
+    def test_changed_completion_before_release_is_unconfirmed(self):
+        client = BufferedClient()
+        original = client.capture_evidence
+        def capture(unit, cursor, deadline):
+            value = original(unit, cursor, deadline)
+            if client.capture_count == 5:
+                value['fixture_result'] = 'failed'
+            return value
+        client.capture_evidence = capture
+        with self.assertRaises(model.Unconfirmed):
+            model.SyntheticService(adapter.SystemdAdapter(client), clock=lambda: 100).run(TASK, 'stopped-child', True)
         self.assertNotIn('unref', [call[0] for call in client.calls])
 
     def test_direct_or_arbitrary_spec_is_rejected(self):

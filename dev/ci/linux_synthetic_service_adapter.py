@@ -43,6 +43,7 @@ class SystemdAdapter:
         self.start_cursor = None
         self.stop_cursor = None
         self.binding = None
+        self.observation_revision = -1
 
     def submit(self, spec, deadline):
         if self.start_attempted:
@@ -76,19 +77,35 @@ class SystemdAdapter:
     def capture(self, identity, deadline):
         self._identity(identity)
         cursor = self.client.unit_cursor(identity['unit'], deadline)
-        value = self.client.capture_evidence(identity, deadline)
+        value = self.client.capture_evidence(identity['unit'], cursor, deadline)
+        self._observation(value, cursor)
         return value, cursor
 
     def next_change(self, identity, cursor, deadline):
         self._identity(identity)
         next_cursor = self.client.wait_unit_change(identity['unit'], cursor, deadline)
-        value = self.client.capture_evidence(identity, deadline)
+        value = self.client.capture_evidence(identity['unit'], next_cursor, deadline)
+        self._observation(value, next_cursor)
         return value, next_cursor
+
+    def _observation(self, value, cursor):
+        if (not isinstance(value, dict) or value.get('watch_cursor') != cursor or
+                value.get('provenance') != 'independent-observer' or
+                value.get('fixture_mode') != self.spec['arguments'][-1] or
+                type(value.get('observation_revision')) is not int or
+                value['observation_revision'] <= self.observation_revision):
+            raise model.Unconfirmed('fresh case-specific observation required')
+        self.observation_revision = value['observation_revision']
 
     def submit_stop(self, identity, deadline):
         self._identity(identity)
         if self.stop_attempted:
             raise model.Unconfirmed('stop already attempted')
+        snapshot, _ = self.capture(identity, deadline)
+        model.verified_snapshot(identity, snapshot)
+        if (snapshot.get('state') != 'active' or snapshot.get('fixture_ready') is not True or
+                snapshot.get('fixture_mode') != self.spec['arguments'][-1]):
+            raise model.Unconfirmed('fresh matching readiness required before stop')
         self.stop_cursor = self.client.job_cursor(deadline)
         if type(self.stop_cursor) is not int or self.stop_cursor < 0:
             raise model.Unconfirmed('stop job watch cursor unavailable')
@@ -104,6 +121,12 @@ class SystemdAdapter:
 
     def release(self, identity, snapshot, deadline):
         self._identity(identity)
+        fresh, _ = self.capture(identity, deadline)
+        model.verified_snapshot(identity, fresh)
+        if any(fresh.get(key) != snapshot.get(key) for key in
+               ('state', 'fixture_mode', 'fixture_result', 'job_terminal', 'cgroup_empty', 'descendants_absent')):
+            raise model.Unconfirmed('settlement evidence changed before release')
+        snapshot = fresh
         if (any(snapshot.get(key) != value for key, value in identity.items()) or
                 snapshot.get('reference_held') is not True or snapshot.get('state') not in ('inactive', 'failed') or
                 snapshot.get('evidence_saved') is not True or snapshot.get('cgroup_empty') is not True or

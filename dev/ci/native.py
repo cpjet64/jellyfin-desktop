@@ -210,6 +210,8 @@ def portable_checks():
     command("linux-synthetic-service-tests", [sys.executable, "dev/ci/test_linux_synthetic_service.py"])
     command("linux-synthetic-adapter-tests", [sys.executable, "dev/ci/test_linux_synthetic_service_adapter.py"])
     command("linux-synthetic-dbus-tests", [sys.executable, "dev/ci/test_linux_synthetic_service_dbus.py"])
+    command("linux-synthetic-wheel-provision", [sys.executable, "dev/ci/provision_dbus_next.py"])
+    command("linux-synthetic-real-dbus-tests", [sys.executable, "dev/ci/test_linux_synthetic_service_real_dbus.py"])
     command("qga-terminal-tests", [sys.executable, "dev/ci/test_qga_terminal.py"])
     command("portable-proof-assembly-tests", [sys.executable, "dev/ci/test_portable_proof_assembly.py"])
     command("portable-proof-protocol-tests", [sys.executable, "dev/ci/test_portable_proof_protocol.py"])

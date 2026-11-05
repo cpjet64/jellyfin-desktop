@@ -45,7 +45,8 @@ class FakeBus:
 
     def emit_job(self, job):
         message = Message(message_type=Types.SIGNAL, sender=':1.2', interface=binding.MANAGER,
-                          member='JobRemoved', path=binding.PATH, body=[int(job.rsplit('/', 1)[1]), job, self.unit, 'done'])
+                          member='JobRemoved', path=binding.PATH, signature='uoss',
+                          body=[int(job.rsplit('/', 1)[1]), job, self.unit, 'done'])
         for handler in self.handlers:
             handler(message)
 
@@ -74,7 +75,7 @@ class FakeBus:
             self.connected = False
         if member == self.change_owner_on:
             self.owner = ':1.3'
-        return SimpleNamespace(message_type='reply', body=body)
+        return SimpleNamespace(message_type='reply', signature=binding.REPLIES[member], body=body)
 
 
 class Observer:
@@ -87,12 +88,14 @@ class Observer:
     def cursor(self, unit, deadline):
         return self.sequence
 
-    def capture(self, identity, deadline):
+    def capture(self, unit, cursor, deadline):
         self.captures += 1
         if self.captures == 1:
             self.sequence += 1
         active = not self.bus.stopped
-        return {**identity, 'reference_held': self.bus.connected, 'state': 'active' if active else 'inactive',
+        return {'unit': unit, 'job': START, 'invocation': 'b' * 32, 'cgroup': '/system.slice/' + unit,
+                'watch_cursor': cursor, 'provenance': 'independent-observer', 'observation_revision': self.captures,
+                'reference_held': self.bus.connected, 'state': 'active' if active else 'inactive',
                 'job_terminal': True, 'cgroup_empty': not active, 'descendants_absent': not active,
                 'evidence_saved': True, 'fixture_ready': self.captures > 1,
                 'fixture_mode': 'stopped-child', 'fixture_result': None if active else 'passed'}
@@ -169,8 +172,8 @@ class DbusBindingTest(unittest.TestCase):
 
     def test_manager_owner_change_during_evidence_is_unconfirmed(self):
         original = self.observer.capture
-        def capture(identity, deadline):
-            result = original(identity, deadline)
+        def capture(unit, cursor, deadline):
+            result = original(unit, cursor, deadline)
             self.bus.owner = ':1.3'
             return result
         self.observer.capture = capture
@@ -184,6 +187,21 @@ class DbusBindingTest(unittest.TestCase):
         with self.assertRaises(model.Unconfirmed) as raised:
             runner.run(TASK, 'stopped-child', True)
         self.assertEqual(raised.exception.last_known['stop_job'], STOP)
+        self.assertFalse(any(message.member == 'UnrefUnit' for message in self.bus.calls))
+
+    def test_stop_wrong_signature_retains_valid_job(self):
+        original = self.bus.call
+        async def wrong_signature(message):
+            reply = await original(message)
+            if message.member == 'StopUnit':
+                reply.signature = 's'
+            return reply
+        self.bus.call = wrong_signature
+        runner = model.SyntheticService(adapter.SystemdAdapter(self.client), clock=lambda: 100)
+        with self.assertRaises(model.JobReplyUnconfirmed) as raised:
+            runner.run(TASK, 'stopped-child', True)
+        self.assertEqual(raised.exception.last_known['stop_job'], STOP)
+        self.assertEqual(sum(message.member == 'StopUnit' for message in self.bus.calls), 1)
         self.assertFalse(any(message.member == 'UnrefUnit' for message in self.bus.calls))
 
     def test_owner_change_after_unref_is_unconfirmed(self):

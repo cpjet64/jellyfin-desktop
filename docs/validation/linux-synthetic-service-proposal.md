@@ -75,6 +75,24 @@ is connection-scoped: discarding that owner or closing the bus can release it;
 a recorded reference flag is not lifetime proof. No automatic disconnect,
 unref or retry occurs on uncertainty.
 
+The observer independently obtains current invocation, cgroup, connection and
+reference state, and case-specific fixture evidence; it is not given the expected
+identity to echo. Each capture supplies its watch cursor and a strictly advancing
+observation revision. Captures immediately before stop and release must match the
+bound identity and case; release also requires unchanged settlement evidence.
+These checks rely on a future independently qualified observer and are not an
+atomic check-and-stop operation. The injected fake demonstrates rejection paths,
+not native observation, reference ownership, or containment.
+
+The offline real-type test requires the official `dbus-next` 0.2.3 wheel, size
+57,885 bytes, SHA-256 `58948f9aff9db08316734c0be2a120f6dc502124d9642f55e90ac82ffb16a18b`,
+provided in a job-local file. The gate provisions the fixed artifact before the
+test; it verifies bytes before zipimport and fails when unavailable or mismatched.
+The test does not install the package or open a bus. Provisioning is a separate
+network step and has not been exercised in this offline qualification.
+It requires curl 8.4.0 or newer for its streaming size limit and fails closed
+on older or unrecognized versions; actual runner versions remain unverified.
+
 Ordinary mode waits for actual fixture completion and a passing fixture result;
 an active unit alone is not completion. Stopped-child, TERM-resistant, and
 session-changing modes wait for a matching-mode fixture-ready observation before
