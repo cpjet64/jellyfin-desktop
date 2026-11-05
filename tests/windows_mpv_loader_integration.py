@@ -43,6 +43,8 @@ def run(args, expected=0, env=None):
         raise RuntimeError(f"{args}: exit {result.returncode}, expected {expected}\n{result.stdout}")
     if Path(args[0]).name in ("primary.exe", "fallback.exe") and expected in (11, 22):
         verify_mode_trace(result.stdout)
+    if Path(args[0]).name in ("primary.exe", "fallback.exe") and expected in (126, 127):
+        verify_failure_trace(result.stdout, expected)
     return result.stdout
 
 
@@ -55,6 +57,50 @@ def verify_mode_trace(output):
     thread, process = map(int, before.groups())
     if not thread or int(inside.group(1)) != (thread | 1) or tuple(map(int, after.groups())) != (thread, process):
         raise RuntimeError('Fixture mode trace does not prove exact restoration')
+
+
+def trace_line(lines, prefix, pattern):
+    matches = [(index, re.fullmatch(pattern, line)) for index, line in enumerate(lines)
+               if line.startswith(prefix)]
+    if len(matches) != 1 or matches[0][1] is None:
+        raise RuntimeError('Fixture failure trace has missing, duplicate or malformed phase')
+    return matches[0]
+
+
+def verify_failure_trace(output, expected):
+    lines = output.splitlines()
+    specs = [('fixture before ', r'fixture before thread=(\d+) process=(\d+)'),
+             ('delay hook ', r'delay hook variant=(?:primary|fallback)'),
+             ('mode before=', r'mode before=(\d+) requested=(\d+)'),
+             ('mode enter ', r'mode enter requested=(\d+) ok=(\d+) previous=(\d+) error=(\d+) observed=(\d+)'),
+             ('before load ', r'before load mode=(\d+)'),
+             ('after load ', r'after load loaded=(\d+) error=(\d+)'),
+             ('mode restore ', r'mode restore requested=(\d+) ok=(\d+) previous=(\d+) error=(\d+) observed=(\d+)')]
+    phases = [trace_line(lines, prefix, pattern) for prefix, pattern in specs]
+    missing = [index for index, line in enumerate(lines) if line.startswith('missing export hook')]
+    if expected == 127:
+        if len(missing) != 1 or lines[missing[0]] != 'missing export hook':
+            raise RuntimeError('Missing or duplicate export failure phase')
+        phases.append((missing[0], None))
+        exit_phase = trace_line(lines, 'before ExitProcess ', r'before ExitProcess policy=(127)')
+    elif expected == 126 and not missing:
+        exit_phase = trace_line(lines, 'before ExitProcess ', r'before ExitProcess policy=(126) loader_error=(\d+)')
+    else:
+        raise RuntimeError('Unexpected fixture failure policy')
+    phases.append(exit_phase)
+    if [item[0] for item in phases] != sorted({item[0] for item in phases}):
+        raise RuntimeError('Fixture failure phases are out of order')
+    thread = int(phases[0][1].group(1))
+    before, requested = map(int, phases[2][1].groups())
+    entry = tuple(map(int, phases[3][1].groups()))
+    inside = int(phases[4][1].group(1))
+    loaded, error = map(int, phases[5][1].groups())
+    restore = tuple(map(int, phases[6][1].groups()))
+    if (not thread or before != thread or requested != (thread | 1) or
+            entry != (requested, 1, thread, 0, requested) or inside != requested or
+            restore != (thread, 1, 0, 0, thread) or loaded != (expected == 127) or
+            (expected == 126 and (not error or int(exit_phase[1].group(2)) != error))):
+        raise RuntimeError('Fixture failure trace does not prove load and exact restoration')
 
 
 def digest(path):
