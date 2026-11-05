@@ -216,6 +216,30 @@ static void setterFailureRejectsQueuedDelivery(QObject& events, QObject& hooks, 
   native(nullptr, nullptr);
 }
 
+static void oldControllerDeliveryIsInvalidated(QObject& events, QObject& hooks, QObject& worker) {
+  NativeSetter native;
+  int delivered = 0;
+  const Binding::Key key{8, 14};
+  auto binding = std::make_unique<Binding>(&worker, &events, &hooks, &worker, key,
+    [&](auto callback, auto context) { native(callback, context); }, [&](auto) { ++delivered; },
+    now, Binding::NativeBarrier::SingleSlotSerialized);
+  installController(*binding, worker);
+  QSemaphore entered, release, finished;
+  CHECK(QMetaObject::invokeMethod(&worker, [&] { entered.release(); release.tryAcquire(1, 3000); finished.release(); }, Qt::QueuedConnection));
+  CHECK(entered.tryAcquire(1, 1000));
+  native.notify();
+  CHECK(binding->install(Binding::Role::Player));
+  closeWake(*binding, key);
+  CHECK(binding->apply(Step::InvalidatePlayerEvents, key, now() + 1000000000) == Binding::Result::Done);
+  CHECK(binding->apply(Step::InvalidateHooks, key, now() + 1000000000) == Binding::Result::Done);
+  CHECK(binding->apply(Step::FenceWorker, key, now() + 30000000) == Binding::Result::Blocked);
+  CHECK(binding != nullptr);
+  release.release();
+  CHECK(finished.tryAcquire(1, 1000));
+  CHECK(binding->apply(Step::FenceWorker, key, now() + 1000000000) == Binding::Result::Done);
+  CHECK(delivered == 0);
+}
+
 int main(int argc, char** argv) {
   QCoreApplication application(argc, argv);
   QObject events, hooks;
@@ -231,6 +255,7 @@ int main(int argc, char** argv) {
   unqualifiedBarrierRetainsOwner(events, hooks, *worker);
   heldBeforeCallbackEntry(events, hooks, *worker);
   setterFailureRejectsQueuedDelivery(events, hooks, *worker);
+  oldControllerDeliveryIsInvalidated(events, hooks, *worker);
   thread.quit();
   CHECK(thread.wait(4000));
 }
