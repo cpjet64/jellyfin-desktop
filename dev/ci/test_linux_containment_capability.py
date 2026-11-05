@@ -65,6 +65,30 @@ class CapabilityTest(unittest.TestCase):
             process.stdout.close.assert_called_once()
             process.stderr.close.assert_called_once()
 
+    def test_clock_failure_after_launch_cleans_owned_child(self):
+        process = Mock()
+        process.poll.return_value = None
+        with patch.object(capability.time, 'monotonic', side_effect=[1, KeyboardInterrupt()]), \
+                patch.object(capability.subprocess, 'Popen', return_value=process):
+            self.assertEqual(capability.command(['/fixed'], 4), {'error': 'KeyboardInterrupt'})
+            process.kill.assert_called_once()
+            process.wait.assert_called_once()
+            process.stdout.close.assert_called_once()
+            process.stderr.close.assert_called_once()
+
+    def test_cleanup_interruptions_preserve_first_failure_and_attempt_all(self):
+        process = Mock()
+        process.poll.return_value = None
+        process.kill.side_effect = KeyboardInterrupt()
+        process.wait.side_effect = SystemExit()
+        process.stdout.close.side_effect = KeyboardInterrupt()
+        with patch.object(capability.time, 'monotonic', side_effect=[1, RuntimeError()]), \
+                patch.object(capability.subprocess, 'Popen', return_value=process):
+            result = capability.command(['/fixed'], 4)
+            self.assertEqual(result['error'], 'RuntimeError')
+            self.assertEqual(result['cleanup_unproven'], ['KeyboardInterrupt', 'SystemExit', 'KeyboardInterrupt'])
+            process.stderr.close.assert_called_once()
+
     def test_identity_mismatch_stops_before_reads(self):
         with patch.object(capability.os, 'geteuid', return_value=100, create=True), \
                 patch.object(capability.os, 'getuid', return_value=101, create=True), \

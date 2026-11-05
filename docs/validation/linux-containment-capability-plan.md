@@ -34,6 +34,9 @@ Commands are fixed to systemd --version, getfacl on the observed ancestor
 paths, and systemctl show for selected properties. Read and report limits,
 per-command two-second bounds, overall alarm, child cleanup, and fail-closed
 parsing limit the work; kernel stalls remain an external limitation.
+Cleanup begins under the same guard as child acquisition, but an unreturning
+Popen or interruption between Python bytecodes cannot establish absolute
+cleanup immunity. Ambiguous child settlement remains unproven.
 
 Before submission, a fresh read-only cluster placement check must establish
 the exact target and name; no automatic fallback is permitted. Pin the

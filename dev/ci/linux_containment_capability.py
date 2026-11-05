@@ -24,18 +24,15 @@ def command(args, deadline, env=None):
     left = deadline - time.monotonic()
     if left <= 0:
         raise TimeoutError('inspection deadline')
-    result = None
+    result, process = None, None
     safe_env = {'LANG': 'C', 'LC_ALL': 'C', 'PATH': '/usr/bin:/bin'}
     if env is not None:
         safe_env.update(env)
     try:
         process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    env=safe_env)
-    except OSError as error:
-        return {'error': type(error).__name__}
-    end = min(deadline, time.monotonic() + 2)
-    data = {'stdout': bytearray(), 'stderr': bytearray()}
-    try:
+        end = min(deadline, time.monotonic() + 2)
+        data = {'stdout': bytearray(), 'stderr': bytearray()}
         with selectors.DefaultSelector() as selector:
             selector.register(process.stdout, selectors.EVENT_READ, 'stdout')
             selector.register(process.stderr, selectors.EVENT_READ, 'stderr')
@@ -53,24 +50,25 @@ def command(args, deadline, env=None):
                             raise ValueError('output limit')
         code = process.wait(timeout=max(0, end - time.monotonic()))
         result = {'exit': code, **{key: value.decode('utf-8', 'replace') for key, value in data.items()}}
-    except Exception as error:
+    except BaseException as error:
         result = {'error': type(error).__name__}
     finally:
         cleanup = []
-        try:
-            if process.poll() is None:
-                process.kill()
-        except Exception as error:
-            cleanup.append(type(error).__name__)
-        try:
-            process.wait(timeout=2)
-        except Exception as error:
-            cleanup.append(type(error).__name__)
-        for stream in (process.stdout, process.stderr):
+        if process is not None:
             try:
-                stream.close()
-            except Exception as error:
+                if process.poll() is None:
+                    process.kill()
+            except BaseException as error:
                 cleanup.append(type(error).__name__)
+            try:
+                process.wait(timeout=2)
+            except BaseException as error:
+                cleanup.append(type(error).__name__)
+            for stream in (process.stdout, process.stderr):
+                try:
+                    stream.close()
+                except BaseException as error:
+                    cleanup.append(type(error).__name__)
         if cleanup:
             result = {'error': (result or {}).get('error', 'cleanup failed'), 'cleanup_unproven': cleanup}
     return result
