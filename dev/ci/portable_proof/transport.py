@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 from urllib.parse import urlencode
 from qga_terminal import poll_preserving_terminal
+import commands
 
 MAX_REQUEST = 100000
 
@@ -13,6 +14,13 @@ def request_body(command):
     if len(data) > MAX_REQUEST:
         raise ValueError('serialized request exceeds limit')
     return data
+
+def submit_transfer(task, operation, args, submit_body):
+    """Send the measured encoded body to an injected submission client."""
+    command, data = commands.transfer_command(task, operation, args)
+    if data != request_body(command):
+        raise ValueError('request serialization mismatch')
+    return submit_body(data)
 
 def poll(pid, receipt, open_response):
     path = Path(receipt)

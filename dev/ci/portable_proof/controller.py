@@ -112,6 +112,13 @@ def build_plans(bundle):
     return plans
 
 
+def reject_later_entries(journal, sequence):
+    for item in journal.iterdir():
+        match = re.fullmatch(r"(\d{4})\.(?:intent|pid|receipt|unknown|failure)\.json", item.name)
+        if match and int(match.group(1)) >= sequence:
+            raise RuntimeError("noncontiguous or orphan journal entry")
+
+
 def planned_step(journal, bundle, target, plans=None):
     """Require a contiguous journal; return one pending or next safe operation."""
     empty = hashlib.sha256(b"").hexdigest()
@@ -135,10 +142,7 @@ def planned_step(journal, bundle, target, plans=None):
         else:
             operation, args, expected = "finish", [], {"offset": TOTAL, "sha256": SHA256}
         if not intent.exists():
-            for item in journal.iterdir():
-                match = re.fullmatch(r"(\d{4})\.(?:intent|pid|receipt|unknown|failure)\.json", item.name)
-                if match and int(match.group(1)) >= sequence:
-                    raise RuntimeError("noncontiguous or orphan journal entry")
+            reject_later_entries(journal, sequence)
             return sequence, operation, args, expected, False
         entry = json.loads(intent.read_text(encoding="utf-8"))
         if entry.get("target") != target:
@@ -153,11 +157,13 @@ def planned_step(journal, bundle, target, plans=None):
         if pid.get("target") != entry.get("target") or type(pid.get("pid")) is not int or pid["pid"] <= 0:
             raise RuntimeError("journal PID identity mismatch")
         if not receipt.exists():
+            reject_later_entries(journal, sequence + 1)
             return sequence, operation, args, expected, True
         observed = json.loads(receipt.read_text(encoding="utf-8"))
         if observed != expected:
             raise RuntimeError("receipt does not match expected source")
         if operation == "finish":
+            reject_later_entries(journal, sequence + 1)
             return None
         offset = expected["offset"]
         sequence += 1

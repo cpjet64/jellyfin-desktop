@@ -142,5 +142,41 @@ class ProtocolTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'target differs'):
                 controller.planned_step(root, ROOT / 'missing', {'id': 2}, plans=[])
 
+    def test_full_journal_replay_and_finish_orphans(self):
+        data = b'abcdef'
+        digest = hashlib.sha256(data).hexdigest()
+        target = {'id': 1}
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp, patch.object(controller, 'TOTAL', len(data)), \
+             patch.object(controller, 'SHA256', digest), patch.object(controller, 'CHUNK', 2):
+            root = Path(tmp)
+            bundle = root / 'bundle'
+            bundle.write_bytes(data)
+            journal = root / 'journal'
+            journal.mkdir()
+            for expected_op in ('init', 'append', 'append', 'append', 'finish'):
+                sequence, operation, args, expected, pending = controller.planned_step(journal, bundle, target)
+                self.assertEqual(operation, expected_op)
+                self.assertFalse(pending)
+                controller.submit_once(journal, sequence, operation, args, target, lambda *_: 42)
+                self.assertTrue(controller.planned_step(journal, bundle, target)[-1])
+                controller.settle_once(journal, sequence, target, lambda _: expected, expected)
+            self.assertIsNone(controller.planned_step(journal, bundle, target))
+            for suffix in ('intent', 'pid', 'receipt', 'unknown', 'failure'):
+                orphan = journal / ('0005.' + suffix + '.json')
+                orphan.write_text('{}')
+                with self.assertRaisesRegex(RuntimeError, 'orphan'):
+                    controller.planned_step(journal, bundle, target)
+                orphan.unlink()
+
+    def test_submission_client_receives_exact_bounded_serialization(self):
+        task = 'a' * 32
+        args = ['0', hashlib.sha256(b'').hexdigest(), base64.b64encode(b'x' * 65536).decode()]
+        command, measured = commands.transfer_command(task, 'append', args)
+        calls = []
+        self.assertEqual(transport.submit_transfer(task, 'append', args, lambda body: calls.append(body) or 42), 42)
+        self.assertEqual(calls, [measured])
+        self.assertEqual(measured, transport.request_body(command))
+        self.assertLessEqual(len(calls[0]), 100000)
+
 if __name__ == '__main__':
     unittest.main()
