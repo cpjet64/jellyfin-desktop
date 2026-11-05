@@ -169,29 +169,68 @@ def _planned_step(journal, bundle, target, plans=None):
         sequence += 1
 
 
+class FreshAuthorization:
+    """Process-local record of a separate fresh-run decision, not a security boundary."""
+    def __init__(self, target):
+        self.target = target
+        self.used = False
+
+    def consume(self, target):
+        if self.used or self.target != target:
+            raise PermissionError('fresh-run authorization unavailable')
+        self.used = True
+
+
+def journal_state(journal):
+    entries = list(journal.iterdir())
+    if len(entries) > 128:
+        raise ValueError('journal entry limit exceeded')
+    state = {}
+    for path in entries:
+        if not path.is_file() or path.is_symlink() or path.stat().st_size > 48 * 1024 * 1024:
+            raise ValueError('invalid journal entry')
+        state[path.name] = source_digest(path)
+    return state
+
+
 class Session:
     """Fresh authorized run only; an interrupted session must never be resumed."""
-    def __init__(self, journal, bundle, target, authorize_fresh):
-        if not callable(authorize_fresh) or authorize_fresh(target) is not True:
-            raise PermissionError('independent fresh-run authorization required')
+    def __init__(self, journal, bundle, target, authorization):
+        if type(authorization) is not FreshAuthorization:
+            raise PermissionError('fresh-run authorization required')
+        authorization.consume(target)
         self.journal = Path(journal)
         self.journal.mkdir(mode=0o700)  # Existing journals are never reopened.
         self.bundle, self.target = Path(bundle), target
         self.plans = build_plans(self.bundle)
+        self.state = {}
+        self.sequence = 0
+        self.pending = False
         self.active = True
 
     def step(self, submit, poll):
         if not self.active:
             raise RuntimeError('session closed; no restart or retry')
         try:
+            if journal_state(self.journal) != self.state:
+                raise RuntimeError('journal changed outside the active session')
             plan = _planned_step(self.journal, self.bundle, self.target, self.plans)
             if plan is None:
+                if self.sequence != len(self.plans) + 2 or self.pending:
+                    raise RuntimeError('journal completion differs from live session')
                 self.active = False
                 return True
             sequence, operation, args, expected, pending = plan
+            if sequence != self.sequence or pending != self.pending:
+                raise RuntimeError('journal sequence differs from live session')
             if not pending:
                 _submit_once(self.journal, sequence, operation, args, self.target, submit)
-            return _settle_once(self.journal, sequence, self.target, poll, expected) and False
+            settled = _settle_once(self.journal, sequence, self.target, poll, expected)
+            self.pending = not settled
+            if settled:
+                self.sequence += 1
+            self.state = journal_state(self.journal)
+            return False
         except BaseException:
             self.active = False
             raise

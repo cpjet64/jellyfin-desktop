@@ -185,18 +185,40 @@ class ProtocolTest(unittest.TestCase):
             bundle.write_bytes(b'data')
             journal = root / 'journal'
             with patch.object(controller, 'build_plans', return_value=[]):
-                with self.assertRaises(PermissionError):
-                    controller.Session(journal, bundle, {'id': 1}, lambda _: False)
-                session = controller.Session(journal, bundle, {'id': 1}, lambda _: True)
+                authority = controller.FreshAuthorization({'id': 1})
+                session = controller.Session(journal, bundle, {'id': 1}, authority)
                 with self.assertRaises(RuntimeError):
                     session.step(lambda *_: (_ for _ in ()).throw(RuntimeError('lost')), lambda _: None)
                 with self.assertRaisesRegex(RuntimeError, 'no restart'):
                     session.step(lambda *_: 42, lambda _: None)
                 with self.assertRaises(FileExistsError):
-                    controller.Session(journal, bundle, {'id': 1}, lambda _: True)
-                # A missing journal alone is never authorization for a new run.
+                    controller.Session(journal, bundle, {'id': 1}, controller.FreshAuthorization({'id': 1}))
                 with self.assertRaises(PermissionError):
-                    controller.Session(root / 'missing', bundle, {'id': 1}, lambda _: False)
+                    controller.Session(root / 'missing', bundle, {'id': 1}, authority)
+
+    def test_live_session_rejects_deleted_or_changed_journal(self):
+        for mutation in ('delete', 'change'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir=ROOT) as tmp:
+                root = Path(tmp)
+                bundle = root / 'bundle'
+                bundle.write_bytes(b'data')
+                calls = []
+                with patch.object(controller, 'build_plans', return_value=[]):
+                    session = controller.Session(root / 'journal', bundle, {'id': 1},
+                                                 controller.FreshAuthorization({'id': 1}))
+                    expected = {'offset': 0, 'sha256': hashlib.sha256(b'').hexdigest()}
+                    session.step(lambda *args: calls.append(args) or 42, lambda _: expected)
+                    entry = root / 'journal' / '0000.intent.json'
+                    if mutation == 'delete':
+                        for item in entry.parent.iterdir():
+                            item.unlink()
+                    else:
+                        entry.write_text('{}')
+                    with self.assertRaisesRegex(RuntimeError, 'journal changed'):
+                        session.step(lambda *args: calls.append(args) or 42, lambda _: expected)
+                    with self.assertRaisesRegex(RuntimeError, 'no restart'):
+                        session.step(lambda *args: calls.append(args) or 42, lambda _: expected)
+                self.assertEqual(len(calls), 1)
 
 if __name__ == '__main__':
     unittest.main()
