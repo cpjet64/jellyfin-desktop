@@ -28,6 +28,66 @@ def run_capture(operation, cleanup=cleanup_success, spawn=None):
 
 
 class SettlementFailureTests(unittest.TestCase):
+    def test_inventory_registration_requires_three_distinct_valid_identities(self):
+        valid = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42,
+                 'start_sec': 1, 'start_usec': 2}
+        identities = (dict(valid, pid=42), valid, dict(valid, pid=44))
+        protocol.validate_inventory_identities(identities)
+        for index in range(3):
+            for key in ('pid', 'uid'):
+                broken = [dict(item) for item in identities]
+                del broken[index][key]
+                with self.subTest(index=index, key=key), self.assertRaises(protocol.Failure) as error:
+                    protocol.validate_inventory_identities(broken)
+                self.assertEqual(error.exception.category, 'identity_unavailable')
+            broken = list(identities)
+            broken[index] = None
+            with self.assertRaises(protocol.Failure):
+                protocol.validate_inventory_identities(broken)
+        with self.assertRaises(protocol.Failure):
+            protocol.validate_inventory_identities((identities[0], identities[0], identities[2]))
+
+    def test_invalid_registered_identity_is_rejected_without_queries(self):
+        from unittest.mock import Mock
+        valid = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42,
+                 'start_sec': 1, 'start_usec': 2}
+        for role in ('leader', 'probe', 'command'):
+            for key in valid:
+                for value in (None, True, '1', -1, 'missing'):
+                    expected = dict(valid)
+                    if value == 'missing':
+                        del expected[key]
+                    else:
+                        expected[key] = value
+                    get_identity, get_session = Mock(), Mock()
+                    with self.subTest(role=role, key=key, value=value), self.assertRaises(protocol.Failure) as error:
+                        protocol.compare_owned_row(role, expected, valid, 1, protocol.Observation(),
+                                                   get_identity, get_session)
+                    self.assertEqual(error.exception.category, 'identity_unavailable')
+                    get_identity.assert_not_called()
+                    get_session.assert_not_called()
+        for key in ('pid', 'pgid', 'session'):
+            self.assertFalse(protocol.valid_owned_evidence('command', dict(valid, **{key: 0}), valid, 1))
+        self.assertFalse(protocol.valid_owned_evidence('command', dict(valid, start_usec=1000000), valid, 1))
+
+    def test_invalid_role_or_parsed_values_are_rejected(self):
+        from unittest.mock import Mock
+        valid = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42,
+                 'start_sec': 1, 'start_usec': 2}
+        cases = [('unexpected', valid, 1), (None, valid, 1), ('command', valid, None),
+                 ('command', valid, True), ('command', valid, '1')]
+        for key in ('pid', 'ppid', 'uid', 'pgid'):
+            cases.extend(('command', dict(valid, **{key: value}), 1) for value in (None, True, '1'))
+            missing = dict(valid)
+            del missing[key]
+            cases.append(('command', missing, 1))
+        for role, row, start in cases:
+            get_identity, get_session = Mock(), Mock()
+            with self.subTest(role=role, row=row, start=start), self.assertRaises(protocol.Failure):
+                protocol.compare_owned_row(role, valid, row, start, protocol.Observation(), get_identity, get_session)
+            get_identity.assert_not_called()
+            get_session.assert_not_called()
+
     def test_role_session_is_live_for_held_and_historical_for_command(self):
         from unittest.mock import Mock
         expected = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42,

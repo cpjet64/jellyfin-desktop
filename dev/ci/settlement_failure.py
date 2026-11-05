@@ -142,8 +142,33 @@ def held_session(identity, get_identity, get_session):
         return None
 
 
+def valid_registered_identity(expected):
+    if not isinstance(expected, dict):
+        return False
+    limits = {'pid': 1, 'ppid': 0, 'uid': 0, 'pgid': 1, 'session': 1, 'start_sec': 0, 'start_usec': 0}
+    if any(not integer(expected.get(key)) or expected[key] < minimum for key, minimum in limits.items()):
+        return False
+    return expected['start_usec'] < 1000000
+
+
+def validate_inventory_identities(identities):
+    if (len(identities) != 3 or not all(valid_registered_identity(item) for item in identities) or
+            len({item['pid'] for item in identities}) != 3):
+        raise Failure('identification', 'identity_unavailable')
+
+
+def valid_owned_evidence(role, expected, row, start):
+    if (role not in ('probe', 'leader', 'command') or not valid_registered_identity(expected) or
+            not isinstance(row, dict) or not integer(start) or start < 0):
+        return False
+    limits = {'pid': 1, 'ppid': 0, 'uid': 0, 'pgid': 1}
+    return all(integer(row.get(key)) and row[key] >= limits[key] for key in ('pid', 'ppid', 'uid', 'pgid'))
+
+
 def compare_owned_row(role, expected, row, start, observation, get_identity, get_session):
     """Compare historical rows and distinguish held SID from completed command."""
+    if not valid_owned_evidence(role, expected, row, start):
+        raise Failure('identification', 'identity_unavailable')
     event = identity_comparison(expected, dict(row, start_sec=start), problem='deferred')
     event['role'] = 'own_' + role
     event['ps_session_metadata'] = row.get('ps_session_metadata')
