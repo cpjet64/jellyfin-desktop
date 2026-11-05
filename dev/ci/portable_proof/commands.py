@@ -11,7 +11,7 @@ MAX_REQUEST = 100000
 PINS = {
     'assembly': '844899c64231fec5b8f4bdcedc3e8053b4912e4e92901b3e3beb7381741fe84f',
     'transfer': 'a118dc2102378aa541e1e591d5e103e425ae0c309c850411b6e2c8d65aa52269',
-    'executor': '6693abedbf9dbc02ae87d340a29178a142b5f996e59dace38f6821f7ed65d2d0',
+    'executor': '859bf51d2badd0ec0f840ef0ddfbc31d03548ab151fbde7ba93f7f03e6af21cc',
     'suite_runner.py': '31cb7fe63bdcc4186bdef12d1440429dfae8d9009a5b3c338a36517f01fa45f1',
     'manifest-8358bd6.json': '190d002c29585a051adec1fed896fdaffd7adc65ec38affec7840271f159d11b',
 }

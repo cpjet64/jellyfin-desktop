@@ -13,6 +13,84 @@ MODULE = Path(__file__).parent / 'portable_proof'
 sys.path.insert(0, str(MODULE))
 
 class SupervisorTest(unittest.TestCase):
+    def executor(self):
+        with patch.dict(sys.modules, {'resource': types.ModuleType('resource'), 'pwd': types.ModuleType('pwd')}):
+            spec = importlib.util.spec_from_file_location('proof_executor', MODULE / 'executor.py')
+            executor = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(executor)
+        return executor
+
+    def test_parent_partial_setup_closes_acquired_pipe(self):
+        executor = self.executor()
+        with patch.object(executor.os, 'pipe', side_effect=[(10, 11), OSError('pipe')]), \
+             patch.object(executor.os, 'close') as close:
+            with self.assertRaisesRegex(OSError, 'pipe'):
+                executor.run_suite('python', ROOT, ROOT, 'suite', {}, 0, 'linux')
+        self.assertEqual([call.args[0] for call in close.call_args_list], [10, 11])
+
+    def test_parent_initial_mask_failure_closes_both_pipes(self):
+        executor = self.executor()
+        with patch.object(executor.os, 'pipe', side_effect=[(10, 11), (12, 13)]), \
+             patch.object(executor.os, 'close') as close, \
+             patch.object(executor.signal, 'pthread_sigmask', side_effect=OSError('mask'), create=True), \
+             patch.object(executor.signal, 'SIG_BLOCK', 1, create=True), \
+             patch.object(executor.signal, 'SIGALRM', 3, create=True):
+            with self.assertRaisesRegex(OSError, 'mask'):
+                executor.run_suite('python', ROOT, ROOT, 'suite', {}, 0, 'linux')
+        self.assertEqual(set(call.args[0] for call in close.call_args_list), {10, 11, 12, 13})
+
+    def test_parent_fork_failure_restores_mask_and_closes_pipes(self):
+        executor = self.executor()
+        with patch.object(executor.os, 'pipe', side_effect=[(10, 11), (12, 13)]), \
+             patch.object(executor.os, 'close') as close, \
+             patch.object(executor.os, 'fork', side_effect=OSError('fork'), create=True), \
+             patch.object(executor.signal, 'pthread_sigmask', return_value={7}, create=True) as mask, \
+             patch.object(executor.signal, 'SIG_BLOCK', 1, create=True), \
+             patch.object(executor.signal, 'SIG_SETMASK', 2, create=True), \
+             patch.object(executor.signal, 'SIGALRM', 3, create=True):
+            with self.assertRaisesRegex(OSError, 'fork'):
+                executor.run_suite('python', ROOT, ROOT, 'suite', {}, 0, 'linux')
+        self.assertEqual(set(call.args[0] for call in close.call_args_list), {10, 11, 12, 13})
+        self.assertEqual(mask.call_args_list[-1].args, (2, {7}))
+
+    def test_parent_mask_and_stop_failures_do_not_skip_cleanup(self):
+        executor = self.executor()
+        mask = [set(), None, RuntimeError('block failed'), None]
+        with patch.object(executor.os, 'pipe', side_effect=[(10, 11), (12, 13)]), \
+             patch.object(executor.os, 'fork', return_value=42, create=True), \
+             patch.object(executor.os, 'close') as close, \
+             patch.object(executor.signal, 'pthread_sigmask', side_effect=mask, create=True), \
+             patch.object(executor.signal, 'SIG_BLOCK', 1, create=True), \
+             patch.object(executor.signal, 'SIG_SETMASK', 2, create=True), \
+             patch.object(executor.signal, 'SIGALRM', 3, create=True), \
+             patch.object(executor.select, 'select', side_effect=ValueError('primary')), \
+             patch.object(executor, 'stop_supervisor', side_effect=TimeoutError('unreaped')) as stop:
+            with self.assertRaisesRegex(ValueError, 'primary'):
+                executor.run_suite('python', ROOT, ROOT, 'suite', {}, 0, 'linux')
+        stop.assert_called_once_with(42, False)
+        self.assertEqual(set(call.args[0] for call in close.call_args_list), {10, 11, 12, 13})
+        self.assertIn('unreaped', executor.STATE['cleanup_unconfirmed'])
+
+    def test_bounded_reap_timeout_never_signals_again(self):
+        executor = self.executor()
+        with patch.object(executor.os, 'killpg', create=True) as killpg, \
+             patch.object(executor.signal, 'SIGKILL', 9, create=True), \
+             patch.object(executor.os, 'waitpid', return_value=(0, 0), create=True), \
+             patch.object(executor.os, 'WNOHANG', 1, create=True), \
+             patch.object(executor.time, 'monotonic', side_effect=[0, 5]):
+            with self.assertRaisesRegex(TimeoutError, 'ownership retained'):
+                executor.stop_supervisor(42, True)
+            killpg.assert_called_once_with(42, 9)
+
+    def test_no_signal_after_successful_reap(self):
+        executor = self.executor()
+        with patch.object(executor.os, 'killpg', side_effect=[None, ProcessLookupError()], create=True) as killpg, \
+             patch.object(executor.signal, 'SIGKILL', 9, create=True), \
+             patch.object(executor.os, 'waitpid', return_value=(42, 0), create=True), \
+             patch.object(executor.os, 'WNOHANG', 1, create=True):
+            executor.stop_supervisor(42, True)
+        self.assertEqual([call.args for call in killpg.call_args_list], [(42, 9), (42, 0)])
+
     def test_success_failure_timeout_and_survivors(self):
         with patch.dict(sys.modules, {'resource': types.ModuleType('resource'), 'pwd': types.ModuleType('pwd')}):
             spec = importlib.util.spec_from_file_location('proof_executor', MODULE / 'executor.py')

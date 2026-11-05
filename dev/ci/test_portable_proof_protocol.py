@@ -63,22 +63,22 @@ class ProtocolTest(unittest.TestCase):
         expected = {'offset': 0, 'sha256': hashlib.sha256(b'').hexdigest()}
         with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             root = Path(tmp)
-            controller.submit_once(root, 0, 'init', [], {'id': 1}, lambda *args: 42)
+            controller._submit_once(root, 0, 'init', [], {'id': 1}, lambda *args: 42)
             raw = json.dumps({'data': {'exited': True, 'exitcode': 0, 'out-data': json.dumps(expected)}}).encode()
             def poll(pid):
                 return transport.terminal_result(pid, root / 'raw.json', lambda: io.BytesIO(raw))
-            self.assertTrue(controller.settle_once(root, 0, {'id': 1}, poll, expected))
+            self.assertTrue(controller._settle_once(root, 0, {'id': 1}, poll, expected))
             self.assertEqual(json.loads((root / '0000.receipt.json').read_text()), expected)
 
     def test_terminal_partial_output_marks_failure_and_never_repolls(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             root = Path(tmp)
-            controller.submit_once(root, 0, 'init', [], {'id': 1}, lambda *args: 42)
+            controller._submit_once(root, 0, 'init', [], {'id': 1}, lambda *args: 42)
             raw = json.dumps({'data': {'exited': True, 'exitcode': 0, 'out-data': '{partial'}}).encode()
             def poll(pid):
                 return transport.terminal_result(pid, root / 'raw.json', lambda: io.BytesIO(raw))
             with self.assertRaises(transport.TerminalFailure):
-                controller.settle_once(root, 0, {'id': 1}, poll, {})
+                controller._settle_once(root, 0, {'id': 1}, poll, {})
             self.assertTrue((root / '0000.failure.json').exists())
             with self.assertRaises(transport.TerminalFailure):
                 transport.terminal_result(42, root / 'raw.json', lambda: self.fail('repoll'))
@@ -130,17 +130,17 @@ class ProtocolTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             root = Path(tmp)
             with self.assertRaises(RuntimeError):
-                controller.submit_once(root, 0, 'init', [], {'id': 1}, lambda *args: (_ for _ in ()).throw(RuntimeError()))
+                controller._submit_once(root, 0, 'init', [], {'id': 1}, lambda *args: (_ for _ in ()).throw(RuntimeError()))
             self.assertTrue((root / '0000.unknown.json').exists())
             with self.assertRaises(RuntimeError):
-                controller.planned_step(root, ROOT / 'missing', {'id': 2}, plans=[])
+                controller._planned_step(root, ROOT / 'missing', {'id': 2}, plans=[])
 
     def test_planned_entry_is_bound_to_current_target(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             root = Path(tmp)
-            controller.submit_once(root, 0, 'init', [], {'id': 1}, lambda *args: 42)
+            controller._submit_once(root, 0, 'init', [], {'id': 1}, lambda *args: 42)
             with self.assertRaisesRegex(RuntimeError, 'target differs'):
-                controller.planned_step(root, ROOT / 'missing', {'id': 2}, plans=[])
+                controller._planned_step(root, ROOT / 'missing', {'id': 2}, plans=[])
 
     def test_full_journal_replay_and_finish_orphans(self):
         data = b'abcdef'
@@ -154,18 +154,18 @@ class ProtocolTest(unittest.TestCase):
             journal = root / 'journal'
             journal.mkdir()
             for expected_op in ('init', 'append', 'append', 'append', 'finish'):
-                sequence, operation, args, expected, pending = controller.planned_step(journal, bundle, target)
+                sequence, operation, args, expected, pending = controller._planned_step(journal, bundle, target)
                 self.assertEqual(operation, expected_op)
                 self.assertFalse(pending)
-                controller.submit_once(journal, sequence, operation, args, target, lambda *_: 42)
-                self.assertTrue(controller.planned_step(journal, bundle, target)[-1])
-                controller.settle_once(journal, sequence, target, lambda _: expected, expected)
-            self.assertIsNone(controller.planned_step(journal, bundle, target))
+                controller._submit_once(journal, sequence, operation, args, target, lambda *_: 42)
+                self.assertTrue(controller._planned_step(journal, bundle, target)[-1])
+                controller._settle_once(journal, sequence, target, lambda _: expected, expected)
+            self.assertIsNone(controller._planned_step(journal, bundle, target))
             for suffix in ('intent', 'pid', 'receipt', 'unknown', 'failure'):
                 orphan = journal / ('0005.' + suffix + '.json')
                 orphan.write_text('{}')
                 with self.assertRaisesRegex(RuntimeError, 'orphan'):
-                    controller.planned_step(journal, bundle, target)
+                    controller._planned_step(journal, bundle, target)
                 orphan.unlink()
 
     def test_submission_client_receives_exact_bounded_serialization(self):
@@ -177,6 +177,26 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(calls, [measured])
         self.assertEqual(measured, transport.request_body(command))
         self.assertLessEqual(len(calls[0]), 100000)
+
+    def test_session_requires_fresh_authority_and_never_resumes(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
+            root = Path(tmp)
+            bundle = root / 'bundle'
+            bundle.write_bytes(b'data')
+            journal = root / 'journal'
+            with patch.object(controller, 'build_plans', return_value=[]):
+                with self.assertRaises(PermissionError):
+                    controller.Session(journal, bundle, {'id': 1}, lambda _: False)
+                session = controller.Session(journal, bundle, {'id': 1}, lambda _: True)
+                with self.assertRaises(RuntimeError):
+                    session.step(lambda *_: (_ for _ in ()).throw(RuntimeError('lost')), lambda _: None)
+                with self.assertRaisesRegex(RuntimeError, 'no restart'):
+                    session.step(lambda *_: 42, lambda _: None)
+                with self.assertRaises(FileExistsError):
+                    controller.Session(journal, bundle, {'id': 1}, lambda _: True)
+                # A missing journal alone is never authorization for a new run.
+                with self.assertRaises(PermissionError):
+                    controller.Session(root / 'missing', bundle, {'id': 1}, lambda _: False)
 
 if __name__ == '__main__':
     unittest.main()

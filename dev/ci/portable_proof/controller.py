@@ -1,4 +1,4 @@
-"""Durable QGA transfer journal. Transport adapter must supply submit and poll.
+"""Single-process QGA journal. Transport adapter must supply submit and poll.
 
 No transport is selected here: never attach a guest until coordinator review.
 """
@@ -53,7 +53,7 @@ def chunk_plan(bundle, offset):
             "after": after.hexdigest(), "encoded": base64.b64encode(data).decode("ascii")}
 
 
-def submit_once(journal, sequence, operation, args, target, submit):
+def _submit_once(journal, sequence, operation, args, target, submit):
     """Write durable intent before submission; uncertainty prohibits resubmission."""
     prefix = journal / ("%04d" % sequence)
     intent_path = prefix.with_suffix(".intent.json")
@@ -71,7 +71,7 @@ def submit_once(journal, sequence, operation, args, target, submit):
     return pid
 
 
-def settle_once(journal, sequence, target, poll, expected):
+def _settle_once(journal, sequence, target, poll, expected):
     """Only poll the recorded PID; require exact receipt before the next chunk."""
     prefix = journal / ("%04d" % sequence)
     intent = json.loads(prefix.with_suffix(".intent.json").read_text(encoding="utf-8"))
@@ -119,7 +119,7 @@ def reject_later_entries(journal, sequence):
             raise RuntimeError("noncontiguous or orphan journal entry")
 
 
-def planned_step(journal, bundle, target, plans=None):
+def _planned_step(journal, bundle, target, plans=None):
     """Require a contiguous journal; return one pending or next safe operation."""
     empty = hashlib.sha256(b"").hexdigest()
     sequence = 0
@@ -167,3 +167,31 @@ def planned_step(journal, bundle, target, plans=None):
             return None
         offset = expected["offset"]
         sequence += 1
+
+
+class Session:
+    """Fresh authorized run only; an interrupted session must never be resumed."""
+    def __init__(self, journal, bundle, target, authorize_fresh):
+        if not callable(authorize_fresh) or authorize_fresh(target) is not True:
+            raise PermissionError('independent fresh-run authorization required')
+        self.journal = Path(journal)
+        self.journal.mkdir(mode=0o700)  # Existing journals are never reopened.
+        self.bundle, self.target = Path(bundle), target
+        self.plans = build_plans(self.bundle)
+        self.active = True
+
+    def step(self, submit, poll):
+        if not self.active:
+            raise RuntimeError('session closed; no restart or retry')
+        try:
+            plan = _planned_step(self.journal, self.bundle, self.target, self.plans)
+            if plan is None:
+                self.active = False
+                return True
+            sequence, operation, args, expected, pending = plan
+            if not pending:
+                _submit_once(self.journal, sequence, operation, args, self.target, submit)
+            return _settle_once(self.journal, sequence, self.target, poll, expected) and False
+        except BaseException:
+            self.active = False
+            raise

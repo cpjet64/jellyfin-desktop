@@ -147,6 +147,7 @@ def run_supervisor(write_fd, ack_fd, python, workspace, checkout, suite, env, ki
 
 
 def stop_supervisor(pid, group_ready):
+    signal_error = None
     try:
         if group_ready:
             os.killpg(pid, signal.SIGKILL)
@@ -154,7 +155,18 @@ def stop_supervisor(pid, group_ready):
             os.kill(pid, signal.SIGKILL)
     except ProcessLookupError:
         pass
-    os.waitpid(pid, 0)  # PID could not be reused before this reap.
+    except BaseException as error:
+        signal_error = error
+    end = time.monotonic() + 5
+    while True:
+        reaped, _ = os.waitpid(pid, os.WNOHANG)
+        if reaped == pid:
+            break
+        if time.monotonic() >= end:
+            raise TimeoutError("supervisor reap unconfirmed; ownership retained; signal error: " + repr(signal_error))
+        time.sleep(min(0.05, max(0, end - time.monotonic())))
+    if signal_error is not None:
+        raise RuntimeError("supervisor signal failed: " + repr(signal_error))
     if not group_ready:
         return
     end = time.monotonic() + 5
@@ -173,31 +185,47 @@ def check_supervisor_result(result, suite):
         raise RuntimeError("portable suite failed or left descendants: " + suite)
 
 
+def suite_log_result(path):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    results = [line[len("W411_RESULT="):] for line in lines if line.startswith("W411_RESULT=")]
+    if len(results) != 1:
+        raise RuntimeError("missing or duplicate suite result")
+    result = json.loads(results[0])
+    result.update({"log_name": path.name, "log_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                   "log_bytes": path.stat().st_size})
+    return result
+
+
 def run_suite(python, workspace, checkout, suite, env, index, kind):
     remaining = DEADLINE - time.monotonic()
     if remaining <= 0:
         raise TimeoutError("overall test deadline exhausted")
     path = workspace / ("suite-%02d.log" % index)
-    read_fd, write_fd = os.pipe()
-    ack_read, ack_write = os.pipe()
-    oldmask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGALRM})
-    try:
-        pid = os.fork()
-    except BaseException:
-        for fd in (read_fd, write_fd, ack_read, ack_write):
-            os.close(fd)
-        signal.pthread_sigmask(signal.SIG_SETMASK, oldmask)
-        raise
-    if pid == 0:
-        os.close(read_fd)
-        os.close(ack_write)
-        signal.pthread_sigmask(signal.SIG_SETMASK, oldmask)
-        run_supervisor(write_fd, ack_read, python, workspace, checkout, suite, env, kind, path)
-        os._exit(1)
-    os.close(write_fd)
-    os.close(ack_read)
+    fds = []
+    oldmask = None
+    pid = None
     group_ready = False
+    failure = None
+    cleanup_errors = []
     try:
+        read_fd, write_fd = os.pipe()
+        fds.extend((read_fd, write_fd))
+        ack_read, ack_write = os.pipe()
+        fds.extend((ack_read, ack_write))
+        oldmask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGALRM})
+        pid = os.fork()
+        if pid == 0:
+            try:
+                os.close(read_fd)
+                os.close(ack_write)
+                signal.pthread_sigmask(signal.SIG_SETMASK, oldmask)
+                run_supervisor(write_fd, ack_read, python, workspace, checkout, suite, env, kind, path)
+            finally:
+                os._exit(1)
+        os.close(write_fd)
+        fds.remove(write_fd)
+        os.close(ack_read)
+        fds.remove(ack_read)
         signal.pthread_sigmask(signal.SIG_SETMASK, oldmask)
         ready, _, _ = select.select([read_fd], [], [], min(100, remaining))
         if not ready:
@@ -210,21 +238,37 @@ def run_suite(python, workspace, checkout, suite, env, index, kind):
         if not ready:
             raise TimeoutError("portable suite deadline exceeded")
         result = json.loads(os.read(read_fd, 8192).decode("ascii"))
+    except BaseException as error:
+        failure = error
     finally:
-        signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGALRM})
-        stop_supervisor(pid, group_ready)
-        os.close(read_fd)
-        os.close(ack_write)
-        signal.pthread_sigmask(signal.SIG_SETMASK, oldmask)
+        if pid is not None and pid > 0:
+            try:
+                signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGALRM})
+            except BaseException as error:
+                cleanup_errors.append(error)
+            try:
+                stop_supervisor(pid, group_ready)
+            except BaseException as error:
+                cleanup_errors.append(error)
+        for fd in fds:
+            try:
+                os.close(fd)
+            except BaseException as error:
+                cleanup_errors.append(error)
+        if oldmask is not None:
+            try:
+                signal.pthread_sigmask(signal.SIG_SETMASK, oldmask)
+            except BaseException as error:
+                cleanup_errors.append(error)
+    if cleanup_errors:
+        detail = '; '.join(repr(error) for error in cleanup_errors)
+        STATE['cleanup_unconfirmed'] = detail
+        if failure is None:
+            raise RuntimeError('supervisor cleanup unconfirmed: ' + detail)
+    if failure is not None:
+        raise failure
     check_supervisor_result(result, suite)
-    lines = path.read_text(encoding="utf-8").splitlines()
-    results = [line[len("W411_RESULT="):] for line in lines if line.startswith("W411_RESULT=")]
-    if len(results) != 1:
-        raise RuntimeError("missing or duplicate suite result")
-    result = json.loads(results[0])
-    result.update({"log_name": path.name, "log_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                   "log_bytes": path.stat().st_size})
-    return result
+    return suite_log_result(path)
 
 
 def main():
