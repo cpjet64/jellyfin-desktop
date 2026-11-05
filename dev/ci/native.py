@@ -200,6 +200,7 @@ def prepare_linux_sdk():
 def portable_checks():
     command("mac-sdist-select-tests", [sys.executable, "dev/ci/test_macos_sdist_select.py"])
     command("settlement-failure-tests", [sys.executable, "dev/ci/test_settlement_failure.py"])
+    command("settlement-candidate-tests", [sys.executable, "dev/ci/test_settlement_candidates.py"])
     command("fixture-suspend-policy-tests", [sys.executable, "dev/ci/test_fixture_suspend_policy.py"])
     command("fixture-suspend-adapter-tests", [sys.executable, "dev/ci/test_fixture_suspend_adapter.py"])
     command("fixture-suspend-linux-tests", [sys.executable, "dev/ci/test_fixture_suspend_linux.py"])

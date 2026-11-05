@@ -126,7 +126,7 @@ class NativeOrderTest(unittest.TestCase):
                      "dev/ci/test_linux_qt_cache.py",
                      "dev/ci/test_fixture_suspend_policy.py", "dev/ci/test_fixture_suspend_adapter.py",
                      "dev/ci/test_fixture_suspend_linux.py", "dev/ci/test_linux_containment_capability.py", "dev/ci/test_linux_capability_preflight.py",
-                     "dev/ci/test_settlement_failure.py",
+                     "dev/ci/test_settlement_failure.py", "dev/ci/test_settlement_candidates.py",
                      "dev/ci/test_macos_sdist_select.py", "dev/ci/test_portable_proof_assembly.py",
                      "dev/ci/test_portable_proof_protocol.py", "dev/ci/test_portable_proof_supervisor.py"):
             self.assertEqual(paths.count(path), 1)
@@ -135,6 +135,8 @@ class NativeOrderTest(unittest.TestCase):
                          "dev/ci/test_linux_containment_capability.py")
         self.assertEqual(paths[paths.index("dev/ci/test_linux_containment_capability.py") + 1],
                          "dev/ci/test_linux_capability_preflight.py")
+        self.assertEqual(paths[paths.index("dev/ci/test_settlement_failure.py") + 1],
+                         "dev/ci/test_settlement_candidates.py")
         start = paths.index("dev/ci/test_qga_terminal.py")
         self.assertEqual(paths[start + 1:start + 4], ["dev/ci/test_portable_proof_assembly.py",
                          "dev/ci/test_portable_proof_protocol.py", "dev/ci/test_portable_proof_supervisor.py"])
@@ -147,7 +149,7 @@ class NativeOrderTest(unittest.TestCase):
                      "dev/ci/test_linux_qt_cache.py", "dev/ci/test_fixture_suspend_policy.py",
                      "dev/ci/test_fixture_suspend_adapter.py", "dev/ci/test_fixture_suspend_linux.py",
                      "dev/ci/test_linux_containment_capability.py", "dev/ci/test_linux_capability_preflight.py",
-                     "dev/ci/test_settlement_failure.py", "dev/ci/test_macos_sdist_select.py",
+                     "dev/ci/test_settlement_failure.py", "dev/ci/test_settlement_candidates.py", "dev/ci/test_macos_sdist_select.py",
                      "dev/ci/test_portable_proof_assembly.py", "dev/ci/test_portable_proof_protocol.py",
                      "dev/ci/test_portable_proof_supervisor.py"):
             self.assertEqual(script.count(path), 1)
@@ -158,9 +160,11 @@ class NativeOrderTest(unittest.TestCase):
                         script.index("dev/ci/test_linux_containment_capability.py"))
         self.assertLess(script.index("dev/ci/test_linux_containment_capability.py"),
                         script.index("dev/ci/test_linux_capability_preflight.py"))
+        self.assertLess(script.index("dev/ci/test_settlement_failure.py"),
+                        script.index("dev/ci/test_settlement_candidates.py"))
 
     def test_new_portable_suite_failure_stops_following_checks(self):
-        for failed in ("mac-sdist-select-tests", "settlement-failure-tests", "fixture-suspend-policy-tests",
+        for failed in ("mac-sdist-select-tests", "settlement-failure-tests", "settlement-candidate-tests", "fixture-suspend-policy-tests",
                        "fixture-suspend-adapter-tests", "fixture-suspend-linux-tests", "linux-containment-capability-tests", "linux-capability-preflight-tests",
                        "qga-terminal-tests", "mac-sdist-static-tests",
                        "mac-sdist-supervisor-tests", "mac-sdist-launcher-tests", "linux-qt-cache-tests", "portable-proof-assembly-tests",
