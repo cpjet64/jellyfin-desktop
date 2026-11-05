@@ -12,6 +12,10 @@ import time
 MAX_OUTPUT = 16384
 
 
+class OverallDeadline(TimeoutError):
+    pass
+
+
 def read(path, limit=65536):
     with open(path, encoding='utf-8') as stream:
         value = stream.read(limit + 1)
@@ -23,8 +27,8 @@ def read(path, limit=65536):
 def command(args, deadline, env=None):
     left = deadline - time.monotonic()
     if left <= 0:
-        raise TimeoutError('inspection deadline')
-    result, process = None, None
+        raise OverallDeadline('inspection deadline')
+    result, process, fatal = None, None, None
     safe_env = {'LANG': 'C', 'LC_ALL': 'C', 'PATH': '/usr/bin:/bin'}
     if env is not None:
         safe_env.update(env)
@@ -51,7 +55,10 @@ def command(args, deadline, env=None):
         code = process.wait(timeout=max(0, end - time.monotonic()))
         result = {'exit': code, **{key: value.decode('utf-8', 'replace') for key, value in data.items()}}
     except BaseException as error:
-        result = {'error': type(error).__name__}
+        if isinstance(error, (KeyboardInterrupt, SystemExit, OverallDeadline)):
+            fatal = error
+        else:
+            result = {'error': type(error).__name__}
     finally:
         cleanup = []
         if process is not None:
@@ -60,17 +67,30 @@ def command(args, deadline, env=None):
                     process.kill()
             except BaseException as error:
                 cleanup.append(type(error).__name__)
+                if fatal is None and isinstance(error, (KeyboardInterrupt, SystemExit, OverallDeadline)):
+                    fatal = error
             try:
                 process.wait(timeout=2)
             except BaseException as error:
                 cleanup.append(type(error).__name__)
+                if fatal is None and isinstance(error, (KeyboardInterrupt, SystemExit, OverallDeadline)):
+                    fatal = error
             for stream in (process.stdout, process.stderr):
                 try:
                     stream.close()
                 except BaseException as error:
                     cleanup.append(type(error).__name__)
+                    if fatal is None and isinstance(error, (KeyboardInterrupt, SystemExit, OverallDeadline)):
+                        fatal = error
         if cleanup:
             result = {'error': (result or {}).get('error', 'cleanup failed'), 'cleanup_unproven': cleanup}
+    if fatal is not None:
+        if hasattr(fatal, 'add_note'):
+            if result and result.get('error') not in (None, 'cleanup failed'):
+                fatal.add_note('inspection failure: ' + result['error'])
+            if cleanup:
+                fatal.add_note('cleanup unproven: ' + ', '.join(cleanup))
+        raise fatal
     return result
 
 
@@ -143,7 +163,7 @@ def inspect_context(expected_uid, deadline):
 
 
 def alarm(_signum, _frame):
-    raise TimeoutError('inspection deadline')
+    raise OverallDeadline('inspection deadline')
 
 
 def main():

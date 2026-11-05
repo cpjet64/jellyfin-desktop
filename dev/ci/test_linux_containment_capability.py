@@ -70,7 +70,8 @@ class CapabilityTest(unittest.TestCase):
         process.poll.return_value = None
         with patch.object(capability.time, 'monotonic', side_effect=[1, KeyboardInterrupt()]), \
                 patch.object(capability.subprocess, 'Popen', return_value=process):
-            self.assertEqual(capability.command(['/fixed'], 4), {'error': 'KeyboardInterrupt'})
+            with self.assertRaises(KeyboardInterrupt):
+                capability.command(['/fixed'], 4)
             process.kill.assert_called_once()
             process.wait.assert_called_once()
             process.stdout.close.assert_called_once()
@@ -84,10 +85,38 @@ class CapabilityTest(unittest.TestCase):
         process.stdout.close.side_effect = KeyboardInterrupt()
         with patch.object(capability.time, 'monotonic', side_effect=[1, RuntimeError()]), \
                 patch.object(capability.subprocess, 'Popen', return_value=process):
-            result = capability.command(['/fixed'], 4)
-            self.assertEqual(result['error'], 'RuntimeError')
-            self.assertEqual(result['cleanup_unproven'], ['KeyboardInterrupt', 'SystemExit', 'KeyboardInterrupt'])
+            with self.assertRaises(KeyboardInterrupt):
+                capability.command(['/fixed'], 4)
             process.stderr.close.assert_called_once()
+
+    def test_overall_deadline_propagates_after_cleanup(self):
+        process = Mock()
+        process.poll.return_value = None
+        with patch.object(capability.time, 'monotonic', side_effect=[1, capability.OverallDeadline('deadline')]), \
+                patch.object(capability.subprocess, 'Popen', return_value=process):
+            with self.assertRaises(capability.OverallDeadline):
+                capability.command(['/fixed'], 4)
+        process.kill.assert_called_once()
+        process.wait.assert_called_once()
+        process.stdout.close.assert_called_once()
+        process.stderr.close.assert_called_once()
+
+    def test_cancellation_prevents_next_inspection_command(self):
+        calls = []
+        def command(args, deadline):
+            calls.append(args)
+            raise KeyboardInterrupt()
+        with patch.object(capability.os, 'geteuid', return_value=100, create=True), \
+                patch.object(capability.os, 'getuid', return_value=100, create=True), \
+                patch.object(capability.os, 'getgid', return_value=100, create=True), \
+                patch.object(capability.os, 'getegid', return_value=100, create=True), \
+                patch.object(capability, 'read', side_effect=['0::/runner\n',
+                    '1 0 0:1 / /sys/fs/cgroup rw - cgroup2 cgroup rw']), \
+                patch.object(capability, 'ancestors', return_value=[]), \
+                patch.object(capability, 'command', side_effect=command):
+            with self.assertRaises(KeyboardInterrupt):
+                capability.inspect_context(100, 10)
+        self.assertEqual(len(calls), 1)
 
     def test_identity_mismatch_stops_before_reads(self):
         with patch.object(capability.os, 'geteuid', return_value=100, create=True), \
