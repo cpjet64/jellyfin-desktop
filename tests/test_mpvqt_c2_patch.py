@@ -60,6 +60,16 @@ class DiagnosticPatchTest(unittest.TestCase):
                         self.assertLess(item.index(call), item.index(after))
                     self.assertLess(item.index("ackEmittedNs"), item.index("emit renderRetired(generation)"))
                     renderer = (copy / "src/mpvrenderer.cpp").read_text(encoding="utf-8")
+                    render = renderer.split("void MpvRenderer::render()", 1)[1].split(
+                        "QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject", 1)[0]
+                    ordered = ("const int injected =", "const int result =", "if (!injected &&",
+                               "if (result < 0 && owner->state.failOnce(",
+                               "const bool original =", "owner->service.activate(",
+                               "DiagnosticFailureInjection::failurePublishedNs")
+                    positions = [render.index(marker) for marker in ordered]
+                    self.assertEqual(positions, sorted(positions))
+                    self.assertEqual(render.count("owner->service.activate("), 1)
+                    self.assertNotIn("}", render[positions[3]:positions[6]])
                     self.assertLess(renderer.index("failurePublishedNs"), renderer.index("QMetaObject::invokeMethod(item", renderer.index("failurePublishedNs")))
                     create = renderer.split("int MpvAbstractItem::createDiagnosticRenderContext()", 1)[1]
                     branch = create.index("if (!injected)")

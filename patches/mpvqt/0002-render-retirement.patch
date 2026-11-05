@@ -460,11 +460,13 @@ diff --git a/src/mpvrenderer.cpp b/src/mpvrenderer.cpp
 +        servicePendingFrame(owner.get());
 +        return;
 +    }
-@@ -114,0 +139,3 @@
+@@ -119,3 +142,10 @@
+     const int injected = DiagnosticFailureInjection::render.exchange(0);
+     const int result = injected ? injected : mpv_render_context_render(owner->context, params);
 +    if (!injected && owner->service.phase() != SyntheticFrameService::Phase::Never &&
 +        owner->service.phase() != SyntheticFrameService::Phase::Armed)
 +        ++DiagnosticFailureInjection::ordinaryPostFaultCount;
-@@ -116,0 +144,4 @@
+     if (result < 0 && owner->state.failOnce(RenderRetirementState::Stage::Render, result)) {
 +        const bool original = owner->context && QThread::currentThread() == owner->originalThread &&
 +            QOpenGLContext::currentContext() == owner->originalContext;
 +        owner->service.activate(owner->generation, injected == MPV_ERROR_UNSUPPORTED, result, original,
