@@ -72,6 +72,8 @@ static void callbackHandoffAndInvalidation(QObject& events, QObject& hooks, QObj
   CHECK(correctThread && delivered.size() == 1 && delivered[0] == Binding::Role::Controller);
   CHECK(!binding.install(Binding::Role::Player));
   CHECK(binding.handoff({key.owner, key.generation + 1}, now() + 1000000000) == Binding::Result::Blocked);
+  CHECK(binding.handoff(key, now() - 1) == Binding::Result::Blocked);
+  CHECK(native.installs == 1);
   CHECK(binding.handoff(key, now() + 1000000000) == Binding::Result::Done);
   pump();
   CHECK(correctThread && delivered.size() == 2 && delivered[1] == Binding::Role::Player);
