@@ -20,6 +20,11 @@ target_compile_features(test_synchronous_stop_events PRIVATE cxx_std_17)
 add_test(NAME test_synchronous_stop_events COMMAND test_synchronous_stop_events)
 set_tests_properties(test_synchronous_stop_events PROPERTIES TIMEOUT 60)
 
+add_executable(test_healthy_cleanup_coordinator test_healthy_cleanup_coordinator.cpp)
+target_compile_features(test_healthy_cleanup_coordinator PRIVATE cxx_std_17)
+add_test(NAME test_healthy_cleanup_coordinator COMMAND test_healthy_cleanup_coordinator)
+set_tests_properties(test_healthy_cleanup_coordinator PROPERTIES TIMEOUT 60)
+
 add_executable(test_c2a_hold_gate test_c2a_hold_gate.cpp)
 target_compile_features(test_c2a_hold_gate PRIVATE cxx_std_17)
 target_link_libraries(test_c2a_hold_gate PRIVATE Qt6::Core Qt6::Test Threads::Threads)
