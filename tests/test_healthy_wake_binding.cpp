@@ -236,9 +236,11 @@ static void oldControllerDeliveryIsInvalidated(QObject& events, QObject& hooks, 
   CHECK(binding != nullptr);
   release.release();
   CHECK(finished.tryAcquire(1, 1000));
+  // Fake-test settlement only; a failed coordinator is never authorized to retry.
   CHECK(binding->apply(Step::FenceWorker, key, now() + 1000000000) == Binding::Result::Done);
   CHECK(delivered == 0);
 }
+
 
 int main(int argc, char** argv) {
   QCoreApplication application(argc, argv);
