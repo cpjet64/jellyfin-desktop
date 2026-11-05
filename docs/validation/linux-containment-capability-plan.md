@@ -16,6 +16,14 @@ the adapter must compare report hostname, account and UID against independently
 verified expectations, and fail closed on ambiguity. The role arguments are
 not themselves identity proof.
 
+The candidate driver inspects the QGA controller process and then permanently
+drops that same process to the runner account using initgroups/setgid/setuid.
+Label this as an inline-drop context: it is not an observation of an existing
+runner-service process, runuser/PAM, or a future fixture's context. Seek
+independent review on whether this evidence is useful and sufficient before
+execution. Any later fixture route must match the observed context, or obtain
+separately authorized evidence for its actual context.
+
 The collector reads selected cgroup v2 mount and membership, ancestors' owner,
 permissions, ACL, controllers, subtree control, events and cgroup.kill access;
 it records identity, process/session, kernel, PID 1, systemd version and fixed
