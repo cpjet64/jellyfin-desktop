@@ -9,11 +9,13 @@ The historical source review below is pinned to `06fdf279ef40d74b6b620e24cefc4e7
 - Native end-file errors set a message (`src/player/PlayerComponent.cpp:498-515`); the error state emits only that message (`:467-469`, declaration in `src/player/PlayerComponent.h:206`). It carries no playback request or session identifier.
 - The adapter's error handler calls `removeMediaDialog`, asks about transcoding, then emits a web error (`native/mpvVideoPlayer.js:210-236`). Both error cleanup (`:479-480`) and public `stop` (`:468-476`) call the same native `player.stop()`; `destroy` also calls cleanup (`:499-500`). Native `load` itself calls `stop`. Native `requestNativeStop` and web `stop` have separate entry points, but the current web stop call carries no origin (`src/player/PlayerComponent.cpp:776-789`).
 
-## Current adapter at adb66e4
+## Current adapter and native commands at 59155af
 
 The prompt guard in `native/playbackErrorPrompt.js:2-31` suppresses a pending prompt's stale error event after a newer intent or prompt. `native/mpvVideoPlayer.js:222-234`, `:443-450` and `:475-477` invalidate it synchronously for play, stop and destroy. This is prompt handling, not native request or stop-origin correlation.
 
 Commit `93efdb3` made media-element setup synchronous: current `native/mpvVideoPlayer.js:222-234` calls `createMediaElement` and `setCurrentSrc` in the same turn, while retaining the asynchronous outer `play` promise and native load callback. Current `createMediaElement` is at `:495-562`. The ordering and prompt tests are `tests/test_mpvVideoPlayer_order.js` and `tests/test_mpvVideoPlayer.js`; the separate [native dispatch plan](synchronous-dispatch-native-plan.md) describes outstanding acceptance evidence. The native `load` success limitation described above remains relevant. These changes do not select a cancellation settlement policy or prove production recovery.
+
+The native command definitions have moved since the historical review: `src/player/PlayerComponentCommands.cpp:8-16` implements load and `:19-50` implements stop and its checked command. `queueMedia` remains in `src/player/PlayerComponent.cpp:278-284`, including the early return when mpv is unavailable. The optional diagnostic observer records command activity; it does not add production request or stop-origin correlation.
 
 ## Proposed boundary for design
 

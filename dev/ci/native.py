@@ -203,6 +203,7 @@ def portable_checks():
     command("fixture-suspend-adapter-tests", [sys.executable, "dev/ci/test_fixture_suspend_adapter.py"])
     command("fixture-suspend-linux-tests", [sys.executable, "dev/ci/test_fixture_suspend_linux.py"])
     command("linux-containment-capability-tests", [sys.executable, "dev/ci/test_linux_containment_capability.py"])
+    command("linux-capability-preflight-tests", [sys.executable, "dev/ci/test_linux_capability_preflight.py"])
     command("qga-terminal-tests", [sys.executable, "dev/ci/test_qga_terminal.py"])
     command("portable-proof-assembly-tests", [sys.executable, "dev/ci/test_portable_proof_assembly.py"])
     command("portable-proof-protocol-tests", [sys.executable, "dev/ci/test_portable_proof_protocol.py"])
