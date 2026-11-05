@@ -51,7 +51,7 @@ $install = $source.FindAll({ param($node) $node -is [Management.Automation.Langu
 if ($install.Count -ne 1) { throw 'Expected one tool bootstrap' }
 foreach ($test in @('test_linux_sdk_order.py', 'test_linux_sdk_inputs.py', 'test_qt_sdk_archive.py',
                     'test_linux_qt_plan.py', 'test_libarchive_reader_contract.py', 'test_linux_sdk_cmake.py',
-                    'test_fixture_suspend_adapter.py', 'test_fixture_suspend_linux.py',
+                    'test_fixture_suspend_adapter.py', 'test_fixture_suspend_linux.py', 'test_linux_containment_capability.py',
                     'test_portable_proof_assembly.py', 'test_portable_proof_protocol.py',
                     'test_portable_proof_supervisor.py')) {
     $path = "dev/ci/$test"
