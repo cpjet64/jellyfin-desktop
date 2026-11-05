@@ -19,6 +19,7 @@ IDENTITY_FIELDS = {'pid', 'uid', 'ppid', 'pgid', 'session', 'start_sec', 'start_
                    'api_result', 'api_error', 'expected_size', 'returned_size'}
 COMMAND_FIELDS = {'exit', 'signal', 'elapsed_ms', 'output_bytes', 'retained_bytes', 'output_bound', 'truncated'}
 SECONDARY_DETAILS = ('fd_close_failed', 'mask_restore_failed', 'mask_block_failed')
+IDENTITY_COMPARISON_FIELDS = ('pid', 'ppid', 'uid', 'pgid', 'session', 'start_sec')
 
 
 class Failure(Exception):
@@ -95,6 +96,90 @@ def failure_record(error, phase):
     if isinstance(error, (KeyboardInterrupt, SystemExit)):
         return {'phase': phase, 'category': 'cancellation'}
     return {'phase': phase, 'category': 'unknown'}
+
+
+def identity_comparison(expected, observed, problem=None):
+    """Describe the existing ordered, short-circuit comparison without changing it."""
+    result, stopped = [], problem is not None
+    for name in IDENTITY_COMPARISON_FIELDS:
+        left, right = expected.get(name), observed.get(name)
+        state = 'not_evaluated'
+        if problem == name:
+            state = 'unknown'
+        elif not stopped:
+            if left is None or right is None:
+                state, stopped = 'unknown', True
+            elif left == right:
+                state = 'match'
+            else:
+                state, stopped = 'mismatch', True
+        result.append({'field': name, 'state': state, 'expected': left, 'observed': right,
+                       'expected_unit': 'seconds_since_epoch' if name == 'start_sec' else 'integer',
+                       'observed_unit': ('text' if isinstance(right, str) else
+                                         'seconds_since_epoch' if name == 'start_sec' else 'integer'),
+                       'expected_source': 'getsid' if name == 'session' else 'kernel_identity',
+                       'observed_source': ('ps_lstart_raw' if name == 'start_sec' and isinstance(right, str)
+                                           else 'ps_lstart_normalized' if name == 'start_sec' else 'ps')})
+    return {'kind': 'identity_comparison', 'fields': result}
+
+
+def inventory_parse_failure(fields, identities, observation, problem):
+    """Record parse failure only when the row's existing PID identifies an own process."""
+    try:
+        pid = int(fields[0])
+    except (IndexError, ValueError):
+        return
+    match = next(((index, item) for index, item in enumerate(identities) if item['pid'] == pid), None)
+    if match is None:
+        return
+    role_index, expected = match
+    observed = {}
+    for index, name in enumerate(('pid', 'ppid', 'pgid', 'session', 'uid')):
+        if index < len(fields):
+            try:
+                observed[name] = int(fields[index])
+            except ValueError:
+                observed[name] = fields[index]
+    if len(fields) > 5:
+        observed['start_sec'] = ' '.join(fields[5:10])
+    event = identity_comparison(expected, observed, problem)
+    event['role'] = ('own_leader', 'own_command', 'own_probe')[role_index]
+    observation.add(event)
+
+
+def missing_identity_comparisons(own, identities, observation):
+    for name, expected in identities:
+        if name not in own:
+            event = identity_comparison(expected, {}, problem='missing_row')
+            event['role'] = 'own_' + name
+            observation.add(event)
+
+
+def parse_inventory_row(line, identities, observation):
+    """Apply the existing ps parser, recording own-row parse failures."""
+    parts = line.split(None, 10)
+    if len(parts) != 11:
+        missing = ('pid', 'ppid', 'pgid', 'session', 'uid', 'start_sec')[min(len(parts), 5)]
+        inventory_parse_failure(parts, identities, observation, missing)
+        raise Failure('inventory', 'malformed_inventory')
+    values = []
+    for index, name in enumerate(('pid', 'ppid', 'pgid', 'session', 'uid')):
+        try:
+            values.append(int(parts[index]))
+        except ValueError:
+            inventory_parse_failure(parts, identities, observation, name)
+            raise Failure('inventory', 'malformed_inventory') from None
+    pid, ppid, pgid, session, uid = values
+    if uid != 501:
+        return None
+    row = {'pid': pid, 'uid': uid, 'ppid': ppid, 'pgid': pgid, 'session': session,
+           'start': ' '.join(parts[5:10])}
+    try:
+        start = int(time.mktime(time.strptime(row['start'], '%a %b %d %H:%M:%S %Y')))
+    except (ValueError, OverflowError):
+        inventory_parse_failure(parts, identities, observation, 'start_sec')
+        raise Failure('inventory', 'malformed_inventory') from None
+    return row, start
 
 
 def import_nested_frame(frame, observation):

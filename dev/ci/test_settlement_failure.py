@@ -28,6 +28,41 @@ def run_capture(operation, cleanup=cleanup_success, spawn=None):
 
 
 class SettlementFailureTests(unittest.TestCase):
+    def test_identity_comparison_retains_short_circuit_and_values(self):
+        names = protocol.IDENTITY_COMPARISON_FIELDS
+        expected = {name: index + 1 for index, name in enumerate(names)}
+        self.assertTrue(all(item['state'] == 'match'
+                            for item in protocol.identity_comparison(expected, expected)['fields']))
+        for index, name in enumerate(names):
+            observed = dict(expected, **{name: 100})
+            fields = protocol.identity_comparison(expected, observed)['fields']
+            self.assertEqual([item['state'] for item in fields],
+                             ['match'] * index + ['mismatch'] + ['not_evaluated'] * (5 - index))
+            self.assertEqual(fields[index]['expected'], expected[name])
+            self.assertEqual(fields[index]['observed'], 100)
+        observed = dict(expected)
+        del observed['session']
+        fields = protocol.identity_comparison(expected, observed)['fields']
+        self.assertEqual(fields[4]['state'], 'unknown')
+        self.assertEqual(fields[5]['state'], 'not_evaluated')
+
+    def test_own_row_parse_failures_are_distinct_and_bounded(self):
+        identity = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42, 'start_sec': 1}
+        base = ['43', '42', '42', '42', '501', 'Mon', 'Jan', '01', '12:00:00', '2024', 'command']
+        for index, field in ((1, 'ppid'), (2, 'pgid'), (3, 'session'), (4, 'uid'), (5, 'start_sec')):
+            parts = list(base)
+            parts[index] = 'unparseable'
+            observation = protocol.Observation()
+            with self.subTest(field=field), self.assertRaises(protocol.Failure):
+                protocol.parse_inventory_row(' '.join(parts), (identity,) * 3, observation)
+            fields = observation.events[0]['fields']
+            self.assertEqual(next(item for item in fields if item['field'] == field)['state'], 'unknown')
+            self.assertTrue(all(item['state'] in ('unknown', 'not_evaluated') for item in fields))
+        observation = protocol.Observation()
+        with self.assertRaises(protocol.Failure):
+            protocol.parse_inventory_row('unparseable ' + ' '.join(base[1:]), (identity,) * 3, observation)
+        self.assertEqual(observation.events, [])
+
     def test_alarm_at_handoff_still_finalizes_registered_group(self):
         class Interrupted(dict):
             def __getitem__(self, key):

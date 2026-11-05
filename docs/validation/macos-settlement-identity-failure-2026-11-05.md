@@ -35,3 +35,20 @@ formats that field in hexadecimal. These upstream sources are not proof of the
 installed guest binary's version or behavior. The retained evidence does not
 establish this hypothesis as the cause; a correction or further live
 observation requires a separate decision and authorization.
+
+## Source-only diagnostic preparation
+
+The prepared adapter records the existing own-row comparison in its original
+PID, parent, UID, process-group, session and normalized-start order. Each field
+has a fixed match, mismatch, unknown or not-evaluated state, plus available
+expected and observed values and their sources and units. A mismatch leaves
+later comparisons not evaluated. Parsing failures are identified separately
+and retain available own-row values without changing the parser's rules. The
+protected response remains subject to the existing record and event bounds.
+
+Association still requires the existing matching PID and runner UID filter.
+A missing or unassociated own row is recorded as not evaluated; it is not
+attributed to some other row. A malformed PID that cannot be associated is
+likewise not claimed as an own-row comparison. No new identity query, timing
+tolerance, field conversion, guest observation or execution is introduced.
+These diagnostics do not establish the W545 cause or authorize another run.
