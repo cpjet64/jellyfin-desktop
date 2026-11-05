@@ -39,6 +39,10 @@ class ProtocolFailure(RuntimeError):
         self.record = record
 
 
+class DiagnosticFinalizationTimeout(TimeoutError):
+    pass
+
+
 def integer(value):
     return type(value) is int and -(2**63) <= value < 2**63
 
@@ -366,7 +370,7 @@ def encode(record):
             qualified = candidate_diagnostics.qualification(diagnostic)
         except TimeoutError:
             if original.get('failure') is None:
-                raise
+                raise DiagnosticFinalizationTimeout('diagnostic finalization timed out') from None
             qualified = 'unavailable'
         enriched = dict(original, diagnostic_qualification=qualified)
         if qualified != 'missing':
@@ -384,6 +388,27 @@ def encode(record):
                {'phase': 'preparation', 'category': 'output_bound'},
                'secondary': record.get('secondary', []), 'events': [], 'cleanup': record.get('cleanup', []),
                'record_truncated': True}
+    return json.dumps(bounded, sort_keys=True, separators=(',', ':')).encode('utf-8')
+
+
+def encode_finalization_timeout(record):
+    """Serialize a fixed failure without repeating diagnostic qualification."""
+    result = dict(record)
+    result.pop('candidate_diagnostic', None)
+    result['ok'] = False
+    result['failure'] = result.get('failure') or {'phase': 'preparation', 'category': 'timeout'}
+    result['diagnostic_qualification'] = 'unavailable'
+    result['candidate_diagnostic'] = {'kind': 'inventory_candidates', 'diagnostic': 'unavailable'}
+    body = json.dumps(result, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    if len(body) <= MAX_RECORD:
+        return body
+    result.pop('candidate_diagnostic')
+    result.pop('diagnostic_qualification')
+    body = json.dumps(result, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    if len(body) <= MAX_RECORD:
+        return body
+    bounded = {'ok': False, 'failure': result['failure'], 'secondary': result['secondary'],
+               'events': [], 'cleanup': result['cleanup'], 'record_truncated': True}
     return json.dumps(bounded, sort_keys=True, separators=(',', ':')).encode('utf-8')
 
 
@@ -425,7 +450,10 @@ def run(spawn, operation, cleanup, emit, clock=time.monotonic):
     record = {'ok': primary is None, 'failure': primary, 'secondary': secondary,
               'events': observed.events, 'cleanup': groups, 'elapsed_ms': elapsed,
               'record_truncated': False, 'candidate_diagnostic': observed.candidate_diagnostic}
-    body = encode(record)
+    try:
+        body = encode(record)
+    except DiagnosticFinalizationTimeout:
+        body = encode_finalization_timeout(record)
     decoded = json.loads(body)
     try:
         emit(body)

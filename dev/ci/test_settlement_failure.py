@@ -28,6 +28,60 @@ def run_capture(operation, cleanup=cleanup_success, spawn=None):
 
 
 class SettlementFailureTests(unittest.TestCase):
+    def test_finalization_timeout_emits_once_without_repeating_cleanup(self):
+        from unittest.mock import Mock, patch
+        import settlement_candidates as candidates
+        cleanup, emit = Mock(side_effect=cleanup_success), Mock()
+        with patch.object(candidates, 'qualification', side_effect=TimeoutError('private')) as qualify, \
+                patch.object(protocol, 'encode', wraps=protocol.encode) as encode:
+            with self.assertRaises(protocol.ProtocolFailure) as error:
+                protocol.run(lambda register: register('owned'), valid_operation, cleanup, emit)
+        cleanup.assert_called_once_with('owned')
+        qualify.assert_called_once()
+        encode.assert_called_once()
+        emit.assert_called_once()
+        record = json.loads(emit.call_args.args[0])
+        self.assertEqual(record['failure'], {'phase': 'preparation', 'category': 'timeout'})
+        self.assertEqual(record['diagnostic_qualification'], 'unavailable')
+        self.assertEqual(record['cleanup'][0]['group_settlement'], 'success')
+        self.assertEqual(error.exception.record, record)
+        self.assertNotIn('private', json.dumps(record))
+
+    def test_unrelated_serialization_timeout_is_not_reclassified(self):
+        from unittest.mock import Mock, patch
+        cleanup, emit = Mock(side_effect=cleanup_success), Mock()
+        with patch.object(protocol, 'encode', side_effect=TimeoutError('serialization')):
+            with self.assertRaisesRegex(TimeoutError, 'serialization'):
+                protocol.run(lambda register: register('owned'), valid_operation, cleanup, emit)
+        cleanup.assert_called_once_with('owned')
+        emit.assert_not_called()
+
+    def test_finalization_timeout_preserves_existing_primary(self):
+        from unittest.mock import Mock, patch
+        import settlement_candidates as candidates
+        cleanup, emit = Mock(side_effect=cleanup_success), Mock()
+        def operation(_observation):
+            raise protocol.Failure('identification', 'identity_mismatch')
+        with patch.object(candidates, 'qualification', side_effect=TimeoutError('private')) as qualify:
+            with self.assertRaises(protocol.ProtocolFailure):
+                protocol.run(lambda register: register('owned'), operation, cleanup, emit)
+        cleanup.assert_called_once_with('owned')
+        qualify.assert_called_once()
+        emit.assert_called_once()
+        record = json.loads(emit.call_args.args[0])
+        self.assertEqual(record['failure'], {'phase': 'identification', 'category': 'identity_mismatch'})
+        self.assertEqual(record['diagnostic_qualification'], 'unavailable')
+
+    def test_finalization_fallback_remains_bounded(self):
+        original = {'ok': True, 'failure': None, 'secondary': [], 'events': ['x' * protocol.MAX_RECORD],
+                    'cleanup': [cleanup_success('owned')], 'record_truncated': False}
+        body = protocol.encode_finalization_timeout(original)
+        self.assertLessEqual(len(body), protocol.MAX_RECORD)
+        record = json.loads(body)
+        self.assertEqual(record['failure'], {'phase': 'preparation', 'category': 'timeout'})
+        self.assertTrue(record['record_truncated'])
+        self.assertEqual(record['cleanup'], original['cleanup'])
+
     def test_malformed_diagnostic_cannot_mask_nested_failure(self):
         import settlement_candidates as candidates
         diagnostic = candidates.scan(b'', ({'pid': 42, 'uid': 501}, {'pid': 43, 'uid': 501},
