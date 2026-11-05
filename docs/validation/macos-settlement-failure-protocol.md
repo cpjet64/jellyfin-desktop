@@ -14,6 +14,13 @@ launch. The nested operation records already-observed command and identity
 facts and classifies failures without collecting new process information.
 The parent retains that nested record, attempts cleanup for registered groups,
 and emits the bounded record before propagating failure.
+The cleanup obligation is established before spawn and remains in a finalizer
+for registered groups. Its unconfirmed defaults cannot become a success.
+The private adapter attempts settlement, each outstanding descriptor close,
+and restoration of a known prior signal mask independently. A failed signal
+block is recorded as the fixed detail `mask_block_failed`; it cannot pass.
+These guarantees cover the tested catchable failure paths, not arbitrary
+asynchronous interruptions or hard termination.
 
 For each group the cleanup adapter reports whether cleanup was requested, its
 operation result, leader reap and independently observed group settlement.

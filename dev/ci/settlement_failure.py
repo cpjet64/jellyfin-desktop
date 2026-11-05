@@ -18,6 +18,7 @@ APIS = {'bsdinfo_before', 'bsdinfo_after', 'path_before', 'path_after'}
 IDENTITY_FIELDS = {'pid', 'uid', 'ppid', 'pgid', 'session', 'start_sec', 'start_usec',
                    'api_result', 'api_error', 'expected_size', 'returned_size'}
 COMMAND_FIELDS = {'exit', 'signal', 'elapsed_ms', 'output_bytes', 'retained_bytes', 'output_bound', 'truncated'}
+SECONDARY_DETAILS = ('fd_close_failed', 'mask_restore_failed', 'mask_block_failed')
 
 
 class Failure(Exception):
@@ -96,6 +97,22 @@ def failure_record(error, phase):
     return {'phase': phase, 'category': 'unknown'}
 
 
+def import_nested_frame(frame, observation):
+    if not isinstance(frame, dict) or not isinstance(frame.get('events'), list):
+        raise Failure('inventory', 'malformed_inventory')
+    for event in frame['events']:
+        observation.add(event)
+    if frame.get('ok') is not True:
+        failure, secondary = frame.get('failure'), frame.get('secondary', [])
+        if not isinstance(failure, dict) or not isinstance(secondary, list):
+            raise Failure('inventory', 'malformed_inventory')
+        allowed = [detail for detail in secondary[:8] if detail in SECONDARY_DETAILS]
+        raise Failure(failure.get('phase'), failure.get('category'), allowed)
+    if not isinstance(frame.get('value'), dict):
+        raise Failure('inventory', 'malformed_inventory')
+    return frame['value']
+
+
 def nested(operation, observation):
     """Retain the nested failure and observations without emitting raw exceptions."""
     try:
@@ -112,7 +129,7 @@ def nested(operation, observation):
     except BaseException as error:
         return {'ok': False, 'value': None, 'failure': failure_record(error, 'inventory'),
                 'secondary': [detail for detail in error.secondary
-                              if detail in ('fd_close_failed', 'mask_restore_failed')]
+                              if detail in SECONDARY_DETAILS]
                 if isinstance(error, Failure) else []}
 
 
@@ -126,7 +143,7 @@ def cleanup_record(cleanup, handle):
             raise ValueError('invalid cleanup result')
         errors = result.get('errors', [])
         if (not isinstance(errors, list) or len(errors) > 8 or
-                any(error not in ('fd_close_failed', 'mask_restore_failed') for error in errors)):
+                any(error not in SECONDARY_DETAILS for error in errors)):
             raise ValueError('invalid secondary cleanup errors')
         return dict(result)
     except BaseException:
@@ -152,19 +169,26 @@ def run(spawn, operation, cleanup, emit, clock=time.monotonic):
     started = clock()
     primary = None
     early_secondary = []
+    result = {'ok': False, 'value': None}
+    groups = []
     try:
-        spawn(observed.register_group)
-        result = nested(operation, observed)
-        primary = result['failure']
-        early_secondary = result.get('secondary', [])
-    except BaseException as error:
-        result = {'ok': False, 'value': None}
-        primary = failure_record(error, 'launch')
-        if isinstance(error, Failure):
-            early_secondary = error.secondary
-    groups = [cleanup_record(cleanup, handle) for handle in observed.groups]
+        try:
+            spawn(observed.register_group)
+            result = nested(operation, observed)
+            primary = result['failure']
+            early_secondary = result.get('secondary', [])
+        except BaseException as error:
+            if primary is None:
+                primary = failure_record(error, 'launch')
+            if isinstance(error, Failure):
+                early_secondary = error.secondary
+    finally:
+        for handle in observed.groups:
+            groups.append({'requested': None, 'operation': 'unknown', 'leader_reap': 'unknown',
+                           'group_settlement': 'unknown', 'error': 'cleanup_exception'})
+            groups[-1] = cleanup_record(cleanup, handle)
     secondary = [{'phase': 'cleanup', 'category': 'unknown', 'group': None, 'detail': detail}
-                 for detail in early_secondary if detail in ('fd_close_failed', 'mask_restore_failed')]
+                 for detail in early_secondary if detail in SECONDARY_DETAILS]
     secondary += [{'phase': 'cleanup', 'category': 'unknown', 'group': index}
                  for index, item in enumerate(groups)
                  if item.get('errors') or item['requested'] is not True or item['operation'] != 'success' or item['leader_reap'] != 'success'

@@ -28,6 +28,20 @@ def run_capture(operation, cleanup=cleanup_success, spawn=None):
 
 
 class SettlementFailureTests(unittest.TestCase):
+    def test_alarm_at_handoff_still_finalizes_registered_group(self):
+        class Interrupted(dict):
+            def __getitem__(self, key):
+                raise TimeoutError('alarm private detail')
+        output, cleaned = [], []
+        from unittest.mock import patch
+        with patch.object(protocol, 'nested', return_value=Interrupted()):
+            with self.assertRaises(protocol.ProtocolFailure):
+                protocol.run(lambda register: register('owned'), valid_operation,
+                             lambda handle: cleaned.append(handle) or cleanup_success(handle), output.append)
+        self.assertEqual(cleaned, ['owned'])
+        self.assertEqual(json.loads(output[0])['failure'], {'phase': 'launch', 'category': 'timeout'})
+        self.assertNotIn('private detail', output[0].decode())
+
     def test_nested_secondary_details_survive_run(self):
         def fail(_observation):
             raise protocol.Failure('inventory', 'timeout',
