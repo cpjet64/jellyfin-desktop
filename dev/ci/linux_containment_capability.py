@@ -16,6 +16,14 @@ class OverallDeadline(TimeoutError):
     pass
 
 
+class InspectionCleanupError(RuntimeError):
+    def __init__(self, primary, cleanup):
+        self.primary = primary
+        self.cleanup = tuple(cleanup)
+        super().__init__('inspection cleanup unconfirmed; primary=' + str(primary) +
+                         '; cleanup=' + ','.join(self.cleanup))
+
+
 def read(path, limit=65536):
     with open(path, encoding='utf-8') as stream:
         value = stream.read(limit + 1)
@@ -82,14 +90,17 @@ def command(args, deadline, env=None):
                     cleanup.append(type(error).__name__)
                     if fatal is None and isinstance(error, (KeyboardInterrupt, SystemExit, OverallDeadline)):
                         fatal = error
-        if cleanup:
-            result = {'error': (result or {}).get('error', 'cleanup failed'), 'cleanup_unproven': cleanup}
+    if cleanup:
+        primary = (result or {}).get('error')
+        if primary is None and result and result.get('exit'):
+            primary = 'exit=' + str(result['exit'])
+        if primary is None and fatal is not None:
+            primary = type(fatal).__name__
+        raise InspectionCleanupError(primary, cleanup) from fatal
     if fatal is not None:
         if hasattr(fatal, 'add_note'):
             if result and result.get('error') not in (None, 'cleanup failed'):
                 fatal.add_note('inspection failure: ' + result['error'])
-            if cleanup:
-                fatal.add_note('cleanup unproven: ' + ', '.join(cleanup))
         raise fatal
     return result
 

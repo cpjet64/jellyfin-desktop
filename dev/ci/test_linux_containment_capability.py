@@ -58,9 +58,10 @@ class CapabilityTest(unittest.TestCase):
         with patch.object(capability.time, 'monotonic', side_effect=[1, 1, 3]), \
                 patch.object(capability.subprocess, 'Popen', return_value=process), \
                 patch.object(capability.selectors, 'DefaultSelector', return_value=selector):
-            result = capability.command(['/fixed'], 4)
-            self.assertEqual(result['error'], 'TimeoutError')
-            self.assertEqual(result['cleanup_unproven'], ['OSError'])
+            with self.assertRaises(capability.InspectionCleanupError) as raised:
+                capability.command(['/fixed'], 4)
+            self.assertEqual(raised.exception.primary, 'TimeoutError')
+            self.assertEqual(raised.exception.cleanup, ('OSError',))
             process.wait.assert_called_once()
             process.stdout.close.assert_called_once()
             process.stderr.close.assert_called_once()
@@ -85,9 +86,74 @@ class CapabilityTest(unittest.TestCase):
         process.stdout.close.side_effect = KeyboardInterrupt()
         with patch.object(capability.time, 'monotonic', side_effect=[1, RuntimeError()]), \
                 patch.object(capability.subprocess, 'Popen', return_value=process):
-            with self.assertRaises(KeyboardInterrupt):
+            with self.assertRaises(capability.InspectionCleanupError) as raised:
                 capability.command(['/fixed'], 4)
+            self.assertEqual(raised.exception.primary, 'RuntimeError')
+            self.assertEqual(raised.exception.cleanup, ('KeyboardInterrupt', 'SystemExit', 'KeyboardInterrupt'))
             process.stderr.close.assert_called_once()
+
+    def test_original_value_error_survives_cleanup_cancellation(self):
+        process = Mock()
+        process.poll.return_value = None
+        process.kill.side_effect = KeyboardInterrupt()
+        with patch.object(capability.time, 'monotonic', side_effect=[1, ValueError('command')]), \
+                patch.object(capability.subprocess, 'Popen', return_value=process):
+            with self.assertRaises(capability.InspectionCleanupError) as raised:
+                capability.command(['/fixed'], 4)
+        self.assertEqual(raised.exception.primary, 'ValueError')
+        self.assertEqual(raised.exception.cleanup, ('KeyboardInterrupt',))
+        process.wait.assert_called_once()
+        process.stdout.close.assert_called_once()
+        process.stderr.close.assert_called_once()
+
+    def test_nonzero_exit_survives_cleanup_cancellation(self):
+        process = Mock()
+        process.poll.side_effect = KeyboardInterrupt()
+        process.wait.return_value = 19
+        selector = MagicMock()
+        selector.__enter__.return_value = selector
+        selector.get_map.return_value = {}
+        with patch.object(capability.time, 'monotonic', return_value=1), \
+                patch.object(capability.subprocess, 'Popen', return_value=process), \
+                patch.object(capability.selectors, 'DefaultSelector', return_value=selector):
+            with self.assertRaises(capability.InspectionCleanupError) as raised:
+                capability.command(['/fixed'], 4)
+        self.assertEqual(raised.exception.primary, 'exit=19')
+        self.assertEqual(raised.exception.cleanup, ('KeyboardInterrupt',))
+        self.assertIsInstance(raised.exception.__cause__, KeyboardInterrupt)
+        process.stdout.close.assert_called_once()
+        process.stderr.close.assert_called_once()
+
+    def test_uncertain_cleanup_stops_later_context_commands(self):
+        for failure in ('kill', 'wait', 'close'):
+            with self.subTest(failure=failure):
+                process = Mock()
+                process.poll.return_value = None
+                if failure == 'kill':
+                    process.kill.side_effect = OSError('kill')
+                elif failure == 'wait':
+                    process.wait.side_effect = capability.subprocess.TimeoutExpired('owned', 2)
+                else:
+                    process.stdout.close.side_effect = OSError('close')
+                selector = MagicMock()
+                selector.__enter__.return_value = selector
+                selector.get_map.return_value = {1: True}
+                with patch.object(capability.os, 'geteuid', return_value=100, create=True), \
+                     patch.object(capability.os, 'getuid', return_value=100, create=True), \
+                     patch.object(capability.os, 'getgid', return_value=100, create=True), \
+                     patch.object(capability.os, 'getegid', return_value=100, create=True), \
+                     patch.object(capability, 'read', side_effect=['0::/runner\n',
+                         '1 0 0:1 / /sys/fs/cgroup rw - cgroup2 cgroup rw']), \
+                     patch.object(capability, 'ancestors', return_value=[]), \
+                     patch.object(capability.time, 'monotonic', side_effect=[1, 1, 3]), \
+                     patch.object(capability.subprocess, 'Popen', return_value=process) as launch, \
+                     patch.object(capability.selectors, 'DefaultSelector', return_value=selector):
+                    with self.assertRaises(capability.InspectionCleanupError) as raised:
+                        capability.inspect_context(100, 4)
+                self.assertEqual(raised.exception.primary, 'TimeoutError')
+                self.assertEqual(len(raised.exception.cleanup), 1)
+                launch.assert_called_once()
+                process.stderr.close.assert_called_once()
 
     def test_overall_deadline_propagates_after_cleanup(self):
         process = Mock()

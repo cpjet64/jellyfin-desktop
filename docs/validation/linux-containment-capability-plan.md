@@ -30,13 +30,17 @@ it records identity, process/session, kernel, PID 1, systemd version and fixed
 unit/slice properties. Fixed system and user manager queries retain failures;
 the user query uses the existing context only. It does not read environment
 contents, create units, change delegation or cgroups, or signal fixtures.
+The `gitlab-runner.service` and `user-<uid>.slice` queries are reference
+observations, not identification of the QGA process's owning unit. Its owning
+unit and delegation remain unknown unless mapped from observed cgroup evidence.
 Commands are fixed to systemd --version, getfacl on the observed ancestor
 paths, and systemctl show for selected properties. Read and report limits,
 per-command two-second bounds, overall alarm, child cleanup, and fail-closed
 parsing limit the work; kernel stalls remain an external limitation.
 Cleanup begins under the same guard as child acquisition, but an unreturning
 Popen or interruption between Python bytecodes cannot establish absolute
-cleanup immunity. Ambiguous child settlement remains unproven.
+cleanup immunity. Cleanup uncertainty stops further queries and the inline
+identity drop; ambiguous child settlement remains unproven.
 
 Before submission, a fresh read-only cluster placement check must establish
 the exact target and name; no automatic fallback is permitted. Pin the
