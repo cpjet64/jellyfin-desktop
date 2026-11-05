@@ -22,6 +22,12 @@ struct DiagnosticFailureInjection
   static std::atomic<int> createCallResult;
   static std::atomic<int> render;
   static std::atomic<int> servicePendingCount;
+  static std::atomic<int> serviceEntryCount;
+  static std::atomic<std::int64_t> serviceEntryFirstNs, serviceEntryLastNs;
+  static std::atomic<std::uint64_t> serviceEntryFirstGeneration, serviceEntryLastGeneration;
+  static std::atomic<std::uintptr_t> serviceEntryFirstThread, serviceEntryLastThread;
+  static std::atomic<int> serviceUpdateCount;
+  static std::atomic<std::uint64_t> serviceUpdateFirstMask, serviceUpdateLastMask;
   static std::atomic<int> serviceSkipCount;
   static std::atomic<int> ordinaryPostFaultCount;
   static std::atomic<std::int64_t> servicePendingNs;

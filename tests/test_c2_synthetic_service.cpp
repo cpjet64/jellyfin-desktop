@@ -92,7 +92,58 @@ bool failedServiceAndDeadline()
   return true;
 }
 
+bool callbackPath()
+{
+  SyntheticFrameService service(20);
+  int updates = 0, skips = 0, result = 42;
+  std::uint64_t mask = 0;
+  auto run = [&](std::uint64_t generation, bool original, std::int64_t now) {
+    serviceSyntheticFrame([&] { return service.allow(generation, original, now); },
+      [&] { ++updates; return mask; },
+      [&] { ++skips; service.result(generation, result); }, 1);
+  };
+  run(20, true, 0);
+  CHECK(updates == 0 && skips == 0);
+  CHECK(service.arm(20, 100, 0));
+  CHECK(service.activate(20, true, -18, true, 1));
+  run(19, true, 2);
+  CHECK(updates == 0 && skips == 0);
+  run(20, true, 3);
+  CHECK(updates == 1 && skips == 0);
+  mask = 3;
+  result = -7;
+  run(20, true, 4);
+  CHECK(updates == 2 && skips == 1 && result == -7);
+  CHECK(!service.requestClose(20, true, 5));
+  CHECK(!service.retirementAllowed(20));
+  const auto telemetry = service.telemetry();
+  CHECK(telemetry.activationResult && telemetry.activationGeneration == 20);
+  CHECK(telemetry.activationSynthetic && telemetry.activationOriginal && telemetry.activationError == -18);
+  CHECK(telemetry.activationNow == 1 && telemetry.deadline == 100 && telemetry.allowCount == 4);
+  CHECK(telemetry.firstRejection == SyntheticFrameService::Rejection::Phase);
+  CHECK(telemetry.lastRejection == SyntheticFrameService::Rejection::Generation);
+  return true;
+}
+
+bool rejectedCallbackPaths()
+{
+  for (int scenario = 0; scenario < 2; ++scenario) {
+    SyntheticFrameService service(21);
+    CHECK(service.arm(21, 10, 0));
+    CHECK(service.activate(21, true, -18, true, 1));
+    int updates = 0, skips = 0;
+    serviceSyntheticFrame([&] { return service.allow(21, scenario != 0, scenario ? 10 : 2); },
+      [&] { ++updates; return 1; }, [&] { ++skips; }, 1);
+    CHECK(updates == 0 && skips == 0);
+    CHECK(!service.retirementAllowed(21));
+    CHECK(service.telemetry().lastRejection == (scenario ? SyntheticFrameService::Rejection::Deadline :
+                                                SyntheticFrameService::Rejection::Context));
+  }
+  return true;
+}
+
 int main()
 {
-  return syntheticAndOrdinaryClosed() && staleRealAndMissingContext() && failedServiceAndDeadline() ? 0 : 1;
+  return syntheticAndOrdinaryClosed() && staleRealAndMissingContext() && failedServiceAndDeadline() &&
+         callbackPath() && rejectedCallbackPaths() ? 0 : 1;
 }

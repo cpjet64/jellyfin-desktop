@@ -8,6 +8,15 @@ class SyntheticFrameService
 {
 public:
   enum class Phase { Never, Armed, Active, Closing, WorkerClosed, Closed, Failed };
+  enum class Rejection { None, Generation, Phase, Context, Deadline };
+  struct Telemetry {
+    std::uint64_t activationGeneration = 0;
+    std::int64_t activationNow = 0, deadline = 0;
+    int activationError = 0;
+    bool activationSynthetic = false, activationOriginal = false, activationResult = false;
+    std::uint64_t allowCount = 0;
+    Rejection firstRejection = Rejection::None, lastRejection = Rejection::None;
+  };
   explicit SyntheticFrameService(std::uint64_t generation) : generation_(generation) {}
 
   bool arm(std::uint64_t generation, std::int64_t deadline, std::int64_t now)
@@ -22,18 +31,41 @@ public:
   bool activate(std::uint64_t generation, bool synthetic, int error, bool original, std::int64_t now)
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (generation != generation_ || phase_ != Phase::Armed) return false;
-    if (!synthetic || error >= 0 || !original || now >= deadline_) { phase_ = Phase::Failed; return false; }
-    phase_ = Phase::Active;
-    return true;
+    telemetry_.activationGeneration = generation;
+    telemetry_.activationNow = now;
+    telemetry_.deadline = deadline_;
+    telemetry_.activationError = error;
+    telemetry_.activationSynthetic = synthetic;
+    telemetry_.activationOriginal = original;
+    bool accepted = false;
+    if (generation == generation_ && phase_ == Phase::Armed) {
+      if (!synthetic || error >= 0 || !original || now >= deadline_) phase_ = Phase::Failed;
+      else { phase_ = Phase::Active; accepted = true; }
+    }
+    telemetry_.activationResult = accepted;
+    return accepted;
   }
 
   bool allow(std::uint64_t generation, bool original, std::int64_t now)
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (generation != generation_ || phase_ != Phase::Active) return false;
-    if (!original || now >= deadline_) { phase_ = Phase::Failed; return false; }
-    return true;
+    Rejection reason = Rejection::None;
+    if (generation != generation_) reason = Rejection::Generation;
+    else if (phase_ != Phase::Active) reason = Rejection::Phase;
+    else if (!original) { reason = Rejection::Context; phase_ = Phase::Failed; }
+    else if (now >= deadline_) { reason = Rejection::Deadline; phase_ = Phase::Failed; }
+    ++telemetry_.allowCount;
+    if (reason != Rejection::None) {
+      if (telemetry_.firstRejection == Rejection::None) telemetry_.firstRejection = reason;
+      telemetry_.lastRejection = reason;
+    }
+    return reason == Rejection::None;
+  }
+
+  Telemetry telemetry()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return telemetry_;
   }
 
   void result(std::uint64_t generation, int code)
@@ -86,4 +118,14 @@ private:
   std::mutex mutex_;
   std::int64_t deadline_ = 0;
   Phase phase_ = Phase::Never;
+  Telemetry telemetry_;
 };
+
+// The callbacks contain the existing operations; each is invoked at most once.
+template<class Allow, class Update, class Skip>
+void serviceSyntheticFrame(Allow allow, Update update, Skip skip, std::uint64_t frameFlag)
+{
+  if (!allow()) return;
+  if (!(update() & frameFlag)) return;
+  skip();
+}

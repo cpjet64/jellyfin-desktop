@@ -404,13 +404,29 @@ diff --git a/src/mpvabstractitem_p.h b/src/mpvabstractitem_p.h
 diff --git a/src/mpvrenderer.cpp b/src/mpvrenderer.cpp
 --- a/src/mpvrenderer.cpp
 +++ b/src/mpvrenderer.cpp
-@@ -91,0 +92,21 @@
+@@ -91,0 +92,38 @@
 +static void servicePendingFrame(DiagnosticRenderOwner* owner)
 +{
++    const auto entryNs = DiagnosticFailureInjection::monotonicNanos();
++    const auto thread = reinterpret_cast<std::uintptr_t>(QThread::currentThreadId());
++    if (++DiagnosticFailureInjection::serviceEntryCount == 1) {
++        DiagnosticFailureInjection::serviceEntryFirstNs = entryNs;
++        DiagnosticFailureInjection::serviceEntryFirstGeneration = owner->generation;
++        DiagnosticFailureInjection::serviceEntryFirstThread = thread;
++    }
++    DiagnosticFailureInjection::serviceEntryLastNs = entryNs;
++    DiagnosticFailureInjection::serviceEntryLastGeneration = owner->generation;
++    DiagnosticFailureInjection::serviceEntryLastThread = thread;
 +    const bool original = owner->context && QThread::currentThread() == owner->originalThread &&
 +        QOpenGLContext::currentContext() == owner->originalContext;
-+    if (!owner->service.allow(owner->generation, original, DiagnosticFailureInjection::monotonicNanos())) return;
-+    if (!(mpv_render_context_update(owner->context) & MPV_RENDER_UPDATE_FRAME)) return;
++    serviceSyntheticFrame([&] { return owner->service.allow(owner->generation, original,
++        DiagnosticFailureInjection::monotonicNanos()); }, [&] {
++        const auto mask = mpv_render_context_update(owner->context);
++        if (++DiagnosticFailureInjection::serviceUpdateCount == 1)
++            DiagnosticFailureInjection::serviceUpdateFirstMask = mask;
++        DiagnosticFailureInjection::serviceUpdateLastMask = mask;
++        return mask;
++    }, [&] {
 +    ++DiagnosticFailureInjection::servicePendingCount;
 +    DiagnosticFailureInjection::servicePendingNs = DiagnosticFailureInjection::monotonicNanos();
 +    int skip = 1;
@@ -424,6 +440,7 @@ diff --git a/src/mpvrenderer.cpp b/src/mpvrenderer.cpp
 +    DiagnosticFailureInjection::serviceResult = result;
 +    DiagnosticFailureInjection::serviceSkipReturnedNs = DiagnosticFailureInjection::monotonicNanos();
 +    owner->service.result(owner->generation, result);
++    }, MPV_RENDER_UPDATE_FRAME);
 +}
 +
 @@ -95 +116,4 @@
