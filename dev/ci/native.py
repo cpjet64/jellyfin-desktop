@@ -28,7 +28,8 @@ HEADLESS_TESTS = ("test_systemcomponent", "test_log", "test_settings", "test_dis
                   "test_mpv_test_bootstrap_pure", "test_smtc_admission_model", "test_c2a_hold_gate", "test_c2_error_terminal",
                   "test_c2_fault_quiescence_policy", "test_c2_synthetic_service",
                   "test_c2_fault_restore_permission", "test_c2_fault_restore_frame", "test_c2_capture_observation",
-                  "test_c2_quiescence_observation", "test_player_intent_observation", "test_synchronous_stop_trace")
+                  "test_c2_quiescence_observation", "test_player_intent_observation", "test_synchronous_stop_trace",
+                  "test_synchronous_stop_events")
 LINUX_DESKTOP_TOOLS = frozenset(("xvfb-run", "xauth", "dbus-run-session", "glxinfo"))
 
 
