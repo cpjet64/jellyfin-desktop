@@ -18,6 +18,10 @@ class FixtureProducerCopyTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         shutil.copytree(MPVQT / 'src', self.root / 'external/mpvqt/src')
         shutil.copytree(ROOT / 'src/player', self.root / 'src/player')
+        for group, name in [('core', 'ComponentManager.cpp'), ('ui', 'WindowManager.cpp'),
+                            ('input', 'InputComponent.cpp'), ('power', 'PowerComponent.cpp')]:
+            (self.root / 'src' / group).mkdir(parents=True)
+            shutil.copy2(ROOT / 'src' / group / name, self.root / 'src' / group)
         (self.root / 'tests').mkdir()
         shutil.copy2(ROOT / 'tests/test_webclient_containment.cpp', self.root / 'tests')
         (self.root / 'patches/fixture-producer').mkdir(parents=True)
@@ -80,6 +84,23 @@ class FixtureProducerCopyTest(unittest.TestCase):
         self.assertIn('target_link_libraries(FixtureCore ${_fixture_links} FixtureMpvQt)', core)
         self.assertIn('set(_containment_core FixtureCore)', tests)
         self.assertIn('set(_containment_source "${_fixture_copy}/tests/test_webclient_containment.cpp")', tests)
+
+    def test_nonplayer_sources_are_pinned_copies(self):
+        result = self.configure()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for name in ['core/ComponentManager.cpp', 'ui/WindowManager.cpp',
+                     'input/InputComponent.cpp', 'power/PowerComponent.cpp']:
+            original = (self.root / 'src' / name).read_text(encoding='utf-8')
+            copied = (self.root / 'fixture-producer-copy' / name).read_text(encoding='utf-8')
+            self.assertEqual(original, copied)
+            self.assertIn('#include "player/PlayerComponent.h"', copied)
+            path = self.root / 'src' / name
+            path.write_text(original + '\n// mismatch\n', encoding='utf-8')
+            self.assertNotEqual(self.configure().returncode, 0)
+            path.write_text(original, encoding='utf-8')
+        core = (ROOT / 'src/CMakeLists.txt').read_text(encoding='utf-8')
+        self.assertIn('core/ComponentManager|ui/WindowManager|input/InputComponent|power/PowerComponent', core)
+        self.assertIn('set_source_files_properties("${copied}" PROPERTIES INCLUDE_DIRECTORIES "${original_dir}")', core)
 
     def test_missing_changed_and_incompatible_inputs_fail(self):
         missing = self.root / 'external/mpvqt/src/mpvcontroller.cpp'
