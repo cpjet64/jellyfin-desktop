@@ -338,3 +338,31 @@ index 7f624fb..8ab025a 100644
    QVERIFY(video->controller());
    mpv_handle* primary = video->controller()->mpv();
    QVERIFY(primary);
+diff --git a/core/ComponentManager.cpp b/core/ComponentManager.cpp
+index a4a2478..ef2615b 100644
+--- a/core/ComponentManager.cpp
++++ b/core/ComponentManager.cpp
+@@ -10 +10 @@
+-#include "player/PlayerComponent.h"
++#include "../player/PlayerComponent.h"
+diff --git a/input/InputComponent.cpp b/input/InputComponent.cpp
+index d424b88..0ab99d4 100644
+--- a/input/InputComponent.cpp
++++ b/input/InputComponent.cpp
+@@ -6 +6 @@
+-#include "player/PlayerComponent.h"
++#include "../player/PlayerComponent.h"
+diff --git a/power/PowerComponent.cpp b/power/PowerComponent.cpp
+index 31c4aed..afd9eb6 100644
+--- a/power/PowerComponent.cpp
++++ b/power/PowerComponent.cpp
+@@ -7 +7 @@
+-#include "player/PlayerComponent.h"
++#include "../player/PlayerComponent.h"
+diff --git a/ui/WindowManager.cpp b/ui/WindowManager.cpp
+index 8474ccd..287a45f 100644
+--- a/ui/WindowManager.cpp
++++ b/ui/WindowManager.cpp
+@@ -5 +5 @@
+-#include "player/PlayerComponent.h"
++#include "../player/PlayerComponent.h"

@@ -92,8 +92,12 @@ class FixtureProducerCopyTest(unittest.TestCase):
                      'input/InputComponent.cpp', 'power/PowerComponent.cpp']:
             original = (self.root / 'src' / name).read_text(encoding='utf-8')
             copied = (self.root / 'fixture-producer-copy' / name).read_text(encoding='utf-8')
-            self.assertEqual(original, copied)
-            self.assertIn('#include "player/PlayerComponent.h"', copied)
+            self.assertEqual(original.count('#include "player/PlayerComponent.h"'), 1)
+            self.assertEqual(copied, original.replace('#include "player/PlayerComponent.h"',
+                                                      '#include "../player/PlayerComponent.h"'))
+            resolved = (self.root / 'fixture-producer-copy' / name).parent / '../player/PlayerComponent.h'
+            self.assertEqual(resolved.resolve(), (self.root / 'fixture-producer-copy/player/PlayerComponent.h').resolve())
+            self.assertTrue(resolved.is_file())
             path = self.root / 'src' / name
             path.write_text(original + '\n// mismatch\n', encoding='utf-8')
             self.assertNotEqual(self.configure().returncode, 0)

@@ -52,6 +52,10 @@ set(_fixture_ui_inputs "WindowManager.cpp|d89e641bad2aa01bf0e2e2855e345a1b155ba7
 set(_fixture_input_inputs "InputComponent.cpp|1d8814277c3b901455cfcf25fc31400c78b4be8bcde9e36c09bc624ac7a9b823")
 set(_fixture_power_inputs "PowerComponent.cpp|0d1c354a121addab787d2390c586b1b762754534eee98f168a39aff854c5b3f5")
 set(_fixture_output_hashes
+  "core/ComponentManager.cpp|c9a15173b349ce7b54f97d9e6a42188b5e4a337128bf4503f2c718a266ed0725"
+  "ui/WindowManager.cpp|448aa4969ba5a0b5808ebbee82dc83543c6e0a9578e00145b791af49d664cf91"
+  "input/InputComponent.cpp|f9eb0ed51f3fb3e841d8afda27bc6d950a2d30020297fc74d815f7a0585165dd"
+  "power/PowerComponent.cpp|b9f34dc28a2e3ff0b475cdfbbb8840284a8c80012458a0854079ae8cd9fccdda"
   "mpvqt/mpvabstractitem.cpp|d8f6143b541b18474a383723d761f8ce0d0f3d7b0bc95d52d19ed3862f2f145f"
   "mpvqt/mpvabstractitem.h|1f6cef7948680f6d5923b721ba9ed471351ccff9099f66fc708ffff7a5c73613"
   "mpvqt/mpvcontroller.cpp|46c3634917f6cdd749da39343512d21c9746dfe5c1383006c76f02b418e631d0"
@@ -96,11 +100,11 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_fixture_patch
 file(READ "${_fixture_patch}" _fixture_patch_contents)
 string(REPLACE "\r\n" "\n" _fixture_patch_contents "${_fixture_patch_contents}")
 string(SHA256 _fixture_patch_hash "${_fixture_patch_contents}")
-if(NOT _fixture_patch_hash STREQUAL "feecc9c7bb8280c2554474b053766bfbd48f9032e9dbb83935906766352e1492")
+if(NOT _fixture_patch_hash STREQUAL "51470cdf3beaffe2e5458dcccfa28016633ad21c35fb5947d3142ecb2a01d1b0")
   message(FATAL_ERROR "Fixture patch hash mismatch")
 endif()
 execute_process(COMMAND "${CMAKE_COMMAND}" -E env "GIT_CEILING_DIRECTORIES=${CMAKE_BINARY_DIR}"
-  "${GIT_EXECUTABLE}" apply --no-index --whitespace=nowarn "${_fixture_patch}"
+  "${GIT_EXECUTABLE}" apply --no-index --unidiff-zero --whitespace=nowarn "${_fixture_patch}"
   WORKING_DIRECTORY "${_fixture_copy}" RESULT_VARIABLE result ERROR_VARIABLE error)
 if(NOT result EQUAL 0)
   message(FATAL_ERROR "Fixture source patch failed: ${error}")
@@ -120,6 +124,10 @@ endforeach()
 # Every unpatched copied file must also remain byte-identical to its input.
 set(_fixture_changed_mpv mpvabstractitem.cpp mpvabstractitem.h mpvcontroller.cpp mpvcontroller.h)
 set(_fixture_changed_player MpvVideoItem.cpp MpvVideoItem.h PlayerMpvEvents.cpp)
+set(_fixture_changed_core ComponentManager.cpp)
+set(_fixture_changed_ui WindowManager.cpp)
+set(_fixture_changed_input InputComponent.cpp)
+set(_fixture_changed_power PowerComponent.cpp)
 foreach(group IN ITEMS mpv player core ui input power)
   foreach(entry IN LISTS _fixture_${group}_inputs)
     string(REPLACE "|" ";" pair "${entry}")
