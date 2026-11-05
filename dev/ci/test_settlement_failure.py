@@ -28,6 +28,78 @@ def run_capture(operation, cleanup=cleanup_success, spawn=None):
 
 
 class SettlementFailureTests(unittest.TestCase):
+    def test_malformed_diagnostic_cannot_mask_nested_failure(self):
+        import settlement_candidates as candidates
+        diagnostic = candidates.scan(b'', ({'pid': 42, 'uid': 501}, {'pid': 43, 'uid': 501},
+                                           {'pid': 44, 'uid': 501}), True)
+        diagnostic['roles']['command'].update(count=1, summaries=[{}], excess_count=0,
+                                               classification='uid_filter_match')
+        self.assertEqual(candidates.qualification(diagnostic), 'unavailable')
+        frame = {'ok': False, 'value': None, 'events': [], 'candidate_diagnostic': diagnostic,
+                 'failure': {'phase': 'inventory', 'category': 'timeout'}}
+        record, _ = run_capture(lambda obs: protocol.import_nested_frame(frame, obs))
+        self.assertEqual(record['failure'], frame['failure'])
+        self.assertEqual(record['diagnostic_qualification'], 'unavailable')
+
+    def test_nested_diagnostic_extra_text_is_not_reemitted(self):
+        import settlement_candidates as candidates
+        diagnostic = candidates.scan(b'', ({'pid': 42, 'uid': 501}, {'pid': 43, 'uid': 501},
+                                           {'pid': 44, 'uid': 501}), True)
+        diagnostic['roles']['command']['private'] = 'unrelated secret text'
+        frame = {'ok': False, 'value': None, 'events': [], 'candidate_diagnostic': diagnostic,
+                 'failure': {'phase': 'inventory', 'category': 'timeout'}}
+        record, _ = run_capture(lambda obs: protocol.import_nested_frame(frame, obs))
+        self.assertEqual(record['failure'], frame['failure'])
+        self.assertEqual(record['diagnostic_qualification'], 'unavailable')
+        self.assertNotIn('unrelated secret text', json.dumps(record))
+
+    def test_diagnostic_timeout_after_failure_preserves_primary(self):
+        import settlement_candidates as candidates
+        from unittest.mock import patch
+        frame = {'ok': False, 'value': None, 'events': [], 'candidate_diagnostic': {},
+                 'failure': {'phase': 'identification', 'category': 'identity_mismatch'}}
+        with patch.object(candidates, 'qualification', side_effect=TimeoutError('deadline')):
+            record, _ = run_capture(lambda obs: protocol.import_nested_frame(frame, obs))
+        self.assertEqual(record['failure'], frame['failure'])
+        self.assertEqual(record['diagnostic_qualification'], 'unavailable')
+
+    def test_diagnostic_timeout_on_successful_frame_is_cancellation(self):
+        import settlement_candidates as candidates
+        from unittest.mock import patch
+        frame = {'ok': True, 'value': {}, 'events': [], 'candidate_diagnostic': {}}
+        with patch.object(candidates, 'qualification', side_effect=TimeoutError('deadline')):
+            record, _ = run_capture(lambda obs: protocol.import_nested_frame(frame, obs))
+        self.assertEqual(record['failure'], {'phase': 'inventory', 'category': 'timeout'})
+    def test_candidate_slot_does_not_consume_original_event_quota(self):
+        import settlement_candidates as candidates
+        expected = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42,
+                    'start_sec': 1, 'start_usec': 2}
+        identities = (dict(expected, pid=42), expected, dict(expected, pid=44))
+        def operation(observation):
+            for _ in range(protocol.MAX_EVENTS - 1):
+                observation.add({'kind': 'padding'})
+            candidates.record(observation, b'', identities, True, protocol.validate_inventory_identities)
+            protocol.compare_owned_row('command', expected, dict(expected, ppid=99), 1, observation, None, None)
+        record, _ = run_capture(operation)
+        self.assertEqual(record['failure'], {'phase': 'identification', 'category': 'identity_mismatch'})
+        self.assertEqual(len(record['events']), protocol.MAX_EVENTS)
+        self.assertEqual(record['diagnostic_qualification'], 'complete')
+
+    def test_diagnostic_never_displaces_existing_record_at_limit(self):
+        import settlement_candidates as candidates
+        identity = ({'pid': 42, 'uid': 501}, {'pid': 43, 'uid': 501}, {'pid': 44, 'uid': 501})
+        diagnostic = candidates.scan(b'', identity, True)
+        original = {'ok': False, 'failure': {'phase': 'inventory', 'category': 'timeout'},
+                    'secondary': [], 'events': [''], 'cleanup': [], 'record_truncated': False}
+        size = len(json.dumps(original, sort_keys=True, separators=(',', ':')).encode())
+        original['events'][0] = 'x' * (protocol.MAX_RECORD - size - 5)
+        body = protocol.encode(dict(original, candidate_diagnostic=diagnostic))
+        self.assertEqual(json.loads(body), original)
+        self.assertEqual(candidates.qualify_records([json.loads(body)]), 'FAIL')
+        original['events'][0] = 'x' * (protocol.MAX_RECORD - size - 100)
+        emitted = json.loads(protocol.encode(dict(original, candidate_diagnostic=diagnostic)))
+        self.assertEqual(emitted.pop('diagnostic_qualification'), 'omitted')
+        self.assertEqual(emitted, original)
     def test_inventory_registration_requires_three_distinct_valid_identities(self):
         valid = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42,
                  'start_sec': 1, 'start_usec': 2}

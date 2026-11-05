@@ -6,6 +6,7 @@ The caller supplies existing operations and a protected response-channel emitter
 import json
 import re
 import time
+import settlement_candidates as candidate_diagnostics
 
 MAX_EVENTS = 4096
 MAX_GROUPS = 8
@@ -55,6 +56,7 @@ class Observation:
         self.events = []
         self.groups = []
         self.qualification_failure = None
+        self.candidate_diagnostic = None
 
     def add(self, event):
         if len(self.events) >= MAX_EVENTS:
@@ -288,6 +290,17 @@ def import_nested_frame(frame, observation):
         raise Failure('inventory', 'malformed_inventory')
     for event in frame['events']:
         observation.add(event)
+    diagnostic = frame.get('candidate_diagnostic')
+    try:
+        qualified = candidate_diagnostics.qualification(diagnostic)
+    except TimeoutError:
+        if frame.get('ok') is True:
+            raise
+        qualified = 'unavailable'
+    if qualified != 'unavailable':
+        observation.candidate_diagnostic = diagnostic
+    elif diagnostic is not None:
+        observation.candidate_diagnostic = {'kind': 'inventory_candidates', 'diagnostic': 'unavailable'}
     if frame.get('ok') is not True:
         failure, secondary = frame.get('failure'), frame.get('secondary', [])
         if not isinstance(failure, dict) or not isinstance(secondary, list):
@@ -299,7 +312,7 @@ def import_nested_frame(frame, observation):
     return frame['value']
 
 
-def nested(operation, observation):
+def nested_outcome(operation, observation):
     """Retain the nested failure and observations without emitting raw exceptions."""
     try:
         value = operation(observation)
@@ -317,6 +330,12 @@ def nested(operation, observation):
                 'secondary': [detail for detail in error.secondary
                               if detail in SECONDARY_DETAILS]
                 if isinstance(error, Failure) else []}
+
+
+def nested(operation, observation):
+    result = nested_outcome(operation, observation)
+    result['candidate_diagnostic'] = observation.candidate_diagnostic
+    return result
 
 
 def cleanup_record(cleanup, handle):
@@ -339,8 +358,27 @@ def cleanup_record(cleanup, handle):
 
 def encode(record):
     """No truncation: replace oversized observations with an explicit failure."""
-    body = json.dumps(record, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    original = dict(record)
+    diagnostic = original.pop('candidate_diagnostic', None)
+    body = json.dumps(original, sort_keys=True, separators=(',', ':')).encode('utf-8')
     if len(body) <= MAX_RECORD:
+        try:
+            qualified = candidate_diagnostics.qualification(diagnostic)
+        except TimeoutError:
+            if original.get('failure') is None:
+                raise
+            qualified = 'unavailable'
+        enriched = dict(original, diagnostic_qualification=qualified)
+        if qualified != 'missing':
+            enriched['candidate_diagnostic'] = ({'kind': 'inventory_candidates', 'diagnostic': 'unavailable'}
+                                                if qualified == 'unavailable' else diagnostic)
+        proposed = json.dumps(enriched, sort_keys=True, separators=(',', ':')).encode('utf-8')
+        if len(proposed) <= MAX_RECORD:
+            return proposed
+        proposed = json.dumps(dict(original, diagnostic_qualification='omitted'),
+                              sort_keys=True, separators=(',', ':')).encode('utf-8')
+        if len(proposed) <= MAX_RECORD:
+            return proposed
         return body
     bounded = {'ok': False, 'failure': record.get('failure') or
                {'phase': 'preparation', 'category': 'output_bound'},
@@ -386,7 +424,7 @@ def run(spawn, operation, cleanup, emit, clock=time.monotonic):
     elapsed = max(0, int((clock() - started) * 1000))
     record = {'ok': primary is None, 'failure': primary, 'secondary': secondary,
               'events': observed.events, 'cleanup': groups, 'elapsed_ms': elapsed,
-              'record_truncated': False}
+              'record_truncated': False, 'candidate_diagnostic': observed.candidate_diagnostic}
     body = encode(record)
     decoded = json.loads(body)
     try:

@@ -21,7 +21,7 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(result['sha256'], hashlib.sha256(body).hexdigest())
         self.assertTrue(result['scan_complete'])
         self.assertEqual([result['roles'][name]['classification'] for name in candidates.ROLES],
-                         ['matching', 'excluded', 'absent'])
+                         ['uid_filter_match', 'uid_filter_excluded', 'absent'])
         self.assertEqual(result['roles']['command']['summaries'][0]['uid'], 502)
 
     def test_missing_malformed_and_shape_fail_closed(self):
@@ -50,7 +50,7 @@ class CandidateTests(unittest.TestCase):
         body = '٤٣\u00a0 1 2 0 ٥٠١ Mon Jan 01 00:00:00 2024 private\n'.encode('utf-8')
         result = candidates.scan(body, IDENTITIES, True)
         self.assertTrue(result['scan_complete'])
-        self.assertEqual(result['roles']['command']['classification'], 'matching')
+        self.assertEqual(result['roles']['command']['classification'], 'uid_filter_match')
         self.assertEqual(result['roles']['command']['summaries'][0]['uid'], 501)
         self.assertEqual(result['sha256'], hashlib.sha256(body).hexdigest())
 
@@ -65,7 +65,7 @@ class CandidateTests(unittest.TestCase):
         result = candidates.scan(row(999, suffix='private path and command text here') + row(43), IDENTITIES, True)
         self.assertNotIn('private', str(result))
         self.assertNotIn('999', str(result))
-        self.assertEqual(result['roles']['command']['classification'], 'matching')
+        self.assertEqual(result['roles']['command']['classification'], 'uid_filter_match')
 
     def test_invalid_role_identity_is_rejected(self):
         for identities in (({'pid': True, 'uid': 501}, *IDENTITIES[1:]),
@@ -76,11 +76,29 @@ class CandidateTests(unittest.TestCase):
     def test_record_separates_diagnostic_errors_but_not_deadlines(self):
         observation = Mock()
         candidates.record(observation, b'', IDENTITIES, True, Mock(side_effect=ValueError('private')))
-        observation.add.assert_called_once_with({'kind': 'inventory_candidates', 'diagnostic': 'unavailable'})
+        self.assertEqual(observation.candidate_diagnostic, {'kind': 'inventory_candidates', 'diagnostic': 'unavailable'})
         with self.assertRaises(TimeoutError):
             candidates.record(observation, b'', IDENTITIES, True, Mock(side_effect=TimeoutError('deadline')))
         with self.assertRaises(KeyboardInterrupt):
             candidates.record(observation, b'', IDENTITIES, True, Mock(side_effect=KeyboardInterrupt()))
+
+    def test_labels_describe_uid_filter_only_not_full_parser(self):
+        bad_parent = b'43 bad-parent 2 0 502 Mon Jan 01 00:00:00 2024 private\n'
+        bad_start = b'43 1 2 0 501 bad date values here now private\n'
+        self.assertEqual(candidates.scan(bad_parent, IDENTITIES, True)['roles']['command']['classification'],
+                         'uid_filter_excluded')
+        self.assertEqual(candidates.scan(bad_start, IDENTITIES, True)['roles']['command']['classification'],
+                         'uid_filter_match')
+
+    def test_qualification_distinguishes_absent_role_from_absent_diagnostic(self):
+        diagnostic = candidates.scan(b'', IDENTITIES, True)
+        self.assertEqual(candidates.qualification(diagnostic), 'complete')
+        self.assertEqual(candidates.qualify_records([]), 'FAIL')
+        self.assertEqual(candidates.qualify_records([{'record_truncated': False, 'candidate_diagnostic': diagnostic,
+                                                       'diagnostic_qualification': 'complete'}]), 'PASS')
+        diagnostic['scan_complete'] = False
+        self.assertEqual(candidates.qualify_records([{'record_truncated': False, 'candidate_diagnostic': diagnostic,
+                                                       'diagnostic_qualification': 'complete'}]), 'FAIL')
 
 
 if __name__ == '__main__':
