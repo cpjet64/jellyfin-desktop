@@ -4,6 +4,17 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+add_executable(test_player_intent_observation test_player_intent_observation.cpp)
+target_include_directories(test_player_intent_observation PRIVATE ${CMAKE_SOURCE_DIR}/src/player)
+target_compile_features(test_player_intent_observation PRIVATE cxx_std_17)
+add_test(NAME test_player_intent_observation COMMAND test_player_intent_observation)
+set_tests_properties(test_player_intent_observation PROPERTIES TIMEOUT 60)
+
+add_executable(test_synchronous_stop_trace test_synchronous_stop_trace.cpp)
+target_link_libraries(test_synchronous_stop_trace PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME test_synchronous_stop_trace COMMAND test_synchronous_stop_trace)
+set_tests_properties(test_synchronous_stop_trace PROPERTIES TIMEOUT 60)
+
 add_executable(test_c2a_hold_gate test_c2a_hold_gate.cpp)
 target_compile_features(test_c2a_hold_gate PRIVATE cxx_std_17)
 target_link_libraries(test_c2a_hold_gate PRIVATE Qt6::Core Qt6::Test Threads::Threads)

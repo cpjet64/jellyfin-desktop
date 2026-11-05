@@ -103,6 +103,10 @@ static QString jsonString(const QString& value)
   return QString::fromUtf8(data.mid(1, data.size() - 2));
 }
 
+#ifdef PLAYER_INTENT_DIAGNOSTIC_ONLY
+#include "synchronous_stop_case.h"
+#endif
+
 class TestWebClientContainment : public QObject
 {
   Q_OBJECT
@@ -253,7 +257,9 @@ void TestWebClientContainment::containment()
   const QString scenario = qEnvironmentVariable("RECOVERY_SCENARIO");
   const QString media = qEnvironmentVariable("RECOVERY_MEDIA");
   const QString evidence = qEnvironmentVariable("RECOVERY_EVIDENCE_DIR");
-  QVERIFY(scenario == "playing" || scenario == "paused" || scenario == "held-hook");
+  QVERIFY(scenario == "playing" || scenario == "paused" || scenario == "held-hook" || scenario == "synchronous-stop");
+  if (scenario == "synchronous-stop")
+    QFAIL("HELD: windowed render, synchronous controls and teardown require independent qualification");
   qInfo().noquote() << "RECOVERY_SCENARIO=" + scenario;
   QVERIFY(QFileInfo::exists(media));
   QVERIFY(QFileInfo(evidence).isDir());
@@ -293,11 +299,23 @@ void TestWebClientContainment::containment()
   QVERIFY(!QTest::currentTestFailed());
   checkProxies(root);
   QVERIFY(!QTest::currentTestFailed());
+  if (scenario == "synchronous-stop") {
+#ifdef PLAYER_INTENT_DIAGNOSTIC_ONLY
+    runSynchronousStop(root, view, player, primary, media, evidence);
+#else
+    QFAIL("synchronous-stop requires the diagnostic observer build");
+#endif
+    return;
+  }
   exercisePlayback(root, view, primary, scenario, media, evidence);
 }
 
 int main(int argc, char** argv)
 {
+  if (qEnvironmentVariable("RECOVERY_SCENARIO") == "synchronous-stop") {
+    qCritical("HELD: windowed render, synchronous controls and teardown require independent qualification");
+    return 1;
+  }
   QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
   QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
   QtWebEngineQuick::initialize();
