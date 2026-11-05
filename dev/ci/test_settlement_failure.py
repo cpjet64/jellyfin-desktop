@@ -63,6 +63,29 @@ class SettlementFailureTests(unittest.TestCase):
             protocol.parse_inventory_row('unparseable ' + ' '.join(base[1:]), (identity,) * 3, observation)
         self.assertEqual(observation.events, [])
 
+    def test_parse_failure_never_records_untrusted_tokens(self):
+        identity = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42, 'start_sec': 1}
+        observation = protocol.Observation()
+        with self.assertRaises(protocol.Failure) as error:
+            protocol.parse_inventory_row('43 42 42 malicious-secret 501 hostile payload x y z command',
+                                         (identity,) * 3, observation)
+        self.assertEqual(error.exception.category, 'malformed_inventory')
+        body = json.dumps(observation.events)
+        self.assertNotIn('malicious-secret', body)
+        self.assertNotIn('hostile', body)
+        fields = {item['field']: item for item in observation.events[0]['fields']}
+        self.assertEqual(fields['session']['state'], 'unknown')
+        self.assertIsNone(fields['session']['observed'])
+        self.assertEqual(fields['session']['observed_type'], 'unparseable_text')
+        self.assertEqual(fields['session']['observed_length'], len('malicious-secret'))
+        self.assertIsNone(fields['start_sec']['observed'])
+        observation = protocol.Observation()
+        with self.assertRaises(protocol.Failure):
+            protocol.parse_inventory_row('43 42 42 abc 501 Mon Jan 01 12:00:00 2024 command',
+                                         (identity,) * 3, observation)
+        fields = {item['field']: item for item in observation.events[0]['fields']}
+        self.assertEqual(fields['start_sec']['observed'], 'Mon Jan 01 12:00:00 2024')
+
     def test_alarm_at_handoff_still_finalizes_registered_group(self):
         class Interrupted(dict):
             def __getitem__(self, key):

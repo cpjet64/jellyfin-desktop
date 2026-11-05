@@ -4,6 +4,7 @@ This module performs no process, filesystem, network, or guest operations.
 The caller supplies existing operations and a protected response-channel emitter.
 """
 import json
+import re
 import time
 
 MAX_EVENTS = 4096
@@ -133,16 +134,33 @@ def inventory_parse_failure(fields, identities, observation, problem):
     if match is None:
         return
     role_index, expected = match
-    observed = {}
+    observed, redacted = {}, {}
     for index, name in enumerate(('pid', 'ppid', 'pgid', 'session', 'uid')):
         if index < len(fields):
             try:
-                observed[name] = int(fields[index])
+                value = int(fields[index])
+                if integer(value):
+                    observed[name] = value
+                else:
+                    redacted[name] = ('out_of_range_integer', len(fields[index]))
             except ValueError:
-                observed[name] = fields[index]
+                redacted[name] = ('unparseable_text', len(fields[index]))
     if len(fields) > 5:
-        observed['start_sec'] = ' '.join(fields[5:10])
+        start = ' '.join(fields[5:10])
+        pattern = (r'(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) '
+                   r'\d{1,2} \d{2}:\d{2}:\d{2} \d{4}')
+        if re.fullmatch(pattern, start, flags=re.ASCII):
+            observed['start_sec'] = start
+        else:
+            redacted['start_sec'] = ('unparseable_text', len(start))
     event = identity_comparison(expected, observed, problem)
+    for item in event['fields']:
+        if item['field'] in redacted:
+            item['observed_type'], item['observed_length'] = redacted[item['field']]
+            if item['field'] == 'start_sec':
+                item['observed_source'], item['observed_unit'] = 'ps_lstart_raw', 'text'
+            else:
+                item['observed_unit'] = 'text'
     event['role'] = ('own_leader', 'own_command', 'own_probe')[role_index]
     observation.add(event)
 

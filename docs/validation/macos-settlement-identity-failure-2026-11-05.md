@@ -43,8 +43,10 @@ PID, parent, UID, process-group, session and normalized-start order. Each field
 has a fixed match, mismatch, unknown or not-evaluated state, plus available
 expected and observed values and their sources and units. A mismatch leaves
 later comparisons not evaluated. Parsing failures are identified separately
-and retain available own-row values without changing the parser's rules. The
-protected response remains subject to the existing record and event bounds.
+without changing the parser's rules. Their records retain bounded numeric
+values and strictly formatted timestamps; malformed or out-of-range tokens
+are represented by type and length rather than copied text. The protected
+response remains subject to the existing record and event bounds.
 
 Association still requires the existing matching PID and runner UID filter.
 A missing or unassociated own row is recorded as not evaluated; it is not
