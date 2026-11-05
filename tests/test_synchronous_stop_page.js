@@ -26,7 +26,7 @@ function harness() {
         createElement() { return { classList: { add() {} }, style: {} }; } };
     const window = { fixturePlayer: bridge, addEventListener(name, fn) { listeners[name] = fn; } };
     const context = vm.createContext({ window, document, console, jmpInfo: { userAgent: 'fixture' } });
-    for (const file of ['native/playbackErrorPrompt.js', 'native/mpvVideoPlayer.js', 'tests/synchronous_stop_page.js']) {
+    for (const file of ['native/PlaybackIntent.js', 'native/PlaybackStreams.js', 'native/playbackErrorPrompt.js', 'native/mpvVideoPlayer.js', 'tests/synchronous_stop_page.js']) {
         vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context);
     }
     return { window, calls, callbacks, listeners, signals };

@@ -1,17 +1,15 @@
 (function() {
     class PlaybackErrorPrompt {
-        constructor(player, confirm) {
+        constructor(player, confirm, intent) {
             this.player = player;
             this.confirm = confirm;
-            this.intentRevision = 0;
-            this.promptRevision = 0;
+            this.intent = intent;
         }
 
-        invalidate() { ++this.intentRevision; }
+        invalidate() { this.intent.invalidatePrompt(); }
 
         async handle(error) {
-            const intent = this.intentRevision;
-            const prompt = ++this.promptRevision;
+            const prompt = this.intent.beginPrompt();
             this.player.removeMediaDialog();
             console.error(`media error: ${error}`);
             const errorData = { type: 'mediadecodeerror' };
@@ -26,7 +24,7 @@
             } catch (ex) {
                 errorData.streamInfo = { mediaSource: { SupportsTranscoding: false } };
             }
-            if (intent === this.intentRevision && prompt === this.promptRevision) {
+            if (this.intent.isCurrentPrompt(prompt)) {
                 this.player.events.trigger(this.player, 'error', [errorData]);
             }
         }

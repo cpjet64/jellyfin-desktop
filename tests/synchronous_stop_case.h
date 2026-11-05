@@ -128,7 +128,7 @@ static void evaluateFixture(QObject* root, const QString& code)
 static void installDispatchPage(QObject* root, SynchronousStopTrace& trace)
 {
   const QString base = QStringLiteral(TEST_SOURCE_DIR "/../native/");
-  const QStringList files{base + "playbackErrorPrompt.js", base + "mpvVideoPlayer.js",
+  const QStringList files{base + "PlaybackIntent.js", base + "PlaybackStreams.js", base + "playbackErrorPrompt.js", base + "mpvVideoPlayer.js",
                           QStringLiteral(TEST_SOURCE_DIR "/synchronous_stop_page.js")};
   QJsonArray hashes;
   for (const auto& path : files) {

@@ -18,6 +18,7 @@
             this.globalize = globalize;
             this.appHost = appHost;
             this.appSettings = appSettings;
+            this._intent = new window._PlaybackIntent();
 
             this.setTransparency = dashboard.default.setBackdropTransparency.bind(dashboard);
 
@@ -122,7 +123,7 @@
              * @type {Array<{start: number, end: number}>}
              */
             this._bufferedRanges = [];
-            this._errorPrompt = new window._PlaybackErrorPrompt(this, confirm);
+            this._errorPrompt = new window._PlaybackErrorPrompt(this, confirm, this._intent);
 
             /**
              * @private
@@ -220,6 +221,7 @@
         }
 
         async play(options) {
+            const request = this._intent.play();
             this._errorPrompt.invalidate();
             this._started = false;
             this._timeUpdated = false;
@@ -231,7 +233,7 @@
                 this.loading.show();
             }
             const elem = this.createMediaElement(options);
-            return await this.setCurrentSrc(elem, options);
+            return await this.setCurrentSrc(elem, options, request);
         }
 
         getSavedVolume() {
@@ -252,36 +254,7 @@
         /**
          * @private
          */
-        getStreamByIndex(mediaStreams, jellyIndex) {
-            for (const stream of mediaStreams) {
-                if (stream.Index == jellyIndex) {
-                    return stream;
-                }
-            }
-            return null;
-        }
-
-        /**
-         * @private
-         */
-        getRelativeIndexByType(mediaStreams, jellyIndex, streamType) {
-            let relIndex = 1;
-            for (const source of mediaStreams) {
-                if (source.Type != streamType || source.IsExternal) {
-                    continue;
-                }
-                if (source.Index == jellyIndex) {
-                    return relIndex;
-                }
-                relIndex += 1;
-            }
-            return null;
-        }
-
-        /**
-         * @private
-         */
-        setCurrentSrc(elem, options) {
+        setCurrentSrc(elem, options, request) {
             return new Promise((resolve) => {
                 const val = options.url;
                 this._currentSrc = val;
@@ -310,18 +283,18 @@
                 // audio stream, so it is always mpv track 1.
                 const isTranscode = options.playMethod === 'Transcode';
                 const audioRelIndex = !isTranscode && this._audioTrackIndexToSetOnPlaying != null && this._audioTrackIndexToSetOnPlaying >= 0
-                    ? this.getRelativeIndexByType(streams, this._audioTrackIndexToSetOnPlaying, 'Audio')
+                    ? window._PlaybackStreams.relativeIndex(streams, this._audioTrackIndexToSetOnPlaying, 'Audio')
                     : 1;
 
                 // Handle subtitle - check for external first
                 let subtitleParam;
                 if (this._subtitleTrackIndexToSetOnPlaying >= 0) {
-                    const subStream = this.getStreamByIndex(streams, this._subtitleTrackIndexToSetOnPlaying);
+                    const subStream = window._PlaybackStreams.byIndex(streams, this._subtitleTrackIndexToSetOnPlaying);
                     if (subStream && subStream.DeliveryMethod === 'External' && subStream.DeliveryUrl) {
                         subtitleParam = '#,' + subStream.DeliveryUrl;
                         console.log('[MPV] External subtitle URL:', subStream.DeliveryUrl);
                     } else {
-                        const relIndex = this.getRelativeIndexByType(streams, this._subtitleTrackIndexToSetOnPlaying, 'Subtitle');
+                        const relIndex = window._PlaybackStreams.relativeIndex(streams, this._subtitleTrackIndexToSetOnPlaying, 'Subtitle');
                         subtitleParam = relIndex != null ? relIndex : -1;
                         console.log('[MPV] Mapped subtitle index:', this._subtitleTrackIndexToSetOnPlaying, '->', subtitleParam);
                     }
@@ -336,11 +309,15 @@
                     streamdata,
                     audioRelIndex,
                     subtitleParam,
-                    resolve);
+                    result => {
+                        this._intent.loadCallback(request);
+                        resolve(result);
+                    });
             });
         }
 
         setSubtitleStreamIndex(index) {
+            this._intent.capture('subtitle', 'web_track_unqualified');
             console.log('[MPV] setSubtitleStreamIndex called with index:', index);
             this._subtitleTrackIndexToSetOnPlaying = index;
 
@@ -350,7 +327,7 @@
             }
 
             const streams = this._currentPlayOptions?.mediaSource?.MediaStreams || [];
-            const stream = this.getStreamByIndex(streams, index);
+            const stream = window._PlaybackStreams.byIndex(streams, index);
 
             // Handle external subtitle URL
             if (stream && stream.DeliveryMethod === 'External' && stream.DeliveryUrl) {
@@ -360,7 +337,7 @@
             }
 
             // Handle embedded subtitle via relative index
-            const relIndex = this.getRelativeIndexByType(streams, index, 'Subtitle');
+            const relIndex = window._PlaybackStreams.relativeIndex(streams, index, 'Subtitle');
             console.log('[MPV] Mapped subtitle index:', index, '->', relIndex);
             window.api.player.setSubtitleStream(relIndex != null ? relIndex : -1);
         }
@@ -417,13 +394,14 @@
         }
 
         setAudioStreamIndex(index) {
+            this._intent.capture('audio', 'web_track_unqualified');
             console.log('[MPV] setAudioStreamIndex called with index:', index);
             this._audioTrackIndexToSetOnPlaying = index;
 
             const playOptions = this._currentPlayOptions;
             const streams = playOptions?.mediaSource?.MediaStreams || [];
             const isTranscode = playOptions?.playMethod === 'Transcode';
-            const relIndex = index < 0 ? -1 : (isTranscode ? 1 : this.getRelativeIndexByType(streams, index, 'Audio'));
+            const relIndex = index < 0 ? -1 : (isTranscode ? 1 : window._PlaybackStreams.relativeIndex(streams, index, 'Audio'));
             console.log('[MPV] Mapped audio index:', index, '->', relIndex);
             window.api.player.setAudioStream(relIndex != null ? relIndex : -1);
         }
@@ -441,6 +419,7 @@
         }
 
         stop(destroyPlayer) {
+            this._intent.barrier('stop', 'web_stop_unclassified');
             this._errorPrompt.invalidate();
             window.api.player.stop();
 
@@ -453,6 +432,7 @@
         }
 
         removeMediaDialog() {
+            this._intent.unattributed('stop', 'web_cleanup_unattributed');
             window.api.player.stop();
 
             window.api.player.setVideoRectangle(-1, 0, 0, 0);
@@ -473,6 +453,7 @@
         }
 
         destroy() {
+            this._intent.barrier('destroy', 'web_teardown_unattributed');
             this._errorPrompt.invalidate();
             this.removeMediaDialog();
 
@@ -626,6 +607,7 @@
     // Save this for when playback stops, because querying the time at that point might return 0
     currentTime(val) {
         if (val != null) {
+            this._intent.capture('seek', 'web_seek_unqualified');
             window.api.player.seekTo(val);
             return;
         }
@@ -678,16 +660,19 @@
     }
 
     pause() {
+        this._intent.capture('pause', 'web_pause_unqualified');
         window.api.player.pause();
     }
 
     // This is a retry after error
     resume() {
+        this._intent.capture('play', 'web_resume_unqualified');
         this._paused = false;
         window.api.player.play();
     }
 
     unpause() {
+        this._intent.capture('play', 'web_resume_unqualified');
         window.api.player.play();
     }
 

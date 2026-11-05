@@ -7,6 +7,8 @@ inline QStringList nativeScriptPaths()
 {
   return {
     ":/qtwebchannel/qwebchannel.js",
+    ":/web-client/extension/PlaybackIntent.js",
+    ":/web-client/extension/PlaybackStreams.js",
     ":/web-client/extension/playbackErrorPrompt.js",
     ":/web-client/extension/mpvVideoPlayer.js",
     ":/web-client/extension/mpvAudioPlayer.js",

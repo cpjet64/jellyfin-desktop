@@ -25,7 +25,7 @@ function fixture(existing = false) {
         createElement() { return { classList: { add() {} }, style: {} }; } };
     const context = { window: { api: { player: bridge } }, document, jmpInfo: { userAgent: 'test' },
         console: { error() {}, debug() {}, log() {} } };
-    for (const file of ['playbackErrorPrompt.js', 'mpvVideoPlayer.js']) {
+    for (const file of ['PlaybackIntent.js', 'PlaybackStreams.js', 'playbackErrorPrompt.js', 'mpvVideoPlayer.js']) {
         vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../native', file), 'utf8'), context);
     }
     const instance = new context.window._mpvVideoPlayer({ events: { trigger() {} },
@@ -96,4 +96,39 @@ test('setup and native load exceptions reject the outer play promise', async () 
     const load = fixture(true);
     load.bridge.load = () => { throw new Error('load failure'); };
     await assert.rejects(load.instance.play(options('A', 0)), /load failure/);
+});
+
+test('a late load callback cannot adopt a newer local request', async () => {
+    const h = fixture(true);
+    const first = h.instance.play(options('A', 0));
+    const a = h.instance._intent.request;
+    const second = h.instance.play(options('B', 0));
+    const b = h.instance._intent.request;
+    assert.ok(Number.isSafeInteger(a) && b > a);
+    h.callbacks[0]('A');
+    assert.equal(await first, 'A');
+    assert.equal(h.instance._intent.lastLoadCallback, null);
+    h.callbacks[1]('B');
+    assert.equal(await second, 'B');
+    assert.equal(h.instance._intent.lastLoadCallback, b);
+});
+
+test('stop invalidates a pending local callback without changing its promise', async () => {
+    const h = fixture(true);
+    const play = h.instance.play(options('A', 0));
+    h.instance.stop();
+    assert.equal(h.instance._intent.request, null);
+    h.callbacks[0]('done');
+    assert.equal(await play, 'done');
+    assert.equal(h.instance._intent.lastLoadCallback, null);
+    assert.deepEqual(commands(h).map(call => call.name), ['load', 'stop']);
+});
+
+test('local tickets do not retain playback URLs or item metadata', async () => {
+    const h = fixture(true);
+    const play = h.instance.play(options('https://example.invalid/private?token=secret', 0));
+    const snapshot = JSON.stringify(h.instance._intent);
+    assert.doesNotMatch(snapshot, /https:|token|secret|example/);
+    h.callbacks[0]('done');
+    assert.equal(await play, 'done');
 });

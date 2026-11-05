@@ -25,7 +25,7 @@ function harness(deferLoad = false) {
         document: { body: { classList: { remove() {} } } },
         console: { error() {}, debug() {}, log() {} }, jmpInfo: { userAgent: 'test' }
     };
-    for (const file of ['playbackErrorPrompt.js', 'mpvVideoPlayer.js']) {
+    for (const file of ['PlaybackIntent.js', 'PlaybackStreams.js', 'playbackErrorPrompt.js', 'mpvVideoPlayer.js']) {
         vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../native', file), 'utf8'), context);
     }
     const instance = new context.window._mpvVideoPlayer({
@@ -105,6 +105,7 @@ for (const newerFirst of [false, true]) for (const newerRejected of [false, true
 test('packaged scripts include the helper before the player', () => {
     const root = path.join(__dirname, '..');
     const paths = fs.readFileSync(path.join(root, 'src/system/NativeScriptPaths.h'), 'utf8');
+    assert.ok(paths.indexOf('PlaybackIntent.js') < paths.indexOf('mpvVideoPlayer.js'));
     assert.ok(paths.indexOf('playbackErrorPrompt.js') >= 0);
     assert.ok(paths.indexOf('playbackErrorPrompt.js') < paths.indexOf('mpvVideoPlayer.js'));
     const component = fs.readFileSync(path.join(root, 'src/system/SystemComponent.cpp'), 'utf8');
@@ -118,4 +119,17 @@ test('pause and unpause retain their native commands', () => {
     h.instance.pause();
     h.instance.unpause();
     assert.deepEqual(h.calls.map(call => call[0]), ['pause', 'play']);
+});
+
+test('unclassified stop and unattributed error cleanup carry no false origin', async () => {
+    const stop = harness();
+    stop.instance.stop();
+    assert.equal(stop.instance._intent.lastAction.origin, 'web_stop_unclassified');
+    const error = harness();
+    const pending = error.instance.onError('uncorrelated');
+    assert.equal(error.instance._intent.lastAction.origin, 'web_cleanup_unattributed');
+    assert.equal(error.instance._intent.lastAction.targetRequest, null);
+    error.prompts[0].resolve();
+    await pending;
+    assert.equal(errors(error).length, 1);
 });
