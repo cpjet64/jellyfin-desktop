@@ -186,6 +186,7 @@ try {
     $env:MPVQT_TEST_SOURCE = "$root/external/mpvqt"
     Run-Native $venvPython @('tests/test_mpvqt_shared_patch.py')
     Run-Native $venvPython @('tests/test_mpvqt_c2_patch.py')
+    Run-Native $venvPython @('tests/test_fixture_producer_copy.py')
 } finally {
     $env:MPVQT_TEST_SOURCE = $previousMpvQtTestSource
 }

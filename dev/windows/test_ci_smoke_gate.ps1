@@ -46,6 +46,17 @@ $failed = $false
 try { Invoke-Expression $c2gate[0].Extent.Text }
 catch { $failed = $_.Exception.Message -match 'failed with exit code 19' }
 if (-not $failed) { throw 'C2 patch failure did not propagate' }
+$copyGate = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
+    $node.GetCommandName() -eq 'Run-Native' -and $node.Extent.Text -match 'test_fixture_producer_copy\.py' }, $true)
+if ($copyGate.Count -ne 1) { throw 'Expected one fixture-copy gate' }
+$script:status = 0
+Invoke-Expression $copyGate[0].Extent.Text
+if (($script:seen -join '|') -ne 'tests/test_fixture_producer_copy.py') { throw 'Wrong fixture-copy gate arguments' }
+$script:status = 19
+$failed = $false
+try { Invoke-Expression $copyGate[0].Extent.Text }
+catch { $failed = $_.Exception.Message -match 'failed with exit code 19' }
+if (-not $failed) { throw 'Fixture-copy failure did not propagate' }
 $install = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
     $node.GetCommandName() -eq 'Install-CiTools' }, $true)
 if ($install.Count -ne 1) { throw 'Expected one tool bootstrap' }

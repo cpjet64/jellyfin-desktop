@@ -101,6 +101,13 @@ HealthyWakeBinding::Result HealthyWakeBinding::handoff(Key key, std::int64_t dea
   } catch (...) { state_->failed = true; return Result::Blocked; }
 }
 
+bool HealthyWakeBinding::controllerWorkAllowed(Key key) const noexcept
+{
+  return state_->controller && state_->controller->thread() == QThread::currentThread() &&
+    key.owner == state_->key.owner && key.generation == state_->key.generation &&
+    state_->eventsValid.load() && !state_->failed.load();
+}
+
 bool HealthyWakeBinding::postDelivery(const std::shared_ptr<State>& state, Role role)
 {
   const auto key = state->key;

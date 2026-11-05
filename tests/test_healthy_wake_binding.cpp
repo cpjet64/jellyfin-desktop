@@ -310,6 +310,33 @@ static void lateKickIsRejected(QObject& events, QObject& hooks, QObject& worker)
 }
 
 
+static bool guardedItemWork(Binding& binding, QObject& worker, Binding::Key key) {
+  QSemaphore done;
+  bool allowed = false;
+  CHECK(QMetaObject::invokeMethod(&worker, [&] { allowed = binding.controllerWorkAllowed(key); done.release(); },
+                                  Qt::QueuedConnection));
+  CHECK(done.tryAcquire(1, 2000));
+  return allowed;
+}
+
+static void itemWorkSurvivesHandoff(QObject& events, QObject& hooks, QObject& worker) {
+  NativeSetter native;
+  const Binding::Key key{12, 18};
+  Binding binding(&worker, &events, &hooks, &worker, key,
+    [&](auto callback, auto context) { native(callback, context); }, [](auto) {}, now,
+    Binding::NativeBarrier::SingleSlotSerialized);
+  installController(binding, worker);
+  CHECK(guardedItemWork(binding, worker, key));
+  CHECK(!guardedItemWork(binding, worker, {key.owner, key.generation + 1}));
+  CHECK(binding.handoff(key, now() + 1000000000) == Binding::Result::Done);
+  CHECK(guardedItemWork(binding, worker, key));
+  closeWake(binding, key);
+  CHECK(binding.apply(Step::InvalidatePlayerEvents, key, now() + 1000000000) == Binding::Result::Done);
+  CHECK(!guardedItemWork(binding, worker, key));
+  CHECK(binding.apply(Step::InvalidateHooks, key, now() + 1000000000) == Binding::Result::Done);
+  CHECK(binding.apply(Step::FenceWorker, key, now() + 1000000000) == Binding::Result::Done);
+}
+
 int main(int argc, char** argv) {
   QCoreApplication application(argc, argv);
   QObject events, hooks;
@@ -329,6 +356,7 @@ int main(int argc, char** argv) {
   executingControllerFinishesBeforeReplacement(events, hooks, *worker);
   failedHandoffNeverReinstalls(events, hooks, *worker);
   lateKickIsRejected(events, hooks, *worker);
+  itemWorkSurvivesHandoff(events, hooks, *worker);
   thread.quit();
   CHECK(thread.wait(4000));
 }

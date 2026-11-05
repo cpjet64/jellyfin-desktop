@@ -49,6 +49,8 @@ public:
   // add this modeled kick as a second startup notification.
   bool install(Role role) noexcept;
   Result handoff(Key key, std::int64_t deadline) noexcept;
+  // Guard copied item-to-controller work independently of consumer handoff.
+  bool controllerWorkAllowed(Key key) const noexcept;
   // Action and delivery captures must own their dependencies. Deliveries can
   // run concurrently on controller and player threads; shared captures need
   // synchronization. Work posted by delivery or action must carry the same

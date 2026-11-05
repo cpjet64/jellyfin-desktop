@@ -1,0 +1,340 @@
+diff --git a/mpvqt/mpvabstractitem.cpp b/mpvqt/mpvabstractitem.cpp
+index 7000478..5121753 100644
+--- a/mpvqt/mpvabstractitem.cpp
++++ b/mpvqt/mpvabstractitem.cpp
+@@ -12,6 +12,7 @@
+ 
+ #include "mpvcontroller.h"
+ #include "mpvrenderer.h"
++#include "FixtureWakeOwner.h"
+ 
+ MpvAbstractItemPrivate::MpvAbstractItemPrivate(MpvAbstractItem *q)
+     : q_ptr(q)
+@@ -19,6 +20,11 @@ MpvAbstractItemPrivate::MpvAbstractItemPrivate(MpvAbstractItem *q)
+ }
+ 
+ MpvAbstractItem::MpvAbstractItem(QQuickItem *parent)
++    : MpvAbstractItem(parent, nullptr)
++{
++}
++
++MpvAbstractItem::MpvAbstractItem(QQuickItem *parent, FixtureWakeOwner *owner)
+     : QQuickFramebufferObject(parent)
+     , d_ptr{std::make_unique<MpvAbstractItemPrivate>(this)}
+ {
+@@ -32,15 +38,25 @@ MpvAbstractItem::MpvAbstractItem(QQuickItem *parent)
+ 
+     d_ptr->m_workerThread = new QThread;
+     d_ptr->m_mpvController = new MpvController;
++    d_ptr->m_mpvController->setFixtureWakeOwner(owner);
+     d_ptr->m_workerThread->start();
+     d_ptr->m_mpvController->moveToThread(d_ptr->m_workerThread);
+     QMetaObject::invokeMethod(d_ptr->m_mpvController, &MpvController::init, Qt::BlockingQueuedConnection);
+     d_ptr->m_mpv = d_ptr->m_mpvController->mpv();
++    if (!d_ptr->m_mpv || !owner || owner->phase() != FixtureWakeOwner::Phase::ControllerInstalled)
++        return;
+ 
+     connect(d_ptr->m_workerThread, &QThread::finished, d_ptr->m_mpvController, &MpvController::deleteLater);
+-    connect(this, &MpvAbstractItem::observeProperty, d_ptr->m_mpvController, &MpvController::observeProperty, Qt::QueuedConnection);
+-    connect(this, &MpvAbstractItem::setProperty, d_ptr->m_mpvController, &MpvController::setProperty, Qt::QueuedConnection);
+-    connect(this, &MpvAbstractItem::command, d_ptr->m_mpvController, &MpvController::command, Qt::QueuedConnection);
++    auto *controller = d_ptr->m_mpvController;
++    connect(this, &MpvAbstractItem::observeProperty, controller, [owner, controller](const QString& property, mpv_format format, uint64_t id) {
++        if (owner && owner->controllerWorkAllowed()) controller->observeProperty(property, format, id);
++    }, Qt::QueuedConnection);
++    connect(this, &MpvAbstractItem::setProperty, controller, [owner, controller](const QString& property, const QVariant& value) {
++        if (owner && owner->controllerWorkAllowed()) controller->setProperty(property, value);
++    }, Qt::QueuedConnection);
++    connect(this, &MpvAbstractItem::command, controller, [owner, controller](const QStringList& params) {
++        if (owner && owner->controllerWorkAllowed()) controller->command(params);
++    }, Qt::QueuedConnection);
+ }
+ 
+ MpvAbstractItem::~MpvAbstractItem()
+diff --git a/mpvqt/mpvabstractitem.h b/mpvqt/mpvabstractitem.h
+index 6268ac1..dcac6e8 100644
+--- a/mpvqt/mpvabstractitem.h
++++ b/mpvqt/mpvabstractitem.h
+@@ -15,12 +15,14 @@
+ 
+ class MpvController;
+ class MpvAbstractItemPrivate;
++class FixtureWakeOwner;
+ 
+ class MPVQT_EXPORT MpvAbstractItem : public QQuickFramebufferObject
+ {
+     Q_OBJECT
+ public:
+     explicit MpvAbstractItem(QQuickItem *parent = nullptr);
++    MpvAbstractItem(QQuickItem *parent, FixtureWakeOwner *owner);
+     ~MpvAbstractItem();
+ 
+     Renderer *createRenderer() const override;
+diff --git a/mpvqt/mpvcontroller.cpp b/mpvqt/mpvcontroller.cpp
+index 53a9b7b..6e86490 100644
+--- a/mpvqt/mpvcontroller.cpp
++++ b/mpvqt/mpvcontroller.cpp
+@@ -5,6 +5,7 @@
+  */
+ 
+ #include "mpvcontroller.h"
++#include "FixtureWakeOwner.h"
+ #include "mpvcontroller_p.h"
+ 
+ #include <QStandardPaths>
+@@ -170,6 +171,10 @@ MpvController::MpvController(QObject *parent)
+ 
+ void MpvController::init()
+ {
++    if (!m_fixtureWakeOwner) {
++        qWarning("fixture wake owner is required before controller initialization");
++        return;
++    }
+     d_ptr = std::make_unique<MpvControllerPrivate>(this);
+     // Qt sets the locale in the QGuiApplication constructor, but libmpv
+     // requires the LC_NUMERIC category to be set to "C", so change it back.
+@@ -182,7 +187,10 @@ void MpvController::init()
+     if (mpv_initialize(d_ptr->m_mpv) < 0) {
+         qFatal("could not initialize mpv context");
+     }
+-    mpv_set_wakeup_callback(d_ptr->m_mpv, MpvController::mpvEvents, this);
++    if (!m_fixtureWakeOwner || !m_fixtureWakeOwner->installController(this)) {
++        qWarning("fixture wake owner unavailable; callback not installed");
++        return;
++    }
+ 
+     // otherwise mpv opens a separate window
+     QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+@@ -298,7 +306,7 @@ void MpvController::eventHandler()
+ 
+ mpv_handle *MpvController::mpv() const
+ {
+-    return d_ptr->m_mpv;
++    return d_ptr ? d_ptr->m_mpv : nullptr;
+ }
+ 
+ void MpvController::observeProperty(const QString &property, mpv_format format, uint64_t id)
+diff --git a/mpvqt/mpvcontroller.h b/mpvqt/mpvcontroller.h
+index 97433af..017c621 100644
+--- a/mpvqt/mpvcontroller.h
++++ b/mpvqt/mpvcontroller.h
+@@ -19,6 +19,7 @@
+ #include <memory>
+ 
+ class MpvControllerPrivate;
++class FixtureWakeOwner;
+ 
+ /**
+  * RAII wrapper that calls mpv_free_node_contents() on the pointer.
+@@ -73,6 +74,8 @@ public:
+     static void mpvEvents(void *ctx);
+     void eventHandler();
+     mpv_handle *mpv() const;
++    void setFixtureWakeOwner(FixtureWakeOwner *owner) { m_fixtureWakeOwner = owner; }
++    FixtureWakeOwner *fixtureWakeOwner() const { return m_fixtureWakeOwner; }
+ 
+ public Q_SLOTS:
+     void init();
+@@ -168,6 +171,7 @@ Q_SIGNALS:
+     void videoReconfig();
+ 
+ private:
++    FixtureWakeOwner *m_fixtureWakeOwner = nullptr;
+     std::unique_ptr<MpvControllerPrivate> d_ptr;
+ };
+ 
+diff --git a/player/MpvVideoItem.cpp b/player/MpvVideoItem.cpp
+index a804bbd..84d7915 100644
+--- a/player/MpvVideoItem.cpp
++++ b/player/MpvVideoItem.cpp
+@@ -1,15 +1,32 @@
+ #include "MpvVideoItem.h"
+ #include "PlayerComponent.h"
++#include "FixtureWakeOwner.h"
+ #include <MpvController>
+ #include <QDebug>
+ 
+ MpvVideoItem::MpvVideoItem(QQuickItem *parent)
++    : MpvVideoItem(parent, nullptr)
++{
++}
++
++bool MpvVideoItem::fixtureControllerReady() const
++{
++    return m_fixtureOwner && m_fixtureOwner->phase() == FixtureWakeOwner::Phase::ControllerInstalled;
++}
++
++bool MpvVideoItem::fixturePlayerReady() const
++{
++    return m_fixtureOwner && m_fixtureOwner->phase() == FixtureWakeOwner::Phase::PlayerInstalled;
++}
++
++MpvVideoItem::MpvVideoItem(QQuickItem *parent, FixtureWakeOwner *owner)
+ #ifdef MPVQT_EXTERNAL_EVENTS
+     : MpvAbstractItem(MpvController::EventMode::External, parent)
+ #else
+-    : MpvAbstractItem(parent)
++    : MpvAbstractItem(parent, owner)
+ #endif
+ {
++    m_fixtureOwner = owner;
+     connect(this, &MpvAbstractItem::ready, this, [this]() {
+         qDebug() << "MpvVideoItem ready() signal fired!";
+         m_ready = true;
+@@ -49,6 +66,7 @@ void MpvVideoItem::setPlayerComponent(PlayerComponent* player)
+ }
+ 
+ void MpvVideoItem::initialize() {
++    if (!fixtureControllerReady()) return;
+     if (m_initialized) {
+         qDebug() << "MpvVideoItem is already initialized, ignoring";
+         return;
+@@ -74,7 +92,7 @@ void MpvVideoItem::initialize() {
+ #else
+     m_player->setMpvController(mpvController());
+ #endif
+-    m_initialized = true;
+     qDebug() << "MpvVideoItem ready, initializing now";
+     m_player->initializeMpv();
++    m_initialized = fixturePlayerReady();
+ }
+diff --git a/player/MpvVideoItem.h b/player/MpvVideoItem.h
+index 42505a7..1805d0d 100644
+--- a/player/MpvVideoItem.h
++++ b/player/MpvVideoItem.h
+@@ -7,6 +7,7 @@
+ #endif
+ 
+ class PlayerComponent;
++class FixtureWakeOwner;
+ 
+ class MpvVideoItem : public MpvAbstractItem
+ {
+@@ -15,10 +16,13 @@ class MpvVideoItem : public MpvAbstractItem
+ 
+ public:
+     explicit MpvVideoItem(QQuickItem *parent = nullptr);
++    MpvVideoItem(QQuickItem *parent, FixtureWakeOwner *owner);
+     ~MpvVideoItem() override;
+     void setPlayerComponent(PlayerComponent* player);
+ 
+     MpvController* controller() { return mpvController(); }
++    bool fixtureControllerReady() const;
++    bool fixturePlayerReady() const;
+ 
+ private:
+ #ifdef MPVQT_EXTERNAL_EVENTS
+@@ -33,6 +37,7 @@ private:
+ #endif
+     bool m_initialized = false;
+     bool m_ready = false;
++    FixtureWakeOwner* m_fixtureOwner = nullptr;
+ };
+ 
+ #endif // MPVVIDEOITEM_H
+diff --git a/player/PlayerMpvEvents.cpp b/player/PlayerMpvEvents.cpp
+index 7ec54be..bf54fed 100644
+--- a/player/PlayerMpvEvents.cpp
++++ b/player/PlayerMpvEvents.cpp
+@@ -1,37 +1,22 @@
+ #include "PlayerComponent.h"
++#include "FixtureWakeOwner.h"
+ #include "settings/SettingsComponent.h"
+ #include "settings/SettingsSection.h"
+ #include <MpvController>
+ #include <QDebug>
+ #include <QThread>
+ 
+-namespace {
+-void wakePlayer(void* context)
+-{
+-  emit static_cast<PlayerComponent*>(context)->onMpvEvents();
+-}
+-}
+-
+ void PlayerComponent::setupMpvEvents()
+ {
+-#ifdef MPVQT_EXTERNAL_EVENTS
+-  if (QThread::currentThread() != thread())
+-    qFatal("MpvQt event consumer must be initialized on the PlayerComponent thread");
+-  connect(this, &PlayerComponent::onMpvEvents, this, &PlayerComponent::handleMpvEvents,
+-          static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+-#endif
+-  mpv_set_wakeup_callback(m_mpv->mpv(), wakePlayer, this);
+-#ifdef MPVQT_EXTERNAL_EVENTS
+-  emit onMpvEvents();
+-#endif
++  // The copied Controller has already installed the fixture-owned endpoint.
+ }
+ 
+ void PlayerComponent::finishMpvEventSetup()
+ {
+-#ifndef MPVQT_EXTERNAL_EVENTS
+-  connect(this, &PlayerComponent::onMpvEvents, this, &PlayerComponent::handleMpvEvents, Qt::QueuedConnection);
+-#endif
+-  emit onMpvEvents();
++  // handoff queues the one existing startup kick after the Controller fence.
++  if (!m_mpv || !m_mpv->fixtureWakeOwner() ||
++      m_mpv->fixtureWakeOwner()->handoff() != HealthyWakeBinding::Result::Done)
++    qWarning("fixture wake handoff blocked");
+ }
+ 
+ void PlayerComponent::subscribeMpvSettings()
+@@ -94,11 +79,8 @@ void PlayerComponent::scheduleMpvHook(const std::function<void()>& resume)
+   }
+   const int pause = SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, "refreshrate.delay").toInt() * 1000;
+   qInfo() << "waiting" << pause << "msec after rate switch before loading";
+-#ifdef MPVQT_EXTERNAL_EVENTS
+-  QTimer::singleShot(pause, this, resume);
+-#else
+-  QTimer::singleShot(pause, resume);
+-#endif
++  if (!m_mpv || !m_mpv->fixtureWakeOwner() || !m_mpv->fixtureWakeOwner()->postHook(pause, resume))
++    qWarning("fixture hook scheduling blocked");
+ }
+ 
+ void PlayerComponent::scheduleMpvHook(const QString& resumeId)
+diff --git a/tests/test_webclient_containment.cpp b/tests/test_webclient_containment.cpp
+index 7f624fb..8ab025a 100644
+--- a/tests/test_webclient_containment.cpp
++++ b/tests/test_webclient_containment.cpp
+@@ -16,6 +16,8 @@
+ #include <MpvController>
+ #include <mpv/client.h>
+ #include <memory>
++#include <chrono>
++#include "FixtureWakeOwner.h"
+ 
+ #include "input/InputComponent.h"
+ #include "player/MpvVideoItem.h"
+@@ -273,6 +275,12 @@ void TestWebClientContainment::containment()
+   auto& input = InputComponent::Get();
+   auto& player = PlayerComponent::Get();
+   auto& guard = WebClientFaultGuard::instance();
++  QFAIL("HELD: fixture owner retention and render teardown remain unqualified");
++  const auto deadline = std::chrono::duration_cast<std::chrono::nanoseconds>(
++    std::chrono::steady_clock::now().time_since_epoch()).count() + 15000000000LL;
++  auto* fixtureOwner = new FixtureWakeOwner(&player,
++    {static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&player)), 1}, deadline,
++    HealthyWakeBinding::NativeBarrier::Unqualified);
+   QQuickView view;
+   view.rootContext()->setContextProperty("webClientFaultGuard", &guard);
+   view.rootContext()->setContextProperty("fixtureInput", &input);
+@@ -280,7 +288,8 @@ void TestWebClientContainment::containment()
+   QCOMPARE(view.status(), QQuickView::Ready);
+   QObject* root = view.rootObject();
+   QVERIFY(root);
+-  auto* video = new MpvVideoItem(view.contentItem());
++  auto* video = new MpvVideoItem(view.contentItem(), fixtureOwner);
++  QVERIFY(video->fixtureControllerReady());
+   video->setParent(view.contentItem());
+   video->setObjectName("video");
+   video->setSize(QSizeF(320, 240));
+@@ -290,6 +299,7 @@ void TestWebClientContainment::containment()
+   player.setWindow(&view);
+   view.show();
+   QTRY_VERIFY_WITH_TIMEOUT(ready.count() > 0, 15000);
++  QTRY_VERIFY_WITH_TIMEOUT(video->fixturePlayerReady(), 15000);
+   QVERIFY(video->controller());
+   mpv_handle* primary = video->controller()->mpv();
+   QVERIFY(primary);

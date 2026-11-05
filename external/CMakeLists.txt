@@ -47,3 +47,20 @@ if(USE_STATIC_MPVQT)
   file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/MpvQt/MpvAbstractItem "#include \"mpvabstractitem.h\"\n")
   file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/MpvQt/MpvController "#include \"mpvcontroller.h\"\n")
 endif()
+
+if(FIXTURE_PRODUCER_COPY_ONLY)
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/mpvqt_export.h" "${_fixture_copy}/mpvqt/mpvqt_export.h" COPYONLY)
+  set(_mpvqt_src "${_fixture_copy}/mpvqt")
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/mpvrenderer-patched-wrapper.cpp.in"
+                 "${_fixture_copy}/mpvqt/mpvrenderer-wrapper.cpp" @ONLY)
+  file(WRITE "${_fixture_copy}/mpvqt/MpvController" "#include \"mpvcontroller.h\"\n")
+  file(WRITE "${_fixture_copy}/mpvqt/MpvAbstractItem" "#include \"mpvabstractitem.h\"\n")
+  add_library(FixtureMpvQt STATIC "${_fixture_copy}/mpvqt/mpvabstractitem.cpp"
+    "${_fixture_copy}/mpvqt/mpvcontroller.cpp" "${_fixture_copy}/mpvqt/mpvrenderer-wrapper.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/HealthyWakeBinding.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/fixture_producer/FixtureWakeOwner.cpp")
+  target_include_directories(FixtureMpvQt PUBLIC "${_fixture_copy}/mpvqt" "${CMAKE_SOURCE_DIR}/tests"
+    "${CMAKE_SOURCE_DIR}/tests/fixture_producer" "${CMAKE_CURRENT_SOURCE_DIR}")
+  target_link_libraries(FixtureMpvQt PUBLIC Qt6::Quick ${MPV_LIBRARY})
+  set_target_properties(FixtureMpvQt PROPERTIES POSITION_INDEPENDENT_CODE ON AUTOMOC ON)
+endif()

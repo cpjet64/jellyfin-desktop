@@ -414,6 +414,7 @@ def main():
     patch_env["MPVQT_TEST_SOURCE"] = str(ROOT / "external/mpvqt")
     command("shared-patch-tests", [sys.executable, "tests/test_mpvqt_shared_patch.py"], env=patch_env)
     command("c2-patch-tests", [sys.executable, "tests/test_mpvqt_c2_patch.py"], env=patch_env)
+    command("fixture-copy-tests", [sys.executable, "tests/test_fixture_producer_copy.py"], env=patch_env)
     command("windows-smoke-result-tests", ["node", "--test", "tests/test_windows_smoke_result.mjs"])
     command("explicit-mpv-cmake-tests", [sys.executable, "dev/ci/test_explicit_mpv_cmake.py"])
     command("linux-sdk-cmake-tests", [sys.executable, "dev/ci/test_linux_sdk_cmake.py"])

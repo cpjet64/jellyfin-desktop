@@ -251,11 +251,21 @@ target_link_libraries(test_renderer_loss_offscreen jmp_core Qt6::Test Qt6::Quick
 target_include_directories(test_renderer_loss_offscreen PRIVATE ${TEST_INCLUDE_DIRS})
 target_compile_definitions(test_renderer_loss_offscreen PRIVATE ${TEST_COMPILE_DEFS})
 
-add_executable(test_webclient_containment test_webclient_containment.cpp
-  "${CMAKE_BINARY_DIR}/src/qrc_resources.cpp")
+if(FIXTURE_PRODUCER_COPY_ONLY)
+  set(_containment_source "${_fixture_copy}/tests/test_webclient_containment.cpp")
+  set(_containment_core FixtureCore)
+else()
+  set(_containment_source test_webclient_containment.cpp)
+  set(_containment_core jmp_core)
+endif()
+add_executable(test_webclient_containment ${_containment_source} "${CMAKE_BINARY_DIR}/src/qrc_resources.cpp")
 add_dependencies(test_webclient_containment generate_resources)
-target_link_libraries(test_webclient_containment jmp_core Qt6::Test Qt6::Quick Qt6::WebEngineQuick Qt6::WebChannel)
+target_link_libraries(test_webclient_containment ${_containment_core} Qt6::Test Qt6::Quick Qt6::WebEngineQuick Qt6::WebChannel)
 target_include_directories(test_webclient_containment PRIVATE ${TEST_INCLUDE_DIRS})
+if(FIXTURE_PRODUCER_COPY_ONLY)
+  target_include_directories(test_webclient_containment BEFORE PRIVATE "${_fixture_copy}" "${_fixture_copy}/player"
+    "${_fixture_copy}/mpvqt" "${CMAKE_SOURCE_DIR}/tests/fixture_producer")
+endif()
 target_compile_definitions(test_webclient_containment PRIVATE ${TEST_COMPILE_DEFS} TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 # CI explicitly runs all three scenarios in isolated native desktop processes.
 

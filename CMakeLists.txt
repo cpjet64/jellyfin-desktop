@@ -22,6 +22,7 @@ option(USE_STATIC_MPVQT "Build MpvQt from bundled submodule instead of using sys
 option(MPVQT_EXTERNAL_EVENTS "Use the patched bundled MpvQt external event consumer" OFF)
 option(MPVQT_C2_DIAGNOSTIC_ONLY "Build isolated render-retirement diagnostics only" OFF)
 option(PLAYER_INTENT_DIAGNOSTIC_ONLY "Build isolated player intent diagnostics without application or package" OFF)
+option(FIXTURE_PRODUCER_COPY_ONLY "Build the held fixture against verified private producer copies" OFF)
 if(PLAYER_INTENT_DIAGNOSTIC_ONLY)
   add_definitions(-DPLAYER_INTENT_DIAGNOSTIC_ONLY)
 endif()
@@ -99,6 +100,9 @@ if (Qt6_POSITION_INDEPENDENT_CODE)
   SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif(Qt6_POSITION_INDEPENDENT_CODE)
 
+if(FIXTURE_PRODUCER_COPY_ONLY)
+  include(FixtureProducerCopy)
+endif()
 add_subdirectory(external)
 add_subdirectory(src)
 
