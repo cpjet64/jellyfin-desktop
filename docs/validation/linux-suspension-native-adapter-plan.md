@@ -44,6 +44,9 @@ The native qualification must exercise and distinguish:
 
 The native helper's timeout must be validated under actual OS behavior; a Python
 timeout alone does not prove an uninterruptible kernel operation can be stopped.
+The stop helper receives the policy's absolute monotonic deadline and checks it
+at the signal boundary. Launch steps share one deadline; process creation and
+other kernel operations may still overrun it and require outer containment.
 Process-group checks do not establish containment of an undetected escaped
 descendant, nor can `SIGSTOP` retract an in-flight write. No production recovery
 or package-transaction suspension may be inferred from this fixture.

@@ -88,7 +88,7 @@ class FixtureAdapter:
         with self._lock:
             if self._closed or self._lost or not self._in_policy or group != self._registry[0].group:
                 raise RuntimeError('fixture target is no longer authorized')
-            return self._operations.stop(self._fixture, self._registry, self._timeout) is True
+            return self._operations.stop(self._fixture, self._registry, self._policy.deadline) is True
 
     def now(self):
         return time.monotonic()

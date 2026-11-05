@@ -11,6 +11,15 @@ import time
 from types import SimpleNamespace
 
 
+def remaining(deadline):
+    if type(deadline) not in (int, float) or not math.isfinite(deadline):
+        raise ValueError('invalid absolute deadline')
+    now = time.monotonic()
+    if not math.isfinite(now) or now >= deadline:
+        raise TimeoutError('fixture deadline expired')
+    return deadline - now
+
+
 def proc_stat(pid):
     path = Path('/proc') / str(pid) / 'stat'
     with path.open(encoding='ascii') as source:
@@ -108,20 +117,22 @@ def probe(request):
         if not complete:
             raise ValueError('fixture descendants are not fully accounted')
         inspect_registry(request)  # Revalidate immediately before signalling.
+        remaining(request['deadline'])
         os.killpg(leader, signal.SIGSTOP if request['operation'] == 'stop' else signal.SIGKILL)
         return {'sent': True}
     return {'members': members, 'leader_held': True, 'visible': True,
             'descendants_complete': complete, 'escaped': not complete, 'control_unchanged': True}
 
 
-def helper(operation, fixture, registry, timeout):
+def helper(operation, fixture, registry, deadline):
     if signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL:
         raise RuntimeError('fixture leader reaping policy changed')
     request = {'operation': operation, 'controller': fixture.controller_pid,
                'controller_group': fixture.controller_group,
-               'registry': [item.__dict__ for item in registry], 'control': fixture.control_identity.__dict__}
+               'registry': [item.__dict__ for item in registry], 'control': fixture.control_identity.__dict__,
+               'deadline': deadline}
     result = subprocess.run([sys.executable, '-I', '-B', __file__, '--probe', json.dumps(request)],
-                            stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout, text=True)
+                            stdin=subprocess.DEVNULL, capture_output=True, timeout=remaining(deadline), text=True)
     if result.returncode or len(result.stdout) > 65536 or len(result.stderr) > 65536:
         raise RuntimeError('bounded fixture probe failed')
     value = json.loads(result.stdout)
@@ -144,17 +155,17 @@ class Operations:
 
     def snapshot(self, fixture, registry, timeout):
         self._check(fixture, registry)
-        return helper('snapshot', fixture, registry, timeout)
+        return helper('snapshot', fixture, registry, time.monotonic() + timeout)
 
-    def stop(self, fixture, registry, timeout):
+    def stop(self, fixture, registry, deadline):
         self._check(fixture, registry)
-        return helper('stop', fixture, registry, timeout).get('sent') is True
+        return helper('stop', fixture, registry, deadline).get('sent') is True
 
     def teardown(self, fixture, registry, timeout):
         self._check(fixture, registry)
-        if helper('teardown', fixture, registry, timeout).get('sent') is not True:
-            return False
         deadline = time.monotonic() + timeout
+        if helper('teardown', fixture, registry, deadline).get('sent') is not True:
+            return False
         while time.monotonic() < deadline:
             result = subprocess.run([sys.executable, '-I', '-B', __file__, '--settled',
                                      str(registry[0].pid), str(registry[1].pid), registry[1].start],
@@ -202,6 +213,7 @@ class Launcher:
                 signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL):
             raise ValueError('native Linux fixture and bounded deadline required')
         self._launch_attempted = True
+        deadline = time.monotonic() + timeout
         from fixture_suspend_adapter import FixtureIdentity
         leader = subprocess.Popen([sys.executable, '-I', '-B', __file__, '--leader'],
                                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -213,7 +225,7 @@ class Launcher:
             selector = selectors.DefaultSelector()
             try:
                 selector.register(leader.stdout, selectors.EVENT_READ)
-                if not selector.select(timeout):
+                if not selector.select(remaining(deadline)):
                     raise TimeoutError('fixture launch handshake timed out')
                 raw = os.read(leader.stdout.fileno(), 256)
             finally:
@@ -221,16 +233,18 @@ class Launcher:
             child = json.loads(raw.decode())['child']
             for pid in (leader.pid, child):
                 result = subprocess.run([sys.executable, '-I', '-B', __file__, '--stat', str(pid)],
-                                        capture_output=True, timeout=timeout, text=True, check=True)
+                                        capture_output=True, timeout=remaining(deadline), text=True, check=True)
                 info = json.loads(result.stdout)
                 identities.append(FixtureIdentity(pid, info['start'], info['parent'], info['group'], info['session']))
+            remaining(deadline)
             control = subprocess.Popen([sys.executable, '-I', '-B', __file__, '--control'],
                                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                        stderr=subprocess.DEVNULL, start_new_session=True)
             result = subprocess.run([sys.executable, '-I', '-B', __file__, '--stat', str(control.pid)],
-                                    capture_output=True, timeout=timeout, text=True, check=True)
+                                    capture_output=True, timeout=remaining(deadline), text=True, check=True)
             info = json.loads(result.stdout)
             control_id = FixtureIdentity(control.pid, info['start'], info['parent'], info['group'], info['session'])
+            remaining(deadline)
             fixture = SimpleNamespace(leader=leader, control=control, control_identity=control_id,
                                       identities=tuple(identities), controller_pid=os.getpid(), controller_group=os.getpgrp())
             self._issued, self._registry, self._control = fixture, fixture.identities, control_id

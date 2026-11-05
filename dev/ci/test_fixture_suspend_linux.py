@@ -1,5 +1,6 @@
 """Portable tests of native fixture decision code; no OS processes are signalled."""
 import unittest
+import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -13,7 +14,7 @@ def item(pid, parent, group, start, state='S'):
 def request(operation='snapshot'):
     return {'operation': operation, 'controller': 90, 'controller_group': 91,
             'registry': [item(42, 90, 42, 'leader'), item(43, 42, 42, 'child')],
-            'control': item(100, 90, 100, 'control')}
+            'control': item(100, 90, 100, 'control'), 'deadline': time.monotonic() + 10}
 
 
 class NativeDecisionTest(unittest.TestCase):
@@ -56,6 +57,22 @@ class NativeDecisionTest(unittest.TestCase):
                 ops.stop(object(), (), 1)
             helper.assert_not_called()
 
+    def test_delayed_probe_cannot_signal_after_deadline(self):
+        req = request('stop')
+        with patch.object(native, 'verify_proc'), patch.object(native.os, 'getppid', return_value=90), \
+                patch.object(native, 'proc_stat', side_effect=lambda pid: dict(self.records[pid])), \
+                patch.object(native, 'process_set', side_effect=lambda: dict(self.records)), \
+                patch.object(native.time, 'monotonic', return_value=req['deadline']), \
+                patch.object(native.os, 'killpg', create=True) as kill:
+            with self.assertRaises(TimeoutError):
+                native.probe(req)
+            kill.assert_not_called()
+
+    def test_invalid_signal_deadline_is_rejected(self):
+        for deadline in (float('nan'), float('inf'), True):
+            with self.assertRaises(ValueError):
+                native.remaining(deadline)
+
     def test_partial_launch_retains_unreaped_owned_handle(self):
         leader = SimpleNamespace(pid=42, stdout=object())
         class Selector:
@@ -89,6 +106,37 @@ class NativeDecisionTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     native.Launcher().create(value)
             launch.assert_not_called()
+
+    def test_launch_steps_share_deadline(self):
+        clock = [100.0]
+        leader = SimpleNamespace(pid=42, stdout=SimpleNamespace(fileno=lambda: 7))
+        class Selector:
+            def register(self, _stream, _event):
+                pass
+            def select(self, timeout):
+                self.timeout = timeout
+                clock[0] += 0.6
+                return [1]
+            def close(self):
+                pass
+        def stat(*_args, **kwargs):
+            self.assertAlmostEqual(kwargs['timeout'], 0.4)
+            clock[0] += 0.5
+            return SimpleNamespace(stdout='{"start":"leader","parent":90,"group":42,"session":42}')
+        with patch.object(native.sys, 'platform', 'linux'), \
+                patch.object(native.signal, 'SIGCHLD', 17, create=True), \
+                patch.object(native.signal, 'getsignal', return_value=native.signal.SIG_DFL), \
+                patch.object(native.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(native.subprocess, 'Popen', return_value=leader) as launch, \
+                patch.object(native.subprocess, 'run', side_effect=stat) as run, \
+                patch.object(native.selectors, 'DefaultSelector', return_value=Selector()), \
+                patch.object(native.os, 'read', return_value=b'{"child":43}'):
+            with self.assertRaises(native.FixtureLaunchError) as error:
+                native.Launcher().create(1)
+            self.assertIsInstance(error.exception.__cause__, TimeoutError)
+            self.assertEqual(error.exception.child_pid, 43)
+            launch.assert_called_once()
+            run.assert_called_once()
 
 
 if __name__ == '__main__':
