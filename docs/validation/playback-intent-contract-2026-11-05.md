@@ -15,6 +15,12 @@ Associate each accepted playback request with a native correlation identity, and
 
 In particular, do not assume that resolving a canceled deferred `play()` is harmless or that rejecting it avoids retry. Obtain the exact Jellyfin Web bundle/version used by the target server and inspect the actual callers of this player, including how they handle play resolution, rejection, cancellation, error events and transcode or other retries. Those callers are not present in the reviewed adapter source. Reconcile their behavior with stop, replacement and late fault ordering before selecting an externally observable contract.
 
+### Candidate public web caller
+
+On 2026-11-05, the public `https://jellyfin.curtpme.com/web/index.html` referenced build query `26148176bec435074cdd`. Its served `main.jellyfin.bundle.js` was 520,778 bytes with SHA-256 `5ddd1a9db7171efe85d499687015c9c9b3fe9cda5822b9e1ea83b3907a22477e`. The exact bytes were retained in ignored `deps/w553-web-contract/`. This endpoint is a candidate: the app's selected server and its served web bundle have not been established.
+
+In that minified bundle, byte offset 129260 calls the selected player's `play(m)` and attaches success and failure handlers. Both perform shared initialization; the failure handler schedules the playback error handler with the stream information. At byte offset 138630, that handler can request another stream when transcoding is supported (the condition appears at offset 139012); otherwise it reports a playback error. A separate non-media path at offset 126410 catches a rejected play, stops the player and reports an error. These observations establish that, for this candidate caller, rejection can enter error or retry handling and resolution takes a success path. They do not determine which settlement is correct for a canceled deferred request, or establish behavior of a different server's bundle.
+
 ## Fixture evidence limits
 
 `tests/c2_fault_restore_permission.h:8-60` is explicitly a fixture-only, single-writer permission fed by caller evidence. In `tests/c2_fault_restore_case.h:118-127`, `currentIdentity` starts from a captured identity and refreshes core, controller, binding and G1; the other captured fields do not establish current production playback intent. The synthetic restore fixture is useful evidence for its own scenario, not proof that production user stop, replacement, error or retry intent is correlated correctly.
