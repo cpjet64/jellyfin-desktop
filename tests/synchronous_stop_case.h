@@ -7,6 +7,7 @@
 #include <QThread>
 #include "c2_event_observer.h"
 #include "player/PlayerIntentObservation.h"
+#include "synchronous_stop_events.h"
 #include "synchronous_stop_trace.h"
 
 // SOURCE ONLY: ordinary QQuickView rendering, synchronous GUI-thread mpv
@@ -162,6 +163,36 @@ static bool matchingDispatch(const IntentTrace::Snapshot& snapshot)
       e[8].kind == K::Exit && e[8].invocation == e[6].invocation;
 }
 
+static StopEventState terminalState(const SynchronousMpvEvents& observer, std::size_t boundary, int64_t aEntry)
+{
+  if (!observer.healthy) return StopEventState::Invalid;
+  std::vector<StopEvent> copied;
+  copied.reserve(observer.events.size());
+  for (const auto& event : observer.events) {
+    const auto kind = event.kind == MPV_EVENT_START_FILE ? StopEventKind::Start :
+      event.kind == MPV_EVENT_END_FILE ? StopEventKind::End :
+      event.kind == MPV_EVENT_QUEUE_OVERFLOW ? StopEventKind::Overflow : StopEventKind::Other;
+    copied.push_back({kind, event.playlistId});
+  }
+  return classifyStopEvents(copied, boundary, aEntry);
+}
+
+static void awaitStartedEntryTerminal(SynchronousMpvEvents& observer, mpv_handle* primary,
+                                      std::size_t boundary, int64_t aEntry)
+{
+  QElapsedTimer timer;
+  timer.start();
+  while (timer.elapsed() < 10000) {
+    observer.drain();
+    const auto state = terminalState(observer, boundary, aEntry);
+    QVERIFY(state != StopEventState::Invalid);
+    QVERIFY(idle(primary) && matchingDispatch(IntentTrace::snapshot()));
+    if (state == StopEventState::Settled) return;
+    QTest::qWait(20);
+  }
+  QFAIL("post-boundary started entry has no matching terminal event");
+}
+
 static void waitPageSettled(QObject* root)
 {
   QElapsedTimer timer;
@@ -233,6 +264,11 @@ static void runSynchronousStop(QObject* root, QQuickView& view, PlayerComponent&
   QVERIFY(!QTest::currentTestFailed());
   provePlayingA(root, view, player, primary, a, evidence, observer, trace);
   QVERIFY(!QTest::currentTestFailed());
+  observer.drain();
+  QVERIFY(observer.healthy);
+  const auto boundary = observer.events.size();
+  const auto aEntry = observer.latestLoadedEntry();
+  trace.data.insert("b_observer_boundary", qint64(boundary));
   QVERIFY(IntentTrace::reset());
   evaluateFixture(root, "fixturePlayBStop(" + jsonString(QUrl::fromLocalFile(b).toString()) + ")");
   QCOMPARE(root->property("result").toString(), QStringLiteral("sent"));
@@ -259,6 +295,9 @@ static void runSynchronousStop(QObject* root, QQuickView& view, PlayerComponent&
   QCOMPARE(page.value("actions").toArray(), QJsonArray({"playA", "playB", "stop"}));
   observer.drain();
   QVERIFY(observer.healthy && idle(primary) && matchingDispatch(IntentTrace::snapshot()));
+  awaitStartedEntryTerminal(observer, primary, boundary, aEntry);
+  QVERIFY(!QTest::currentTestFailed());
+  trace.data.insert("post_boundary_terminal_identity", "settled or no new start");
   trace.data.insert("web_state", page);
   trace.data.insert("status", "assertions passed; teardown requires independent proof");
 }

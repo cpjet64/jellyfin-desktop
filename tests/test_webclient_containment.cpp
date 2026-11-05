@@ -293,8 +293,8 @@ void TestWebClientContainment::containment()
   QVERIFY(video->controller());
   mpv_handle* primary = video->controller()->mpv();
   QVERIFY(primary);
-  QTRY_COMPARE_WITH_TIMEOUT(player.requestNativeStop().status,
-                            PlayerComponent::NativeStopResult::Status::Accepted, 15000);
+  const auto readinessStop = player.requestNativeStop();
+  QCOMPARE(readinessStop.status, PlayerComponent::NativeStopResult::Status::Accepted);
   connectBridge(root, player, settings);
   QVERIFY(!QTest::currentTestFailed());
   checkProxies(root);
