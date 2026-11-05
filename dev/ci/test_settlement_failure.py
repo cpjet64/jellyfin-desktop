@@ -49,7 +49,7 @@ class SettlementFailureTests(unittest.TestCase):
     def test_own_row_parse_failures_are_distinct_and_bounded(self):
         identity = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42, 'start_sec': 1}
         base = ['43', '42', '42', '42', '501', 'Mon', 'Jan', '01', '12:00:00', '2024', 'command']
-        for index, field in ((1, 'ppid'), (2, 'pgid'), (3, 'session'), (4, 'uid'), (5, 'start_sec')):
+        for index, field in ((1, 'ppid'), (2, 'pgid'), (3, 'session'), (5, 'start_sec')):
             parts = list(base)
             parts[index] = 'unparseable'
             observation = protocol.Observation()
@@ -62,6 +62,23 @@ class SettlementFailureTests(unittest.TestCase):
         with self.assertRaises(protocol.Failure):
             protocol.parse_inventory_row('unparseable ' + ' '.join(base[1:]), (identity,) * 3, observation)
         self.assertEqual(observation.events, [])
+
+    def test_parse_failure_ownership_and_row_shape(self):
+        identity = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42, 'start_sec': 1}
+        for line in ('44 42 42 bad 501 Mon Jan 01 12:00:00 2024 command',
+                     '43 42 42 bad 502 Mon Jan 01 12:00:00 2024 command',
+                     '43 42 42 bad secret Mon Jan 01 12:00:00 2024 command', '43 42 42 42'):
+            observation = protocol.Observation()
+            with self.subTest(line=line), self.assertRaises(protocol.Failure):
+                protocol.parse_inventory_row(line, (identity,) * 3, observation)
+            self.assertEqual(observation.events, [])
+        for line in ('43 42 42 42 501 Mon Jan 01 12:00:00 2024', '43 42 42 42 501 Mon Jan'):
+            observation = protocol.Observation()
+            with self.subTest(line=line), self.assertRaises(protocol.Failure):
+                protocol.parse_inventory_row(line, (identity,) * 3, observation)
+            event = observation.events[0]
+            self.assertEqual(event['reason'], 'row_shape')
+            self.assertTrue(all(item['state'] == 'not_evaluated' for item in event['fields']))
 
     def test_parse_failure_never_records_untrusted_tokens(self):
         identity = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42, 'start_sec': 1}

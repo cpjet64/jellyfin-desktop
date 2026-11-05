@@ -125,12 +125,15 @@ def identity_comparison(expected, observed, problem=None):
 
 
 def inventory_parse_failure(fields, identities, observation, problem):
-    """Record parse failure only when the row's existing PID identifies an own process."""
+    """Record parse failure only for an own row with matching parsed PID and UID."""
     try:
-        pid = int(fields[0])
+        pid, uid = int(fields[0]), int(fields[4])
     except (IndexError, ValueError):
         return
-    match = next(((index, item) for index, item in enumerate(identities) if item['pid'] == pid), None)
+    if not integer(pid) or not integer(uid):
+        return
+    match = next(((index, item) for index, item in enumerate(identities)
+                  if item['pid'] == pid and item['uid'] == uid), None)
     if match is None:
         return
     role_index, expected = match
@@ -154,6 +157,8 @@ def inventory_parse_failure(fields, identities, observation, problem):
         else:
             redacted['start_sec'] = ('unparseable_text', len(start))
     event = identity_comparison(expected, observed, problem)
+    if problem == 'row_shape':
+        event['reason'] = 'row_shape'
     for item in event['fields']:
         if item['field'] in redacted:
             item['observed_type'], item['observed_length'] = redacted[item['field']]
@@ -177,8 +182,7 @@ def parse_inventory_row(line, identities, observation):
     """Apply the existing ps parser, recording own-row parse failures."""
     parts = line.split(None, 10)
     if len(parts) != 11:
-        missing = ('pid', 'ppid', 'pgid', 'session', 'uid', 'start_sec')[min(len(parts), 5)]
-        inventory_parse_failure(parts, identities, observation, missing)
+        inventory_parse_failure(parts, identities, observation, 'row_shape')
         raise Failure('inventory', 'malformed_inventory')
     values = []
     for index, name in enumerate(('pid', 'ppid', 'pgid', 'session', 'uid')):
