@@ -14,11 +14,12 @@ struct HealthyWakeBinding::State {
   QObject* worker;
   Key key;
   Delivery delivery;
-  std::atomic<bool> admission{true}, eventsValid{true}, hooksValid{true}, failed{false};
+  std::atomic<bool> admission{true}, controllerValid{true}, eventsValid{true}, hooksValid{true}, failed{false};
   std::atomic<unsigned> active{0};
   // Control operations fail fast on overlap; wake admission never uses this flag.
   std::atomic_flag transition = ATOMIC_FLAG_INIT;
   bool attempted = false, unregisterAttempted = false, unregistered = false, drained = false;
+  bool handoffAttempted = false;
   NativeBarrier barrier = NativeBarrier::Unqualified;
   unsigned installed = 0;
 };
@@ -56,12 +57,13 @@ bool HealthyWakeBinding::install(Role role) noexcept
   Transition transition(state_->transition);
   if (!transition.acquired) return false;
   try {
-    const unsigned bit = role == Role::Controller ? 1U : 2U;
-    QObject* target = role == Role::Controller ? state_->controller : state_->player;
+    if (role != Role::Controller) return false;
+    const unsigned bit = 1U;
+    QObject* target = state_->controller;
     if (!target || !state_->worker || !state_->controller || !state_->player || !state_->hooks ||
         !state_->key.owner || !state_->key.generation || state_->controller->thread() != state_->worker->thread() ||
         target->thread() != QThread::currentThread() || !setter_ || !state_->delivery || !state_->admission ||
-        state_->failed || (state_->installed & bit) || (bit == 2 && !(state_->installed & 1))) return false;
+        state_->failed || (state_->installed & bit)) return false;
     auto endpoint = std::make_unique<Endpoint>();
     endpoint->state = state_; endpoint->role = role;
     auto* raw = endpoint.get();
@@ -73,21 +75,53 @@ bool HealthyWakeBinding::install(Role role) noexcept
   } catch (...) { state_->failed = true; return false; }
 }
 
+HealthyWakeBinding::Result HealthyWakeBinding::handoff(Key key, std::int64_t deadline) noexcept
+{
+  Transition transition(state_->transition);
+  if (!transition.acquired) return Result::Blocked;
+  try {
+    if (!onOwnerThread() || key.owner != state_->key.owner || key.generation != state_->key.generation ||
+        !clock_ || clock_() >= deadline || state_->failed || !state_->admission ||
+        !(state_->installed & 1) || state_->handoffAttempted) return Result::Blocked;
+    state_->handoffAttempted = true;
+    state_->controllerValid = false;
+    if (state_->barrier != NativeBarrier::SingleSlotSerialized || fence(deadline) != Result::Done ||
+        state_->failed || clock_() >= deadline) { state_->failed = true; return Result::Blocked; }
+    auto endpoint = std::make_unique<Endpoint>();
+    endpoint->state = state_; endpoint->role = Role::Player;
+    auto* raw = endpoint.get();
+    endpoints_.push_back(std::move(endpoint));
+    setter_(&HealthyWakeBinding::wake, raw);
+    if (clock_() >= deadline || !postDelivery(state_, Role::Player) || clock_() >= deadline) {
+      state_->failed = true;
+      return Result::Blocked;
+    }
+    state_->installed |= 2U;
+    return Result::Done;
+  } catch (...) { state_->failed = true; return Result::Blocked; }
+}
+
+bool HealthyWakeBinding::postDelivery(const std::shared_ptr<State>& state, Role role)
+{
+  const auto key = state->key;
+  QObject* target = role == Role::Controller ? state->controller : state->player;
+  return QMetaObject::invokeMethod(target, [state, key, role] {
+    if (state->failed.load() || !state->eventsValid.load() ||
+        (role == Role::Controller && !state->controllerValid.load()) ||
+        key.owner != state->key.owner || key.generation != state->key.generation) return;
+    try { state->delivery(role); } catch (...) { state->failed = true; }
+  }, Qt::QueuedConnection);
+}
+
 void HealthyWakeBinding::wake(void* context) noexcept
 {
   auto* endpoint = static_cast<Endpoint*>(context);
   auto state = endpoint->state;
   ++state->active;
   try {
-    if (state->admission.load() && !state->failed.load()) {
-      const auto key = state->key;
-      const auto role = endpoint->role;
-      QObject* target = role == Role::Controller ? state->controller : state->player;
-      const bool posted = QMetaObject::invokeMethod(target, [state, key, role] {
-        if (state->failed.load() || !state->eventsValid.load() || key.owner != state->key.owner || key.generation != state->key.generation) return;
-        try { state->delivery(role); } catch (...) { state->failed = true; }
-      }, Qt::QueuedConnection);
-      if (!posted) state->failed = true;
+    if (state->admission.load() && !state->failed.load() &&
+        (endpoint->role != Role::Controller || state->controllerValid.load())) {
+      if (!postDelivery(state, endpoint->role)) state->failed = true;
     }
   } catch (...) { state->failed = true; }
   --state->active;

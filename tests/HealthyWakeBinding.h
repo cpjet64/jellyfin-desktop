@@ -40,7 +40,15 @@ public:
   HealthyWakeBinding(const HealthyWakeBinding&) = delete;
   HealthyWakeBinding& operator=(const HealthyWakeBinding&) = delete;
 
+  // Only Controller may be installed directly. A valid handoff has one attempt:
+  // close its delivery gate, fence the worker, replace the same native slot and
+  // queue one Player kick. Failure keeps the gate closed and owner retained.
+  // A wrong key or already-expired deadline is rejected before starting an
+  // attempt and does not change the valid owner's gate.
+  // The eventual adapter must reuse finishMpvEventSetup's existing kick, not
+  // add this modeled kick as a second startup notification.
   bool install(Role role) noexcept;
+  Result handoff(Key key, std::int64_t deadline) noexcept;
   // Action and delivery captures must own their dependencies. Deliveries can
   // run concurrently on controller and player threads; shared captures need
   // synchronization. Work posted by delivery or action must carry the same
@@ -53,6 +61,7 @@ private:
   struct State;
   struct Endpoint;
   static void wake(void* context) noexcept;
+  static bool postDelivery(const std::shared_ptr<State>& state, Role role);
   Result fence(std::int64_t deadline) noexcept;
   bool onOwnerThread() const noexcept;
   std::shared_ptr<State> state_;
