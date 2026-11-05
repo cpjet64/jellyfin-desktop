@@ -117,6 +117,7 @@ Run-Native $venvPython @('dev/ci/test_linux_qt_plan.py')
 Run-Native $venvPython @('dev/ci/test_linux_qt_pc.py')
 Run-Native $venvPython @('dev/ci/test_libarchive_reader_contract.py')
 Run-Native $venvPython @('dev/ci/test_linux_sdk_cmake.py')
+Run-Native $venvPython @('tests/test_windows_mpv_runtime_configure.py')
 Run-Native 'powershell.exe' @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', 'dev/windows/test_ci_gui.ps1')
 Run-Native $venvPython @('-m', 'pip', 'install', 'aqtinstall==3.3.0')
 Run-Native $venvPython @('-m', 'aqt', 'install-qt', 'windows', 'desktop', $qtVersion, 'win64_msvc2022_64', '-m', 'qtwebengine', 'qtwebchannel', 'qtpositioning', '-O', "$ci/qt")
@@ -163,7 +164,7 @@ $env:LOCALAPPDATA = "$testHome/local"
 $env:JELLYFIN_TEST_OWNED_ROOT = $build
 Run-Native 'ctest.exe' @('--test-dir', $build, '-LE', 'gui', '--no-tests=error', '--output-on-failure', '--timeout', '60', '--output-junit', "$results/headless-ctest.xml")
 $reportArgs = @('dev/ci/check_results.py', 'junit', "$results/headless-ctest.xml")
-$required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard', 'test_mpv_test_bootstrap', 'test_mpv_test_bootstrap_pure', 'test_smtc_admission_model', 'test_c2a_hold_gate', 'test_c2_error_terminal', 'test_c2_fault_quiescence_policy', 'test_c2_synthetic_service', 'test_c2_fault_restore_permission', 'test_c2_fault_restore_frame', 'test_c2_capture_observation', 'test_c2_quiescence_observation')
+$required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard', 'test_mpv_test_bootstrap', 'test_mpv_test_bootstrap_pure', 'test_smtc_admission_model', 'test_c2a_hold_gate', 'test_c2_error_terminal', 'test_c2_fault_quiescence_policy', 'test_c2_synthetic_service', 'test_c2_fault_restore_permission', 'test_c2_fault_restore_frame', 'test_c2_capture_observation', 'test_c2_quiescence_observation', 'test_player_intent_observation', 'test_synchronous_stop_trace')
 if ($mode -eq 'static') { $required += @('test_mpvqt_event_ownership', 'test_mpvqt_player_binding', 'test_player_released_state') }
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs
@@ -186,7 +187,7 @@ try {
     $env:MPVQT_TEST_SOURCE = $previousMpvQtTestSource
 }
 Run-Native $found.Node @('--test', 'tests/test_inputPlugin.js')
-Run-Native $found.Node @('--test', 'tests/test_mpvVideoPlayer.js', 'tests/test_mpvVideoPlayer_order.js')
+Run-Native $found.Node @('--test', 'tests/test_mpvVideoPlayer.js', 'tests/test_mpvVideoPlayer_order.js', 'tests/test_synchronous_stop_page.js')
 Run-Native $found.Node @('--test', 'tests/test_windows_smoke_result.mjs')
 Run-Native $found.Node @('tests/windows_hidden_desktop_fixture.mjs')
 } finally {

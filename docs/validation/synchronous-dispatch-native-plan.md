@@ -1,11 +1,37 @@
-# Synchronous dispatch: proposed native fixture
+# Synchronous dispatch: native diagnostic plan
 
-This is a source-only plan. No fixture has been changed or run, and no native
-playback result is claimed. Its purpose is to exercise the real web player,
+## Diagnostic gate registration plan — 2026-11-05
+
+The existing production builds do not enable the
+`PLAYER_INTENT_DIAGNOSTIC_ONLY` observation seam. The option is to default OFF;
+its diagnostic configuration excludes application, installation and packaging
+targets. It must not enable C2 or change the selected MpvQt or external-event
+mode. The existing render-thread holds remain in force. A separate diagnostic
+build and an individually selected WebEngine fixture case are needed; the
+existing full-fixture scenario loops are not proof that this case ran.
+
+Register the single Stop case as a required, separately named diagnostic
+obligation for each of Windows, Linux and macOS in both Debug and Release.
+Each platform route must build only the diagnostic fixture and its required
+dependencies, use the existing platform-specific owned desktop and process
+containment, select the exact case, impose a finite timeout, and require its
+named QTest result and successful cleanup. Missing, skipped, failed, timed-out
+or uncertain results remain non-passing. Preserve the 28 Node checks and
+existing gates; Node and mock tests cannot substitute for the six native
+receipts. The source draft selects `RECOVERY_SCENARIO=synchronous-stop` in
+`test_webclient_containment`, with `RECOVERY_MEDIA`, `RECOVERY_MEDIA_B`,
+`RECOVERY_EVIDENCE_DIR`, `JELLYFIN_TEST_OWNED_ROOT` and
+`JELLYFIN_TEST_SOURCE_SHA`. It is explicitly held before native execution;
+the evidence schema and safe renderer route require review before wiring jobs.
+This plan neither changes the default build nor authorizes execution, resource
+allocation or a CI unhold.
+
+This is a source-only plan. A fixture draft exists but remains held and has not
+been run; no native playback result is claimed. Its purpose is to exercise the real web player,
 QWebChannel and PlayerComponent/mpv path when Play is immediately followed by
 Stop or a replacement Play. It does not propose a new intent API, origin API,
-or cancellation policy. The pending JavaScript change must be reviewed and
-landed before the fixture is implemented against its actual interface.
+or cancellation policy. The synchronous JavaScript dispatch change is landed;
+native execution requires separate safety review and authorization.
 
 ## Existing pieces and the remaining seam
 

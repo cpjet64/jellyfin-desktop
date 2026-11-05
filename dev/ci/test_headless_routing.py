@@ -62,9 +62,9 @@ class TestHeadlessRouting(unittest.TestCase):
         calls = []
         with redirect_stdout(io.StringIO()), patch.object(native, "command", side_effect=lambda name, args, **kw: calls.append((name, args))):
             native.headless_checks()
-        self.assertEqual(len(native.HEADLESS_TESTS), 17)
+        self.assertEqual(len(native.HEADLESS_TESTS), 19)
         names = set(native.HEADLESS_TESTS)
-        self.assertTrue({"test_c2_fault_restore_permission", "test_c2_fault_restore_frame", "test_c2_capture_observation", "test_c2_quiescence_observation"}.issubset(names))
+        self.assertTrue({"test_c2_fault_restore_permission", "test_c2_fault_restore_frame", "test_c2_capture_observation", "test_c2_quiescence_observation", "test_player_intent_observation", "test_synchronous_stop_trace"}.issubset(names))
         self.assertTrue({"test_systemcomponent", "test_log", "test_webclient_transport", "test_mpv_test_bootstrap_pure", "test_smtc_admission_model", "test_c2a_hold_gate", "test_c2_error_terminal", "test_c2_fault_quiescence_policy", "test_c2_synthetic_service"}.issubset(names))
         self.assertTrue(names.isdisjoint({"test_fault_stop", "test_windowmanager", "test_mpv_test_bootstrap",
                                          "test_mpvqt_event_ownership", "test_webclient_fault_webengine"}))
@@ -136,6 +136,10 @@ class TestHeadlessRouting(unittest.TestCase):
         self.assertIn("'test_c2_fault_restore_frame'", script)
         self.assertIn("'test_c2_capture_observation'", script)
         self.assertIn("'test_c2_quiescence_observation'", script)
+        self.assertIn("'test_player_intent_observation'", script)
+        self.assertIn("'test_synchronous_stop_trace'", script)
+        self.assertEqual(script.count("tests/test_windows_mpv_runtime_configure.py"), 1)
+        self.assertGreater(script.index("tests/test_windows_mpv_runtime_configure.py"), script.index("Install-CiTools"))
         self.assertIn("Run-Native $venvPython @('dev/ci/test_linux_qt_pc.py')", script)
         hold = script.index("fixture held before launch")
         for name in ("windows_mpv_loader_integration.py", "windows_packaging_runtime_test.py",
