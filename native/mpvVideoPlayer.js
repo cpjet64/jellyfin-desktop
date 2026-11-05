@@ -230,7 +230,7 @@
             if (options.fullscreen) {
                 this.loading.show();
             }
-            const elem = await this.createMediaElement(options);
+            const elem = this.createMediaElement(options);
             return await this.setCurrentSrc(elem, options);
         }
 
@@ -553,14 +553,14 @@
                     // At this point, we must hide the scrollbar placeholder, so it's not being displayed while the item is being loaded
                     document.body.classList.add('hide-scroll');
                 }
-                return Promise.resolve();
+                return;
             } else {
                 // we need to hide scrollbar when starting playback from page with animated background
                 if (options.fullscreen) {
                     document.body.classList.add('hide-scroll');
                 }
 
-                return Promise.resolve();
+                return;
             }
         }
 

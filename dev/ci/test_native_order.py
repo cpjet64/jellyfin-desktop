@@ -19,7 +19,8 @@ class NativeOrderTest(unittest.TestCase):
         with patch.object(native, 'command', side_effect=run):
             with self.assertRaisesRegex(RuntimeError, 'player test failure'):
                 native.headless_checks()
-        self.assertEqual(calls[-1], ('mpv-video-player', ['node', '--test', 'tests/test_mpvVideoPlayer.js']))
+        self.assertEqual(calls[-1], ('mpv-video-player', ['node', '--test', 'tests/test_mpvVideoPlayer.js',
+                                                          'tests/test_mpvVideoPlayer_order.js']))
 
     def exercise(self, available, blocked=False, system="Linux", mode="static", node_available=True,
                  smoke_failed=False, c2_failed=False, source_failed=False):

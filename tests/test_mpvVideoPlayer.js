@@ -10,13 +10,13 @@ function deferred() {
     return { promise, resolve, reject };
 }
 
-function harness() {
-    const calls = [], events = [], prompts = [];
+function harness(deferLoad = false) {
+    const calls = [], events = [], prompts = [], callbacks = [];
     const signal = { connect() {}, disconnect() {} };
     const player = new Proxy({}, {
         get(_target, key) {
             if (['playing', 'positionUpdate', 'finished', 'updateDuration', 'error', 'paused', 'bufferedRangesUpdated'].includes(key)) return signal;
-            if (key === 'load') return (...args) => { calls.push([key, ...args.slice(0, -1)]); args.at(-1)(); };
+            if (key === 'load') return (...args) => { calls.push([key, ...args.slice(0, -1)]); callbacks.push(args.at(-1)); if (!deferLoad) callbacks.at(-1)(); };
             return (...args) => calls.push([key, ...args]);
         }
     });
@@ -34,7 +34,7 @@ function harness() {
         confirm(options) { const pending = deferred(); prompts.push({ ...pending, options }); return pending.promise; },
         dashboard: { default: { setBackdropTransparency() {} } }
     });
-    return { instance, calls, events, prompts };
+    return { instance, calls, events, prompts, callbacks };
 }
 
 test('a new completed load is not disturbed by an earlier prompt', async () => {
@@ -70,17 +70,19 @@ for (const rejected of [false, true]) {
 for (const action of ['stop', 'play', 'destroy']) {
     for (const rejected of [false, true]) {
         test(`${action} invalidates pending ${rejected ? 'cancel' : 'retry'} synchronously`, async () => {
-            const h = harness();
+            const h = harness(action === 'play');
             const pending = h.instance.onError('old');
+            let playing;
             if (action === 'play') {
-                h.instance.createMediaElement = () => new Promise(() => {});
-                h.instance.play({ fullscreen: false });
+                h.instance.createMediaElement = () => {};
+                playing = h.instance.play({ fullscreen: false, url: 'new', mediaSource: { MediaStreams: [] } });
             } else h.instance[action]();
             const before = h.calls.length;
             h.prompts[0][rejected ? 'reject' : 'resolve']();
             await pending;
             assert.equal(errors(h).length, 0);
             assert.deepEqual(h.calls.slice(before), []);
+            if (playing) { h.callbacks[0](); await playing; }
         });
     }
 }

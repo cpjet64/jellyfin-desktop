@@ -289,7 +289,7 @@ def headless_checks():
         report += ["--require", name]
     command("headless-ctest-report", report)
     command("input-plugin", ["node", "--test", "tests/test_inputPlugin.js"], timeout=120)
-    command("mpv-video-player", ["node", "--test", "tests/test_mpvVideoPlayer.js"], timeout=120)
+    command("mpv-video-player", ["node", "--test", "tests/test_mpvVideoPlayer.js", "tests/test_mpvVideoPlayer_order.js"], timeout=120)
     command("bundle-paths", [sys.executable, "tests/test_bundle_paths.py"], timeout=120)
     command("package-freshness", [sys.executable, "tests/test_windows_package_freshness.py"], timeout=300)
     print(f"PASS: {len(HEADLESS_TESTS)} explicitly classified headless CTest cases", flush=True)
