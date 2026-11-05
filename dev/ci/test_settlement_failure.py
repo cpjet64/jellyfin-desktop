@@ -28,6 +28,19 @@ def run_capture(operation, cleanup=cleanup_success, spawn=None):
 
 
 class SettlementFailureTests(unittest.TestCase):
+    def test_nested_secondary_details_survive_run(self):
+        def fail(_observation):
+            raise protocol.Failure('inventory', 'timeout',
+                                   ['fd_close_failed', 'mask_restore_failed', 'private detail'])
+        record, error = run_capture(fail)
+        self.assertEqual(record['failure'], {'phase': 'inventory', 'category': 'timeout'})
+        self.assertEqual(record['secondary'], [
+            {'phase': 'cleanup', 'category': 'unknown', 'group': None, 'detail': 'fd_close_failed'},
+            {'phase': 'cleanup', 'category': 'unknown', 'group': None, 'detail': 'mask_restore_failed'}])
+        self.assertEqual(record['cleanup'][0]['group_settlement'], 'success')
+        self.assertEqual(error.record, record)
+        self.assertNotIn('private detail', json.dumps(record))
+
     def test_nested_failure_categories_survive_parent(self):
         for phase, category in (('inventory', 'timeout'), ('inventory', 'output_bound'),
                                 ('inventory', 'nonzero'), ('held_identity', 'identity_unavailable'),

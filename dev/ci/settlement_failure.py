@@ -110,7 +110,8 @@ def nested(operation, observation):
                     'failure': {'phase': 'held_identity', 'category': 'identity_unavailable'}}
         return {'ok': True, 'value': value, 'failure': None}
     except BaseException as error:
-        return {'ok': False, 'value': None, 'failure': failure_record(error, 'inventory')}
+        return {'ok': False, 'value': None, 'failure': failure_record(error, 'inventory'),
+                'secondary': error.secondary if isinstance(error, Failure) else []}
 
 
 def cleanup_record(cleanup, handle):
@@ -153,6 +154,7 @@ def run(spawn, operation, cleanup, emit, clock=time.monotonic):
         spawn(observed.register_group)
         result = nested(operation, observed)
         primary = result['failure']
+        early_secondary = result.get('secondary', [])
     except BaseException as error:
         result = {'ok': False, 'value': None}
         primary = failure_record(error, 'launch')
