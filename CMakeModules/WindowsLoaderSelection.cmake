@@ -1,0 +1,7 @@
+function(configure_windows_loader target loader_source)
+  if(WIN32 AND MSVC)
+    target_sources(${target} INTERFACE "${loader_source}")
+    target_link_libraries(${target} delayimp.lib)
+    target_link_options(${target} INTERFACE /DELAYLOAD:libmpv-2.dll)
+  endif()
+endfunction()

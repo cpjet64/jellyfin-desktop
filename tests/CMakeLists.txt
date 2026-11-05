@@ -4,6 +4,24 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+add_executable(test_windows_loader_mode windows_loader_mode_test.cpp)
+target_compile_features(test_windows_loader_mode PRIVATE cxx_std_17)
+add_test(NAME test_windows_loader_mode COMMAND test_windows_loader_mode)
+set_tests_properties(test_windows_loader_mode PROPERTIES TIMEOUT 60)
+
+add_executable(test_recovery_bridge_session test_recovery_bridge_session.cpp ${CMAKE_SOURCE_DIR}/src/system/RecoveryBridgeSession.cpp ${CMAKE_SOURCE_DIR}/src/system/RecoveryBridgeSession.h)
+target_include_directories(test_recovery_bridge_session PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_recovery_bridge_session PRIVATE Qt6::Core Qt6::Test Qt6::WebChannel)
+target_compile_features(test_recovery_bridge_session PRIVATE cxx_std_17)
+add_test(NAME test_recovery_bridge_session COMMAND test_recovery_bridge_session)
+set_tests_properties(test_recovery_bridge_session PROPERTIES TIMEOUT 60)
+
+add_executable(test_recovery_bridge_host test_recovery_bridge_host.cpp)
+target_include_directories(test_recovery_bridge_host PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
+target_link_libraries(test_recovery_bridge_host PRIVATE jmp_core Qt6::Test Qt6::WebChannel)
+add_test(NAME test_recovery_bridge_host COMMAND test_recovery_bridge_host)
+set_tests_properties(test_recovery_bridge_host PROPERTIES TIMEOUT 60)
+
 add_executable(test_playback_intent_acceptance test_playback_intent_acceptance.cpp ${CMAKE_SOURCE_DIR}/src/player/PlaybackIntent.cpp)
 target_include_directories(test_playback_intent_acceptance PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_compile_features(test_playback_intent_acceptance PRIVATE cxx_std_17)

@@ -5,6 +5,7 @@ include_directories(
   core
   shared
 )
+include(${CMAKE_SOURCE_DIR}/CMakeModules/WindowsLoaderSelection.cmake)
 
 set(CMAKE_AUTOMOC ON)
 get_target_property(Qt6Core_RCC_EXECUTABLE Qt6::rcc IMPORTED_LOCATION)
@@ -264,19 +265,11 @@ if(FIXTURE_PRODUCER_COPY_ONLY)
     endif()
   endforeach()
   target_link_libraries(FixtureCore ${_fixture_links} FixtureMpvQt)
-  if(WIN32 AND MSVC)
-    target_sources(FixtureCore INTERFACE "${_fixture_copy}/player/WindowsMpvLoader.cpp")
-    target_link_libraries(FixtureCore delayimp.lib)
-    target_link_options(FixtureCore INTERFACE /DELAYLOAD:libmpv-2.dll)
-  endif()
+  configure_windows_loader(FixtureCore "${_fixture_copy}/player/WindowsMpvLoader.cpp")
 endif()
 
 # The hook must be linked into every executable that uses the static core.
-if(WIN32 AND MSVC)
-  target_sources(jmp_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/player/WindowsMpvLoader.cpp)
-  target_link_libraries(jmp_core delayimp.lib)
-  target_link_options(jmp_core INTERFACE /DELAYLOAD:libmpv-2.dll)
-endif()
+configure_windows_loader(jmp_core "${CMAKE_CURRENT_SOURCE_DIR}/player/WindowsMpvLoader.cpp")
 
 if(NOT MPVQT_C2_DIAGNOSTIC_ONLY AND NOT PLAYER_INTENT_DIAGNOSTIC_ONLY)
 target_link_libraries(${MAIN_TARGET} PRIVATE jmp_core)

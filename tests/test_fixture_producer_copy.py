@@ -34,6 +34,19 @@ class FixtureProducerCopyTest(unittest.TestCase):
         return subprocess.run(args, cwd=self.root, capture_output=True, text=True, timeout=30, check=False,
                               creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
 
+    def test_platform_loader_selection(self):
+        fixture = ROOT / 'tests/fixtures/windows_loader_selection'
+        module = ROOT / 'CMakeModules/WindowsLoaderSelection.cmake'
+        for name, windows, msvc in [('windows-msvc', 'ON', 'ON'),
+                                    ('windows-other', 'ON', 'OFF'),
+                                    ('linux', 'OFF', 'OFF'), ('macos', 'OFF', 'OFF')]:
+            result = subprocess.run(
+                ['cmake', '-S', str(fixture), '-B', str(self.root / name),
+                 f'-DSELECTION_MODULE={module}', f'-DCASE_WINDOWS={windows}', f'-DCASE_MSVC={msvc}'],
+                capture_output=True, text=True, timeout=30, check=False,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            self.assertEqual(result.returncode, 0, name + result.stdout + result.stderr)
+
     def test_copy_patch_and_output(self):
         result = self.configure()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -78,6 +91,9 @@ class FixtureProducerCopyTest(unittest.TestCase):
         self.assertIn('#include "PlaybackCheckpoint.h"', moved)
         self.assertTrue((copied / 'player/PlaybackIntent.cpp').is_file())
         self.assertTrue((copied / 'player/PlaybackCheckpoint.cpp').is_file())
+        for name in ('WindowsMpvLoader.cpp', 'WindowsLoaderMode.h'):
+            self.assertEqual((copied / 'player' / name).read_bytes(),
+                             (ROOT / 'src/player' / name).read_bytes())
         self.assertNotIn('connect(this, &PlayerComponent::onMpvEvents', player)
         self.assertNotIn('emit onMpvEvents()', player)
         self.assertIn('fixtureWakeOwner()->postHook(pause, resume)', player)

@@ -21,7 +21,7 @@ class NativeOrderTest(unittest.TestCase):
                 native.headless_checks()
         self.assertEqual(calls[-1], ('mpv-video-player', ['node', '--test', 'tests/test_mpvVideoPlayer.js',
                                                           'tests/test_mpvVideoPlayer_order.js', 'tests/test_synchronous_stop_page.js',
-                                                          'tests/test_playback_intent_acceptance.js']))
+                                                          'tests/test_playback_intent_acceptance.js', 'tests/test_recovery_plugin_acceptance.js']))
 
     def exercise(self, available, blocked=False, system="Linux", mode="static", node_available=True,
                  smoke_failed=False, c2_failed=False, source_failed=False):
@@ -117,6 +117,7 @@ class NativeOrderTest(unittest.TestCase):
         with patch.object(native, "command", side_effect=lambda name, args, **kwargs: calls.append((name, args))):
             native.portable_checks()
         paths = [args[-1] for _, args in calls]
+        self.assertEqual(paths.count('tests/test_windows_loader_driver.py'), 1)
         for path in ("dev/ci/test_linux_sdk_order.py", "dev/ci/test_linux_sdk_inputs.py",
                      "dev/ci/test_qt_sdk_archive.py", "dev/ci/test_linux_qt_plan.py",
                      "dev/ci/test_libarchive_reader_contract.py", "dev/ci/test_linux_qt_pc.py",
@@ -190,7 +191,7 @@ class NativeOrderTest(unittest.TestCase):
                         script.index("dev/ci/test_settlement_observation.py"))
 
     def test_new_portable_suite_failure_stops_following_checks(self):
-        for failed in ("mac-sdist-select-tests", "settlement-failure-tests", "settlement-candidate-tests", "settlement-observation-tests", "fixture-suspend-policy-tests",
+        for failed in ("windows-loader-driver-tests", "mac-sdist-select-tests", "settlement-failure-tests", "settlement-candidate-tests", "settlement-observation-tests", "fixture-suspend-policy-tests",
                        "fixture-suspend-adapter-tests", "fixture-suspend-linux-tests", "linux-containment-capability-tests", "linux-capability-preflight-tests", "linux-synthetic-service-tests",
                        "linux-synthetic-adapter-tests", "linux-synthetic-dbus-tests", "linux-synthetic-wheel-provision",
                        "linux-synthetic-real-dbus-tests",
