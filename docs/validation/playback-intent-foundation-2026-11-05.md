@@ -64,6 +64,24 @@ and `python -B` on `dev/ci/test_native_order.py` and
 The package fixture checks used `python -B tests/test_bundle_paths.py` and
 `python -B tests/test_windows_package_freshness.py`.
 
+## Follow-up local checks
+
+At `f82fc4d0e0b98ce2d5d75749abf80074a24c2b7b`, with production bytes
+unchanged from `70fee1a6af02c72cf99dcd004c5902e217d26274`, 25 additional
+portable Python suites ran 207 tests with two platform-dependent skips; the
+Node smoke-result suite passed four tests. Fourteen further offline suites
+passed 116 tests. The actual installer script compiled in two tests, and the
+non-GUI hidden-desktop harness passed. A QtCore check read the actual compiled
+resource object bytes and matched all four JavaScript resources; this does not
+establish their inclusion in a distributable.
+
+The loader's corrupt-fallback case, expected to exit 126, timed out after 30
+seconds. It is not a pass and its cause is unconfirmed. The coordinator verified
+the fixture directories were removed and no task-owned processes remained.
+The Release configuration used static MpvQt ON and external events OFF;
+current builds of the designated static ON/external ON and system OFF/OFF
+configurations remain unproven.
+
 The strict producer endpoint is absent. No host-bound producer, replay or
 conflict qualification, or end-to-end stale-event suppression is claimed.
 Actual quit versus close-to-tray behavior was not exercised. No native Linux or
