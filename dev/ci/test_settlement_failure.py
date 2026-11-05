@@ -32,6 +32,9 @@ class SettlementFailureTests(unittest.TestCase):
         def fail(_observation):
             raise protocol.Failure('inventory', 'timeout',
                                    ['fd_close_failed', 'mask_restore_failed', 'private detail'])
+        nested = protocol.nested(fail, protocol.Observation())
+        self.assertEqual(nested['secondary'], ['fd_close_failed', 'mask_restore_failed'])
+        self.assertNotIn('private detail', json.dumps(nested))
         record, error = run_capture(fail)
         self.assertEqual(record['failure'], {'phase': 'inventory', 'category': 'timeout'})
         self.assertEqual(record['secondary'], [

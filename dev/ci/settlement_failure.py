@@ -111,7 +111,9 @@ def nested(operation, observation):
         return {'ok': True, 'value': value, 'failure': None}
     except BaseException as error:
         return {'ok': False, 'value': None, 'failure': failure_record(error, 'inventory'),
-                'secondary': error.secondary if isinstance(error, Failure) else []}
+                'secondary': [detail for detail in error.secondary
+                              if detail in ('fd_close_failed', 'mask_restore_failed')]
+                if isinstance(error, Failure) else []}
 
 
 def cleanup_record(cleanup, handle):
