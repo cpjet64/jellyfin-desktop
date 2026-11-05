@@ -19,7 +19,8 @@ struct HealthyWakeBinding::State {
   // Control operations fail fast on overlap; wake admission never uses this flag.
   std::atomic_flag transition = ATOMIC_FLAG_INIT;
   bool attempted = false, unregisterAttempted = false, unregistered = false, drained = false;
-  bool handoffAttempted = false;
+  bool handoffAttempted = false, handoffBegun = false, finishAttempted = false;
+  std::int64_t handoffDeadline = 0;
   NativeBarrier barrier = NativeBarrier::Unqualified;
   unsigned installed = 0;
 };
@@ -75,18 +76,43 @@ bool HealthyWakeBinding::install(Role role) noexcept
   } catch (...) { state_->failed = true; return false; }
 }
 
-HealthyWakeBinding::Result HealthyWakeBinding::handoff(Key key, std::int64_t deadline) noexcept
+HealthyWakeBinding::Result HealthyWakeBinding::beginHandoff(Key key, std::int64_t deadline) noexcept
 {
   Transition transition(state_->transition);
   if (!transition.acquired) return Result::Blocked;
   try {
-    if (!onOwnerThread() || key.owner != state_->key.owner || key.generation != state_->key.generation ||
-        !clock_ || clock_() >= deadline || state_->failed || !state_->admission ||
-        !(state_->installed & 1) || state_->handoffAttempted) return Result::Blocked;
+    if (!onOwnerThread() || key.owner != state_->key.owner || key.generation != state_->key.generation)
+      return Result::Blocked;
+    if (state_->handoffAttempted) {
+      if (!state_->finishAttempted) state_->failed = true;
+      return Result::Blocked;
+    }
+    if (!clock_ || clock_() >= deadline || state_->failed || !state_->admission ||
+        !(state_->installed & 1)) return Result::Blocked;
     state_->handoffAttempted = true;
+    state_->handoffDeadline = deadline;
     state_->controllerValid = false;
     if (state_->barrier != NativeBarrier::SingleSlotSerialized || fence(deadline) != Result::Done ||
         state_->failed || clock_() >= deadline) { state_->failed = true; return Result::Blocked; }
+    state_->handoffBegun = true;
+    return Result::Done;
+  } catch (...) { state_->failed = true; return Result::Blocked; }
+}
+
+HealthyWakeBinding::Result HealthyWakeBinding::finishHandoff(Key key, std::int64_t deadline) noexcept
+{
+  Transition transition(state_->transition);
+  if (!transition.acquired) return Result::Blocked;
+  try {
+    if (!onOwnerThread() || key.owner != state_->key.owner || key.generation != state_->key.generation)
+      return Result::Blocked;
+    if (!state_->handoffBegun || state_->finishAttempted || state_->failed) return Result::Blocked;
+    if (!state_->admission || deadline != state_->handoffDeadline || !clock_) {
+      state_->failed = true;
+      return Result::Blocked;
+    }
+    state_->finishAttempted = true;
+    if (clock_() >= deadline) { state_->failed = true; return Result::Blocked; }
     auto endpoint = std::make_unique<Endpoint>();
     endpoint->state = state_; endpoint->role = Role::Player;
     auto* raw = endpoint.get();

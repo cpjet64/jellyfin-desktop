@@ -46,9 +46,16 @@ bool FixtureWakeOwner::installController(MpvController* controller) noexcept
   } catch (...) { phase_ = Phase::Blocked; return false; }
 }
 
-FixtureWakeOwner::Result FixtureWakeOwner::handoff() noexcept
+FixtureWakeOwner::Result FixtureWakeOwner::beginHandoff() noexcept
 {
-  const auto result = binding_ ? binding_->handoff(key_, deadline_) : Result::Blocked;
+  const auto result = binding_ ? binding_->beginHandoff(key_, deadline_) : Result::Blocked;
+  phase_ = result == Result::Done ? Phase::HandoffBegun : Phase::Blocked;
+  return result;
+}
+
+FixtureWakeOwner::Result FixtureWakeOwner::finishHandoff() noexcept
+{
+  const auto result = binding_ ? binding_->finishHandoff(key_, deadline_) : Result::Blocked;
   phase_ = result == Result::Done ? Phase::PlayerInstalled : Phase::Blocked;
   return result;
 }

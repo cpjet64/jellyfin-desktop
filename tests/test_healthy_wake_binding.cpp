@@ -54,6 +54,11 @@ static void closeWake(Binding& binding, Binding::Key key) {
   CHECK(binding.apply(Step::DrainWakeCallbacks, key, now() + 1000000000) == Binding::Result::Done);
 }
 
+static Binding::Result handoff(Binding& binding, Binding::Key key, std::int64_t deadline) {
+  const auto begun = binding.beginHandoff(key, deadline);
+  return begun == Binding::Result::Done ? binding.finishHandoff(key, deadline) : begun;
+}
+
 static void callbackHandoffAndInvalidation(QObject& events, QObject& hooks, QObject& worker) {
   NativeSetter native;
   std::vector<Binding::Role> delivered;
@@ -71,13 +76,13 @@ static void callbackHandoffAndInvalidation(QObject& events, QObject& hooks, QObj
   CHECK(controllerDelivered.tryAcquire(1, 1000));
   CHECK(correctThread && delivered.size() == 1 && delivered[0] == Binding::Role::Controller);
   CHECK(!binding.install(Binding::Role::Player));
-  CHECK(binding.handoff({key.owner, key.generation + 1}, now() + 1000000000) == Binding::Result::Blocked);
-  CHECK(binding.handoff(key, now() - 1) == Binding::Result::Blocked);
+  CHECK(handoff(binding, {key.owner, key.generation + 1}, now() + 1000000000) == Binding::Result::Blocked);
+  CHECK(handoff(binding, key, now() - 1) == Binding::Result::Blocked);
   CHECK(native.installs == 1);
-  CHECK(binding.handoff(key, now() + 1000000000) == Binding::Result::Done);
+  CHECK(handoff(binding, key, now() + 1000000000) == Binding::Result::Done);
   pump();
   CHECK(correctThread && delivered.size() == 2 && delivered[1] == Binding::Role::Player);
-  CHECK(binding.handoff(key, now() + 1000000000) == Binding::Result::Blocked);
+  CHECK(handoff(binding, key, now() + 1000000000) == Binding::Result::Blocked);
   native.notify();
   pump();
   CHECK(correctThread && delivered.size() == 3 && delivered[2] == Binding::Role::Player);
@@ -96,7 +101,7 @@ static void closureAndDelayedHook(QObject& events, QObject& hooks, QObject& work
                   [&](auto callback, auto context) { native(callback, context); },
                   [&](auto) { ++deliveries; }, now, Binding::NativeBarrier::SingleSlotSerialized);
   installController(binding, worker);
-  CHECK(binding.handoff(key, now() + 1000000000) == Binding::Result::Done);
+  CHECK(handoff(binding, key, now() + 1000000000) == Binding::Result::Done);
   CHECK(binding.postHook(0, [&] { ++hookCount; }));
   native.callDuringUnregister = true;
   CHECK(binding.apply(Step::CloseWakeAdmission, {key.owner, key.generation + 1}, now() + 1000000000) == Binding::Result::Blocked);
@@ -207,8 +212,8 @@ static void setterFailureRejectsQueuedDelivery(QObject& events, QObject& hooks, 
   }, [&](auto) { ++delivered; }, now, Binding::NativeBarrier::SingleSlotSerialized);
   installController(binding, worker);
   CHECK(binding.postHook(0, [&] { ++hook; }));
-  CHECK(binding.handoff(key, now() + 1000000000) == Binding::Result::Blocked);
-  CHECK(binding.handoff(key, now() + 1000000000) == Binding::Result::Blocked && setters == 2);
+  CHECK(handoff(binding, key, now() + 1000000000) == Binding::Result::Blocked);
+  CHECK(handoff(binding, key, now() + 1000000000) == Binding::Result::Blocked && setters == 2);
   pump();
   CHECK(delivered == 0 && hook == 0);
   CHECK(binding.apply(Step::CloseWakeAdmission, key, now() + 1000000000) == Binding::Result::Blocked);
@@ -233,14 +238,14 @@ static void oldControllerDeliveryIsInvalidated(QObject& events, QObject& hooks, 
   void* oldContext = native.context;
   native.notify();
   std::thread unblock([&] { QThread::msleep(50); oldCallback(oldContext); release.release(); });
-  const auto handoff = binding->handoff(key, now() + 1000000000);
+  const auto handoffResult = handoff(*binding, key, now() + 1000000000);
   unblock.join();
-  CHECK(handoff == Binding::Result::Done);
+  CHECK(handoffResult == Binding::Result::Done);
   CHECK(finished.tryAcquire(1, 1000));
   oldCallback(oldContext);
   pump();
   CHECK(controller == 0 && player == 1); // Player kick services the handoff gap.
-  CHECK(binding->handoff(key, now() + 1000000000) == Binding::Result::Blocked);
+  CHECK(handoff(*binding, key, now() + 1000000000) == Binding::Result::Blocked);
   CHECK(native.installs == 2);
   closeWake(*binding, key);
   CHECK(binding->apply(Step::InvalidatePlayerEvents, key, now() + 1000000000) == Binding::Result::Done);
@@ -264,9 +269,11 @@ static void executingControllerFinishesBeforeReplacement(QObject& events, QObjec
   native.notify();
   CHECK(entered.tryAcquire(1, 1000));
   std::thread unblock([&] { QThread::msleep(50); release.release(); });
-  const auto result = binding.handoff(key, now() + 1000000000);
+  const auto deadline = now() + 1000000000;
+  const auto result = binding.beginHandoff(key, deadline);
   unblock.join();
-  CHECK(result == Binding::Result::Done && replacementAfterReturn && completed.load());
+  CHECK(result == Binding::Result::Done && completed.load() && native.installs == 1);
+  CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Done && replacementAfterReturn);
   pump();
   closeWake(binding, key);
 }
@@ -284,8 +291,8 @@ static void failedHandoffNeverReinstalls(QObject& events, QObject& hooks, QObjec
       CHECK(QMetaObject::invokeMethod(&worker, [&] { entered.release(); release.tryAcquire(1, 3000); finished.release(); }, Qt::QueuedConnection));
       CHECK(entered.tryAcquire(1, 1000));
     }
-    CHECK(binding->handoff(key, now() + 30000000) == Binding::Result::Blocked);
-    CHECK(binding->handoff(key, now() + 1000000000) == Binding::Result::Blocked && native.installs == 1);
+    CHECK(handoff(*binding, key, now() + 30000000) == Binding::Result::Blocked);
+    CHECK(handoff(*binding, key, now() + 1000000000) == Binding::Result::Blocked && native.installs == 1);
     CHECK(binding != nullptr);
     if (qualified) { release.release(); CHECK(finished.tryAcquire(1, 1000)); }
     native(nullptr, nullptr); // Only this fake can prove its producer is gone.
@@ -301,11 +308,11 @@ static void lateKickIsRejected(QObject& events, QObject& hooks, QObject& worker)
     [&](auto callback, auto context) { native(callback, context); }, [&](auto) { ++delivered; },
     [&] { return ++clocks >= 6 ? deadline : std::int64_t{0}; }, Binding::NativeBarrier::SingleSlotSerialized);
   installController(binding, worker);
-  CHECK(binding.handoff(key, deadline) == Binding::Result::Blocked);
+  CHECK(handoff(binding, key, deadline) == Binding::Result::Blocked);
   CHECK(native.installs == 2 && clocks == 6);
   pump();
   CHECK(delivered == 0);
-  CHECK(binding.handoff(key, deadline) == Binding::Result::Blocked && native.installs == 2);
+  CHECK(handoff(binding, key, deadline) == Binding::Result::Blocked && native.installs == 2);
   native(nullptr, nullptr); // Fake setter clears the producer after the blocked result.
 }
 
@@ -328,13 +335,133 @@ static void itemWorkSurvivesHandoff(QObject& events, QObject& hooks, QObject& wo
   installController(binding, worker);
   CHECK(guardedItemWork(binding, worker, key));
   CHECK(!guardedItemWork(binding, worker, {key.owner, key.generation + 1}));
-  CHECK(binding.handoff(key, now() + 1000000000) == Binding::Result::Done);
+  const auto deadline = now() + 1000000000;
+  CHECK(binding.beginHandoff(key, deadline) == Binding::Result::Done);
+  CHECK(guardedItemWork(binding, worker, key));
+  CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Done);
   CHECK(guardedItemWork(binding, worker, key));
   closeWake(binding, key);
   CHECK(binding.apply(Step::InvalidatePlayerEvents, key, now() + 1000000000) == Binding::Result::Done);
   CHECK(!guardedItemWork(binding, worker, key));
   CHECK(binding.apply(Step::InvalidateHooks, key, now() + 1000000000) == Binding::Result::Done);
   CHECK(binding.apply(Step::FenceWorker, key, now() + 1000000000) == Binding::Result::Done);
+}
+
+static void gapPreservesEvents(QObject& events, QObject& hooks, QObject& worker) {
+  NativeSetter native;
+  std::atomic<int> queued{0}, controller{0}, player{0};
+  const Binding::Key key{13, 19};
+  Binding binding(&worker, &events, &hooks, &worker, key,
+    [&](auto callback, auto context) { native(callback, context); }, [&](auto role) {
+      if (role == Binding::Role::Controller) { ++controller; queued.exchange(0); }
+      else { ++player; queued.exchange(0); }
+    }, now, Binding::NativeBarrier::SingleSlotSerialized);
+  installController(binding, worker);
+  const auto old = native.callback; void* oldContext = native.context;
+  const auto deadline = now() + 1000000000;
+  CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Blocked);
+  CHECK(binding.beginHandoff(key, deadline) == Binding::Result::Done);
+  ++queued; old(oldContext); native.notify();
+  CHECK(guardedItemWork(binding, worker, key));
+  CHECK(controller == 0 && queued == 1 && player == 0);
+  CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Done);
+  pump();
+  CHECK(controller == 0 && queued == 0 && player == 1);
+  old(oldContext); pump();
+  CHECK(controller == 0 && player == 1);
+  CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Blocked);
+  closeWake(binding, key);
+}
+
+static void failedBeginSkipsRegistration(QObject& events, QObject& hooks, QObject& worker) {
+  NativeSetter native;
+  const Binding::Key key{14, 20};
+  Binding binding(&worker, &events, &hooks, &worker, key,
+    [&](auto callback, auto context) { native(callback, context); }, [](auto) {}, now,
+    Binding::NativeBarrier::Unqualified);
+  installController(binding, worker);
+  const auto deadline = now() + 1000000000;
+  int registrations = 0;
+  if (binding.beginHandoff(key, deadline) == Binding::Result::Done) {
+    ++registrations;
+    binding.finishHandoff(key, deadline);
+  }
+  CHECK(registrations == 0 && native.installs == 1);
+  CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Blocked);
+  native(nullptr, nullptr); // Only this fake can settle its callback after failure.
+}
+
+static void changedDeadlineFailsClosed(QObject& events, QObject& hooks, QObject& worker) {
+  NativeSetter native;
+  int delivered = 0;
+  const Binding::Key key{15, 21};
+  Binding binding(&worker, &events, &hooks, &worker, key,
+    [&](auto callback, auto context) { native(callback, context); }, [&](auto) { ++delivered; }, now,
+    Binding::NativeBarrier::SingleSlotSerialized);
+  installController(binding, worker);
+  const auto deadline = now() + 1000000000;
+  CHECK(binding.beginHandoff(key, deadline) == Binding::Result::Done);
+  CHECK(binding.finishHandoff(key, deadline + 1) == Binding::Result::Blocked);
+  CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Blocked);
+  pump();
+  CHECK(native.installs == 1 && delivered == 0);
+  native(nullptr, nullptr);
+}
+
+static void expiredFinishFailsClosed(QObject& events, QObject& hooks, QObject& worker) {
+  NativeSetter native;
+  std::int64_t clock = 0;
+  const Binding::Key key{16, 22};
+  Binding binding(&worker, &events, &hooks, &worker, key,
+    [&](auto callback, auto context) { native(callback, context); }, [](auto) {}, [&] { return clock; },
+    Binding::NativeBarrier::SingleSlotSerialized);
+  installController(binding, worker);
+  const std::int64_t deadline = 1000000000;
+  CHECK(binding.beginHandoff(key, deadline) == Binding::Result::Done);
+  clock = deadline;
+  CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Blocked);
+  clock = 0;
+  CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Blocked && native.installs == 1);
+  native(nullptr, nullptr);
+}
+
+static void duplicateBeginFailsClosed(QObject& events, QObject& hooks, QObject& worker) {
+  NativeSetter native;
+  const Binding::Key key{17, 23};
+  Binding binding(&worker, &events, &hooks, &worker, key,
+    [&](auto callback, auto context) { native(callback, context); }, [](auto) {}, now,
+    Binding::NativeBarrier::SingleSlotSerialized);
+  installController(binding, worker);
+  const auto deadline = now() + 1000000000;
+  CHECK(binding.beginHandoff(key, deadline) == Binding::Result::Done);
+  CHECK(binding.beginHandoff(key, deadline) == Binding::Result::Blocked);
+  CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Blocked && native.installs == 1);
+  native(nullptr, nullptr);
+}
+
+static void foreignCallsDoNotPoisonHandoff(QObject& events, QObject& hooks, QObject& worker) {
+  NativeSetter native;
+  int player = 0;
+  const Binding::Key key{18, 24};
+  Binding binding(&worker, &events, &hooks, &worker, key,
+    [&](auto callback, auto context) { native(callback, context); }, [&](auto) { ++player; }, now,
+    Binding::NativeBarrier::SingleSlotSerialized);
+  installController(binding, worker);
+  const auto deadline = now() + 1000000000;
+  CHECK(binding.beginHandoff(key, deadline) == Binding::Result::Done);
+  CHECK(binding.beginHandoff({key.owner, key.generation + 1}, deadline) == Binding::Result::Blocked);
+  CHECK(binding.finishHandoff({key.owner + 1, key.generation}, deadline) == Binding::Result::Blocked);
+  QSemaphore done;
+  CHECK(QMetaObject::invokeMethod(&worker, [&] {
+    CHECK(binding.beginHandoff(key, deadline) == Binding::Result::Blocked);
+    CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Blocked);
+    done.release();
+  }, Qt::QueuedConnection));
+  CHECK(done.tryAcquire(1, 1000));
+  CHECK(binding.finishHandoff(key, deadline) == Binding::Result::Done);
+  pump();
+  CHECK(native.installs == 2 && player == 1);
+  closeWake(binding, key);
 }
 
 int main(int argc, char** argv) {
@@ -357,6 +484,12 @@ int main(int argc, char** argv) {
   failedHandoffNeverReinstalls(events, hooks, *worker);
   lateKickIsRejected(events, hooks, *worker);
   itemWorkSurvivesHandoff(events, hooks, *worker);
+  gapPreservesEvents(events, hooks, *worker);
+  failedBeginSkipsRegistration(events, hooks, *worker);
+  changedDeadlineFailsClosed(events, hooks, *worker);
+  expiredFinishFailsClosed(events, hooks, *worker);
+  duplicateBeginFailsClosed(events, hooks, *worker);
+  foreignCallsDoNotPoisonHandoff(events, hooks, *worker);
   thread.quit();
   CHECK(thread.wait(4000));
 }

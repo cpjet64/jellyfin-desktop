@@ -62,7 +62,9 @@ set(_fixture_output_hashes
   "mpvqt/mpvcontroller.h|02d4b3499ec99d3eb0f3d5e5f7bc7e9d283fb027a72a195c2779876e5f5229c7"
   "player/MpvVideoItem.cpp|df2d8f3429067ef94cf4e737bad91555ff3d47545c6a03502a6763267895c2f8"
   "player/MpvVideoItem.h|697c7c2d34cdf99c266dcab77623a9be5c35ab966cb555739932159e8bed13cf"
-  "player/PlayerMpvEvents.cpp|e55ec5baad5e7f6492849ee566c24f64e7a5edf22a71594218af09ff14ef1e40"
+  "player/PlayerMpvEvents.cpp|44cd5d38f80527b8577c796c0cbd413e0a031369f53e8afcb6f897580d4563bb"
+  "player/PlayerComponent.cpp|fadf5c172759ffd394ba2870ef7e3408bd1b04596c0b611279f5ad2a60f55377"
+  "player/PlayerComponent.h|754d26066d120c3fd8f493fa87698d38ff8f380dd333df7b14706f169d2a8b4e"
   "tests/test_webclient_containment.cpp|c8a607dcea1de26ebfaf7eb3668814cf7c2605940fcb29b86eda827c31e55bf6")
 
 function(_fixture_copy_inputs source destination list_name)
@@ -100,7 +102,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_fixture_patch
 file(READ "${_fixture_patch}" _fixture_patch_contents)
 string(REPLACE "\r\n" "\n" _fixture_patch_contents "${_fixture_patch_contents}")
 string(SHA256 _fixture_patch_hash "${_fixture_patch_contents}")
-if(NOT _fixture_patch_hash STREQUAL "51470cdf3beaffe2e5458dcccfa28016633ad21c35fb5947d3142ecb2a01d1b0")
+if(NOT _fixture_patch_hash STREQUAL "beab0fad9cecb8e5d98c8a85ad10485d4513731b2f43031e92498c7ac2bd2bec")
   message(FATAL_ERROR "Fixture patch hash mismatch")
 endif()
 execute_process(COMMAND "${CMAKE_COMMAND}" -E env "GIT_CEILING_DIRECTORIES=${CMAKE_BINARY_DIR}"
@@ -123,7 +125,7 @@ endforeach()
 
 # Every unpatched copied file must also remain byte-identical to its input.
 set(_fixture_changed_mpv mpvabstractitem.cpp mpvabstractitem.h mpvcontroller.cpp mpvcontroller.h)
-set(_fixture_changed_player MpvVideoItem.cpp MpvVideoItem.h PlayerMpvEvents.cpp)
+set(_fixture_changed_player MpvVideoItem.cpp MpvVideoItem.h PlayerMpvEvents.cpp PlayerComponent.cpp PlayerComponent.h)
 set(_fixture_changed_core ComponentManager.cpp)
 set(_fixture_changed_ui WindowManager.cpp)
 set(_fixture_changed_input InputComponent.cpp)

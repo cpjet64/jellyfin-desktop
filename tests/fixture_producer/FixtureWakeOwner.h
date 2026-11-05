@@ -17,14 +17,15 @@ class FixtureWakeOwner
 public:
   using Result = HealthyWakeBinding::Result;
   using Key = HealthyWakeBinding::Key;
-  enum class Phase { New, ControllerInstalled, PlayerInstalled, Blocked };
+  enum class Phase { New, ControllerInstalled, HandoffBegun, PlayerInstalled, Blocked };
   FixtureWakeOwner(QObject* player, Key key, std::int64_t deadline,
                    HealthyWakeBinding::NativeBarrier barrier);
   ~FixtureWakeOwner();
   FixtureWakeOwner(const FixtureWakeOwner&) = delete;
   FixtureWakeOwner& operator=(const FixtureWakeOwner&) = delete;
   bool installController(MpvController* controller) noexcept;
-  Result handoff() noexcept;
+  Result beginHandoff() noexcept;
+  Result finishHandoff() noexcept;
   bool controllerWorkAllowed() const noexcept;
   bool postHook(int delayMs, std::function<void()> action) noexcept;
   Result apply(HealthyCleanup::Step step) noexcept;
