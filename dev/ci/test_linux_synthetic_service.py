@@ -17,9 +17,11 @@ class FakeManager:
         self.capture_error = None
         self.stop_result = 'done'
         self.stop_error = None
+        self.mode = None
 
     def submit(self, spec, deadline):
         self.calls.append(('submit', spec, deadline))
+        self.mode = spec['arguments'][-1]
         if self.submit_error:
             raise self.submit_error
         return JOB
@@ -29,7 +31,8 @@ class FakeManager:
         if self.observe_error:
             raise self.observe_error
         return {'unit': unit, 'job': job, 'invocation': 'b' * 32, 'cgroup': '/system.slice/' + unit,
-                'reference_held': True, 'job_terminal': True, 'start_result': 'done', **self.start_changes}
+                'reference_held': True, 'bus': 'system', 'job_observed': True,
+                'job_terminal': True, 'start_result': 'done', **self.start_changes}
 
     def capture(self, identity, deadline):
         self.calls.append(('capture', identity, deadline))
@@ -38,7 +41,8 @@ class FakeManager:
         stopped = any(call[0] == 'stop' for call in self.calls)
         result = {**identity, 'reference_held': True, 'state': 'inactive' if stopped else 'active',
                   'job_terminal': True, 'cgroup_empty': stopped, 'descendants_absent': stopped,
-                  'evidence_saved': True}
+                  'evidence_saved': True, 'fixture_ready': True, 'fixture_mode': self.mode,
+                  'fixture_result': 'passed' if stopped else None}
         return {**result, **self.capture_changes}
 
     def stop(self, identity, deadline):
@@ -46,15 +50,91 @@ class FakeManager:
         if self.stop_error:
             raise self.stop_error
         return {**identity, 'stop_job': '/org/freedesktop/systemd1/job/43',
-                'job_terminal': True, 'result': self.stop_result}
+                'observed_job': '/org/freedesktop/systemd1/job/43', 'observed_unit': identity['unit'],
+                'job_observed': True, 'job_terminal': True, 'result': self.stop_result}
 
 
 class SyntheticServiceTest(unittest.TestCase):
+    def test_ordinary_waits_for_actual_completion(self):
+        backend = FakeManager()
+        clock = [100]
+        original = backend.capture
+        def capture(identity, deadline):
+            clock[0] += 1
+            snapshot = original(identity, deadline)
+            if clock[0] == 102:
+                snapshot.update(state='inactive', cgroup_empty=True, descendants_absent=True, fixture_result='passed')
+            return snapshot
+        backend.capture = capture
+        result = subject.SyntheticService(backend, clock=lambda: clock[0]).run(TASK, 'ordinary', False)
+        self.assertEqual(result['fixture_result'], 'passed')
+        self.assertEqual([x[0] for x in backend.calls].count('capture'), 2)
+        self.assertEqual([x[2] for x in backend.calls if x[0] == 'capture'], [125, 125])
+        self.assertNotIn('stop', [x[0] for x in backend.calls])
+
+    def test_ready_modes_wait_for_matching_fixture_ready(self):
+        for mode in ('stopped-child', 'term-resistant', 'session-changing'):
+            with self.subTest(mode=mode):
+                backend = FakeManager()
+                clock = [100]
+                original = backend.capture
+                def capture(identity, deadline):
+                    clock[0] += 1
+                    result = original(identity, deadline)
+                    if result['state'] == 'active' and clock[0] == 101:
+                        result['fixture_ready'] = False
+                    return result
+                backend.capture = capture
+                subject.SyntheticService(backend, clock=lambda: clock[0]).run(TASK, mode, True)
+                self.assertEqual([x[0] for x in backend.calls], ['submit', 'observe', 'capture', 'capture', 'stop', 'capture'])
+
+    def test_readiness_deadline_retains_binding_without_stop(self):
+        backend = FakeManager()
+        clock = [100]
+        original = backend.capture
+        def capture(identity, deadline):
+            clock[0] += 10
+            return {**original(identity, deadline), 'fixture_ready': False}
+        backend.capture = capture
+        runner = subject.SyntheticService(backend, clock=lambda: clock[0])
+        with self.assertRaises(subject.Unconfirmed) as raised:
+            runner.run(TASK, 'stopped-child', True)
+        self.assertEqual(raised.exception.last_known['submitted_job'], JOB)
+        self.assertEqual(raised.exception.last_known['binding']['invocation'], 'b' * 32)
+        self.assertNotIn('stop', [x[0] for x in backend.calls])
+        with self.assertRaises(subject.Unconfirmed):
+            runner.run(TASK, 'stopped-child', True)
+
+    def test_rapid_completion_and_failed_fixture(self):
+        for state, result, expected in (('inactive', 'passed', None), ('failed', 'failed', subject.FixtureFailed),
+                                        ('inactive', 'failed', subject.FixtureFailed)):
+            backend = FakeManager()
+            backend.capture_changes = {'state': state, 'cgroup_empty': True, 'descendants_absent': True,
+                                       'fixture_result': result}
+            runner = subject.SyntheticService(backend, clock=lambda: 100)
+            with self.subTest(state=state, result=result):
+                if expected:
+                    with self.assertRaises(expected):
+                        runner.run(TASK, 'ordinary', False)
+                else:
+                    self.assertEqual(runner.run(TASK, 'ordinary', False)['fixture_result'], 'passed')
+
+    def test_mismatched_readiness_or_lost_connection_never_stops(self):
+        for changes, error in (({'fixture_mode': 'other'}, None), ({}, ConnectionError('bus lost'))):
+            backend = FakeManager()
+            backend.capture_changes = changes
+            backend.capture_error = error
+            with self.subTest(changes=changes, error=error), self.assertRaises(subject.Unconfirmed) as raised:
+                subject.SyntheticService(backend, clock=lambda: 100).run(TASK, 'term-resistant', True)
+            self.assertEqual(raised.exception.last_known['binding']['job'], JOB)
+            self.assertNotIn('stop', [x[0] for x in backend.calls])
+
     def test_exact_synthetic_properties_and_successful_stop(self):
         backend = FakeManager()
         result = subject.SyntheticService(backend, clock=lambda: 100).run(TASK, 'stopped-child', True)
         spec = backend.calls[0][1]
         self.assertEqual(spec['unit'], 'w644-' + TASK + '.service')
+        self.assertEqual(spec['manager'], {'bus': 'system', 'add_ref': True, 'watch_jobs_before_start': True})
         self.assertEqual(spec['properties'], {'Type': 'exec', 'User': '999', 'Group': '988', 'Restart': 'no',
                          'Delegate': False, 'KillMode': 'control-group', 'SendSIGKILL': True,
                          'RuntimeMaxSec': 25, 'TimeoutStartSec': 15, 'TimeoutStopSec': 15})
@@ -63,14 +143,15 @@ class SyntheticServiceTest(unittest.TestCase):
 
     def test_ordinary_completion_does_not_stop(self):
         backend = FakeManager()
-        backend.capture_changes = {'state': 'inactive', 'cgroup_empty': True, 'descendants_absent': True}
+        backend.capture_changes = {'state': 'inactive', 'cgroup_empty': True, 'descendants_absent': True,
+                                   'fixture_result': 'passed'}
         result = subject.SyntheticService(backend, clock=lambda: 100).run(TASK, 'ordinary', False)
         self.assertEqual(result['state'], 'inactive')
         self.assertNotIn('stop', [call[0] for call in backend.calls])
 
     def test_rejected_name_collision_exec_failure_and_missing_identity(self):
         for changes in ({'start_result': 'failed'}, {'invocation': ''}, {'cgroup': '/system.slice'},
-                        {'reference_held': False}, {'job': JOB + '1'}):
+                        {'reference_held': False}, {'job_observed': False}, {'bus': 'direct'}, {'job': JOB + '1'}):
             with self.subTest(changes=changes):
                 backend = FakeManager()
                 backend.start_changes = changes
@@ -146,16 +227,27 @@ class SyntheticServiceTest(unittest.TestCase):
         def stop(identity, deadline):
             backend.calls.append(('stop', identity, deadline))
             return {**identity, 'invocation': 'c' * 32, 'stop_job': '/org/freedesktop/systemd1/job/43',
-                    'job_terminal': True, 'result': 'done'}
+                    'observed_job': '/org/freedesktop/systemd1/job/43', 'observed_unit': identity['unit'],
+                    'job_observed': True, 'job_terminal': True, 'result': 'done'}
         backend.stop = stop
         with self.assertRaisesRegex(subject.Unconfirmed, 'stop job or identity'):
             subject.SyntheticService(backend, clock=lambda: 100).run(TASK, 'term-resistant', True)
         self.assertEqual([call[0] for call in backend.calls], ['submit', 'observe', 'capture', 'stop', 'capture'])
 
+    def test_stop_observation_must_correlate_returned_job(self):
+        backend = FakeManager()
+        original = backend.stop
+        def stop(identity, deadline):
+            return {**original(identity, deadline), 'observed_job': '/org/freedesktop/systemd1/job/99'}
+        backend.stop = stop
+        with self.assertRaisesRegex(subject.Unconfirmed, 'stop job or identity'):
+            subject.SyntheticService(backend, clock=lambda: 100).run(TASK, 'term-resistant', True)
+        self.assertEqual([x[0] for x in backend.calls].count('stop'), 1)
+
     def test_active_capture_must_preserve_evidence_before_stop(self):
         backend = FakeManager()
         backend.capture_changes = {'evidence_saved': False}
-        with self.assertRaisesRegex(subject.Unconfirmed, 'pre-stop evidence'):
+        with self.assertRaisesRegex(subject.Unconfirmed, 'fixture evidence'):
             subject.SyntheticService(backend, clock=lambda: 100).run(TASK, 'stopped-child', True)
         self.assertNotIn('stop', [call[0] for call in backend.calls])
 

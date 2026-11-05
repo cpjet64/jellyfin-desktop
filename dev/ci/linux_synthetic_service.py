@@ -20,6 +20,10 @@ class Rejected(RuntimeError):
     """The manager definitively rejected creation without a job."""
 
 
+class FixtureFailed(RuntimeError):
+    """The unit settled but the synthetic fixture did not qualify."""
+
+
 def remaining(clock, deadline):
     value = deadline - clock()
     if value <= 0:
@@ -39,6 +43,7 @@ def synthetic_spec(task, mode):
                            'Delegate': False, 'KillMode': 'control-group', 'SendSIGKILL': True,
                            'RuntimeMaxSec': RUN_SECONDS, 'TimeoutStartSec': START_SECONDS,
                            'TimeoutStopSec': STOP_SECONDS},
+            'manager': {'bus': 'system', 'add_ref': True, 'watch_jobs_before_start': True},
             'evidence': workspace + '/evidence.json'}
 
 
@@ -46,7 +51,8 @@ def bind(spec, job, observed):
     if (not isinstance(job, str) or not re.fullmatch('/org/freedesktop/systemd1/job/[1-9][0-9]*', job) or
             not isinstance(observed, dict) or observed.get('unit') != spec['unit'] or
             observed.get('job') != job or not re.fullmatch('[0-9a-f]{32}', str(observed.get('invocation', ''))) or
-            observed.get('cgroup') != '/system.slice/' + spec['unit'] or observed.get('reference_held') is not True):
+            observed.get('cgroup') != '/system.slice/' + spec['unit'] or observed.get('reference_held') is not True or
+            observed.get('bus') != 'system' or observed.get('job_observed') is not True):
         raise Unconfirmed('unit, job, invocation, cgroup or reference identity unconfirmed')
     return {'unit': spec['unit'], 'job': job, 'invocation': observed['invocation'], 'cgroup': observed['cgroup']}
 
@@ -74,11 +80,35 @@ def require_settled(snapshot):
             snapshot.get('cgroup_empty') is not True or snapshot.get('descendants_absent') is not True or
             snapshot.get('evidence_saved') is not True):
         raise Unconfirmed('settlement or pre-collection evidence unconfirmed')
+    if snapshot.get('state') == 'failed' or snapshot.get('fixture_result') != 'passed':
+        raise FixtureFailed('synthetic fixture did not qualify')
+
+
+def wait_for_fixture(backend, identity, mode, deadline, clock):
+    """Backend waits for successive changes; never reset the fixed deadline."""
+    while True:
+        snapshot = capture(backend, identity, deadline, clock)
+        if snapshot.get('evidence_saved') is not True:
+            raise Unconfirmed('fixture evidence not saved')
+        state = snapshot.get('state')
+        if state in ('inactive', 'failed'):
+            require_settled(snapshot)
+            if mode != 'ordinary':
+                raise FixtureFailed('fixture completed before required readiness')
+            return snapshot
+        if state != 'active':
+            raise Unconfirmed('fixture state unconfirmed')
+        if mode != 'ordinary' and snapshot.get('fixture_ready') is True:
+            if snapshot.get('fixture_mode') != mode:
+                raise Unconfirmed('fixture readiness mode mismatch')
+            return snapshot
 
 
 def verify_stop(identity, value):
     if (not isinstance(value, dict) or any(value.get(key) != identity[key] for key in ('unit', 'invocation', 'cgroup')) or
             not re.fullmatch('/org/freedesktop/systemd1/job/[1-9][0-9]*', str(value.get('stop_job', ''))) or
+            value.get('stop_job') == identity['job'] or value.get('observed_job') != value.get('stop_job') or
+            value.get('observed_unit') != identity['unit'] or value.get('job_observed') is not True or
             value.get('job_terminal') is not True or value.get('result') != 'done'):
         raise Unconfirmed('stop job or identity not confirmed')
 
@@ -89,12 +119,21 @@ class SyntheticService:
         self.backend = backend
         self.clock = clock
         self.attempted = False
+        self.last_known = None
 
     def run(self, task, mode, stop_requested):
         if self.attempted:
             raise Unconfirmed('attempt already consumed; no resubmission')
         spec = synthetic_spec(task, mode)
         self.attempted = True
+        self.last_known = {'task': task, 'unit': spec['unit'], 'submitted_job': None, 'binding': None}
+        try:
+            return self._run(spec, mode, stop_requested)
+        except (Unconfirmed, Rejected, FixtureFailed) as error:
+            error.last_known = dict(self.last_known)
+            raise
+
+    def _run(self, spec, mode, stop_requested):
         outer = self.clock() + TOTAL_SECONDS
         start = min(outer, self.clock() + START_SECONDS)
         remaining(self.clock, start)
@@ -104,6 +143,8 @@ class SyntheticService:
             raise
         except BaseException as error:
             raise Unconfirmed('submission uncertain; do not resubmit or signal') from error
+        if isinstance(job, str) and re.fullmatch('/org/freedesktop/systemd1/job/[1-9][0-9]*', job):
+            self.last_known['submitted_job'] = job
         remaining(self.clock, start)
         try:
             observed = self.backend.observe_start(spec['unit'], job, start)
@@ -111,20 +152,18 @@ class SyntheticService:
             raise Unconfirmed('start observation unavailable; do not signal') from error
         remaining(self.clock, start)
         identity = bind(spec, job, observed)
+        self.last_known['binding'] = dict(identity)
         if observed.get('job_terminal') is not True or observed.get('start_result') != 'done':
             snapshot = capture(self.backend, identity, start, self.clock)
             if snapshot.get('evidence_saved') is not True:
                 raise Unconfirmed('start failure evidence not saved')
             raise Unconfirmed('start job or executable outcome unconfirmed')
         runtime = min(outer, self.clock() + RUN_SECONDS)
-        snapshot = capture(self.backend, identity, runtime, self.clock)
-        if snapshot.get('evidence_saved') is not True:
-            raise Unconfirmed('pre-stop evidence not saved')
-        if snapshot.get('state') in ('inactive', 'failed'):
-            require_settled(snapshot)
+        snapshot = wait_for_fixture(self.backend, identity, mode, runtime, self.clock)
+        if mode == 'ordinary':
             return snapshot
-        if snapshot.get('state') != 'active' or stop_requested is not True:
-            raise Unconfirmed('active service not authorized for synthetic stop')
+        if stop_requested is not True:
+            raise Unconfirmed('synthetic stop not authorized')
         stop = min(outer, self.clock() + STOP_SECONDS)
         remaining(self.clock, stop)
         try:

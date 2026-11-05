@@ -16,18 +16,39 @@ specification. There is no persistent unit file or delegated process migration.
 The future fixture's reviewed bytes, interpreter identity, workspace ownership,
 and evidence persistence must be independently pinned before any native run.
 
-The manager adapter must create a transient unit with collision rejection and
-return the exact start job identity. It must obtain and retain a unit reference,
-then bind the exact unit, start job, invocation ID and dedicated
+The proposed systemd 255 adapter must use one persistent **system bus**
+connection, not the manager's direct private socket. Before submitting
+`StartTransientUnit`, it must subscribe to manager signals and install its
+job watcher. At transient creation it must request `AddRef=true` on that bus
+connection, use collision-rejecting mode, and retain the connection and unit
+reference through evidence persistence. The v255
+[`systemd-run` source](https://github.com/systemd/systemd/blob/v255/src/run/run.c)
+adds `AddRef` only for a bus client; the v255
+[manager interface](https://github.com/systemd/systemd/blob/v255/man/org.freedesktop.systemd1.xml)
+describes `Subscribe` and `JobRemoved` identities and results. Those sources
+do not prove this host's authorization or a future adapter's behavior.
+
+The adapter must correlate the returned start job with the subscribed terminal
+job observation, then bind the exact unit, start job, invocation ID and dedicated
 `/system.slice/w644-<task>.service` cgroup before any stop. It must preserve
-the unit and process evidence before garbage collection, and confirm the exact
-stop job and terminal result. It must also establish cgroup emptiness and absence
+the unit and process evidence before releasing the reference or permitting
+collection, and correlate the returned stop job with its terminal observation.
+Connection loss, late or missing replies, a collected job, and an absent unit
+are unconfirmed rather than settlement. It must also establish cgroup emptiness and absence
 of descendants through independently qualified observation. A missing unit or a
 client timeout is not proof of settlement or cancellation; a timed-out manager
 request may still start later. Lost responses, inconsistent identities, missing
 references, incomplete evidence and failed cleanup stop the candidate without an
 automatic resubmission or another signal. The abstract adapter's statements are
 not themselves proof that a real manager can provide these guarantees.
+
+Ordinary mode waits for actual fixture completion and a passing fixture result;
+an active unit alone is not completion. Stopped-child, TERM-resistant, and
+session-changing modes wait for a matching-mode fixture-ready observation before
+an explicitly authorized stop. The same identity and retained reference are
+checked at every observation; a settled failed fixture is not a pass. Uncertain
+outcomes retain the last known task, unit, submitted job and binding without an
+automatic resubmission or repeated stop.
 
 The candidate gives startup, runtime and stop separate finite limits under one
 60-second outer deadline. An actual adapter must enforce each deadline across
