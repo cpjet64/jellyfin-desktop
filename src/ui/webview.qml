@@ -22,6 +22,7 @@ Window
   // Properties previously from KonvergoWindow
   property bool webDesktopMode: true
   property bool showDebugLayer: false
+  property bool recoveryNavigationObserved: false
   property string debugInfo: ""
   property string videoInfo: ""
   property string webUrl: ""
@@ -287,6 +288,8 @@ Window
       //
       if (loadingInfo.status == WebEngineView.LoadStartedStatus)
       {
+        mainWindow.recoveryNavigationObserved = true;
+        webClientFaultGuard.observeRecoveryNavigation(mainWindow);
         console.log("WebEngineLoadRequest starting: " + loadingInfo.url);
       }
       else if (loadingInfo.status == WebEngineView.LoadSucceededStatus)
