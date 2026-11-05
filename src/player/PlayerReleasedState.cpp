@@ -50,6 +50,8 @@ QString PlayerComponent::configureAudioPassthrough(const QString& deviceType)
 
 void PlayerComponent::userCommand(QString command)
 {
+  if (!intentControlThread()) return;
+  m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
   if (!m_mpv) return;
   QByteArray cmdUtf8 = command.toUtf8();
   mpv_command_string(m_mpv->mpv(), cmdUtf8.data());

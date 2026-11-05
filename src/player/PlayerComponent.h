@@ -14,11 +14,13 @@
 
 #include "ComponentManager.h"
 #include "QtHelper.h"
+#include "PlaybackIntent.h"
 
 #include <mpv/client.h>
 
 class MpvController;
 class AlbumArtProvider;
+struct PlaybackCheckpoint;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 class PlayerComponent : public ComponentBase
@@ -246,6 +248,12 @@ Q_SIGNALS:
   void bufferedRangesUpdated(const QVariantList& ranges);
 
 private:
+  static quint64 newIntentEpoch();
+  bool intentControlThread() const;
+  PlaybackCheckpoint makePlaybackCheckpoint() const;
+  PlaybackIntent m_playbackIntent;
+  bool m_replacementLoad = false;
+  bool m_replacementStop = false;
 #ifdef MPVQT_C2_DIAGNOSTIC_ONLY
   friend class TestC2RetirementNative;
   friend class TestMpvThreadIndependence;
@@ -258,8 +266,10 @@ private:
   uint64_t m_c2LastContinuedHookId = 0;
 #endif
   friend class TestFaultStop;
+  friend class TestPlaybackIntent;
   friend class TestPlayerReleasedState;
   NativeStopResult stopMpv();
+  std::function<NativeStopResult()> m_stopDispatch;
   static NativeStopResult checkedStop(mpv_handle* handle, int (*command)(mpv_handle*, const char**));
   static NativeSeekResult checkedSeek(mpv_handle* handle, qint64 milliseconds,
                                       int (*command)(mpv_handle*, const char**));

@@ -1,10 +1,4 @@
 #include "PlayerComponent.h"
-#ifdef PLAYER_INTENT_DIAGNOSTIC_ONLY
-#include "PlayerIntentObservation.h"
-#define PLAYER_QUEUE_DISPATCH(call) (PlayerIntentObservation::queueDispatch(), (call))
-#else
-#define PLAYER_QUEUE_DISPATCH(call) (call)
-#endif
 #include <QString>
 #include <Qt>
 #include <QDir>
@@ -43,7 +37,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 PlayerComponent::PlayerComponent(QObject* parent)
-  : ComponentBase(parent), m_state(State::finished), m_paused(false), m_playbackActive(false),
+  : ComponentBase(parent), m_playbackIntent(newIntentEpoch()), m_state(State::finished), m_paused(false), m_playbackActive(false),
   m_windowVisible(false), m_videoPlaybackActive(false), m_inPlayback(false), m_playbackCanceled(false),
   m_bufferingPercentage(100), m_lastBufferingPercentage(-1),
   m_lastPositionUpdate(0.0), m_playbackAudioDelay(0),
@@ -85,6 +79,11 @@ PlayerComponent::~PlayerComponent()
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 bool PlayerComponent::componentInitialize()
 {
+  connect(&WebClientFaultGuard::instance(), &WebClientFaultGuard::rendererLostChanged, this, [this] {
+    if (WebClientFaultGuard::instance().rendererLost()) m_playbackIntent.invalidate(PlaybackIntent::Reason::RendererLost);
+  });
+  if (WebClientFaultGuard::instance().rendererLost()) m_playbackIntent.invalidate(PlaybackIntent::Reason::RendererLost);
+  connect(qApp, &QCoreApplication::aboutToQuit, this, [this] { m_playbackIntent.exit(); });
   // Defer mpv creation until setQtQuickWindow() where we get MpvQt's handle
   // m_mpv will be set via setMpvHandle() called from MpvVideoItem::initMpv()
   return true;
@@ -275,70 +274,7 @@ void PlayerComponent::setWindow(QQuickWindow* window)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options, const QVariantMap &metadata, const QVariant& audioStream, const QVariant& subtitleStream)
-{
-  if (!m_mpv) {
-    qWarning() << "PlayerComponent::queueMedia: mpv not initialized yet";
-    return;
-  }
 
-  InputComponent::Get().cancelAutoRepeat();
-
-  m_mediaFrameRate = metadata["frameRate"].toFloat(); // returns 0 on failure
-  m_serverMediaInfo = metadata["media"].toMap();
-
-  updateVideoConfiguration();
-
-  QUrl qurl = url;
-  QString host = qurl.host();
-
-  QStringList command;
-  command << "loadfile" << qurl.toString(QUrl::FullyEncoded);
-  command << "append-play"; // if nothing is playing, play it now, otherwise just enqueue it
-
-#if MPV_CLIENT_API_VERSION >= MPV_MAKE_VERSION(2, 3)
-  command << "-1"; // insert_at_idx
-#endif
-
-  QString extraArgs;
-
-  quint64 startMilliseconds = options["startMilliseconds"].toLongLong();
-  if (startMilliseconds != 0)
-    extraArgs += "start=+" + QString::number(startMilliseconds / 1000.0) + ",";
-
-  // we're going to select these streams later, in the preloaded hook
-  extraArgs += "aid=no,";
-  extraArgs += "sid=no,";
-
-  m_currentSubtitleStream = subtitleStream;
-  m_currentAudioStream = audioStream;
-
-  if (metadata["type"] == "music")
-    extraArgs += "vid=no,";
-
-  QString pause = options["autoplay"].toBool() ? "no" : "yes";
-  extraArgs += "pause=" + pause + ",";
-
-  QString userAgent = metadata["headers"].toMap()["User-Agent"].toString();
-  if (userAgent.size())
-    extraArgs += "user-agent=" + userAgent + ",";
-
-  // Make sure the list of requested codecs is reset.
-  extraArgs += "ad=,";
-  extraArgs += "vd="; // Keep last
-
-  command << extraArgs;
-
-  PLAYER_QUEUE_DISPATCH(m_mpv->command( command));
-
-  QVariantMap jellyfinMetadata = metadata["metadata"].toMap();
-  QUrl jellyfinBaseUrl = qurl.adjusted(QUrl::RemovePath | QUrl::RemoveQuery);
-  emit onMetaData(jellyfinMetadata, jellyfinBaseUrl);
-
-  // Request album art from the provider
-  if (m_albumArtProvider)
-    m_albumArtProvider->requestArtwork(jellyfinMetadata, jellyfinBaseUrl);
-}
 
 /////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::streamSwitch()
@@ -659,22 +595,7 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::handleMpvEvents()
-{
-#ifdef MPVQT_EXTERNAL_EVENTS
-  if (!m_mpv) return;
-#endif
-  // Process all events, until the event queue is empty.
-  while (1)
-  {
-    mpv_event *event = mpv_wait_event(m_mpv->mpv(), 0);
-    if (event->event_id == MPV_EVENT_NONE)
-      break;
-    handleMpvEvent(event);
-  }
-  // Once we got all status updates, determine the new canonical state.
-  updatePlaybackState();
-}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::setVideoOnlyMode(bool enable)
@@ -688,15 +609,7 @@ void PlayerComponent::setVideoOnlyMode(bool enable)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::play()
-{
-  if (!m_mpv) {
-    qWarning() << "PlayerComponent::play: mpv not initialized yet";
-    return;
-  }
-  QStringList args = (QStringList() << "set" << "pause" << "no");
-  m_mpv->command( args);
-}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::notifyShuffleChange(bool enabled)
@@ -771,55 +684,16 @@ void PlayerComponent::notifyVolumeChange(double volume)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::clearQueue()
-{
-  if (!m_mpv) {
-    qWarning() << "PlayerComponent::clearQueue: mpv not initialized yet";
-    return;
-  }
-  QStringList args("playlist_clear");
-  m_mpv->command( args);
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::pause()
-{
-  if (!m_mpv) {
-    qWarning() << "PlayerComponent::pause: mpv not initialized yet";
-    return;
-  }
-  QStringList args = (QStringList() << "set" << "pause" << "yes");
-  m_mpv->command( args);
-}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::seekTo(qint64 ms)
-{
-  if (!m_mpv) {
-    qWarning() << "PlayerComponent::seekTo: mpv not initialized yet";
-    return;
-  }
-  double timeSecs = ms / 1000.0;
-  QStringList args = (QStringList() << "seek" << QString::number(timeSecs) << "absolute+exact");
-  m_mpv->command( args);
-}
 
-PlayerComponent::NativeSeekResult PlayerComponent::requestNativeSeek(qint64 milliseconds)
-{
-  if (QThread::currentThread() != thread()) return {NativeSeekResult::Status::Unavailable, 0};
-  if (WebClientFaultGuard::instance().rendererLost() || !m_mpv || !m_mpv->mpv() || milliseconds < 0)
-    return {NativeSeekResult::Status::Unavailable, 0};
-  return checkedSeek(m_mpv->mpv(), milliseconds, mpv_command);
-}
 
-PlayerComponent::NativeSeekResult PlayerComponent::checkedSeek(mpv_handle* handle, qint64 milliseconds,
-                                                                int (*command)(mpv_handle*, const char**))
-{
-  const QByteArray position = QString::number(milliseconds / 1000.0).toUtf8();
-  const char* args[] = {"seek", position.constData(), "absolute+exact", nullptr};
-  const int error = command(handle, args);
-  return {error < 0 ? NativeSeekResult::Status::Error : NativeSeekResult::Status::Accepted, error};
-}
+
+
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 QVariant PlayerComponent::getAudioDeviceList()
@@ -1021,18 +895,10 @@ void PlayerComponent::reselectStream(const QVariant &streamSelection, MediaType 
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::setSubtitleStream(const QVariant &subtitleStream)
-{
-  m_currentSubtitleStream = subtitleStream;
-  reselectStream(m_currentSubtitleStream, MediaType::Subtitle);
-}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::setAudioStream(const QVariant &audioStream)
-{
-  m_currentAudioStream = audioStream;
-  reselectStream(m_currentAudioStream, MediaType::Audio);
-}
+
 
 /////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1539,12 +1405,6 @@ QString PlayerComponent::videoInformation() const
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::setWebPlaylist(const QVariantList& playlist, const QString& currentItemId)
-{
-  m_webPlaylist = playlist;
-  m_currentWebPlaylistItemId = currentItemId;
-  emit webPlaylistChanged(playlist, currentItemId);
-}
 
 /////////////////////////////////////////////////////////////////////////////////////////
 QVariantList PlayerComponent::getWebPlaylist() const
