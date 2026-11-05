@@ -1,0 +1,311 @@
+{
+  "bundle_bytes": 156208,
+  "bundle_sha256": "ee9daf887e9a2841f22b3dda9dedeaa203d278eabdf570aea3177fdbd178f07c",
+  "commit": "8358bd61286fb2d706f245a278aa577ef27363e1",
+  "files": {
+    "dev/ci/acceptance.py": {
+      "bytes": 18467,
+      "sha256": "955f2be84dfb4df351830cc847c60acd1d4c969db4715bccdad97a99a03eb96f"
+    },
+    "dev/ci/build_manifest.py": {
+      "bytes": 2272,
+      "sha256": "e61835e7a187394fc5ed5f9ad38741cb31f6cacadb3469a89d05e71fe4ae44de"
+    },
+    "dev/ci/check_results.py": {
+      "bytes": 1860,
+      "sha256": "f2fd545a7b469a5faaa41ea07fdda3d8c8b2f552f550222a115a63f55debd093"
+    },
+    "dev/ci/desktop_policy.py": {
+      "bytes": 1140,
+      "sha256": "2c7e4a7df494abf895bc8d67ba967594a59cf8a859f1f6720415874310d92b8d"
+    },
+    "dev/ci/evidence.py": {
+      "bytes": 6023,
+      "sha256": "05d680fea117a52a10d7b90d46f2354115f5ae54a67705bebfca8a561d3afeff"
+    },
+    "dev/ci/explicit_mpv.py": {
+      "bytes": 6257,
+      "sha256": "75dc4a8f95769bc7808cae8e2f31ff06d721b3b7c5d55f6269c68aeb0c55b522"
+    },
+    "dev/ci/headless_requirements.py": {
+      "bytes": 2751,
+      "sha256": "996cd1281a1ce04ce285574558f44f297cf82a38a69ceae86168966e5a85289a"
+    },
+    "dev/ci/linux_mpris_receipt.py": {
+      "bytes": 712,
+      "sha256": "8a60f63d7c0f043fef5113cdace7658b898fe76fdb736c0f49c8bc21463d9054"
+    },
+    "dev/ci/linux_mpv_payload.py": {
+      "bytes": 2412,
+      "sha256": "262e4b10b03d1864e60c7bf79fe32226d999a311e307e33d39d0d12cbf183572"
+    },
+    "dev/ci/linux_qt_archive.py": {
+      "bytes": 10911,
+      "sha256": "3d3eb1d47daa78f51e4c771fac9e603742f7a524da7994d5d6dab5160d49a924"
+    },
+    "dev/ci/linux_qt_cache.py": {
+      "bytes": 7777,
+      "sha256": "a2c3aeddd87076fc14480174d4a8437545d45e9697d7e075cb01bf05955010b5"
+    },
+    "dev/ci/linux_qt_library.py": {
+      "bytes": 3945,
+      "sha256": "7cb35bf5315e76d98c3c0a2eb5ca7701cf19a782bbe0e08979b29d3d8b2f8add"
+    },
+    "dev/ci/linux_qt_pc.py": {
+      "bytes": 10005,
+      "sha256": "e0b233151d4e5377ca998ad622c729c873015d4457fdf27f7a0df49783711aae"
+    },
+    "dev/ci/linux_qt_plan.py": {
+      "bytes": 2911,
+      "sha256": "41fe8fdfa4368a53fb748e4f81aabfce93a83ca1b878b29d5a5594ce0aaaa3e3"
+    },
+    "dev/ci/linux_qt_reader.py": {
+      "bytes": 5458,
+      "sha256": "ffc8d1cbe33fb83dfc7d0d1a9a3a1a35f57b437e56aae2801cc4790193c6c8d8"
+    },
+    "dev/ci/linux_sdk_probe.py": {
+      "bytes": 6905,
+      "sha256": "b878293d34bac03d3becfa055eb3dbace5ec04955bb17187c3e475e2292636e5"
+    },
+    "dev/ci/linux_sdk_probe/CMakeLists.txt": {
+      "bytes": 2239,
+      "sha256": "af7fa0f516bd6e480fb23800e89780e9050e67bb0a0e135b9605d0ea78d07461"
+    },
+    "dev/ci/linux_sdk_probe/probe.cpp": {
+      "bytes": 813,
+      "sha256": "784b1df990b6787ca691a394336b5b345ce2c5a5ee20f2cb21644667e2b74bcd"
+    },
+    "dev/ci/linux_sdk_probe/probe_checks.cmake": {
+      "bytes": 1303,
+      "sha256": "2b8f41d2138e110776339bf763c26bb7b0c1db5625e2746cf76a51ef1a3e7f8d"
+    },
+    "dev/ci/mac_carchive.py": {
+      "bytes": 4731,
+      "sha256": "36a0fb4ee510f6062dec3d1a31782a4a8c0e7bb9deeb9030ea80361a17d85c7c"
+    },
+    "dev/ci/mac_carchive_format.py": {
+      "bytes": 4545,
+      "sha256": "5fa8d882250921d45fb07f7f3a2a89e408de6bb8178265b4861ef8158a4e07ec"
+    },
+    "dev/ci/mac_carchive_macho.py": {
+      "bytes": 2967,
+      "sha256": "192b3e1aba7d458f8438dd0aba4dac13cfbae7eeeaf4933a3e986450e1673546"
+    },
+    "dev/ci/mac_helpers.py": {
+      "bytes": 6456,
+      "sha256": "14858aa6055191aede55662492821332155b920f22d8ec35a1a57878d3e8f81c"
+    },
+    "dev/ci/mac_helpers_acquire.py": {
+      "bytes": 7546,
+      "sha256": "93e75eb0152a3526843a6e3ed10bb1544ba6b7ed70f2ddef7655b83b2fbde56e"
+    },
+    "dev/ci/mac_helpers_manifest.json": {
+      "bytes": 964,
+      "sha256": "265d6dd6ef30bb2816be656c5875810abfe564b8585b34c27f7b49d2cf8ffcdc"
+    },
+    "dev/ci/mac_qt_reader_identity.c": {
+      "bytes": 3782,
+      "sha256": "c6c2efe57a8179a3c59b7a20be88f30c5b47e7560ef44c5344672c1d3fe46528"
+    },
+    "dev/ci/macos_sdist_manifest.json": {
+      "bytes": 1613,
+      "sha256": "0912faea678df3b5f6381a05784e1ab82050dc3d65c44c9c4a2f25dc4137a6bd"
+    },
+    "dev/ci/macos_sdist_static.py": {
+      "bytes": 12965,
+      "sha256": "95eee9ee01591ede2dbc9ecbedf79ec2d7c9239cc10ee61e5aa7cc5bce59d585"
+    },
+    "dev/ci/macos_sdist_supervise.py": {
+      "bytes": 8336,
+      "sha256": "79ef70a49092607ce77a5c94b379c8ad4e9bd266fe753424f74e976db2dd664f"
+    },
+    "dev/ci/macos_session.py": {
+      "bytes": 2299,
+      "sha256": "b2ac5303714c3fde5cfd7a53e11b408d97fa7c888a84798af353b2aef87a5b2a"
+    },
+    "dev/ci/mpv_link_probe.c": {
+      "bytes": 945,
+      "sha256": "8a4d0f895afeb8c071b6b3aac50ebc53494492dc58c443f603624099213563a1"
+    },
+    "dev/ci/native.py": {
+      "bytes": 24170,
+      "sha256": "2d8185ea0e2d80be59bee208bbd409c9fcf865505239e56aa9a8441336556540"
+    },
+    "dev/ci/native_bootstrap.py": {
+      "bytes": 2597,
+      "sha256": "269a5f42837ba3735e86a7cffdfebeb37c18c74b02e0d07820d2c92fdad2b30b"
+    },
+    "dev/ci/native_inventory.py": {
+      "bytes": 9653,
+      "sha256": "7dba0f73c07e2452d99a9a26eb0c1c509dec76337fcf2e68796bee1f39c2eec6"
+    },
+    "dev/ci/native_prereq_inventory.py": {
+      "bytes": 15790,
+      "sha256": "3bb67412956cd75c035cd9dc92b75fdf62dcd22280ccc1d375024d3d3f9e1d52"
+    },
+    "dev/ci/patch_mpvqt_shared.py": {
+      "bytes": 3536,
+      "sha256": "89ef660f85e58fd8c8247fbe78a63ec7e4cd3f3448fdf063e93ea47291b4ec6b"
+    },
+    "dev/ci/qga_terminal.py": {
+      "bytes": 3186,
+      "sha256": "4fb0a633074da2636e178c7a7ec470c9ca0c666251b368d848a4eb1aca5db180"
+    },
+    "dev/ci/qt-6.9.3-unix.json": {
+      "bytes": 15532,
+      "sha256": "364d2a9b52a20f045a5042f62104b206ac7acec6d6a150d85b70950006a91955"
+    },
+    "dev/ci/qt-pc-prefix-v1.json": {
+      "bytes": 15279,
+      "sha256": "f704a01f0fdccb33ff69127d01bfea06858ead779f127272d09142482caec5c7"
+    },
+    "dev/ci/qt_sdk_archive.py": {
+      "bytes": 12869,
+      "sha256": "6ae9296744faff5db56c82320c7dfa24919428cb5d2f38ad8d15bb82458efb81"
+    },
+    "dev/ci/safe_extract.py": {
+      "bytes": 3480,
+      "sha256": "51bda4b7ec2f1ab2bce4c854652a6368d1c0567694353158da3d977d7dab6335"
+    },
+    "dev/ci/test_acceptance.py": {
+      "bytes": 22634,
+      "sha256": "7f4d2470d554e947d4766ab2dc8772e72d6b4161affd61474330720564e8b46b"
+    },
+    "dev/ci/test_build_manifest.py": {
+      "bytes": 2594,
+      "sha256": "5a55d444882c31b20d343a7da5ee684a5f0767aebeee3ed7a041df251ef44d09"
+    },
+    "dev/ci/test_evidence.py": {
+      "bytes": 8363,
+      "sha256": "e476030e087d9d607d6c669119a1814f8bd7f6ea57d2d2a0a0dcb2e7937c08a8"
+    },
+    "dev/ci/test_explicit_mpv.py": {
+      "bytes": 7451,
+      "sha256": "e35567c81d70d6adc3385cd33eb5c1ab4b2e4dadbcff4340b108ec024159f465"
+    },
+    "dev/ci/test_headless_routing.py": {
+      "bytes": 9669,
+      "sha256": "8840a0369a64596420ee9962643814b235414b6740588aa9250146d5208f003a"
+    },
+    "dev/ci/test_libarchive_reader_contract.py": {
+      "bytes": 10440,
+      "sha256": "654933162ab37a98d3df1685181590e8660a5015634904cc7c84360f5978f90c"
+    },
+    "dev/ci/test_linux_mpris_receipt.py": {
+      "bytes": 1906,
+      "sha256": "99a8386504dce336b2143401444c091bbfd1658fb2431616c6be9c540fb123c1"
+    },
+    "dev/ci/test_linux_qt_cache.py": {
+      "bytes": 11387,
+      "sha256": "a30ed97dbf3942000a2eb8bc48df43a56bd1944289391b7619d0ef94bf044acd"
+    },
+    "dev/ci/test_linux_qt_pc.py": {
+      "bytes": 8681,
+      "sha256": "a2b57f177fc308bc000abe979344e321402a181e305bc289664a205036b19b52"
+    },
+    "dev/ci/test_linux_qt_plan.py": {
+      "bytes": 9401,
+      "sha256": "b41b393160ae4dbc04d956545d993a50b997422111b269dad59ee63983655e03"
+    },
+    "dev/ci/test_linux_sdk_inputs.py": {
+      "bytes": 6789,
+      "sha256": "11723b02559c86bc5e13c6aabc99396b20ea38458b94b2de811a8e4fd76272cc"
+    },
+    "dev/ci/test_linux_sdk_order.py": {
+      "bytes": 8887,
+      "sha256": "05b7735f336fc92b46738a7d63024d17ba943465b3c85cff3e8d9b22ed6ba898"
+    },
+    "dev/ci/test_mac_carchive.py": {
+      "bytes": 8667,
+      "sha256": "b7fe9796a053245759e15ab9fa2f7ad84e29d93320d7fbc7696e294fbf759424"
+    },
+    "dev/ci/test_mac_helpers.py": {
+      "bytes": 10294,
+      "sha256": "310d8203d84594d60857a71dd0eb77afeeb5e59832650d3948b7e97ff7f761a8"
+    },
+    "dev/ci/test_mac_helpers_acquire.py": {
+      "bytes": 13458,
+      "sha256": "769ada4fe069b9e7f1e6673194008ede1e67735003083c07aa990e06707376a9"
+    },
+    "dev/ci/test_macos_sdist_static.py": {
+      "bytes": 9109,
+      "sha256": "24138bef9b752aa2a27779622e9073ecbddd16e0e32e701cef22deded34c41f7"
+    },
+    "dev/ci/test_macos_sdist_supervise.py": {
+      "bytes": 11265,
+      "sha256": "3e1ccc17ba8bd1ff8adf0b9f6c5e460121ed68cd1ccba5700560e9eaac740a75"
+    },
+    "dev/ci/test_macos_session.py": {
+      "bytes": 2207,
+      "sha256": "70e2886729a58e4d910764e85110ac70cd656b510c94faf9a4f3e7c9cc212488"
+    },
+    "dev/ci/test_native_inventory.py": {
+      "bytes": 4269,
+      "sha256": "5ee5307ec4f8f74499224f87975ef0023fad3785d0562c1b3b32074a602924bd"
+    },
+    "dev/ci/test_native_order.py": {
+      "bytes": 8495,
+      "sha256": "d7e4d196674112c0d56798c419927f7ddc1742db41713ee6de08eb2ae3fa63a9"
+    },
+    "dev/ci/test_native_prereq_inventory.py": {
+      "bytes": 13525,
+      "sha256": "3e4769d3f5d4454012bc27433ecb69540ea0eaf3c8aa39efa339cf13ee4eae34"
+    },
+    "dev/ci/test_qga_terminal.py": {
+      "bytes": 2718,
+      "sha256": "f741bc401ff81a7586e95ca9670773ddc56ed33d98b26cd1b07fbaf4a00eb256"
+    },
+    "dev/ci/test_qt_sdk_archive.py": {
+      "bytes": 14894,
+      "sha256": "5a20df690558061fd72c7b9ac5746cfe5be35a78e667cd83e5d44b4cc186ed34"
+    },
+    "dev/ci/test_qt_unix_manifest.py": {
+      "bytes": 4175,
+      "sha256": "8687aa1e7729ae5f74aca4208378943c998cc7617783ff5cddb60f4d0cd138a2"
+    },
+    "dev/ci/test_safe_extract.py": {
+      "bytes": 3644,
+      "sha256": "8a6c32ddc6e6e4ddc595b48ea5406a3d29b0ce5d5cea073689d374ec12dfa2ca"
+    },
+    "dev/windows/ci.ps1": {
+      "bytes": 12427,
+      "sha256": "2c26d19349f1cf147399087b664cd918aa53de31eb38ae8e7d6b04cc3ffba5dc"
+    },
+    "docs/validation/linux-qt-pc-inventory-2026-11-04.json": {
+      "bytes": 31348,
+      "sha256": "984e85dd8b1efc78d9c6b5afc0a2add133978b5046b088f4f1a0fe37f79a817e"
+    },
+    "tests/test_ci_results.py": {
+      "bytes": 3651,
+      "sha256": "e1a047d617f831d0c83988aee6279cdd8b5c338c585737895bfadf813404ff31"
+    }
+  },
+  "suites": [
+    "dev/ci/test_qga_terminal.py",
+    "dev/ci/test_macos_sdist_static.py",
+    "dev/ci/test_macos_sdist_supervise.py",
+    "dev/ci/test_linux_qt_cache.py",
+    "dev/ci/test_mac_carchive.py",
+    "dev/ci/test_mac_helpers.py",
+    "dev/ci/test_mac_helpers_acquire.py",
+    "tests/test_ci_results.py",
+    "dev/ci/test_evidence.py",
+    "dev/ci/test_linux_mpris_receipt.py",
+    "dev/ci/test_build_manifest.py",
+    "dev/ci/test_acceptance.py",
+    "dev/ci/test_safe_extract.py",
+    "dev/ci/test_native_inventory.py",
+    "dev/ci/test_native_prereq_inventory.py",
+    "dev/ci/test_explicit_mpv.py",
+    "dev/ci/test_native_order.py",
+    "dev/ci/test_linux_sdk_order.py",
+    "dev/ci/test_linux_sdk_inputs.py",
+    "dev/ci/test_qt_sdk_archive.py",
+    "dev/ci/test_linux_qt_plan.py",
+    "dev/ci/test_linux_qt_pc.py",
+    "dev/ci/test_libarchive_reader_contract.py",
+    "dev/ci/test_qt_unix_manifest.py",
+    "dev/ci/test_macos_session.py",
+    "dev/ci/test_headless_routing.py"
+  ]
+}
