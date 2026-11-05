@@ -1,6 +1,6 @@
 # Healthy wake binding: offline scope
 
-`HealthyWakeBinding` is a Qt Core-only diagnostic binding for six producer and worker steps of the injected healthy-cleanup coordinator. It does not bind libmpv, create a GUI or prove native fixture teardown. The fixture must retain the binding, callback endpoints and targets through native unregister and all required barriers. Windows execution is pending; Linux and macOS execution has not been performed.
+`HealthyWakeBinding` is a Qt Core-only diagnostic binding for six producer and worker steps of the injected healthy-cleanup coordinator. It does not bind libmpv, create a GUI or prove native fixture teardown. The fixture must retain the binding, callback endpoints and targets through native unregister and all required barriers. On Windows, W658 ran the binding, cleanup coordinator and synchronous Stop event-classifier tests: all three passed in both Debug and Release at source `b45c75ce629f031b6210228d9c9756172ecf0a72`. The retained logs are `deps/w658-proof/debug-test.log` and `deps/w658-proof/release-test.log` in the integration worktree. Linux and macOS native execution has not been performed. These results do not establish GUI, mpv, playback or native teardown behavior.
 
 | Coordinator step | Intended owner and bounded result |
 | --- | --- |
