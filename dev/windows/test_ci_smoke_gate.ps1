@@ -23,6 +23,17 @@ $failed = $false
 try { Invoke-Expression $gate[0].Extent.Text }
 catch { $failed = $_.Exception.Message -match 'failed with exit code 19' }
 if (-not $failed) { throw 'Smoke-result failure did not propagate' }
+$playerGate = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
+    $node.GetCommandName() -eq 'Run-Native' -and $node.Extent.Text -match 'test_mpvVideoPlayer\.js' }, $true)
+if ($playerGate.Count -ne 1) { throw 'Expected one video-player gate' }
+$script:status = 0
+Invoke-Expression $playerGate[0].Extent.Text
+if (($script:seen -join '|') -ne '--test|tests/test_mpvVideoPlayer.js') { throw 'Wrong video-player gate arguments' }
+$script:status = 19
+$failed = $false
+try { Invoke-Expression $playerGate[0].Extent.Text }
+catch { $failed = $_.Exception.Message -match 'failed with exit code 19' }
+if (-not $failed) { throw 'Video-player failure did not propagate' }
 $c2gate = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
     $node.GetCommandName() -eq 'Run-Native' -and $node.Extent.Text -match 'test_mpvqt_c2_patch\.py' }, $true)
 if ($c2gate.Count -ne 1) { throw 'Expected one C2 patch gate' }

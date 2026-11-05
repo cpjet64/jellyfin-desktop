@@ -10,6 +10,17 @@ import native
 
 
 class NativeOrderTest(unittest.TestCase):
+    def test_headless_player_gate_is_required(self):
+        calls = []
+        def run(name, args, **_kwargs):
+            calls.append((name, args))
+            if name == 'mpv-video-player':
+                raise RuntimeError('player test failure')
+        with patch.object(native, 'command', side_effect=run):
+            with self.assertRaisesRegex(RuntimeError, 'player test failure'):
+                native.headless_checks()
+        self.assertEqual(calls[-1], ('mpv-video-player', ['node', '--test', 'tests/test_mpvVideoPlayer.js']))
+
     def exercise(self, available, blocked=False, system="Linux", mode="static", node_available=True,
                  smoke_failed=False, c2_failed=False, source_failed=False):
         events = []

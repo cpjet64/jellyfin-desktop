@@ -122,6 +122,7 @@
              * @type {Array<{start: number, end: number}>}
              */
             this._bufferedRanges = [];
+            this._errorPrompt = new window._PlaybackErrorPrompt(this, confirm);
 
             /**
              * @private
@@ -207,34 +208,7 @@
              * @private
              * @param e {Event} The event received from the `<video>` element
              */
-            this.onError = async (error) => {
-                this.removeMediaDialog();
-                console.error(`media error: ${error}`);
-
-                const errorData = {
-                    type: 'mediadecodeerror'
-                };
-
-                try {
-                    await confirm({
-                        title: "Playback Failed",
-                        text: `Playback failed with error "${error}". Retry with transcode? (Note this may hang the player.)`,
-                        cancelText: "Cancel",
-                        confirmText: "Retry"
-                    });
-                } catch (ex) {
-                    // User declined retry
-                    errorData.streamInfo = {
-                        // Prevent jellyfin-web retrying with transcode
-                        // which crashes the player
-                        mediaSource: {
-                            SupportsTranscoding: false
-                        }
-                    };
-                }
-
-                this.events.trigger(this, 'error', [errorData]);
-            };
+            this.onError = (error) => this._errorPrompt.handle(error);
 
             this.onDuration = (duration) => {
                 this._duration = duration;
@@ -246,6 +220,7 @@
         }
 
         async play(options) {
+            this._errorPrompt.invalidate();
             this._started = false;
             this._timeUpdated = false;
             this._currentTime = null;
@@ -466,6 +441,7 @@
         }
 
         stop(destroyPlayer) {
+            this._errorPrompt.invalidate();
             window.api.player.stop();
 
             this.onEndedInternal();
@@ -497,6 +473,7 @@
         }
 
         destroy() {
+            this._errorPrompt.invalidate();
             this.removeMediaDialog();
 
             const player = window.api.player;

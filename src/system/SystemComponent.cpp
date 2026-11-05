@@ -25,6 +25,7 @@
 
 #include "input/InputComponent.h"
 #include "SystemComponent.h"
+#include "NativeScriptPaths.h"
 #include "Version.h"
 #include "settings/SettingsComponent.h"
 #include "settings/SettingsSection.h"
@@ -592,18 +593,8 @@ QString SystemComponent::getNativeShellScript()
     return QTextStream(&file).readAll();
   };
 
-  QStringList scriptPaths = {
-    ":/qtwebchannel/qwebchannel.js",
-    ":/web-client/extension/mpvVideoPlayer.js",
-    ":/web-client/extension/mpvAudioPlayer.js",
-    ":/web-client/extension/inputPlugin.js",
-    ":/web-client/extension/updatePlugin.js",
-    ":/web-client/extension/connectivityHelper.js",
-    ":/web-client/extension/nativeshell.js"
-  };
-
   cachedScript = jmpInfoDeclaration;
-  for (const QString& scriptPath : scriptPaths) {
+  for (const QString& scriptPath : nativeScriptPaths()) {
     cachedScript += loadScript(scriptPath) + "\n";
   }
 

@@ -185,6 +185,7 @@ try {
     $env:MPVQT_TEST_SOURCE = $previousMpvQtTestSource
 }
 Run-Native $found.Node @('--test', 'tests/test_inputPlugin.js')
+Run-Native $found.Node @('--test', 'tests/test_mpvVideoPlayer.js')
 Run-Native $found.Node @('--test', 'tests/test_windows_smoke_result.mjs')
 Run-Native $found.Node @('tests/windows_hidden_desktop_fixture.mjs')
 } finally {
