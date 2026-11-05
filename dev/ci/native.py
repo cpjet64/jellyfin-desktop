@@ -208,6 +208,7 @@ def portable_checks():
     command("portable-proof-supervisor-tests", [sys.executable, "dev/ci/test_portable_proof_supervisor.py"])
     command("mac-sdist-static-tests", [sys.executable, "dev/ci/test_macos_sdist_static.py"])
     command("mac-sdist-supervisor-tests", [sys.executable, "dev/ci/test_macos_sdist_supervise.py"])
+    command("mac-sdist-launcher-tests", [sys.executable, "dev/ci/test_macos_sdist_select_launch.py"])
     command("linux-qt-cache-tests", [sys.executable, "dev/ci/test_linux_qt_cache.py"])
     command("mac-carchive-tests", [sys.executable, "dev/ci/test_mac_carchive.py"])
     command("mac-helper-tests", [sys.executable, "dev/ci/test_mac_helpers.py"])

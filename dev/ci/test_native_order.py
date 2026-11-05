@@ -110,7 +110,8 @@ class NativeOrderTest(unittest.TestCase):
                      "dev/ci/test_mac_helpers.py",
                      "dev/ci/test_mac_helpers_acquire.py", "dev/ci/test_mac_carchive.py",
                      "dev/ci/test_qga_terminal.py", "dev/ci/test_macos_sdist_static.py",
-                     "dev/ci/test_macos_sdist_supervise.py", "dev/ci/test_linux_qt_cache.py",
+                     "dev/ci/test_macos_sdist_supervise.py", "dev/ci/test_macos_sdist_select_launch.py",
+                     "dev/ci/test_linux_qt_cache.py",
                      "dev/ci/test_fixture_suspend_policy.py", "dev/ci/test_fixture_suspend_adapter.py",
                      "dev/ci/test_fixture_suspend_linux.py", "dev/ci/test_settlement_failure.py",
                      "dev/ci/test_macos_sdist_select.py", "dev/ci/test_portable_proof_assembly.py",
@@ -125,7 +126,7 @@ class NativeOrderTest(unittest.TestCase):
         script = (Path(__file__).resolve().parents[2] / "dev/windows/ci.ps1").read_text(encoding="utf-8")
         for path in ("dev/ci/test_mac_helpers.py", "dev/ci/test_mac_helpers_acquire.py",
                      "dev/ci/test_mac_carchive.py", "dev/ci/test_qga_terminal.py",
-                     "dev/ci/test_macos_sdist_static.py", "dev/ci/test_macos_sdist_supervise.py",
+                     "dev/ci/test_macos_sdist_static.py", "dev/ci/test_macos_sdist_supervise.py", "dev/ci/test_macos_sdist_select_launch.py",
                      "dev/ci/test_linux_qt_cache.py", "dev/ci/test_fixture_suspend_policy.py",
                      "dev/ci/test_fixture_suspend_adapter.py", "dev/ci/test_fixture_suspend_linux.py",
                      "dev/ci/test_settlement_failure.py", "dev/ci/test_macos_sdist_select.py",
@@ -139,7 +140,7 @@ class NativeOrderTest(unittest.TestCase):
     def test_new_portable_suite_failure_stops_following_checks(self):
         for failed in ("mac-sdist-select-tests", "settlement-failure-tests", "fixture-suspend-policy-tests",
                        "fixture-suspend-adapter-tests", "fixture-suspend-linux-tests", "qga-terminal-tests", "mac-sdist-static-tests",
-                       "mac-sdist-supervisor-tests", "linux-qt-cache-tests", "portable-proof-assembly-tests",
+                       "mac-sdist-supervisor-tests", "mac-sdist-launcher-tests", "linux-qt-cache-tests", "portable-proof-assembly-tests",
                        "portable-proof-protocol-tests", "portable-proof-supervisor-tests"):
             calls = []
             def run(name, args, **kwargs):

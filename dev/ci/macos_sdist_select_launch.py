@@ -1,7 +1,9 @@
-"""Run the pinned selector on Windows; 180 seconds bounds child execution only.
+"""Run the pinned selector on Windows; poll the child against a 180-second deadline.
 
 Popen interruption before it returns a handle cannot be settled by this launcher.
 The held direct child is the only process covered; no descendant guarantee is made.
+The deadline is checked only while polling; preflight and a quick exit are not bounded.
+Synthetic tests do not validate Windows pipe APIs or establish runtime proof.
 """
 import ctypes
 import hashlib
