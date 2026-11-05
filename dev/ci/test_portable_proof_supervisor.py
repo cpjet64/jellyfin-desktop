@@ -71,6 +71,49 @@ class SupervisorTest(unittest.TestCase):
         self.assertEqual(set(call.args[0] for call in close.call_args_list), {10, 11, 12, 13})
         self.assertIn('unreaped', executor.STATE['cleanup_unconfirmed'])
 
+    def test_parent_cancellation_after_spawn_preserves_primary_and_settles(self):
+        executor = self.executor()
+        cancellation = KeyboardInterrupt('cancelled')
+        with patch.object(executor.os, 'pipe', side_effect=[(10, 11), (12, 13)]), \
+             patch.object(executor.os, 'fork', return_value=42, create=True), \
+             patch.object(executor.os, 'close') as close, \
+             patch.object(executor.os, 'read', return_value=b'R'), \
+             patch.object(executor.os, 'write') as write, \
+             patch.object(executor.signal, 'pthread_sigmask', return_value=set(), create=True), \
+             patch.object(executor.signal, 'SIG_BLOCK', 1, create=True), \
+             patch.object(executor.signal, 'SIG_SETMASK', 2, create=True), \
+             patch.object(executor.signal, 'SIGALRM', 3, create=True), \
+             patch.object(executor.select, 'select', side_effect=[([10], [], []), cancellation]), \
+             patch.object(executor, 'stop_supervisor', side_effect=TimeoutError('unreaped')) as stop:
+            with self.assertRaises(KeyboardInterrupt) as error:
+                executor.run_suite('python', ROOT, ROOT, 'suite', {}, 0, 'linux')
+        self.assertIs(error.exception, cancellation)
+        stop.assert_called_once_with(42, True)
+        write.assert_called_once_with(13, b'G')
+        self.assertEqual(sorted(call.args[0] for call in close.call_args_list), [10, 11, 12, 13])
+        self.assertIn('unreaped', executor.STATE['cleanup_unconfirmed'])
+
+    def test_cleanup_failure_rejects_otherwise_successful_result(self):
+        executor = self.executor()
+        with patch.object(executor.os, 'pipe', side_effect=[(10, 11), (12, 13)]), \
+             patch.object(executor.os, 'fork', return_value=42, create=True), \
+             patch.object(executor.os, 'close') as close, \
+             patch.object(executor.os, 'read', side_effect=[b'R', b'{"exit":0,"survivors":[]}']), \
+             patch.object(executor.os, 'write'), \
+             patch.object(executor.signal, 'pthread_sigmask', return_value=set(), create=True), \
+             patch.object(executor.signal, 'SIG_BLOCK', 1, create=True), \
+             patch.object(executor.signal, 'SIG_SETMASK', 2, create=True), \
+             patch.object(executor.signal, 'SIGALRM', 3, create=True), \
+             patch.object(executor.select, 'select', return_value=([10], [], [])), \
+             patch.object(executor, 'stop_supervisor', side_effect=TimeoutError('unreaped')) as stop, \
+             patch.object(executor, 'suite_log_result') as log:
+            with self.assertRaisesRegex(RuntimeError, 'cleanup unconfirmed.*unreaped'):
+                executor.run_suite('python', ROOT, ROOT, 'suite', {}, 0, 'linux')
+        stop.assert_called_once_with(42, True)
+        log.assert_not_called()
+        self.assertEqual(sorted(call.args[0] for call in close.call_args_list), [10, 11, 12, 13])
+        self.assertIn('unreaped', executor.STATE['cleanup_unconfirmed'])
+
     def test_bounded_reap_timeout_never_signals_again(self):
         executor = self.executor()
         with patch.object(executor.os, 'killpg', create=True) as killpg, \

@@ -196,6 +196,35 @@ class ProtocolTest(unittest.TestCase):
                 with self.assertRaises(PermissionError):
                     controller.Session(root / 'missing', bundle, {'id': 1}, authority)
 
+    def test_session_submits_each_operation_once_across_pending_polls(self):
+        data, target = b'abcdef', {'id': 1}
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp, \
+                patch.object(controller, 'TOTAL', len(data)), patch.object(controller, 'CHUNK', 2), \
+                patch.object(controller, 'SHA256', hashlib.sha256(data).hexdigest()):
+            root = Path(tmp)
+            bundle, journal = root / 'bundle', root / 'journal'
+            bundle.write_bytes(data)
+            session = controller.Session(journal, bundle, target, controller.FreshAuthorization(target))
+            submissions, polls = [], []
+            expected = [{'offset': offset, 'sha256': hashlib.sha256(data[:offset]).hexdigest()}
+                        for offset in (0, 2, 4, 6, 6)]
+            def submit(operation, args):
+                submissions.append((operation, args))
+                return 100 + len(submissions)
+            def poll(pid):
+                polls.append(pid)
+                self.assertEqual(pid, 100 + len(submissions))
+                return expected[pid - 101] if polls.count(pid) == 3 else None
+            for _ in range(15):
+                self.assertFalse(session.step(submit, poll))
+            self.assertEqual([operation for operation, _ in submissions],
+                             ['init', 'append', 'append', 'append', 'finish'])
+            self.assertEqual(polls, [pid for pid in range(101, 106) for _ in range(3)])
+            self.assertTrue(session.step(submit, poll))
+            with self.assertRaisesRegex(RuntimeError, 'session closed'):
+                session.step(submit, poll)
+            self.assertEqual(len(submissions), 5)
+
     def test_live_session_rejects_deleted_or_changed_journal(self):
         for mutation in ('delete', 'change'):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir=ROOT) as tmp:
