@@ -1,13 +1,19 @@
 # Playback intent: bounded source contract proposal
 
-This is a source review of `06fdf279ef40d74b6b620e24cefc4e798d9041f9`, not an implementation or acceptance claim. It covers the native video adapter's request and error paths. The actual Jellyfin Web caller and its promise and retry contract remain to be examined before choosing observable cancellation behavior.
+The historical source review below is pinned to `06fdf279ef40d74b6b620e24cefc4e798d9041f9`; its line references and adapter behavior describe that revision. The current-source update is recorded separately below. Neither review is a production acceptance claim. The actual selected Jellyfin Web caller and its promise and retry contract remain to be examined before choosing observable cancellation behavior.
 
-## Current paths
+## Historical paths at 06fdf27
 
 - `native/mpvVideoPlayer.js:248-259` awaits `createMediaElement(options)` before `setCurrentSrc`. The former returns resolved promises in both paths (`:518-586`). The latter creates a resolve-only promise and passes its resolver to `player.load` (`:309-365`). This resolves with the native call's return, not with proof that playback has started. Synchronous exceptions can still reject the promise.
 - `src/player/PlayerComponent.cpp:272-276` implements `load` by calling `stop()`, queuing the replacement and returning `true`. `queueMedia` returns early when mpv is unavailable (`:280-285`). The returned value therefore does not by itself establish successful playback.
 - Native end-file errors set a message (`src/player/PlayerComponent.cpp:498-515`); the error state emits only that message (`:467-469`, declaration in `src/player/PlayerComponent.h:206`). It carries no playback request or session identifier.
 - The adapter's error handler calls `removeMediaDialog`, asks about transcoding, then emits a web error (`native/mpvVideoPlayer.js:210-236`). Both error cleanup (`:479-480`) and public `stop` (`:468-476`) call the same native `player.stop()`; `destroy` also calls cleanup (`:499-500`). Native `load` itself calls `stop`. Native `requestNativeStop` and web `stop` have separate entry points, but the current web stop call carries no origin (`src/player/PlayerComponent.cpp:776-789`).
+
+## Current adapter at adb66e4
+
+The prompt guard in `native/playbackErrorPrompt.js:2-31` suppresses a pending prompt's stale error event after a newer intent or prompt. `native/mpvVideoPlayer.js:222-234`, `:443-450` and `:475-477` invalidate it synchronously for play, stop and destroy. This is prompt handling, not native request or stop-origin correlation.
+
+Commit `93efdb3` made media-element setup synchronous: current `native/mpvVideoPlayer.js:222-234` calls `createMediaElement` and `setCurrentSrc` in the same turn, while retaining the asynchronous outer `play` promise and native load callback. Current `createMediaElement` is at `:495-562`. The ordering and prompt tests are `tests/test_mpvVideoPlayer_order.js` and `tests/test_mpvVideoPlayer.js`; the separate [native dispatch plan](synchronous-dispatch-native-plan.md) describes outstanding acceptance evidence. The native `load` success limitation described above remains relevant. These changes do not select a cancellation settlement policy or prove production recovery.
 
 ## Proposed boundary for design
 
