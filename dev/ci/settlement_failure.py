@@ -124,6 +124,57 @@ def identity_comparison(expected, observed, problem=None):
     return {'kind': 'identity_comparison', 'fields': result}
 
 
+def held_session(identity, get_identity, get_session):
+    """Check a continuously held process around one exact-PID session query."""
+    pid = identity.get('pid')
+    keys = ('pid', 'ppid', 'uid', 'pgid', 'start_sec', 'start_usec')
+    if not integer(pid) or pid <= 0 or any(key not in identity for key in keys):
+        return None
+    expected = {key: identity[key] for key in keys}
+    try:
+        if get_identity(pid) != expected:
+            return None
+        session = get_session(pid)
+        if not integer(session) or get_identity(pid) != expected:
+            return None
+        return session
+    except Exception:
+        return None
+
+
+def compare_owned_row(role, expected, row, start, observation, get_identity, get_session):
+    """Compare historical rows and distinguish held SID from completed command."""
+    event = identity_comparison(expected, dict(row, start_sec=start), problem='deferred')
+    event['role'] = 'own_' + role
+    event['ps_session_metadata'] = row.get('ps_session_metadata')
+    event['scope'] = 'historical_completed_not_current_ownership' if role == 'command' else 'held'
+    fields = {item['field']: item for item in event['fields']}
+    session = fields['session']
+    if role == 'command':
+        session['expected_source'] = 'getsid(pre_exec)'
+    session['observed_source'] = 'getsid(target_pid)' if role != 'command' else 'not_applicable_completed'
+    session['observed'] = None
+    try:
+        for name in ('pid', 'ppid', 'uid', 'pgid'):
+            field = fields[name]
+            field['state'] = 'match' if row.get(name) == expected.get(name) else 'mismatch'
+            if field['state'] != 'match':
+                raise Failure('identification', 'identity_mismatch')
+        if role == 'command':
+            session['state'] = 'not_applicable'
+        else:
+            actual = held_session(expected, get_identity, get_session)
+            session['observed'] = actual
+            session['state'] = 'unknown' if actual is None else 'match' if actual == expected.get('session') else 'mismatch'
+            if session['state'] != 'match':
+                raise Failure('identification', 'identity_unavailable' if actual is None else 'identity_mismatch')
+        fields['start_sec']['state'] = 'match' if start == expected.get('start_sec') else 'mismatch'
+        if fields['start_sec']['state'] != 'match':
+            raise Failure('identification', 'identity_mismatch')
+    finally:
+        observation.add(event)
+
+
 def inventory_parse_failure(fields, identities, observation, problem):
     """Record parse failure only for an own row with matching parsed PID and UID."""
     try:
@@ -138,7 +189,8 @@ def inventory_parse_failure(fields, identities, observation, problem):
         return
     role_index, expected = match
     observed, redacted = {}, {}
-    for index, name in enumerate(('pid', 'ppid', 'pgid', 'session', 'uid')):
+    for index, name in enumerate(('pid', 'ppid', 'pgid', 'uid')):
+        index = (0, 1, 2, 4)[index]
         if index < len(fields):
             try:
                 value = int(fields[index])
@@ -185,16 +237,18 @@ def parse_inventory_row(line, identities, observation):
         inventory_parse_failure(parts, identities, observation, 'row_shape')
         raise Failure('inventory', 'malformed_inventory')
     values = []
-    for index, name in enumerate(('pid', 'ppid', 'pgid', 'session', 'uid')):
+    for index, name in ((0, 'pid'), (1, 'ppid'), (2, 'pgid'), (4, 'uid')):
         try:
             values.append(int(parts[index]))
         except ValueError:
             inventory_parse_failure(parts, identities, observation, name)
             raise Failure('inventory', 'malformed_inventory') from None
-    pid, ppid, pgid, session, uid = values
+    pid, ppid, pgid, uid = values
     if uid != 501:
         return None
-    row = {'pid': pid, 'uid': uid, 'ppid': ppid, 'pgid': pgid, 'session': session,
+    ps_session = parts[3] if re.fullmatch(r'[0-9a-fA-F]{1,32}', parts[3], flags=re.ASCII) else None
+    row = {'pid': pid, 'uid': uid, 'ppid': ppid, 'pgid': pgid, 'session': None,
+           'ps_session_metadata': ps_session,
            'start': ' '.join(parts[5:10])}
     try:
         start = int(time.mktime(time.strptime(row['start'], '%a %b %d %H:%M:%S %Y')))

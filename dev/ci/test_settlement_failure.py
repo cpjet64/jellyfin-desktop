@@ -28,6 +28,57 @@ def run_capture(operation, cleanup=cleanup_success, spawn=None):
 
 
 class SettlementFailureTests(unittest.TestCase):
+    def test_role_session_is_live_for_held_and_historical_for_command(self):
+        from unittest.mock import Mock
+        expected = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42,
+                    'start_sec': 1, 'start_usec': 2}
+        row = dict(expected, session=None, ps_session_metadata='abcdef')
+        kernel = {key: expected[key] for key in ('pid', 'ppid', 'uid', 'pgid', 'start_sec', 'start_usec')}
+        identity, sid = Mock(return_value=kernel), Mock(return_value=42)
+        observation = protocol.Observation()
+        protocol.compare_owned_row('leader', expected, row, 1, observation, identity, sid)
+        self.assertEqual(identity.call_count, 2)
+        sid.assert_called_once_with(43)
+        event = observation.events[-1]
+        self.assertEqual([field['state'] for field in event['fields']], ['match'] * 6)
+        self.assertEqual(event['ps_session_metadata'], 'abcdef')
+        identity.reset_mock(); sid.reset_mock()
+        protocol.compare_owned_row('command', expected, row, 1, observation, identity, sid)
+        identity.assert_not_called(); sid.assert_not_called()
+        self.assertEqual(observation.events[-1]['fields'][4]['state'], 'not_applicable')
+        self.assertEqual(observation.events[-1]['fields'][4]['expected_source'], 'getsid(pre_exec)')
+        self.assertEqual(observation.events[-1]['fields'][4]['expected'], 42)
+        self.assertEqual(observation.events[-1]['fields'][4]['observed_source'], 'not_applicable_completed')
+        self.assertEqual(observation.events[-1]['scope'], 'historical_completed_not_current_ownership')
+
+    def test_held_identity_and_session_fail_closed_in_order(self):
+        from unittest.mock import Mock
+        expected = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42,
+                    'start_sec': 1, 'start_usec': 2}
+        kernel = {key: expected[key] for key in ('pid', 'ppid', 'uid', 'pgid', 'start_sec', 'start_usec')}
+        for values, sid_effect, expected_category, sid_count in (
+            ([{}, kernel], 42, 'identity_unavailable', 0),
+            ([kernel, {}], 42, 'identity_unavailable', 1),
+            ([kernel, kernel], ProcessLookupError('private'), 'identity_unavailable', 1),
+            ([kernel, kernel], PermissionError('private'), 'identity_unavailable', 1),
+            ([kernel, kernel], OSError('private'), 'identity_unavailable', 1),
+            ([kernel, kernel], 99, 'identity_mismatch', 1)):
+            identity, sid = Mock(side_effect=values), Mock(side_effect=sid_effect) if isinstance(sid_effect, Exception) else Mock(return_value=sid_effect)
+            observation = protocol.Observation()
+            with self.assertRaises(protocol.Failure) as error:
+                protocol.compare_owned_row('probe', expected, expected, 1, observation, identity, sid)
+            self.assertEqual(error.exception.category, expected_category)
+            self.assertEqual(sid.call_count, sid_count)
+            self.assertEqual(observation.events[-1]['fields'][5]['state'], 'not_evaluated')
+        identity, sid = Mock(), Mock()
+        with self.assertRaises(protocol.Failure):
+            protocol.compare_owned_row('leader', expected, dict(expected, ppid=99), 1,
+                                       protocol.Observation(), identity, sid)
+        identity.assert_not_called(); sid.assert_not_called()
+        with self.assertRaises(protocol.Failure) as error:
+            protocol.compare_owned_row('leader', expected, expected, 1, protocol.Observation(), Mock(return_value=kernel), None)
+        self.assertEqual(error.exception.category, 'identity_unavailable')
+
     def test_identity_comparison_retains_short_circuit_and_values(self):
         names = protocol.IDENTITY_COMPARISON_FIELDS
         expected = {name: index + 1 for index, name in enumerate(names)}
@@ -49,7 +100,7 @@ class SettlementFailureTests(unittest.TestCase):
     def test_own_row_parse_failures_are_distinct_and_bounded(self):
         identity = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42, 'start_sec': 1}
         base = ['43', '42', '42', '42', '501', 'Mon', 'Jan', '01', '12:00:00', '2024', 'command']
-        for index, field in ((1, 'ppid'), (2, 'pgid'), (3, 'session'), (5, 'start_sec')):
+        for index, field in ((1, 'ppid'), (2, 'pgid'), (5, 'start_sec')):
             parts = list(base)
             parts[index] = 'unparseable'
             observation = protocol.Observation()
@@ -65,9 +116,9 @@ class SettlementFailureTests(unittest.TestCase):
 
     def test_parse_failure_ownership_and_row_shape(self):
         identity = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42, 'start_sec': 1}
-        for line in ('44 42 42 bad 501 Mon Jan 01 12:00:00 2024 command',
-                     '43 42 42 bad 502 Mon Jan 01 12:00:00 2024 command',
-                     '43 42 42 bad secret Mon Jan 01 12:00:00 2024 command', '43 42 42 42'):
+        for line in ('44 42 bad 42 501 Mon Jan 01 12:00:00 2024 command',
+                     '43 42 bad 42 502 Mon Jan 01 12:00:00 2024 command',
+                     '43 42 bad 42 secret Mon Jan 01 12:00:00 2024 command', '43 42 42 42'):
             observation = protocol.Observation()
             with self.subTest(line=line), self.assertRaises(protocol.Failure):
                 protocol.parse_inventory_row(line, (identity,) * 3, observation)
@@ -84,21 +135,21 @@ class SettlementFailureTests(unittest.TestCase):
         identity = {'pid': 43, 'ppid': 42, 'uid': 501, 'pgid': 42, 'session': 42, 'start_sec': 1}
         observation = protocol.Observation()
         with self.assertRaises(protocol.Failure) as error:
-            protocol.parse_inventory_row('43 42 42 malicious-secret 501 hostile payload x y z command',
+            protocol.parse_inventory_row('43 42 malicious-secret 42 501 hostile payload x y z command',
                                          (identity,) * 3, observation)
         self.assertEqual(error.exception.category, 'malformed_inventory')
         body = json.dumps(observation.events)
         self.assertNotIn('malicious-secret', body)
         self.assertNotIn('hostile', body)
         fields = {item['field']: item for item in observation.events[0]['fields']}
-        self.assertEqual(fields['session']['state'], 'unknown')
-        self.assertIsNone(fields['session']['observed'])
-        self.assertEqual(fields['session']['observed_type'], 'unparseable_text')
-        self.assertEqual(fields['session']['observed_length'], len('malicious-secret'))
+        self.assertEqual(fields['pgid']['state'], 'unknown')
+        self.assertIsNone(fields['pgid']['observed'])
+        self.assertEqual(fields['pgid']['observed_type'], 'unparseable_text')
+        self.assertEqual(fields['pgid']['observed_length'], len('malicious-secret'))
         self.assertIsNone(fields['start_sec']['observed'])
         observation = protocol.Observation()
         with self.assertRaises(protocol.Failure):
-            protocol.parse_inventory_row('43 42 42 abc 501 Mon Jan 01 12:00:00 2024 command',
+            protocol.parse_inventory_row('43 42 abc 42 501 Mon Jan 01 12:00:00 2024 command',
                                          (identity,) * 3, observation)
         fields = {item['field']: item for item in observation.events[0]['fields']}
         self.assertEqual(fields['start_sec']['observed'], 'Mon Jan 01 12:00:00 2024')
