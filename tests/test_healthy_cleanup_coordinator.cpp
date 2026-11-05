@@ -10,23 +10,54 @@ using namespace HealthyCleanup;
 // The injected operations represent native barriers; these tests do not prove them.
 struct Fake : Operations {
   std::vector<Step> calls;
+  std::vector<std::int64_t> deadlines;
   Step failure = Step::None;
   Step expiresAt = Step::None;
   std::int64_t time = 1;
+  std::int64_t elapsedPerOperation = 0;
   int stops = 0;
   Stop stop = {StopStatus::Accepted, 0};
   Identity expected = {7, 8, 9};
   std::int64_t now() noexcept override { return time; }
-  Stop cleanupStop(std::int64_t) noexcept override { ++stops; return stop; }
+  Stop cleanupStop(std::int64_t deadline) noexcept override { deadlines.push_back(deadline); ++stops; return stop; }
   void freeRender(const Identity& identity, std::int64_t deadline) noexcept override {
     (void)perform(Step::FreeRender, identity, deadline);
   }
-  bool perform(Step step, const Identity& identity, std::int64_t) noexcept override {
+  bool perform(Step step, const Identity& identity, std::int64_t deadline) noexcept override {
     calls.push_back(step);
+    deadlines.push_back(deadline);
     CHECK(identity.generation == expected.generation && identity.thread == expected.thread &&
           identity.context == expected.context);
     if (step == expiresAt) time = 100;
+    time += elapsedPerOperation;
     return step != failure;
+  }
+};
+
+// Models an adapter enforcing these barriers; it is not a native callback proof.
+struct ProducerFake final : Fake {
+  bool wakeOpen = true, hooksValid = true, eventsValid = true;
+  bool enqueueRejected = false, hookRejected = false, eventRejected = false;
+  bool perform(Step step, const Identity& identity, std::int64_t deadline) noexcept override {
+    if (!Fake::perform(step, identity, deadline)) return false;
+    if (step == Step::CloseWakeAdmission) wakeOpen = false;
+    if (step == Step::InvalidateHooks) hooksValid = false;
+    if (step == Step::InvalidatePlayerEvents) eventsValid = false;
+    if (step == Step::FenceWorker) {
+      enqueueRejected = !wakeOpen;
+      hookRejected = !hooksValid;
+      eventRejected = !eventsValid;
+      return enqueueRejected && hookRejected && eventRejected;
+    }
+    return true;
+  }
+};
+
+struct AliasFake final : Fake {
+  Input* caller = nullptr;
+  bool perform(Step step, const Identity& identity, std::int64_t deadline) noexcept override {
+    caller->deadline = 1000;
+    return Fake::perform(step, identity, deadline);
   }
 };
 
@@ -254,6 +285,43 @@ static void wrapperKeepsAbsoluteDeadline() {
   CHECK(report.failed == Step::Terminal && fake.calls.empty());
 }
 
+static void deadlineIsSharedAcrossElapsedPhases() {
+  Fake fake;
+  fake.elapsedPerOperation = 10;
+  Coordinator coordinator;
+  auto value = input();
+  value.cleanupStopRequired = true;
+  const auto report = coordinator.run(value, fake);
+  CHECK(!report.completed && report.retained && report.failed != Step::None);
+  CHECK(fake.calls.size() > 2 && fake.stops == 1);
+  CHECK(std::all_of(fake.deadlines.begin(), fake.deadlines.end(),
+                    [&](std::int64_t deadline) { return deadline == value.deadline; }));
+  CHECK(!saw(fake, Step::DestroyOwned));
+}
+
+static void staleProducersCannotCrossModeledFence() {
+  ProducerFake fake;
+  Coordinator coordinator;
+  const auto report = coordinator.run(input(), fake);
+  CHECK(report.completed && fake.enqueueRejected && fake.hookRejected && fake.eventRejected);
+  CHECK(before(fake, Step::CloseWakeAdmission, Step::FenceWorker));
+  CHECK(before(fake, Step::InvalidateHooks, Step::FenceWorker));
+  CHECK(before(fake, Step::InvalidatePlayerEvents, Step::FenceWorker));
+}
+
+static void callerCannotExtendDirectRunDeadline() {
+  AliasFake fake;
+  fake.elapsedPerOperation = 10;
+  Coordinator coordinator;
+  auto value = input();
+  fake.caller = &value;
+  const auto report = coordinator.run(value, fake);
+  CHECK(value.deadline == 1000 && !report.completed && report.retained);
+  CHECK(fake.calls.size() > 2 && !saw(fake, Step::DestroyOwned));
+  CHECK(std::all_of(fake.deadlines.begin(), fake.deadlines.end(),
+                    [](std::int64_t deadline) { return deadline == 100; }));
+}
+
 static void reentrantWrapperDoesNotRepeatScenarioOrCleanup() {
   Fake fake;
   Coordinator coordinator;
@@ -280,5 +348,8 @@ int main() {
   injectedCallbackBarriers();
   wrapperPreservesScenarioFailures();
   wrapperKeepsAbsoluteDeadline();
+  deadlineIsSharedAcrossElapsedPhases();
+  staleProducersCannotCrossModeledFence();
+  callerCannotExtendDirectRunDeadline();
   reentrantWrapperDoesNotRepeatScenarioOrCleanup();
 }
