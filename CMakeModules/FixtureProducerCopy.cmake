@@ -37,12 +37,17 @@ set(_fixture_player_inputs
   "MpvVideoItem.h|1e1bba8c18f5548535bc8e71da1259457a081cab8cda3dd8957c10852b8b8ab2"
   "OpenGLDetect.cpp|8dc58b06d131a2a7416189405145735c3fdb0d7f6632d31285862b524ee2b77c"
   "OpenGLDetect.h|576ecf842f1cc1b4d0aabef1bc87e060a057d23015a0ca39be7f96108e881970"
-  "PlayerComponent.cpp|6a4cf1edfa6831e1d5608918ece36afadce587fe7804beda88c64b9544cc9092"
-  "PlayerComponent.h|38fdc3fe0a8edb56b3b5aff8a1142552c0dfa01266701bd09e33bdc269618106"
-  "PlayerComponentCommands.cpp|cad7f30600d2df6eea4b6f910a813c553f61bde70fc303ba103eaa42dee9deb9"
+  "PlayerComponent.cpp|28911d8c3b645383f2f9016d02b16e3022f62084fd1cacc64b16ca83decc2b3d"
+  "PlayerComponent.h|ad77729b420d58a5518763e84a2049d72ed9321255950d9bbc0012b3b8bcca22"
+  "PlayerComponentCommands.cpp|82aa36c445f73369f5f21991cada5c24e3e2f9148ce6bf64e8e3bdd50e3d7673"
+  "PlayerIntentCommands.cpp|22b18079a8f2811b00be4df1f809c74bd81d1cf390e25638d32bd28fbccbd263"
+  "PlaybackIntent.cpp|fc7ac3efaa2015c42420deea8c657b8db86a5795f4f7383785c3113ba64349fe"
+  "PlaybackIntent.h|ccefa6ddf3be574bc2580af21b59567e49c3fbe5c68a0634a9426fa02c5f31b3"
+  "PlaybackCheckpoint.cpp|ad66683598a4f46956e5f4711fbf580faf0828057be39fe5ed055b9c327f8f52"
+  "PlaybackCheckpoint.h|f845a4070b623c29ff26bc3335f95910d31029878eac8de40870f0b57166fe5b"
   "PlayerIntentObservation.h|dc2bf8491cb58d2b30156245d18c8590a3ebebbfe3932c9bb1df97c1bdaebe31"
-  "PlayerMpvEvents.cpp|53ad9afccbeff2934503156f15b612a65795bc5e73efaf214d99da4a90036557"
-  "PlayerReleasedState.cpp|273d7001db537e184dc4527b8571e7944973c68fbf8cfb2546aab87defca7f86"
+  "PlayerMpvEvents.cpp|710102ecf8e4d56f9a43250f4358b5f26c7107b39756133414e9dafbe6b5b084"
+  "PlayerReleasedState.cpp|82a125b3629891080ec4e051841ee309d7c967374c66532a6928e3664437f62e"
   "QtHelper.h|87fbb5a65a740998e9da037f1527906b214d90f758586538d1395237ac4a388a"
   "WindowsMpvLoader.cpp|8a1070a83908a1510896905bc0d156a518de09d637324eba997a97e6952f9897")
 set(_fixture_test_inputs
@@ -62,9 +67,9 @@ set(_fixture_output_hashes
   "mpvqt/mpvcontroller.h|02d4b3499ec99d3eb0f3d5e5f7bc7e9d283fb027a72a195c2779876e5f5229c7"
   "player/MpvVideoItem.cpp|df2d8f3429067ef94cf4e737bad91555ff3d47545c6a03502a6763267895c2f8"
   "player/MpvVideoItem.h|697c7c2d34cdf99c266dcab77623a9be5c35ab966cb555739932159e8bed13cf"
-  "player/PlayerMpvEvents.cpp|44cd5d38f80527b8577c796c0cbd413e0a031369f53e8afcb6f897580d4563bb"
-  "player/PlayerComponent.cpp|fadf5c172759ffd394ba2870ef7e3408bd1b04596c0b611279f5ad2a60f55377"
-  "player/PlayerComponent.h|754d26066d120c3fd8f493fa87698d38ff8f380dd333df7b14706f169d2a8b4e"
+  "player/PlayerMpvEvents.cpp|c66034bb7a310e5853ff81cba7ceeea3abaaba2c99ab6b0a492f8a13e1e8e365"
+  "player/PlayerComponent.cpp|c311dcb12886d427af1f5c32e6b5d5f3e8462e7205d64196cfe1f6355b8ebc0a"
+  "player/PlayerComponent.h|f6756eb4e9bcb26b458fe3c53262e3625ff87fc2f28723b551f296a290027e95"
   "tests/test_webclient_containment.cpp|c8a607dcea1de26ebfaf7eb3668814cf7c2605940fcb29b86eda827c31e55bf6")
 
 function(_fixture_copy_inputs source destination list_name)
@@ -102,7 +107,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_fixture_patch
 file(READ "${_fixture_patch}" _fixture_patch_contents)
 string(REPLACE "\r\n" "\n" _fixture_patch_contents "${_fixture_patch_contents}")
 string(SHA256 _fixture_patch_hash "${_fixture_patch_contents}")
-if(NOT _fixture_patch_hash STREQUAL "beab0fad9cecb8e5d98c8a85ad10485d4513731b2f43031e92498c7ac2bd2bec")
+if(NOT _fixture_patch_hash STREQUAL "4eb132cc3598d22e57676e184b456a8338ce514a738b529d266616c585d9ec81")
   message(FATAL_ERROR "Fixture patch hash mismatch")
 endif()
 execute_process(COMMAND "${CMAKE_COMMAND}" -E env "GIT_CEILING_DIRECTORIES=${CMAKE_BINARY_DIR}"

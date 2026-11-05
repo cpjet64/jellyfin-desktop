@@ -28,7 +28,7 @@ $playerGate = $source.FindAll({ param($node) $node -is [Management.Automation.La
 if ($playerGate.Count -ne 1) { throw 'Expected one video-player gate' }
 $script:status = 0
 Invoke-Expression $playerGate[0].Extent.Text
-if (($script:seen -join '|') -ne '--test|tests/test_mpvVideoPlayer.js|tests/test_mpvVideoPlayer_order.js|tests/test_synchronous_stop_page.js') { throw 'Wrong video-player gate arguments' }
+if (($script:seen -join '|') -ne '--test|tests/test_mpvVideoPlayer.js|tests/test_mpvVideoPlayer_order.js|tests/test_synchronous_stop_page.js|tests/test_playback_intent_acceptance.js') { throw 'Wrong video-player gate arguments' }
 $script:status = 19
 $failed = $false
 try { Invoke-Expression $playerGate[0].Extent.Text }

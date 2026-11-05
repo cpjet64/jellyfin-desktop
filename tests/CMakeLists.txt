@@ -4,6 +4,25 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+add_executable(test_playback_intent_acceptance test_playback_intent_acceptance.cpp ${CMAKE_SOURCE_DIR}/src/player/PlaybackIntent.cpp)
+target_include_directories(test_playback_intent_acceptance PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_features(test_playback_intent_acceptance PRIVATE cxx_std_17)
+add_test(NAME test_playback_intent_acceptance COMMAND test_playback_intent_acceptance)
+set_tests_properties(test_playback_intent_acceptance PROPERTIES TIMEOUT 60)
+
+add_executable(test_playback_checkpoint test_playback_checkpoint.cpp ${CMAKE_SOURCE_DIR}/src/player/PlaybackCheckpoint.cpp)
+target_include_directories(test_playback_checkpoint PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_playback_checkpoint PRIVATE Qt6::Core)
+target_compile_features(test_playback_checkpoint PRIVATE cxx_std_17)
+add_test(NAME test_playback_checkpoint COMMAND test_playback_checkpoint)
+set_tests_properties(test_playback_checkpoint PROPERTIES TIMEOUT 60)
+
+add_executable(test_player_intent_boundary test_player_intent_boundary.cpp)
+target_include_directories(test_player_intent_boundary PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
+target_link_libraries(test_player_intent_boundary PRIVATE jmp_core Qt6::Test)
+add_test(NAME test_player_intent_boundary COMMAND test_player_intent_boundary)
+set_tests_properties(test_player_intent_boundary PROPERTIES TIMEOUT 60)
+
 add_executable(test_player_intent_observation test_player_intent_observation.cpp)
 target_include_directories(test_player_intent_observation PRIVATE ${CMAKE_SOURCE_DIR}/src/player)
 target_compile_features(test_player_intent_observation PRIVATE cxx_std_17)

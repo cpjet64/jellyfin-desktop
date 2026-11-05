@@ -129,21 +129,21 @@ index 42505a7..1805d0d 100644
 @@ -35,0 +40 @@ private:
 +    FixtureWakeOwner* m_fixtureOwner = nullptr;
 diff --git a/player/PlayerComponent.cpp b/player/PlayerComponent.cpp
-index 45563b2..9f36145 100644
+index a16ea0b..06bbb80 100644
 --- a/player/PlayerComponent.cpp
 +++ b/player/PlayerComponent.cpp
-@@ -105 +105 @@ void PlayerComponent::initializeMpv()
+@@ -104 +104 @@ void PlayerComponent::initializeMpv()
 -  setupMpvEvents();
 +  if (!setupMpvEvents()) return;
 diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
-index 0469b5e..66e2b5f 100644
+index efe8bef..dfdbb5c 100644
 --- a/player/PlayerComponent.h
 +++ b/player/PlayerComponent.h
-@@ -278 +278 @@ private:
+@@ -288 +288 @@ private:
 -  void setupMpvEvents();
 +  bool setupMpvEvents();
 diff --git a/player/PlayerMpvEvents.cpp b/player/PlayerMpvEvents.cpp
-index 7ec54be..8237353 100644
+index 9e12135..7889998 100644
 --- a/player/PlayerMpvEvents.cpp
 +++ b/player/PlayerMpvEvents.cpp
 @@ -1,0 +2 @@
@@ -180,7 +180,7 @@ index 7ec54be..8237353 100644
 +  if (!m_mpv || !m_mpv->fixtureWakeOwner() ||
 +      m_mpv->fixtureWakeOwner()->finishHandoff() != HealthyWakeBinding::Result::Done)
 +    qWarning("fixture wake handoff blocked");
-@@ -97,5 +83,2 @@ void PlayerComponent::scheduleMpvHook(const std::function<void()>& resume)
+@@ -98,5 +84,2 @@ void PlayerComponent::scheduleMpvHook(const std::function<void()>& resume)
 -#ifdef MPVQT_EXTERNAL_EVENTS
 -  QTimer::singleShot(pause, this, resume);
 -#else
