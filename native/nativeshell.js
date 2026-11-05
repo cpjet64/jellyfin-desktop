@@ -17,10 +17,7 @@ const features = [
 ];
 
 const getPlugins = () => {
-    const basePlugins = [
-        'inputPlugin',
-        'updatePlugin'
-    ];
+    const basePlugins = ['inputPlugin', 'recoveryPlugin', 'updatePlugin'];
 
     const mpvEnabled = jmpInfo.settings?.main?.enableMPV !== false;
     if (mpvEnabled) {
