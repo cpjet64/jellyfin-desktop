@@ -50,7 +50,7 @@ set(_fixture_player_inputs
   "PlayerReleasedState.cpp|82a125b3629891080ec4e051841ee309d7c967374c66532a6928e3664437f62e"
   "QtHelper.h|87fbb5a65a740998e9da037f1527906b214d90f758586538d1395237ac4a388a"
   "WindowsLoaderMode.h|4458f4d3fbb9d7bcef5342a9c22bf440e1a462256084bb66202d28c4924e7fe3"
-  "WindowsMpvLoader.cpp|ba4d249bd3f90da8cfce4a1eee0fdf3ef9d812e910dd912d7788de4081457e6f")
+  "WindowsMpvLoader.cpp|d26f12893901f4b2896b7c92f4134877926d5a4821fc0367a7c327e52158fc8a")
 set(_fixture_test_inputs
   "test_webclient_containment.cpp|75de059742269bc205841cc2026114f5eb0cf6a478caade681a3a8ff07f8486b")
 set(_fixture_core_inputs "ComponentManager.cpp|e69695ac1e88b8044793ccd5245c61a156f483db5d30c74ef284627f701eae66")
