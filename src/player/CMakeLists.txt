@@ -1,4 +1,4 @@
-add_sources(PlayerComponent.cpp PlayerComponent.h PlayerMpvEvents.cpp PlayerReleasedState.cpp)
+add_sources(PlayerComponent.cpp PlayerComponentCommands.cpp PlayerComponent.h PlayerMpvEvents.cpp PlayerReleasedState.cpp)
 add_sources(AlbumArtProvider.cpp AlbumArtProvider.h)
 add_sources(MpvVideoItem.cpp MpvVideoItem.h)
 add_sources(OpenGLDetect.cpp OpenGLDetect.h)

@@ -1,4 +1,10 @@
 #include "PlayerComponent.h"
+#ifdef PLAYER_INTENT_DIAGNOSTIC_ONLY
+#include "PlayerIntentObservation.h"
+#define PLAYER_QUEUE_DISPATCH(call) (PlayerIntentObservation::queueDispatch(), (call))
+#else
+#define PLAYER_QUEUE_DISPATCH(call) (call)
+#endif
 #include <QString>
 #include <Qt>
 #include <QDir>
@@ -269,14 +275,6 @@ void PlayerComponent::setWindow(QQuickWindow* window)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-bool PlayerComponent::load(const QString& url, const QVariantMap& options, const QVariantMap &metadata, const QVariant& audioStream , const QVariant& subtitleStream)
-{
-  stop();
-  queueMedia(url, options, metadata, audioStream, subtitleStream);
-  return true;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options, const QVariantMap &metadata, const QVariant& audioStream, const QVariant& subtitleStream)
 {
   if (!m_mpv) {
@@ -331,7 +329,7 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
 
   command << extraArgs;
 
-  m_mpv->command( command);
+  PLAYER_QUEUE_DISPATCH(m_mpv->command( command));
 
   QVariantMap jellyfinMetadata = metadata["metadata"].toMap();
   QUrl jellyfinBaseUrl = qurl.adjusted(QUrl::RemovePath | QUrl::RemoveQuery);
@@ -770,30 +768,6 @@ void PlayerComponent::notifyMetadata(const QVariantMap& metadata)
 void PlayerComponent::notifyVolumeChange(double volume)
 {
   emit volumeChanged(volume);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::stop()
-{
-  if (!WebClientFaultGuard::instance().rendererLost()) stopMpv();
-}
-
-PlayerComponent::NativeStopResult PlayerComponent::requestNativeStop()
-{
-  return stopMpv();
-}
-
-PlayerComponent::NativeStopResult PlayerComponent::stopMpv()
-{
-  if (!m_mpv || !m_mpv->mpv()) return {NativeStopResult::Status::Unavailable, 0};
-  return checkedStop(m_mpv->mpv(), mpv_command);
-}
-
-PlayerComponent::NativeStopResult PlayerComponent::checkedStop(mpv_handle* handle, int (*command)(mpv_handle*, const char**))
-{
-  const char* args[] = {"stop", nullptr};
-  const int error = command(handle, args);
-  return {error < 0 ? NativeStopResult::Status::Error : NativeStopResult::Status::Accepted, error};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
