@@ -39,7 +39,8 @@ $install = $source.FindAll({ param($node) $node -is [Management.Automation.Langu
     $node.GetCommandName() -eq 'Install-CiTools' }, $true)
 if ($install.Count -ne 1) { throw 'Expected one tool bootstrap' }
 foreach ($test in @('test_linux_sdk_order.py', 'test_linux_sdk_inputs.py', 'test_qt_sdk_archive.py',
-                    'test_linux_qt_plan.py', 'test_libarchive_reader_contract.py', 'test_linux_sdk_cmake.py')) {
+                    'test_linux_qt_plan.py', 'test_libarchive_reader_contract.py', 'test_linux_sdk_cmake.py',
+                    'test_fixture_suspend_adapter.py', 'test_fixture_suspend_linux.py')) {
     $path = "dev/ci/$test"
     $matches = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
         $node.GetCommandName() -eq 'Run-Native' -and $node.Extent.Text.Contains($path) }, $true)
