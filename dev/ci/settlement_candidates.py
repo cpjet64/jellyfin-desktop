@@ -5,6 +5,32 @@ import re
 
 MAX_INVENTORY = 1024 * 1024
 ROLES = ('leader', 'command', 'probe')
+IDENTITY_COMPARISON_FIELDS = ('pid', 'ppid', 'uid', 'pgid', 'session', 'start_sec')
+
+
+def identity_comparison(expected, observed, problem=None):
+    """Describe the existing ordered, short-circuit comparison without changing it."""
+    result, stopped = [], problem is not None
+    for name in IDENTITY_COMPARISON_FIELDS:
+        left, right = expected.get(name), observed.get(name)
+        state = 'not_evaluated'
+        if problem == name:
+            state = 'unknown'
+        elif not stopped:
+            if left is None or right is None:
+                state, stopped = 'unknown', True
+            elif left == right:
+                state = 'match'
+            else:
+                state, stopped = 'mismatch', True
+        result.append({'field': name, 'state': state, 'expected': left, 'observed': right,
+                       'expected_unit': 'seconds_since_epoch' if name == 'start_sec' else 'integer',
+                       'observed_unit': ('text' if isinstance(right, str) else
+                                         'seconds_since_epoch' if name == 'start_sec' else 'integer'),
+                       'expected_source': 'getsid' if name == 'session' else 'kernel_identity',
+                       'observed_source': ('ps_lstart_raw' if name == 'start_sec' and isinstance(right, str)
+                                           else 'ps_lstart_normalized' if name == 'start_sec' else 'ps')})
+    return {'kind': 'identity_comparison', 'fields': result}
 
 
 def integer(value):
@@ -162,8 +188,17 @@ def qualification(value):
         return 'unavailable'
 
 
-def qualify_records(records):
+def valid_attempt_id(value):
+    return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{32}', value, flags=re.ASCII) is not None
+
+
+def qualify_records(records, expected_attempt_id=None):
     if not isinstance(records, list):
+        return 'FAIL'
+    if any(isinstance(r, dict) and r.get('claim', 'settlement') != 'settlement' for r in records):
+        return 'FAIL'
+    if expected_attempt_id is not None and (not valid_attempt_id(expected_attempt_id) or
+            any(not isinstance(r, dict) or r.get('attempt_id') != expected_attempt_id for r in records)):
         return 'FAIL'
     found = [item for item in records if isinstance(item, dict) and item.get('candidate_diagnostic') is not None]
     if len(found) != 1:
@@ -179,9 +214,10 @@ def qualify_records(records):
         return 'FAIL'
 
 
-def qualify_observation_records(records):
+def qualify_observation_records(records, expected_attempt_id=None):
     """Accept only an explicitly bounded, successful metadata observation."""
-    if not isinstance(records, list) or not records or any(not isinstance(r, dict) for r in records):
+    if (not valid_attempt_id(expected_attempt_id) or not isinstance(records, list) or not records or
+            any(not isinstance(r, dict) or r.get('attempt_id') != expected_attempt_id for r in records)):
         return 'FAIL'
     if any(not valid_observation_record(record) for record in records):
         return 'FAIL'
@@ -198,10 +234,12 @@ def qualify_observation_records(records):
 
 def valid_observation_record(record):
     purpose = record.get('purpose')
-    if (record.get('claim') != 'metadata_observation' or record.get('coverage') != 'bounded' or
+    if (not valid_observation_envelope(record, nested=False) or
+            record.get('claim') != 'metadata_observation' or record.get('coverage') != 'bounded' or
             purpose not in ('command', 'inventory') or
             record.get('ok') is not True or record.get('failure') is not None or
-            record.get('secondary') != [] or record.get('record_truncated') is not False):
+            record.get('secondary') != [] or record.get('record_truncated') is not False or
+            not integer(record.get('elapsed_ms')) or record['elapsed_ms'] < 0):
         return False
     events, cleanup = record.get('events'), record.get('cleanup')
     if not isinstance(events, list) or not isinstance(cleanup, list) or not cleanup:
@@ -212,7 +250,26 @@ def valid_observation_record(record):
            c.get('requested') is not True or c.get('errors') not in (None, []) or
            any(c.get(k) != 'success' for k in ('operation', 'leader_reap', 'group_settlement')) for c in cleanup):
         return False
-    return purpose == 'inventory' or record.get('candidate_diagnostic') is None
+    return purpose == 'inventory' or (record.get('candidate_diagnostic') is None and
+                                      record.get('diagnostic_qualification') == 'missing')
+
+
+def valid_observation_envelope(record, nested):
+    """Reject unrecognized or missing claim-bearing envelope fields."""
+    if not isinstance(record, dict):
+        return False
+    common = {'ok', 'failure', 'events', 'claim', 'purpose', 'coverage', 'attempt_id'}
+    required = common | ({'value', 'candidate_diagnostic'} if nested else
+                         {'secondary', 'cleanup', 'elapsed_ms', 'record_truncated', 'diagnostic_qualification'})
+    optional = {'secondary'} if nested else {'candidate_diagnostic'}
+    if (not required <= set(record) or set(record) - required - optional or type(record['ok']) is not bool or
+            not valid_attempt_id(record['attempt_id'])):
+        return False
+    if nested and record['ok']:
+        return record['failure'] is None and isinstance(record['value'], dict) and record.get('secondary', []) == []
+    if nested:
+        return record['value'] is None and isinstance(record['failure'], dict) and isinstance(record.get('secondary', []), list)
+    return True
 
 
 def valid_observation_events(events, purpose):
@@ -220,6 +277,7 @@ def valid_observation_events(events, purpose):
     if not isinstance(events, list):
         return False
     command = leader = False
+    subjects = 0
     owned_pids, unrelated_sets, comparisons, identity_pids = set(), [], {}, {}
     for event in events:
         if not isinstance(event, dict):
@@ -228,14 +286,18 @@ def valid_observation_events(events, purpose):
         if kind == 'command':
             values = event.get('values')
             allowed = {'exit', 'signal', 'elapsed_ms', 'output_bytes', 'retained_bytes', 'output_bound', 'truncated'}
-            if (set(event) != {'kind', 'phase', 'values'} or
+            role = event.get('role')
+            if role == 'subject':
+                subjects += 1
+            if (not {'kind', 'phase', 'values'} <= set(event) or set(event) - {'kind', 'phase', 'values', 'role'} or
+                    ('role' in event and (role != 'subject' or purpose != 'command' or event.get('phase') != 'inventory')) or
                     event.get('phase') not in {'preparation', 'launch', 'held_identity', 'inventory', 'identification', 'cleanup'} or
                     not isinstance(values, dict) or set(values) - allowed or
                     any(not (v is None or integer(v) or type(v) is bool) for v in values.values()) or
                     any(k in values and type(values[k]) is not bool for k in ('output_bound', 'truncated')) or
                     any(k in values and values[k] is not None and not integer(values[k]) for k in allowed - {'output_bound', 'truncated'}) or
                     not integer(values.get('exit')) or values['exit'] < 0 or
-                    (purpose == 'inventory' and values['exit'] != 0) or
+                    (values['exit'] != 0 and role != 'subject') or
                     (values.get('signal') is not None and (not integer(values['signal']) or values['signal'] != 0))
                     or values.get('truncated') is True or values.get('output_bound') is True):
                 return False
@@ -278,7 +340,7 @@ def valid_observation_events(events, purpose):
             return False
     registered = set(comparisons.values())
     if purpose == 'command':
-        return command and leader and not comparisons and not unrelated_sets
+        return command and leader and subjects == 1 and not comparisons and not unrelated_sets
     return (purpose == 'inventory' and command and leader and len(comparisons) == 3 and len(registered) == 3 and
             all(comparisons.get(role) == pid for role, pid in identity_pids.items()) and
             owned_pids <= registered and all(pids == registered for pids in unrelated_sets))

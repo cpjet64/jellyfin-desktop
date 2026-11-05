@@ -6,6 +6,12 @@ from unittest.mock import patch
 import settlement_candidates as candidates
 import settlement_failure as protocol
 
+ATTEMPT = 'a' * 32
+
+
+def qualify(records):
+    return candidates.qualify_observation_records(records, ATTEMPT)
+
 
 def identities():
     return tuple(dict(pid=pid, ppid=1, uid=501, pgid=pid, session=pid,
@@ -17,7 +23,8 @@ def cleanup(_):
 
 
 def child_frame(policy, role='observed_row', state='unknown', pid=40, ids=None, problem=None):
-    child = protocol.Observation(policy, 'inventory' if policy == 'metadata_observation' else None)
+    child = protocol.Observation(policy, 'inventory' if policy == 'metadata_observation' else None,
+                                 ATTEMPT if policy == 'metadata_observation' else None)
     def operation(obs):
         obs.command('inventory', {'exit': 0})
         obs.identity('own_leader', 'success', {'pid': 20})
@@ -42,7 +49,8 @@ def capture(frame, policy='metadata_observation', cleanup_fn=cleanup):
         value = protocol.run(lambda register: register('owned'),
                              lambda obs: protocol.import_nested_frame(frame, obs),
                              cleanup_fn, emitted.append, clock=lambda: 1, policy=policy,
-                             purpose='inventory' if policy == 'metadata_observation' else None)
+                             purpose='inventory' if policy == 'metadata_observation' else None,
+                             attempt_id=ATTEMPT if policy == 'metadata_observation' else None)
     except protocol.ProtocolFailure as error:
         value = error
     return json.loads(emitted[0]), value
@@ -56,33 +64,85 @@ class ObservationPolicyTests(unittest.TestCase):
                 self.assertEqual(result, {'sampled': True})
                 self.assertEqual((record['claim'], record['coverage']), ('metadata_observation', 'bounded'))
                 self.assertEqual(record['events'][-1]['state'], state)
-                self.assertEqual(candidates.qualify_observation_records([record]), 'PASS')
+                self.assertEqual(qualify([record]), 'PASS')
                 self.assertEqual(candidates.qualify_records([record]), 'FAIL')
 
     def test_aggregate_has_one_inventory_and_bounded_command_records(self):
-        child = protocol.Observation('metadata_observation', 'command')
+        child = protocol.Observation('metadata_observation', 'command', ATTEMPT)
         def operation(obs):
             obs.identity('own_leader', 'success', {'pid': 20})
-            obs.command('inventory', {'exit': 0})
+            obs.add({'kind': 'command', 'phase': 'inventory', 'role': 'subject', 'values': {'exit': 0}})
             return {'sampled': True}
         frame = protocol.nested(operation, child)
         frame['events'] = child.events
         emitted = []
         protocol.run(lambda register: register('owned'), lambda obs: protocol.import_nested_frame(frame, obs),
-                     cleanup, emitted.append, clock=lambda: 1, policy='metadata_observation', purpose='command')
+                     cleanup, emitted.append, clock=lambda: 1, policy='metadata_observation', purpose='command', attempt_id=ATTEMPT)
         command = json.loads(emitted[0])
         inventory, _ = capture(child_frame('metadata_observation', ids=identities()))
-        self.assertEqual(candidates.qualify_observation_records([command, inventory, command]), 'PASS')
-        nonzero = dict(frame, events=[dict(e, values={'exit': 3}) if e['kind'] == 'command' else e
+        self.assertEqual(qualify([command, inventory, command]), 'PASS')
+        nonzero = dict(frame, events=[dict(e, values={'exit': 3}, role='subject') if e['kind'] == 'command' else e
                                       for e in frame['events']])
         emitted.clear()
         protocol.run(lambda register: register('owned'), lambda obs: protocol.import_nested_frame(nonzero, obs),
-                     cleanup, emitted.append, clock=lambda: 1, policy='metadata_observation', purpose='command')
-        self.assertEqual(candidates.qualify_observation_records([json.loads(emitted[0]), inventory]), 'PASS')
-        self.assertEqual(candidates.qualify_observation_records([command]), 'FAIL')
-        self.assertEqual(candidates.qualify_observation_records([inventory, inventory]), 'FAIL')
-        self.assertEqual(candidates.qualify_observation_records([command, dict(inventory, purpose='changed')]), 'FAIL')
-        self.assertEqual(candidates.qualify_observation_records([dict(command, coverage='incomplete'), inventory]), 'FAIL')
+                     cleanup, emitted.append, clock=lambda: 1, policy='metadata_observation', purpose='command', attempt_id=ATTEMPT)
+        self.assertEqual(qualify([json.loads(emitted[0]), inventory]), 'PASS')
+        self.assertEqual(qualify([command]), 'FAIL')
+        self.assertEqual(qualify([inventory, inventory]), 'FAIL')
+        self.assertEqual(qualify([command, dict(inventory, purpose='changed')]), 'FAIL')
+        self.assertEqual(qualify([dict(command, coverage='incomplete'), inventory]), 'FAIL')
+
+    def test_failed_helper_and_unknown_envelopes_fail_through_parent(self):
+        child = protocol.Observation('metadata_observation', 'command', ATTEMPT)
+        def operation(obs):
+            obs.identity('own_leader', 'success', {'pid': 20})
+            obs.add({'kind': 'command', 'phase': 'inventory', 'role': 'subject', 'values': {'exit': 3}})
+            return {'sampled': True}
+        frame = protocol.nested(operation, child)
+        frame['events'] = child.events
+        def run_frame(value):
+            emitted = []
+            try:
+                protocol.run(lambda register: register('owned'), lambda obs: protocol.import_nested_frame(value, obs),
+                             cleanup, emitted.append, clock=lambda: 1, policy='metadata_observation',
+                             purpose='command', attempt_id=ATTEMPT)
+            except protocol.ProtocolFailure:
+                pass
+            return json.loads(emitted[0])
+        inventory, _ = capture(child_frame('metadata_observation', ids=identities()))
+        good = run_frame(frame)
+        self.assertEqual(qualify([good, inventory]), 'PASS')
+        self.assertEqual(candidates.qualify_observation_records([good, inventory]), 'FAIL')
+        missing = dict(frame, events=[e for e in frame['events'] if e.get('role') != 'subject'] +
+                       [{'kind': 'command', 'phase': 'inventory', 'values': {'exit': 0}}])
+        self.assertFalse(run_frame(missing)['ok'])
+        failed = dict(frame, events=frame['events'] + [{'kind': 'command', 'phase': 'launch', 'values': {'exit': 9}}])
+        self.assertFalse(run_frame(failed)['ok'])
+        for field in ('settlement_verified', 'full_coverage', 'unexpected'):
+            self.assertFalse(run_frame(dict(frame, **{field: True}))['ok'])
+            self.assertEqual(qualify([dict(good, **{field: True}), inventory]), 'FAIL')
+        self.assertFalse(run_frame(dict(frame, failure={'phase': 'launch', 'category': 'nonzero'}))['ok'])
+        self.assertFalse(run_frame(dict(frame, secondary=['fd_close_failed']))['ok'])
+        self.assertEqual(qualify([dict(good, elapsed_ms=True), inventory]), 'FAIL')
+        self.assertEqual(qualify([dict(good, diagnostic_qualification='complete'), inventory]), 'FAIL')
+        self.assertEqual(qualify([good, dict(inventory, attempt_id='b' * 32)]), 'FAIL')
+        self.assertFalse(run_frame(dict(frame, attempt_id='b' * 32))['ok'])
+        self.assertFalse(run_frame({key: value for key, value in frame.items() if key != 'attempt_id'})['ok'])
+
+    def test_attempt_validation_and_settlement_compatibility(self):
+        for value in (None, '', 'A' * 32, 'a' * 31, 'g' * 32, 1):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                protocol.Observation('metadata_observation', 'command', value)
+        child = protocol.Observation(attempt_id=ATTEMPT)
+        frame = protocol.nested(lambda obs: ({'value': 1}), child)
+        frame['events'] = []
+        with self.assertRaises(protocol.Failure):
+            protocol.import_nested_frame(frame, protocol.Observation(attempt_id='b' * 32))
+        legacy = {'record_truncated': False, 'candidate_diagnostic': candidates.scan(b'', identities(), True),
+                  'diagnostic_qualification': 'complete'}
+        self.assertEqual(candidates.qualify_records([legacy]), 'PASS')
+        self.assertEqual(candidates.qualify_records([legacy], ATTEMPT), 'FAIL')
+        self.assertEqual(candidates.qualify_records([legacy, {'claim': 'metadata_observation'}]), 'FAIL')
 
     def test_owned_ambiguous_and_unregistered_remain_failed(self):
         for role, pid, ids in (('own_probe', 20, identities()), ('observed_row', 20, identities()),
@@ -93,10 +153,10 @@ class ObservationPolicyTests(unittest.TestCase):
                 self.assertIsInstance(error, protocol.ProtocolFailure)
                 self.assertEqual(record['coverage'], 'incomplete')
                 self.assertEqual(record['failure']['category'], 'identity_unavailable')
-                self.assertEqual(candidates.qualify_observation_records([record]), 'FAIL')
+                self.assertEqual(qualify([record]), 'FAIL')
 
     def test_settlement_unchanged_and_interleaved_policies(self):
-        first = protocol.Observation('metadata_observation', 'inventory')
+        first = protocol.Observation('metadata_observation', 'inventory', ATTEMPT)
         second = protocol.Observation()
         first.identity('observed_row', 'unknown', {'pid': 40, 'uid': 501}, registered_identities=identities())
         second.identity('observed_row', 'unknown', {'pid': 40, 'uid': 501}, registered_identities=identities())
@@ -121,7 +181,7 @@ class ObservationPolicyTests(unittest.TestCase):
                   'diagnostic_qualification': 'complete'}
         self.assertEqual(candidates.qualify_records([legacy]), 'PASS')
         for claim in (None, 'changed', 'settlement'):
-            self.assertEqual(candidates.qualify_observation_records([dict(legacy, claim=claim)]), 'FAIL')
+            self.assertEqual(qualify([dict(legacy, claim=claim)]), 'FAIL')
         with self.assertRaises(ValueError):
             protocol.Observation('altered')
 
@@ -141,7 +201,7 @@ class ObservationPolicyTests(unittest.TestCase):
                 self.assertEqual(record['coverage'], 'incomplete')
 
     def test_owned_comparison_failures_do_not_qualify(self):
-        child = protocol.Observation('metadata_observation', 'inventory')
+        child = protocol.Observation('metadata_observation', 'inventory', ATTEMPT)
         expected = identities()[0]
         row = {'pid': 20, 'ppid': 2, 'uid': 501, 'pgid': 20}
         with self.assertRaises(protocol.Failure):

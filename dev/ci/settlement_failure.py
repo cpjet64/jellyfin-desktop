@@ -7,7 +7,7 @@ import json
 import re
 import time
 import settlement_candidates as candidate_diagnostics
-from settlement_candidates import fields, integer
+from settlement_candidates import fields, integer, identity_comparison, IDENTITY_COMPARISON_FIELDS
 
 MAX_EVENTS = 4096
 MAX_GROUPS = 8
@@ -22,7 +22,6 @@ IDENTITY_FIELDS = {'pid', 'uid', 'ppid', 'pgid', 'session', 'start_sec', 'start_
                    'api_result', 'api_error', 'expected_size', 'returned_size'}
 COMMAND_FIELDS = {'exit', 'signal', 'elapsed_ms', 'output_bytes', 'retained_bytes', 'output_bound', 'truncated'}
 SECONDARY_DETAILS = ('fd_close_failed', 'mask_restore_failed', 'mask_block_failed')
-IDENTITY_COMPARISON_FIELDS = ('pid', 'ppid', 'uid', 'pgid', 'session', 'start_sec')
 
 
 class Failure(Exception):
@@ -45,13 +44,16 @@ class DiagnosticFinalizationTimeout(TimeoutError):
 
 
 class Observation:
-    def __init__(self, policy='settlement', purpose=None):
+    def __init__(self, policy='settlement', purpose=None, attempt_id=None):
         if policy not in ('settlement', 'metadata_observation'):
             raise ValueError('unsupported policy')
         if (policy == 'metadata_observation' and purpose not in ('command', 'inventory')) or (policy == 'settlement' and purpose is not None):
             raise ValueError('unsupported purpose')
+        if (attempt_id is not None or policy == 'metadata_observation') and not candidate_diagnostics.valid_attempt_id(attempt_id):
+            raise ValueError('invalid attempt id')
         self.policy = policy
         self.purpose = purpose
+        self.attempt_id = attempt_id
         self.events = []
         self.groups = []
         self.qualification_failure = None
@@ -109,31 +111,6 @@ def failure_record(error, phase):
     if isinstance(error, (KeyboardInterrupt, SystemExit)):
         return {'phase': phase, 'category': 'cancellation'}
     return {'phase': phase, 'category': 'unknown'}
-
-
-def identity_comparison(expected, observed, problem=None):
-    """Describe the existing ordered, short-circuit comparison without changing it."""
-    result, stopped = [], problem is not None
-    for name in IDENTITY_COMPARISON_FIELDS:
-        left, right = expected.get(name), observed.get(name)
-        state = 'not_evaluated'
-        if problem == name:
-            state = 'unknown'
-        elif not stopped:
-            if left is None or right is None:
-                state, stopped = 'unknown', True
-            elif left == right:
-                state = 'match'
-            else:
-                state, stopped = 'mismatch', True
-        result.append({'field': name, 'state': state, 'expected': left, 'observed': right,
-                       'expected_unit': 'seconds_since_epoch' if name == 'start_sec' else 'integer',
-                       'observed_unit': ('text' if isinstance(right, str) else
-                                         'seconds_since_epoch' if name == 'start_sec' else 'integer'),
-                       'expected_source': 'getsid' if name == 'session' else 'kernel_identity',
-                       'observed_source': ('ps_lstart_raw' if name == 'start_sec' and isinstance(right, str)
-                                           else 'ps_lstart_normalized' if name == 'start_sec' else 'ps')})
-    return {'kind': 'identity_comparison', 'fields': result}
 
 
 def held_session(identity, get_identity, get_session):
@@ -298,8 +275,11 @@ def parse_inventory_row(line, identities, observation):
 def import_nested_frame(frame, observation):
     if not isinstance(frame, dict) or not isinstance(frame.get('events'), list):
         raise Failure('inventory', 'malformed_inventory')
+    if frame.get('attempt_id') != observation.attempt_id:
+        raise Failure('inventory', 'malformed_inventory')
     if observation.policy == 'metadata_observation':
-        if (frame.get('claim') != observation.policy or frame.get('purpose') != observation.purpose or
+        if (not candidate_diagnostics.valid_observation_envelope(frame, nested=True) or frame.get('claim') != observation.policy or
+                frame.get('purpose') != observation.purpose or
                 frame.get('coverage') not in ('bounded', 'incomplete')):
             raise Failure('inventory', 'malformed_inventory')
         if frame['coverage'] != ('bounded' if frame.get('ok') is True else 'incomplete'):
@@ -355,6 +335,8 @@ def nested_outcome(operation, observation):
 def nested(operation, observation):
     result = nested_outcome(operation, observation)
     result['candidate_diagnostic'] = observation.candidate_diagnostic
+    if observation.attempt_id is not None:
+        result['attempt_id'] = observation.attempt_id
     if observation.policy == 'metadata_observation':
         result.update(claim=observation.policy, purpose=observation.purpose, coverage='bounded' if result['ok'] else 'incomplete')
     return result
@@ -414,7 +396,9 @@ def encode(record):
                'secondary': record.get('secondary', []), 'events': [], 'cleanup': record.get('cleanup', []),
                'record_truncated': True}
     if record.get('claim') == 'metadata_observation':
-        bounded.update(claim=record['claim'], purpose=record.get('purpose'), coverage='incomplete')
+        bounded.update(claim=record['claim'], purpose=record.get('purpose'), coverage='incomplete', attempt_id=record.get('attempt_id'))
+    elif record.get('attempt_id') is not None:
+        bounded['attempt_id'] = record['attempt_id']
     return json.dumps(bounded, sort_keys=True, separators=(',', ':')).encode('utf-8')
 
 
@@ -439,13 +423,15 @@ def encode_finalization_timeout(record):
     bounded = {'ok': False, 'failure': result['failure'], 'secondary': result['secondary'],
                'events': [], 'cleanup': result['cleanup'], 'record_truncated': True}
     if result.get('claim') == 'metadata_observation':
-        bounded.update(claim=result['claim'], purpose=result.get('purpose'), coverage='incomplete')
+        bounded.update(claim=result['claim'], purpose=result.get('purpose'), coverage='incomplete', attempt_id=result.get('attempt_id'))
+    elif result.get('attempt_id') is not None:
+        bounded['attempt_id'] = result['attempt_id']
     return json.dumps(bounded, sort_keys=True, separators=(',', ':')).encode('utf-8')
 
 
-def run(spawn, operation, cleanup, emit, clock=time.monotonic, policy='settlement', purpose=None):
+def run(spawn, operation, cleanup, emit, clock=time.monotonic, policy='settlement', purpose=None, attempt_id=None):
     """Emit one bounded record, then raise on any operation or cleanup failure."""
-    observed = Observation(policy, purpose)
+    observed = Observation(policy, purpose, attempt_id)
     started = clock()
     primary = None
     early_secondary = []
@@ -483,6 +469,8 @@ def run(spawn, operation, cleanup, emit, clock=time.monotonic, policy='settlemen
               'record_truncated': False, 'candidate_diagnostic': observed.candidate_diagnostic}
     if policy == 'metadata_observation':
         record.update(claim=policy, purpose=purpose, coverage='bounded' if primary is None else 'incomplete')
+    if attempt_id is not None:
+        record['attempt_id'] = attempt_id
     try:
         body = encode(record)
     except DiagnosticFinalizationTimeout:
