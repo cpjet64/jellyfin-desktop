@@ -24,9 +24,13 @@ def command(args, deadline, env=None):
     left = deadline - time.monotonic()
     if left <= 0:
         raise TimeoutError('inspection deadline')
+    result = None
+    safe_env = {'LANG': 'C', 'LC_ALL': 'C', 'PATH': '/usr/bin:/bin'}
+    if env is not None:
+        safe_env.update(env)
     try:
         process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   env=env)
+                                   env=safe_env)
     except OSError as error:
         return {'error': type(error).__name__}
     end = min(deadline, time.monotonic() + 2)
@@ -48,17 +52,28 @@ def command(args, deadline, env=None):
                         if len(data[key.data]) > MAX_OUTPUT:
                             raise ValueError('output limit')
         code = process.wait(timeout=max(0, end - time.monotonic()))
-        return {'exit': code, **{key: value.decode('utf-8', 'replace') for key, value in data.items()}}
-    except (TimeoutError, ValueError, subprocess.TimeoutExpired) as error:
-        process.kill()
-        process.wait(timeout=2)
-        return {'error': type(error).__name__}
+        result = {'exit': code, **{key: value.decode('utf-8', 'replace') for key, value in data.items()}}
+    except Exception as error:
+        result = {'error': type(error).__name__}
     finally:
-        if process.poll() is None:
-            process.kill()
+        cleanup = []
+        try:
+            if process.poll() is None:
+                process.kill()
+        except Exception as error:
+            cleanup.append(type(error).__name__)
+        try:
             process.wait(timeout=2)
-        process.stdout.close()
-        process.stderr.close()
+        except Exception as error:
+            cleanup.append(type(error).__name__)
+        for stream in (process.stdout, process.stderr):
+            try:
+                stream.close()
+            except Exception as error:
+                cleanup.append(type(error).__name__)
+        if cleanup:
+            result = {'error': (result or {}).get('error', 'cleanup failed'), 'cleanup_unproven': cleanup}
+    return result
 
 
 def metadata(path):
@@ -102,15 +117,16 @@ def group_info(path, deadline):
 
 
 def inspect_context(expected_uid, deadline):
-    if os.geteuid() != expected_uid:
+    if os.geteuid() != expected_uid or os.getuid() != expected_uid or os.getgid() != os.getegid():
         raise ValueError('effective identity changed')
     memberships = read('/proc/self/cgroup', 8192).splitlines()
     unified = [line[3:] for line in memberships if line.startswith('0::/')]
-    if len(unified) != 1:
+    if len(unified) != 1 or '\\' in unified[0] or any(part in ('.', '..') for part in unified[0].split('/')):
         raise ValueError('unique unified cgroup unavailable')
     mounts = read('/proc/self/mountinfo', 131072).splitlines()
     matches = [line for line in mounts if ' - cgroup2 ' in line]
-    if len(matches) != 1 or matches[0].split()[4] != '/sys/fs/cgroup':
+    if (len(matches) != 1 or matches[0].split()[3:5] != ['/', '/sys/fs/cgroup'] or
+            '\\' in matches[0].split()[3] or '\\' in matches[0].split()[4]):
         raise ValueError('cgroup v2 mount ambiguous')
     groups = [group_info(path, deadline) for path in ancestors(unified[0])]
     unit = command(['/usr/bin/systemctl', 'show', '--property=ControlGroup,Delegate,User,KillMode,RemainAfterExit,CollectMode',

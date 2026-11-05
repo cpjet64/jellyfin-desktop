@@ -20,7 +20,7 @@ class CapabilityTest(unittest.TestCase):
 
     def test_timeout_kills_and_reaps_only_started_child(self):
         process = Mock()
-        process.poll.return_value = 0
+        process.poll.return_value = None
         selector = MagicMock()
         selector.__enter__ = Mock(return_value=selector)
         selector.__exit__ = Mock(return_value=False)
@@ -34,7 +34,7 @@ class CapabilityTest(unittest.TestCase):
 
     def test_output_limit_kills_owned_child(self):
         process = Mock()
-        process.poll.return_value = 0
+        process.poll.return_value = None
         selector = MagicMock()
         selector.__enter__.return_value = selector
         selector.get_map.return_value = {1: True}
@@ -48,6 +48,44 @@ class CapabilityTest(unittest.TestCase):
             process.kill.assert_called_once()
             process.wait.assert_called_once_with(timeout=2)
 
+    def test_failed_kill_still_waits_and_closes_both_streams(self):
+        process = Mock()
+        process.poll.return_value = None
+        process.kill.side_effect = OSError('denied')
+        selector = MagicMock()
+        selector.__enter__.return_value = selector
+        selector.get_map.return_value = {1: True}
+        with patch.object(capability.time, 'monotonic', side_effect=[1, 1, 3]), \
+                patch.object(capability.subprocess, 'Popen', return_value=process), \
+                patch.object(capability.selectors, 'DefaultSelector', return_value=selector):
+            result = capability.command(['/fixed'], 4)
+            self.assertEqual(result['error'], 'TimeoutError')
+            self.assertEqual(result['cleanup_unproven'], ['OSError'])
+            process.wait.assert_called_once()
+            process.stdout.close.assert_called_once()
+            process.stderr.close.assert_called_once()
+
+    def test_identity_mismatch_stops_before_reads(self):
+        with patch.object(capability.os, 'geteuid', return_value=100, create=True), \
+                patch.object(capability.os, 'getuid', return_value=101, create=True), \
+                patch.object(capability, 'read') as reader:
+            with self.assertRaises(ValueError):
+                capability.inspect_context(100, 10)
+            reader.assert_not_called()
+
+    def test_bind_subtree_mount_is_rejected(self):
+        values = {'/proc/self/cgroup': '0::/runner\n',
+                  '/proc/self/mountinfo': '1 0 0:1 /sub /sys/fs/cgroup rw - cgroup2 cgroup rw'}
+        with patch.object(capability.os, 'geteuid', return_value=100, create=True), \
+                patch.object(capability.os, 'getuid', return_value=100, create=True), \
+                patch.object(capability.os, 'getgid', return_value=100, create=True), \
+                patch.object(capability.os, 'getegid', return_value=100, create=True), \
+                patch.object(capability, 'read', side_effect=lambda path, *_: values[path]), \
+                patch.object(capability, 'ancestors') as parents:
+            with self.assertRaises(ValueError):
+                capability.inspect_context(100, 10)
+            parents.assert_not_called()
+
     def test_role_identity_must_match_before_inspection(self):
         with patch.object(capability.os, 'geteuid', return_value=99, create=True), \
                 patch.object(capability, 'read') as read:
@@ -59,6 +97,9 @@ class CapabilityTest(unittest.TestCase):
         reads = ['/proc/self/cgroup', '/proc/self/mountinfo']
         values = {'/proc/self/cgroup': '0::/runner\n', '/proc/self/mountinfo': ''}
         with patch.object(capability.os, 'geteuid', return_value=100, create=True), \
+                patch.object(capability.os, 'getuid', return_value=100, create=True), \
+                patch.object(capability.os, 'getgid', return_value=100, create=True), \
+                patch.object(capability.os, 'getegid', return_value=100, create=True), \
                 patch.object(capability, 'read', side_effect=lambda path, *_: values[path]) as reader:
             with self.assertRaises(ValueError):
                 capability.inspect_context(100, 10)
@@ -66,6 +107,9 @@ class CapabilityTest(unittest.TestCase):
 
     def test_ambiguous_membership_is_rejected(self):
         with patch.object(capability.os, 'geteuid', return_value=100, create=True), \
+                patch.object(capability.os, 'getuid', return_value=100, create=True), \
+                patch.object(capability.os, 'getgid', return_value=100, create=True), \
+                patch.object(capability.os, 'getegid', return_value=100, create=True), \
                 patch.object(capability, 'read', return_value='0::/a\n0::/b\n'):
             with self.assertRaises(ValueError):
                 capability.inspect_context(100, 10)
