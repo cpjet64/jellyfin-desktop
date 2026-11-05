@@ -16,6 +16,14 @@ the adapter must compare report hostname, account and UID against independently
 verified expectations, and fail closed on ambiguity. The role arguments are
 not themselves identity proof.
 
+For the separately approved follow-up task, the expected guest hostname is
+`runner`, as observed by the byte-exact preflight. The VM routing identity
+remains VMID 201 with the inventory name `ubuntu-runner-201`; routing and the
+runner account and UID must be independently checked. Both controller and
+inline-drop reports must identify hostname `runner` and their expected role,
+account and UID. This task-specific expectation does not alter the earlier
+failed report or establish future host identity.
+
 The candidate driver inspects the QGA controller process and then permanently
 drops that same process to the runner account using initgroups/setgid/setuid.
 Label this as an inline-drop context: it is not an observation of an existing
