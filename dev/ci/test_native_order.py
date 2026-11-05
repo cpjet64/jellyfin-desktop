@@ -113,9 +113,13 @@ class NativeOrderTest(unittest.TestCase):
                      "dev/ci/test_macos_sdist_supervise.py", "dev/ci/test_linux_qt_cache.py",
                      "dev/ci/test_fixture_suspend_policy.py", "dev/ci/test_fixture_suspend_adapter.py",
                      "dev/ci/test_fixture_suspend_linux.py", "dev/ci/test_settlement_failure.py",
-                     "dev/ci/test_macos_sdist_select.py"):
+                     "dev/ci/test_macos_sdist_select.py", "dev/ci/test_portable_proof_assembly.py",
+                     "dev/ci/test_portable_proof_protocol.py", "dev/ci/test_portable_proof_supervisor.py"):
             self.assertEqual(paths.count(path), 1)
         self.assertNotIn("dev/ci/test_linux_sdk_cmake.py", paths)
+        start = paths.index("dev/ci/test_qga_terminal.py")
+        self.assertEqual(paths[start + 1:start + 4], ["dev/ci/test_portable_proof_assembly.py",
+                         "dev/ci/test_portable_proof_protocol.py", "dev/ci/test_portable_proof_supervisor.py"])
 
     def test_windows_gate_registers_mac_helper_suites_once(self):
         script = (Path(__file__).resolve().parents[2] / "dev/windows/ci.ps1").read_text(encoding="utf-8")
@@ -124,13 +128,19 @@ class NativeOrderTest(unittest.TestCase):
                      "dev/ci/test_macos_sdist_static.py", "dev/ci/test_macos_sdist_supervise.py",
                      "dev/ci/test_linux_qt_cache.py", "dev/ci/test_fixture_suspend_policy.py",
                      "dev/ci/test_fixture_suspend_adapter.py", "dev/ci/test_fixture_suspend_linux.py",
-                     "dev/ci/test_settlement_failure.py", "dev/ci/test_macos_sdist_select.py"):
+                     "dev/ci/test_settlement_failure.py", "dev/ci/test_macos_sdist_select.py",
+                     "dev/ci/test_portable_proof_assembly.py", "dev/ci/test_portable_proof_protocol.py",
+                     "dev/ci/test_portable_proof_supervisor.py"):
             self.assertEqual(script.count(path), 1)
+        order = [script.index("dev/ci/test_" + name + ".py") for name in
+                 ("qga_terminal", "portable_proof_assembly", "portable_proof_protocol", "portable_proof_supervisor")]
+        self.assertEqual(order, sorted(order))
 
     def test_new_portable_suite_failure_stops_following_checks(self):
         for failed in ("mac-sdist-select-tests", "settlement-failure-tests", "fixture-suspend-policy-tests",
                        "fixture-suspend-adapter-tests", "fixture-suspend-linux-tests", "qga-terminal-tests", "mac-sdist-static-tests",
-                       "mac-sdist-supervisor-tests", "linux-qt-cache-tests"):
+                       "mac-sdist-supervisor-tests", "linux-qt-cache-tests", "portable-proof-assembly-tests",
+                       "portable-proof-protocol-tests", "portable-proof-supervisor-tests"):
             calls = []
             def run(name, args, **kwargs):
                 calls.append(name)
