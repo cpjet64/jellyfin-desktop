@@ -7,6 +7,7 @@ import json
 import re
 import time
 import settlement_candidates as candidate_diagnostics
+from settlement_candidates import fields, integer
 
 MAX_EVENTS = 4096
 MAX_GROUPS = 8
@@ -43,20 +44,14 @@ class DiagnosticFinalizationTimeout(TimeoutError):
     pass
 
 
-def integer(value):
-    return type(value) is int and -(2**63) <= value < 2**63
-
-
-def fields(values, allowed):
-    if not isinstance(values, dict) or not set(values) <= allowed:
-        raise ValueError('unexpected observation fields')
-    if any(value is not None and not integer(value) and type(value) is not bool for value in values.values()):
-        raise ValueError('invalid observation value')
-    return dict(values)
-
-
 class Observation:
-    def __init__(self):
+    def __init__(self, policy='settlement', purpose=None):
+        if policy not in ('settlement', 'metadata_observation'):
+            raise ValueError('unsupported policy')
+        if (policy == 'metadata_observation' and purpose not in ('command', 'inventory')) or (policy == 'settlement' and purpose is not None):
+            raise ValueError('unsupported purpose')
+        self.policy = policy
+        self.purpose = purpose
         self.events = []
         self.groups = []
         self.qualification_failure = None
@@ -67,14 +62,25 @@ class Observation:
             raise Failure('preparation', 'output_bound')
         self.events.append(event)
 
-    def identity(self, role, state, values, api=None):
+    def identity(self, role, state, values, api=None, registered_identities=None):
         if role not in ROLES or state not in STATES:
             raise ValueError('invalid identity observation')
         if api is not None and api not in APIS:
             raise ValueError('invalid identity API')
-        self.add({'kind': 'identity', 'role': role, 'state': state, 'api': api,
-                  'values': fields(values, IDENTITY_FIELDS)})
-        if state != 'success' and self.qualification_failure is None:
+        values = fields(values, IDENTITY_FIELDS)
+        unrelated = False
+        if self.policy == 'metadata_observation' and role == 'observed_row' and state != 'success':
+            try:
+                validate_inventory_identities(registered_identities)
+                pid = values.get('pid')
+                unrelated = integer(pid) and pid > 0 and all(pid != item['pid'] for item in registered_identities)
+            except (Failure, TypeError):
+                pass
+        event = {'kind': 'identity', 'role': role, 'state': state, 'api': api, 'values': values}
+        if unrelated:
+            event['unrelated_to_pids'] = [item['pid'] for item in registered_identities]
+        self.add(event)
+        if state != 'success' and not unrelated and self.qualification_failure is None:
             self.qualification_failure = {'phase': 'identification', 'category':
                                           'identity_mismatch' if state == 'mismatch' else 'identity_unavailable'}
 
@@ -292,6 +298,16 @@ def parse_inventory_row(line, identities, observation):
 def import_nested_frame(frame, observation):
     if not isinstance(frame, dict) or not isinstance(frame.get('events'), list):
         raise Failure('inventory', 'malformed_inventory')
+    if observation.policy == 'metadata_observation':
+        if (frame.get('claim') != observation.policy or frame.get('purpose') != observation.purpose or
+                frame.get('coverage') not in ('bounded', 'incomplete')):
+            raise Failure('inventory', 'malformed_inventory')
+        if frame['coverage'] != ('bounded' if frame.get('ok') is True else 'incomplete'):
+            raise Failure('inventory', 'malformed_inventory')
+        if frame.get('ok') is True and not candidate_diagnostics.valid_observation_events(frame['events'], observation.purpose):
+            raise Failure('inventory', 'malformed_inventory')
+    elif frame.get('claim', 'settlement') != 'settlement':
+        raise Failure('inventory', 'malformed_inventory')
     for event in frame['events']:
         observation.add(event)
     diagnostic = frame.get('candidate_diagnostic')
@@ -339,6 +355,8 @@ def nested_outcome(operation, observation):
 def nested(operation, observation):
     result = nested_outcome(operation, observation)
     result['candidate_diagnostic'] = observation.candidate_diagnostic
+    if observation.policy == 'metadata_observation':
+        result.update(claim=observation.policy, purpose=observation.purpose, coverage='bounded' if result['ok'] else 'incomplete')
     return result
 
 
@@ -373,21 +391,30 @@ def encode(record):
                 raise DiagnosticFinalizationTimeout('diagnostic finalization timed out') from None
             qualified = 'unavailable'
         enriched = dict(original, diagnostic_qualification=qualified)
+        if enriched.get('claim') == 'metadata_observation' and enriched.get('purpose') == 'inventory' and qualified != 'complete':
+            enriched.update(ok=False, coverage='incomplete', failure=enriched.get('failure') or
+                            {'phase': 'inventory', 'category': 'unknown'})
         if qualified != 'missing':
             enriched['candidate_diagnostic'] = ({'kind': 'inventory_candidates', 'diagnostic': 'unavailable'}
                                                 if qualified == 'unavailable' else diagnostic)
         proposed = json.dumps(enriched, sort_keys=True, separators=(',', ':')).encode('utf-8')
         if len(proposed) <= MAX_RECORD:
             return proposed
-        proposed = json.dumps(dict(original, diagnostic_qualification='omitted'),
-                              sort_keys=True, separators=(',', ':')).encode('utf-8')
+        omitted = dict(original, diagnostic_qualification='omitted')
+        if original.get('claim') == 'metadata_observation':
+            omitted.update(ok=False, coverage='incomplete', failure=original.get('failure') or
+                           {'phase': 'inventory', 'category': 'output_bound'})
+        proposed = json.dumps(omitted, sort_keys=True, separators=(',', ':')).encode('utf-8')
         if len(proposed) <= MAX_RECORD:
             return proposed
-        return body
+        if original.get('claim') != 'metadata_observation':
+            return body
     bounded = {'ok': False, 'failure': record.get('failure') or
                {'phase': 'preparation', 'category': 'output_bound'},
                'secondary': record.get('secondary', []), 'events': [], 'cleanup': record.get('cleanup', []),
                'record_truncated': True}
+    if record.get('claim') == 'metadata_observation':
+        bounded.update(claim=record['claim'], purpose=record.get('purpose'), coverage='incomplete')
     return json.dumps(bounded, sort_keys=True, separators=(',', ':')).encode('utf-8')
 
 
@@ -396,6 +423,8 @@ def encode_finalization_timeout(record):
     result = dict(record)
     result.pop('candidate_diagnostic', None)
     result['ok'] = False
+    if result.get('claim') == 'metadata_observation':
+        result['coverage'] = 'incomplete'
     result['failure'] = result.get('failure') or {'phase': 'preparation', 'category': 'timeout'}
     result['diagnostic_qualification'] = 'unavailable'
     result['candidate_diagnostic'] = {'kind': 'inventory_candidates', 'diagnostic': 'unavailable'}
@@ -409,12 +438,14 @@ def encode_finalization_timeout(record):
         return body
     bounded = {'ok': False, 'failure': result['failure'], 'secondary': result['secondary'],
                'events': [], 'cleanup': result['cleanup'], 'record_truncated': True}
+    if result.get('claim') == 'metadata_observation':
+        bounded.update(claim=result['claim'], purpose=result.get('purpose'), coverage='incomplete')
     return json.dumps(bounded, sort_keys=True, separators=(',', ':')).encode('utf-8')
 
 
-def run(spawn, operation, cleanup, emit, clock=time.monotonic):
+def run(spawn, operation, cleanup, emit, clock=time.monotonic, policy='settlement', purpose=None):
     """Emit one bounded record, then raise on any operation or cleanup failure."""
-    observed = Observation()
+    observed = Observation(policy, purpose)
     started = clock()
     primary = None
     early_secondary = []
@@ -450,6 +481,8 @@ def run(spawn, operation, cleanup, emit, clock=time.monotonic):
     record = {'ok': primary is None, 'failure': primary, 'secondary': secondary,
               'events': observed.events, 'cleanup': groups, 'elapsed_ms': elapsed,
               'record_truncated': False, 'candidate_diagnostic': observed.candidate_diagnostic}
+    if policy == 'metadata_observation':
+        record.update(claim=policy, purpose=purpose, coverage='bounded' if primary is None else 'incomplete')
     try:
         body = encode(record)
     except DiagnosticFinalizationTimeout:
