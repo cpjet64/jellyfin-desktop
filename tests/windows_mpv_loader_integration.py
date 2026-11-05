@@ -1,7 +1,12 @@
-"""Run from an x64 MSVC developer environment: python tests/windows_mpv_loader_integration.py."""
+"""Run in an x64 MSVC environment after the coordinator releases the execution hold.
+
+The fixed fixture sources emit a finite set of markers. subprocess.run captures
+output in memory without a hard cap; only retained timeout evidence is capped.
+"""
 import hashlib
 import csv
 import os
+import re
 from pathlib import Path
 import shutil
 import stat
@@ -9,19 +14,66 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "build" / "windows-mpv-loader-test"
+INPUT_SOURCES = (ROOT / "src" / "player" / "WindowsMpvLoader.cpp",
+                 ROOT / "src" / "player" / "WindowsLoaderMode.h",
+                 ROOT / "tests" / "windows_mpv_delay_test.cpp",
+                 ROOT / "tests" / "windows_mpv_stub.cpp",
+                 ROOT / "tests" / "windows_mpv_dependency.cpp",
+                 ROOT / "tests" / "windows_mpv_loader_integration.py")
 
 
-def run(args, expected=0):
-    result = subprocess.run(args, cwd=OUT, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, text=True, timeout=30,
-                            creationflags=subprocess.CREATE_NO_WINDOW)
+def run(args, expected=0, env=None):
+    if Path(args[0]).name in ("primary.exe", "fallback.exe"):
+        fixture_identity(Path(args[0]))
+    try:
+        result = subprocess.run(args, cwd=OUT, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, timeout=30, env=env,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except subprocess.TimeoutExpired as error:
+        partial = error.stdout or b""
+        if isinstance(partial, str):
+            partial = partial.encode("utf-8", errors="replace")
+        (OUT / "loader-timeout.txt").write_bytes(partial[:65536])
+        (OUT / "loader-timeout-pending").touch()
+        raise RuntimeError("Fixture timeout; child state at timeout is not established; "
+                           f"bounded partial output retained at {OUT}") from error
+    if Path(args[0]).name in ("primary.exe", "fallback.exe"):
+        print(result.stdout, end="", flush=True)
     if result.returncode != expected:
         raise RuntimeError(f"{args}: exit {result.returncode}, expected {expected}\n{result.stdout}")
+    if Path(args[0]).name in ("primary.exe", "fallback.exe") and expected in (11, 22):
+        verify_mode_trace(result.stdout)
     return result.stdout
+
+
+def verify_mode_trace(output):
+    before = re.search(r'fixture before thread=(\d+) process=(\d+)', output)
+    inside = re.search(r'before load mode=(\d+)', output)
+    after = re.search(r'fixture after thread=(\d+) process=(\d+)', output)
+    if not before or not inside or not after:
+        raise RuntimeError('Fixture mode trace is incomplete')
+    thread, process = map(int, before.groups())
+    if not thread or int(inside.group(1)) != (thread | 1) or tuple(map(int, after.groups())) != (thread, process):
+        raise RuntimeError('Fixture mode trace does not prove exact restoration')
 
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def fixture_identity(executable):
+    """Print prelaunch identities for the fixed sources and current case inputs."""
+    revision = run(["git", "rev-parse", "HEAD"]).strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise RuntimeError("Unable to identify source revision")
+    print(f"fixture source_revision={revision} case={executable.name} executable_sha256={digest(executable)}",
+          flush=True)
+    for source in INPUT_SOURCES:
+        print(f"fixture source={source.name} sha256={digest(source)}", flush=True)
+    for path in (executable.parent / "libmpv-2.dll", executable.parent / "libmpv-fallback.dll",
+                 OUT / "path-only" / "libmpv-2.dll"):
+        print(f"fixture input={path.name} scope={'path-only' if path.parent.name == 'path-only' else 'adjacent'} "
+              f"sha256={digest(path) if path.is_file() else 'missing'}", flush=True)
 
 
 def expect_denied(operation, description):
@@ -139,10 +191,7 @@ def verify_incompatible(primary, fallback, primary_hash):
     primary.unlink()
     env = os.environ.copy()
     env["PATH"] = str(path_dir) + os.pathsep + env.get("PATH", "")
-    result = subprocess.run([str(OUT / "primary.exe")], cwd=OUT, env=env,
-                            timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
-    if result.returncode != 126:
-        raise RuntimeError("Missing primary did not fail safely with a PATH copy present")
+    run([str(OUT / "primary.exe")], 126, env=env)
     if digest(path_dir / primary.name) != primary_hash:
         raise RuntimeError("PATH-only DLL changed")
 
@@ -155,8 +204,8 @@ def main():
         compile_fixtures()
         verify()
     finally:
-        if (OUT / "acl-restore-pending").exists():
-            print(f"Fixture retained for ACL recovery: {OUT}")
+        if (OUT / "acl-restore-pending").exists() or (OUT / "loader-timeout-pending").exists():
+            print(f"Fixture retained for recovery or timeout inspection: {OUT}")
         else:
             for path in OUT.iterdir():
                 if path.is_file():
