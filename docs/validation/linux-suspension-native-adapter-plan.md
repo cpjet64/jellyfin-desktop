@@ -20,6 +20,8 @@ error, sends no cleanup signal, and cannot be retried on the same launcher.
 Those records do not establish complete ownership: a new session can escape an
 ordinary outer process group. Qualification requires containment that covers
 such sessions and has a verified failure-path cleanup procedure before launch.
+No established cross-session containment mechanism is identified in this
+repository; its availability and authority remain unverified.
 
 Before a native attempt, publish the implementation, tests, this plan and an
 independent review. Obtain a separate execution decision and a dedicated process
@@ -47,6 +49,8 @@ timeout alone does not prove an uninterruptible kernel operation can be stopped.
 The stop helper receives the policy's absolute monotonic deadline and checks it
 at the signal boundary. Launch steps share one deadline; process creation and
 other kernel operations may still overrun it and require outer containment.
+Teardown has its own single deadline, checked after waits and immediately before
+the control-process signal. Expiry or ambiguous cleanup remains unproven.
 Process-group checks do not establish containment of an undetected escaped
 descendant, nor can `SIGSTOP` retract an in-flight write. No production recovery
 or package-transaction suspension may be inferred from this fixture.

@@ -163,30 +163,45 @@ class Operations:
 
     def teardown(self, fixture, registry, timeout):
         self._check(fixture, registry)
+        if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0 or timeout > 10:
+            raise ValueError('invalid teardown timeout')
         deadline = time.monotonic() + timeout
         if helper('teardown', fixture, registry, deadline).get('sent') is not True:
             return False
-        while time.monotonic() < deadline:
+        while True:
             result = subprocess.run([sys.executable, '-I', '-B', __file__, '--settled',
                                      str(registry[0].pid), str(registry[1].pid), registry[1].start],
-                                    capture_output=True, timeout=max(.01, deadline - time.monotonic()), text=True)
+                                    capture_output=True, timeout=remaining(deadline), text=True)
+            remaining(deadline)
             if result.returncode == 0 and result.stdout.strip() == 'settled':
                 if signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL:
                     return False
+                remaining(deadline)
                 status = os.waitid(os.P_PID, fixture.leader.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+                remaining(deadline)
                 if status is None or status.si_pid != fixture.leader.pid:
                     continue
-                fixture.leader.wait(timeout=max(.01, deadline - time.monotonic()))
+                fixture.leader.wait(timeout=remaining(deadline))
+                remaining(deadline)
                 control = fixture.control_identity
                 stopped = subprocess.run([sys.executable, '-I', '-B', __file__, '--control-stop',
-                                          str(control.pid), control.start, str(control.parent)],
-                                         capture_output=True, timeout=max(.01, deadline - time.monotonic()), text=True)
+                                          str(control.pid), control.start, str(control.parent), str(deadline)],
+                                         capture_output=True, timeout=remaining(deadline), text=True)
+                remaining(deadline)
                 if stopped.returncode:
                     return False
-                fixture.control.wait(timeout=max(.01, deadline - time.monotonic()))
+                fixture.control.wait(timeout=remaining(deadline))
+                remaining(deadline)
                 return True
-            time.sleep(.02)
-        return False
+            time.sleep(min(.02, remaining(deadline)))
+
+
+def stop_control(pid, start, parent, deadline):
+    actual = proc_stat(pid)
+    if pid <= 1 or actual['start'] != start or actual['parent'] != parent or parent != os.getppid():
+        raise ValueError('control ownership changed')
+    remaining(deadline)
+    os.kill(pid, signal.SIGKILL)
 
 
 class FixtureLaunchError(RuntimeError):
@@ -283,11 +298,7 @@ if __name__ == '__main__':
             print('settled', flush=True)
         else:
             raise SystemExit('fixture descendants still present')
-    elif len(sys.argv) == 5 and sys.argv[1] == '--control-stop':
-        pid, start, parent = int(sys.argv[2]), sys.argv[3], int(sys.argv[4])
-        actual = proc_stat(pid)
-        if pid <= 1 or actual['start'] != start or actual['parent'] != parent or parent != os.getppid():
-            raise ValueError('control ownership changed')
-        os.kill(pid, signal.SIGKILL)
+    elif len(sys.argv) == 6 and sys.argv[1] == '--control-stop':
+        stop_control(int(sys.argv[2]), sys.argv[3], int(sys.argv[4]), float(sys.argv[5]))
     else:
         raise SystemExit('fixture helper mode required')

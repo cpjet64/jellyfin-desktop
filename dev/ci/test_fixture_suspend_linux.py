@@ -2,7 +2,7 @@
 import unittest
 import time
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import fixture_suspend_linux as native
 
@@ -72,6 +72,58 @@ class NativeDecisionTest(unittest.TestCase):
         for deadline in (float('nan'), float('inf'), True):
             with self.assertRaises(ValueError):
                 native.remaining(deadline)
+
+    def test_teardown_deadline_boundaries(self):
+        for expiry in ('settled', 'leader_wait', 'control_wait', None):
+            with self.subTest(expiry=expiry):
+                clock = [100.0]
+                leader = Mock(pid=42)
+                control = Mock()
+                identity = SimpleNamespace(pid=100, start='control', parent=90)
+                fixture = SimpleNamespace(leader=leader, control=control, control_identity=identity)
+                registry = (SimpleNamespace(pid=42), SimpleNamespace(pid=43, start='child'))
+                def run(args, **_kwargs):
+                    if '--settled' in args:
+                        if expiry == 'settled':
+                            clock[0] = 101.0
+                        return SimpleNamespace(returncode=0, stdout='settled')
+                    return SimpleNamespace(returncode=0)
+                def leader_wait(**_kwargs):
+                    if expiry == 'leader_wait':
+                        clock[0] = 101.0
+                def control_wait(**_kwargs):
+                    if expiry == 'control_wait':
+                        clock[0] = 101.0
+                leader.wait.side_effect = leader_wait
+                control.wait.side_effect = control_wait
+                ops = native.Operations(native.Launcher())
+                with patch.object(ops, '_check'), patch.object(native, 'helper', return_value={'sent': True}), \
+                        patch.object(native.time, 'monotonic', side_effect=lambda: clock[0]), \
+                        patch.object(native.subprocess, 'run', side_effect=run) as process, \
+                        patch.object(native.signal, 'SIGCHLD', 17, create=True), \
+                        patch.object(native.signal, 'getsignal', return_value=native.signal.SIG_DFL), \
+                        patch.object(native.os, 'P_PID', 1, create=True), \
+                        patch.object(native.os, 'WEXITED', 4, create=True), \
+                        patch.object(native.os, 'WNOHANG', 1, create=True), \
+                        patch.object(native.os, 'WNOWAIT', 8, create=True), \
+                        patch.object(native.os, 'waitid', return_value=SimpleNamespace(si_pid=42), create=True):
+                    if expiry is None:
+                        self.assertTrue(ops.teardown(fixture, registry, 1))
+                        self.assertEqual(process.call_count, 2)
+                        control.wait.assert_called_once()
+                    else:
+                        with self.assertRaises(TimeoutError):
+                            ops.teardown(fixture, registry, 1)
+                        self.assertEqual(process.call_count, 1 if expiry in ('settled', 'leader_wait') else 2)
+
+    def test_control_signal_checks_deadline_after_identity(self):
+        with patch.object(native, 'proc_stat', return_value={'start': 'control', 'parent': 90}), \
+                patch.object(native.os, 'getppid', return_value=90), \
+                patch.object(native.time, 'monotonic', return_value=101.0), \
+                patch.object(native.os, 'kill') as kill:
+            with self.assertRaises(TimeoutError):
+                native.stop_control(100, 'control', 90, 101.0)
+            kill.assert_not_called()
 
     def test_partial_launch_retains_unreaped_owned_handle(self):
         leader = SimpleNamespace(pid=42, stdout=object())
