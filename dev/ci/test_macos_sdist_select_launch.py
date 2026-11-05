@@ -33,6 +33,7 @@ class LaunchTests(unittest.TestCase):
     def run_mock(self, process, identity=None):
         with patch.object(subject.subprocess, "CREATE_NO_WINDOW", 1, create=True), \
              patch.object(subject.subprocess, "Popen", return_value=process), \
+             patch.object(subject, "available", side_effect=lambda s: len(s.getbuffer()) - s.tell()), \
              patch.object(subject, "identity", return_value=identity or {"image": str(subject.PYTHON)}):
             return subject.run_child(["synthetic"])
 
@@ -45,12 +46,15 @@ class LaunchTests(unittest.TestCase):
         process.wait.assert_called_once()
 
     def test_identity_failure_kills_and_reaps(self):
-        process = self.process()
+        process = self.process(b"early", b"failure")
         process.poll.return_value = None
         with patch.object(subject.subprocess, "CREATE_NO_WINDOW", 1, create=True), \
              patch.object(subject.subprocess, "Popen", return_value=process), \
+             patch.object(subject, "available", side_effect=lambda s: len(s.getbuffer()) - s.tell()), \
              patch.object(subject, "identity", side_effect=ValueError("identity")):
-            self.assertIn("identity", subject.run_child(["synthetic"])[4])
+            result = subject.run_child(["synthetic"])
+            self.assertIn("identity", result[4])
+            self.assertEqual((result[3]["stdout"], result[3]["stderr"]), (b"early", b"failure"))
         process.kill.assert_called_once()
         process.wait.assert_called_once()
 
@@ -59,6 +63,7 @@ class LaunchTests(unittest.TestCase):
         process.poll.return_value = None
         with patch.object(subject.subprocess, "CREATE_NO_WINDOW", 1, create=True), \
              patch.object(subject.subprocess, "Popen", return_value=process), \
+             patch.object(subject, "available", side_effect=lambda s: len(s.getbuffer()) - s.tell()), \
              patch.object(subject, "identity", side_effect=KeyboardInterrupt()):
             self.assertIn("KeyboardInterrupt", subject.run_child(["synthetic"])[4])
         process.kill.assert_called_once()
@@ -69,6 +74,7 @@ class LaunchTests(unittest.TestCase):
         process.poll.return_value = None
         with patch.object(subject.subprocess, "CREATE_NO_WINDOW", 1, create=True), \
              patch.object(subject.subprocess, "Popen", return_value=process), \
+             patch.object(subject, "available", side_effect=lambda s: len(s.getbuffer()) - s.tell()), \
              patch.object(subject, "identity", return_value={"image": str(subject.PYTHON)}):
             self.assertIn("timeout", subject.run_child(["synthetic"], clock=iter((0, 181, 182)).__next__)[4])
         process.kill.assert_called_once()
@@ -86,6 +92,19 @@ class LaunchTests(unittest.TestCase):
         with patch.object(subject.subprocess, "CREATE_NO_WINDOW", 1, create=True), \
              patch.object(subject.subprocess, "Popen", side_effect=KeyboardInterrupt()):
             self.assertIn("KeyboardInterrupt", subject.run_child(["synthetic"])[4])
+
+    def test_reader_failure_retains_stable_partial_output(self):
+        process = self.process(b"early", b"failure")
+        calls = iter((5, 7))
+        def failing_available(stream):
+            return next(calls, None) if stream.tell() == 0 else (_ for _ in ()).throw(OSError("pipe failure"))
+        with patch.object(subject.subprocess, "CREATE_NO_WINDOW", 1, create=True), \
+             patch.object(subject.subprocess, "Popen", return_value=process), \
+             patch.object(subject, "available", side_effect=failing_available), \
+             patch.object(subject, "identity", return_value={"image": str(subject.PYTHON)}):
+            result = subject.run_child(["synthetic"])
+        self.assertIn("pipe failure", result[4])
+        self.assertEqual((result[3]["stdout"], result[3]["stderr"]), (b"early", b"failure"))
 
     def test_storage_failure_stops_preflight(self):
         with patch.object(subject.os, "name", "nt"), \

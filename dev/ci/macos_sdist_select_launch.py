@@ -1,4 +1,8 @@
-"""Run the pinned offline selector once, retaining bounded evidence on Windows."""
+"""Run the pinned selector on Windows; 180 seconds bounds child execution only.
+
+Popen interruption before it returns a handle cannot be settled by this launcher.
+The held direct child is the only process covered; no descendant guarantee is made.
+"""
 import ctypes
 import hashlib
 import json
@@ -7,7 +11,6 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-import threading
 import time
 import types
 
@@ -88,28 +91,46 @@ def preflight():
             raise ValueError("archive hash mismatch")
 
 
-def drain(stream, limit, state, key):
-    data = bytearray()
-    try:
-        while True:
-            chunk = stream.read(65536)
+def available(stream):
+    import msvcrt
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.PeekNamedPipe.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong,
+                                     ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong), ctypes.c_void_p]
+    count = ctypes.c_ulong()
+    if not kernel.PeekNamedPipe(msvcrt.get_osfhandle(stream.fileno()), None, 0, None,
+                                ctypes.byref(count), None):
+        error = ctypes.get_last_error()
+        if error == 109:  # broken pipe
+            return 0
+        raise ctypes.WinError(error)
+    return count.value
+
+
+def collect(process, state):
+    progress = False
+    for stream, limit, key in ((process.stdout, STDOUT_LIMIT, "stdout"),
+                               (process.stderr, STDERR_LIMIT, "stderr")):
+        count = available(stream)
+        if count:
+            chunk = stream.read1(min(count, 65536))
             if not chunk:
-                break
-            remaining = limit - len(data)
-            data.extend(chunk[:remaining])
-            state[key] = bytes(data)
+                continue
+            progress = True
+            remaining = limit - len(state[key])
+            state[key] += chunk[:remaining]
             if len(chunk) > remaining:
                 state["overflow"] = True
-                break
-    except BaseException as error:
-        state["error"] = repr(error)
-    state[key] = bytes(data)
+    return progress
+
+
+def collect_remaining(process, state):
+    while collect(process, state) and not state["overflow"]:
+        pass
 
 
 def run_child(command, clock=time.monotonic):
     start = clock()
-    state = {"overflow": False}
-    threads = []
+    state = {"overflow": False, "stdout": b"", "stderr": b""}
     failure = None
     process = None
     child = {"identity_unavailable": True}
@@ -118,23 +139,18 @@ def run_child(command, clock=time.monotonic):
                                    stderr=subprocess.PIPE, close_fds=True,
                                    creationflags=subprocess.CREATE_NO_WINDOW)
         child = {"pid": process.pid, "identity_unavailable": True}
-        threads = [threading.Thread(target=drain, args=(stream, limit, state, key), daemon=True)
-                   for stream, limit, key in ((process.stdout, STDOUT_LIMIT, "stdout"),
-                                               (process.stderr, STDERR_LIMIT, "stderr"))]
         child = identity(process._handle, process.pid)
         if Path(child["image"]).resolve() != PYTHON.resolve():
             raise ValueError("child image mismatch")
-        for thread in threads:
-            thread.start()
         while process.poll() is None:
-            if clock() - start >= DEADLINE or state["overflow"] or "error" in state:
+            collect(process, state)
+            if clock() - start >= DEADLINE or state["overflow"]:
                 raise RuntimeError("timeout or output failure")
             time.sleep(0.05)
         code = process.wait(timeout=5)
-        for thread in threads:
-            thread.join(timeout=5)
-        if any(thread.is_alive() for thread in threads) or state["overflow"] or "error" in state:
-            raise RuntimeError("output drain not settled")
+        collect_remaining(process, state)
+        if state["overflow"]:
+            raise RuntimeError("output overflow")
     except BaseException as error:
         failure = repr(error)
         try:
@@ -148,11 +164,14 @@ def run_child(command, clock=time.monotonic):
         except BaseException as settlement_error:
             failure += "; child settlement uncertain: " + repr(settlement_error)
             code = None
-        for thread in threads:
-            if thread.ident is not None:
-                thread.join(timeout=5)
-        if any(thread.is_alive() for thread in threads):
-            failure += "; output readers unsettled"
+        if process is not None:
+            try:
+                collect_remaining(process, state)
+            except BaseException as output_error:
+                failure += "; output collection failed: " + repr(output_error)
+    if process is not None:
+        process.stdout.close()
+        process.stderr.close()
     return child, code, clock() - start, state, failure
 
 
