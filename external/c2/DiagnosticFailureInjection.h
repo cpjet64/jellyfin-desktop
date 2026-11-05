@@ -27,6 +27,7 @@ struct DiagnosticFailureInjection
   static std::atomic<std::uint64_t> serviceEntryFirstGeneration, serviceEntryLastGeneration;
   static std::atomic<std::uintptr_t> serviceEntryFirstThread, serviceEntryLastThread;
   static std::atomic<int> serviceUpdateCount;
+  static std::atomic<int> serviceFrameCount, serviceNoFrameCount;
   static std::atomic<std::uint64_t> serviceUpdateFirstMask, serviceUpdateLastMask;
   static std::atomic<int> serviceSkipCount;
   static std::atomic<int> ordinaryPostFaultCount;

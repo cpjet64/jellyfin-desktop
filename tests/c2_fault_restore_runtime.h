@@ -6,6 +6,7 @@
 #include "c2a_hold_gate.h"
 #include "c2_quiescence_observation.h"
 #include "c2_quiescence_terminal_predicate.h"
+#include "c2_service_telemetry.h"
 #include <QScopeGuard>
 
 // The inherited two-generation owner contains the process on uncertain teardown.
@@ -22,6 +23,8 @@ public:
       if (outcome == C2aHoldGate::Outcome::Timeout) std::_Exit(EXIT_FAILURE);
     });
     const bool original = quiesceObserved(player, canceled, thread, context, sameBinding, evidence, observation, gate, done);
+    observation.value("service_mutex_snapshot", c2ServiceTelemetry(item->syntheticFrameServiceTelemetry()));
+    observation.value("service_atomics", c2ServiceAtomicTelemetry());
     return observation.finish(original, [&](const QJsonObject& record) {
       return save(evidence + "/c2-quiescence-observation.json", record);
     });
@@ -31,6 +34,11 @@ public:
                         const std::function<bool()>& sameBinding, const QString& evidence,
                         C2QuiescenceObservation& observation, C2aHoldGate& gate, std::atomic<bool>& done)
   {
+    observation.value("typed_fault_evaluated", false);
+    observation.value("matching_fault_evaluated", false);
+    observation.value("stop_evaluated", false);
+    observation.value("force_evaluated", false);
+    observation.value("terminal_evaluated", false);
     gate.start(std::chrono::seconds(15));
     const auto checkedWait = [&](const QString& phase, const std::function<bool()>& predicate, int timeout = 10000) {
       return observation.wait(phase, [&](const std::function<bool()>& fn) { return wait(fn, timeout); }, predicate);
@@ -49,13 +57,23 @@ public:
       [&](quint64 generation) { observation.sample("close-failure-signal", {{"generation", qint64(generation)}}); }, Qt::DirectConnection);
     const auto failureConnection = QObject::connect(item, &MpvAbstractItem::renderFailure, item,
       [&](quint64 generation, MpvAbstractItem::RenderFailureStage stage, int error) {
-        observation.sample("typed-fault", {{"generation", qint64(generation)}, {"stage", int(stage)}, {"error", error}});
+        const auto faultNs = QtThreaded::monotonicNanos();
+        observation.value("typed_fault_evaluated", true);
+        observation.sample("typed-fault", {{"generation", qint64(generation)}, {"stage", int(stage)}, {"error", error}, {"time_ns", faultNs}});
         if (generation != g1 || stage != MpvAbstractItem::RenderFailureStage::Render ||
             error != MPV_ERROR_UNSUPPORTED || matching++) return;
+        observation.value("matching_fault_evaluated", true);
+        observation.value("matching_fault_ns", faultNs);
+        observation.value("stop_evaluated", true);
+        observation.value("stop_entered_ns", QtThreaded::monotonicNanos());
         const auto stop = player.requestNativeStop();
+        observation.value("stop_returned_ns", QtThreaded::monotonicNanos());
         stopStatus = int(stop.status);
         observation.value("stop", QJsonObject{{"status", stopStatus}, {"error", stop.error}});
+        observation.value("force_evaluated", true);
+        observation.value("force_entered_ns", QtThreaded::monotonicNanos());
         forceStatus = mpv_set_property_string(core, "force-window", "no");
+        observation.value("force_returned_ns", QtThreaded::monotonicNanos());
         observation.value("force_command_status", forceStatus);
       }, Qt::DirectConnection);
     const auto disconnect = qScopeGuard([&] { QObject::disconnect(closeConnection); QObject::disconnect(closeFailureConnection); QObject::disconnect(failureConnection); });
@@ -69,6 +87,8 @@ public:
         !observation.check("force-status", [&] { return forceStatus == 0; }) ||
         !checkedWait("terminal-wait", [&] { return stoppedState(canceled, sameBinding, &observation); })) return false;
     terminalNs = QtThreaded::monotonicNanos();
+    observation.value("terminal_evaluated", true);
+    observation.value("terminal_ns", terminalNs);
     if (!checkedWait("service-wait", [&] { return serviceObserved(thread, context, &observation); }) ||
         !observation.check("service-close-request", [&] { return item->requestSyntheticFrameServiceClose(g1, true); }) ||
         !checkedWait("close-wait", [&] { const bool a = !closed.isEmpty(); observation.value("close_signal_present", a);

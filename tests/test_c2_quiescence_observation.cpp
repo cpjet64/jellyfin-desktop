@@ -2,6 +2,7 @@
 #include "c2_quiescence_observation.h"
 #include "c2_quiescence_event_trace.h"
 #include "c2_quiescence_terminal_predicate.h"
+#include "c2_service_telemetry.h"
 
 class TestC2QuiescenceObservation : public QObject
 {
@@ -13,11 +14,34 @@ private slots:
   void actualOrderedEvents();
   void terminalShortCircuit();
   void writeFailure();
+  void serviceTelemetry();
 };
+
+void TestC2QuiescenceObservation::serviceTelemetry()
+{
+  SyntheticFrameService service(9);
+  auto activation = c2ServiceTelemetry(service.telemetry()).value("activation").toObject();
+  QVERIFY(!activation.value("evaluated").toBool());
+  QVERIFY(!activation.contains("result"));
+  QVERIFY(service.arm(9, 50, 0));
+  QVERIFY(!service.activate(9, true, -18, false, 2));
+  QVERIFY(!service.allow(9, true, 3));
+  const auto telemetry = c2ServiceTelemetry(service.telemetry());
+  activation = telemetry.value("activation").toObject();
+  QVERIFY(activation.value("evaluated").toBool());
+  QVERIFY(!activation.value("result").toBool());
+  QCOMPARE(activation.value("deadline_ns").toInteger(), qint64(50));
+  QCOMPARE(activation.value("error").toInt(), -18);
+  QCOMPARE(telemetry.value("allow_count").toInteger(), qint64(1));
+  QCOMPARE(telemetry.value("last_rejection").toInt(), int(SyntheticFrameService::Rejection::Phase));
+}
 
 void TestC2QuiescenceObservation::immediateAndShortCircuit()
 {
   C2QuiescenceObservation observation;
+  SyntheticFrameService service(7);
+  observation.value("service_mutex_snapshot", c2ServiceTelemetry(service.telemetry()));
+  observation.value("stop_evaluated", false);
   int calls = 0;
   const bool result = observation.check("first", [] { return false; }) &&
     observation.check("never", [&] { ++calls; return true; });
@@ -25,6 +49,9 @@ void TestC2QuiescenceObservation::immediateAndShortCircuit()
   QVERIFY(!observation.finish(result, [&](const QJsonObject& record) { saved = record; return true; }));
   QCOMPARE(calls, 0);
   QCOMPARE(saved.value("exit_reason").toString(), QStringLiteral("immediate-rejection"));
+  const auto values = saved.value("values").toObject();
+  QVERIFY(!values.value("stop_evaluated").toBool());
+  QVERIFY(!values.value("service_mutex_snapshot").toObject().value("activation").toObject().value("evaluated").toBool());
   QVERIFY(!saved.value("phases").toObject().contains("never"));
 }
 

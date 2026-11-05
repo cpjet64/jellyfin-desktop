@@ -13,7 +13,7 @@ public:
     std::uint64_t activationGeneration = 0;
     std::int64_t activationNow = 0, deadline = 0;
     int activationError = 0;
-    bool activationSynthetic = false, activationOriginal = false, activationResult = false;
+    bool activationEvaluated = false, activationSynthetic = false, activationOriginal = false, activationResult = false;
     std::uint64_t allowCount = 0;
     Rejection firstRejection = Rejection::None, lastRejection = Rejection::None;
   };
@@ -31,6 +31,7 @@ public:
   bool activate(std::uint64_t generation, bool synthetic, int error, bool original, std::int64_t now)
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    telemetry_.activationEvaluated = true;
     telemetry_.activationGeneration = generation;
     telemetry_.activationNow = now;
     telemetry_.deadline = deadline_;

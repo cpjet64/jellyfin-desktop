@@ -352,7 +352,13 @@ diff --git a/src/mpvabstractitem.cpp b/src/mpvabstractitem.cpp
 @@ -81 +81 @@
 -    if (!owner->state.request(generation) || !window()) return;
 +    if (!owner->service.retirementAllowed(generation) || !owner->state.request(generation) || !window()) return;
-@@ -125,0 +126,29 @@
+@@ -125,0 +126,35 @@
++SyntheticFrameService::Telemetry MpvAbstractItem::syntheticFrameServiceTelemetry() const
++{
++    auto owner = std::atomic_load(&d_ptr->renderOwner);
++    return owner->service.telemetry();
++}
++
 +bool MpvAbstractItem::armSyntheticFrameService(quint64 generation, qint64 deadlineNs)
 +{
 +    auto owner = std::atomic_load(&d_ptr->renderOwner);
@@ -385,7 +391,10 @@ diff --git a/src/mpvabstractitem.cpp b/src/mpvabstractitem.cpp
 diff --git a/src/mpvabstractitem.h b/src/mpvabstractitem.h
 --- a/src/mpvabstractitem.h
 +++ b/src/mpvabstractitem.h
-@@ -42,0 +43,2 @@
+@@ -10,0 +11 @@
++#include "c2/SyntheticFrameService.h"
+@@ -42,0 +43,3 @@
++    SyntheticFrameService::Telemetry syntheticFrameServiceTelemetry() const;
 +    bool armSyntheticFrameService(quint64 generation, qint64 deadlineNs);
 +    bool requestSyntheticFrameServiceClose(quint64 generation, bool terminalConfirmed);
 @@ -51,0 +54,2 @@
@@ -404,7 +413,7 @@ diff --git a/src/mpvabstractitem_p.h b/src/mpvabstractitem_p.h
 diff --git a/src/mpvrenderer.cpp b/src/mpvrenderer.cpp
 --- a/src/mpvrenderer.cpp
 +++ b/src/mpvrenderer.cpp
-@@ -91,0 +92,38 @@
+@@ -91,0 +92,40 @@
 +static void servicePendingFrame(DiagnosticRenderOwner* owner)
 +{
 +    const auto entryNs = DiagnosticFailureInjection::monotonicNanos();
@@ -425,6 +434,8 @@ diff --git a/src/mpvrenderer.cpp b/src/mpvrenderer.cpp
 +        if (++DiagnosticFailureInjection::serviceUpdateCount == 1)
 +            DiagnosticFailureInjection::serviceUpdateFirstMask = mask;
 +        DiagnosticFailureInjection::serviceUpdateLastMask = mask;
++        if (mask & MPV_RENDER_UPDATE_FRAME) ++DiagnosticFailureInjection::serviceFrameCount;
++        else ++DiagnosticFailureInjection::serviceNoFrameCount;
 +        return mask;
 +    }, [&] {
 +    ++DiagnosticFailureInjection::servicePendingCount;

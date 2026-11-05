@@ -28,6 +28,7 @@ std::atomic<std::int64_t> DiagnosticFailureInjection::serviceEntryFirstNs{0}, Di
 std::atomic<std::uint64_t> DiagnosticFailureInjection::serviceEntryFirstGeneration{0}, DiagnosticFailureInjection::serviceEntryLastGeneration{0};
 std::atomic<std::uintptr_t> DiagnosticFailureInjection::serviceEntryFirstThread{0}, DiagnosticFailureInjection::serviceEntryLastThread{0};
 std::atomic<int> DiagnosticFailureInjection::serviceUpdateCount{0};
+std::atomic<int> DiagnosticFailureInjection::serviceFrameCount{0}, DiagnosticFailureInjection::serviceNoFrameCount{0};
 std::atomic<std::uint64_t> DiagnosticFailureInjection::serviceUpdateFirstMask{0}, DiagnosticFailureInjection::serviceUpdateLastMask{0};
 std::atomic<int> DiagnosticFailureInjection::serviceSkipCount{0};
 std::atomic<int> DiagnosticFailureInjection::ordinaryPostFaultCount{0};
