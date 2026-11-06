@@ -39,5 +39,35 @@ struct RestoreCleanupState {
         receipt.key.host == key.host && receipt.key.core == key.core && receipt.key.revision == key.revision &&
         receipt.key.attempt == key.attempt;
   }
+
+  bool noLoadEvidence(const PlaybackNativeReceipts::Snapshot& receipt, bool loadAttempted,
+                      std::uint64_t lastAttempt) const noexcept
+  { return !loadAttempted && !receipt.key.attempt && !receipt.consumed && !lastAttempt; }
+
+  bool reconcileReceipt(const PlaybackNativeReceipts::Snapshot& receipt) noexcept
+  {
+    if (receipt.invalid) {
+      status = Status::Failed;
+      return false;
+    }
+    if (!receipt.replyOk || receipt.entry <= 0) return false;
+    if (entry && entry != receipt.entry) {
+      status = Status::Failed;
+      return false;
+    }
+    entry = receipt.entry;
+    if (receipt.started) {
+      if (!startedEntry) startedEntry = receipt.entry;
+      if (startedEntry != receipt.entry || (endSeen && endEntry != receipt.entry)) {
+        status = Status::Failed;
+        return false;
+      }
+      if (!endSeen || !receipt.ended || !receipt.settled) return false;
+    } else if (startedEntry || endSeen || receipt.ended) {
+      status = Status::Failed;
+      return false;
+    }
+    return true;
+  }
 };
 }

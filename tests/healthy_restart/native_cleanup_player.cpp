@@ -216,16 +216,15 @@ PlayerComponent::RestoreCleanupStatus PlayerComponent::pollNativeRestoreCancella
   else return state.status = RestoreCleanupStatus::Failed;
   if (state.noLoadCandidate) {
     const auto receipt = m_nativeReceipts.snapshot();
-    if (m_nativeRestore.loadAttempted || receipt.key.attempt || receipt.consumed || m_lastReceiptAttempt || !restoreCleanupPriorSettled())
+    if (!state.noLoadEvidence(receipt, m_nativeRestore.loadAttempted, m_lastReceiptAttempt) || !restoreCleanupPriorSettled())
       return state.status = RestoreCleanupStatus::Failed;
     requestRestoreCleanupProperty(false);
     if (state.status != RestoreCleanupStatus::Pending) return state.status;
     requestRestoreCleanupProperty(true);
     if (state.status != RestoreCleanupStatus::Pending) return state.status;
     const auto finalReceipt = m_nativeReceipts.snapshot();
-    if (state.propertiesReady() && m_healthyStopQueueEmpty && !m_nativeRestore.loadAttempted &&
-        !finalReceipt.key.attempt && !finalReceipt.consumed &&
-        !m_lastReceiptAttempt &&
+    if (state.propertiesReady() && m_healthyStopQueueEmpty &&
+        state.noLoadEvidence(finalReceipt, m_nativeRestore.loadAttempted, m_lastReceiptAttempt) &&
         restoreCleanupPriorSettled() && restoreCleanupTimeValid() &&
         restoreCleanupOwnsCurrent() && m_healthyStopLease && !m_healthyStopLease->contained() &&
         m_healthyStopLease->matchesArm(m_healthyRendererGeneration,
@@ -244,16 +243,7 @@ PlayerComponent::RestoreCleanupStatus PlayerComponent::pollNativeRestoreCancella
   if (!state.stopKnown || !state.stopSubmitted || !state.stopReply || !state.stopOk || !restoreCleanupPriorSettled())
     return state.status;
   const auto receipt = m_nativeReceipts.snapshot();
-  if (receipt.invalid) return state.status = RestoreCleanupStatus::Failed;
-  if (!receipt.replyOk || receipt.entry <= 0) return state.status;
-  if (state.entry && state.entry != receipt.entry) return state.status = RestoreCleanupStatus::Failed;
-  state.entry = receipt.entry;
-  if (receipt.started) {
-    if (!state.startedEntry) state.startedEntry = receipt.entry;
-    if (state.startedEntry != receipt.entry || (state.endSeen && state.endEntry != receipt.entry))
-      return state.status = RestoreCleanupStatus::Failed;
-    if (!state.endSeen || !receipt.ended || !receipt.settled) return state.status;
-  } else if (state.startedEntry || state.endSeen || receipt.ended) return state.status = RestoreCleanupStatus::Failed;
+  if (!state.reconcileReceipt(receipt)) return state.status;
   requestRestoreCleanupProperty(false);
   if (state.status != RestoreCleanupStatus::Pending) return state.status;
   requestRestoreCleanupProperty(true);
