@@ -61,7 +61,7 @@ class TestHealthyUnpausePlayer : public QObject
 {
   Q_OBJECT
   PlayerTestCache cache_;
-  static void prepare(PlayerComponent& player, bool paused);
+  static void prepare(PlayerComponent& player, bool paused, const std::shared_ptr<FixtureRestart::ChildGate>& gate);
   static std::shared_ptr<FixtureRestart::ChildGate> gate(bool permit);
   static void observe(PlayerComponent& player, quint64 id, bool paused);
   static QImage image(int index);
@@ -70,10 +70,12 @@ private slots:
   void actualPausedHoldAndUnpause();
 };
 
-void TestHealthyUnpausePlayer::prepare(PlayerComponent& player, bool paused)
+void TestHealthyUnpausePlayer::prepare(PlayerComponent& player, bool paused,
+                                       const std::shared_ptr<FixtureRestart::ChildGate>& gate)
 {
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
+  QVERIFY(player.healthyBindRestoreCleanupGate(gate));
   const PlayerComponent::RestoreGrant grant{3, 4, 0, 3000, paused};
   QVERIFY(player.armNativeRestore(grant, 7, 2));
   player.m_restoreDispatch = [](quint64, const char**) { return 0; };
@@ -111,10 +113,12 @@ QImage TestHealthyUnpausePlayer::image(int index)
 
 void TestHealthyUnpausePlayer::actualPausedHoldAndUnpause()
 {
-  PlayerComponent player; prepare(player, false);
   auto child = gate(true); QVERIFY(child);
+  PlayerComponent player; prepare(player, false, child);
   FixtureRestart::Grant grant{1, 3, 4, QByteArray(64, 'a'), 3000, false};
   const auto digest = QCryptographicHash::hash(FixtureRestart::encodeGrant(grant), QCryptographicHash::Sha256);
+  auto other = gate(true); QVERIFY(other);
+  QVERIFY(!player.healthyBindRestoreGate(other, 1, 5, 3, 4, digest, [] { return qint64{1}; }));
   QVERIFY(player.healthyBindRestoreGate(child, 1, 5, 3, 4, digest, [] { return qint64{1}; }));
   observe(player, 1, true);
   fixture_restart::FrameKey baseline{11, 8, 12, 42, 1, 0};
@@ -171,8 +175,8 @@ std::shared_ptr<FixtureRestart::ChildGate> TestHealthyUnpausePlayer::gate(bool p
 void TestHealthyUnpausePlayer::missingPermitAndImage()
 {
   for (bool permit : {false, true}) {
-    PlayerComponent player; prepare(player, false);
     auto child = gate(permit); QVERIFY(child);
+    PlayerComponent player; prepare(player, false, child);
     FixtureRestart::Grant grant{1, 3, 4, QByteArray(64, 'a'), 3000, false};
     const auto digest = QCryptographicHash::hash(FixtureRestart::encodeGrant(grant), QCryptographicHash::Sha256);
     const bool bound = player.healthyBindRestoreGate(child, 1, 5, 3, 4, digest, [] { return qint64{1}; });
