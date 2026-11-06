@@ -43,6 +43,7 @@ BOOL transfer(HANDLE pipe, void* buffer, DWORD size, LPDWORD count)
 {
   auto& bytes = script->bytes[pipe];
   if (bytes.empty()) {
+    *count = 0;
     script->error = script->eof[pipe] ? ERROR_BROKEN_PIPE : ERROR_IO_PENDING;
     return FALSE;
   }
@@ -102,7 +103,7 @@ ChildSession::TestOperations operations()
   o.valid = [] { return script->live; };
   o.initialize = [](const QString&) { return true; };
   o.grant = [](const QByteArray& frame, bool eof, QByteArray& ack) {
-    ++script->grants; script->grantFrame = frame; ack = "grant-ack"; return eof && !script->revoked;
+    ++script->grants; script->grantFrame = frame; ack = "JGA2-ack"; return eof && !script->revoked;
   };
   o.control = [](const QByteArray&, QByteArray& ack) {
     ++script->controls; script->revoked = true; ack = "control-ack"; return true;
