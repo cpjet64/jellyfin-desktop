@@ -1,6 +1,7 @@
 #include <fixture_restart/WindowsRestartChannel.h>
 #include <fixture_restart/WindowsRestartProcess.h>
 #include <healthy_restart/module_identity_win.h>
+#include <healthy_restart/module_gate.h>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -12,6 +13,8 @@ namespace {
 int launches = 0;
 int writes = 0;
 bool fakeLaunch = false;
+LaunchBinding binding()
+{ LaunchBinding b; b.role = LaunchRole::Restore; b.run = 4; b.expectedGrantDigest[0] = 1; return b; }
 HANDLE WINAPI current() { return reinterpret_cast<HANDLE>(2); }
 BOOL WINAPI token(HANDLE, DWORD, PHANDLE out) { *out = reinterpret_cast<HANDLE>(3); return TRUE; }
 BOOL WINAPI tokenInfo(HANDLE, TOKEN_INFORMATION_CLASS, LPVOID data, DWORD, PDWORD size)
@@ -79,8 +82,8 @@ void noLeaseCannotLaunch()
   auto* io = new WindowsRestartIo(ioApi);
   auto* process = WindowsRestartProcess::createHealthyWithChannels(processApi(), {channel}, {io}, channel); CHECK(process);
   std::shared_ptr<StageLease> absent;
-  CHECK(!process->bindHealthyModuleLease(absent, channel, 1));
-  CHECK(!process->bindHealthyModuleLease(absent, nullptr, 1));
+  CHECK(!process->bindHealthyModuleLease(absent, channel, 1, binding()));
+  CHECK(!process->bindHealthyModuleLease(absent, nullptr, 1, binding()));
   FileObservation output; output.size = 123; std::uint64_t launchId = 7;
   CHECK(!process->healthyModuleEvidence(channel, output, launchId));
   CHECK(output.size == 123 && launchId == 7);
@@ -115,9 +118,11 @@ void leaseRetainedUntilOwnerRelease()
   auto* io = new WindowsRestartIo(ioApi);
   auto* process = WindowsRestartProcess::createHealthyWithChannels(processApi(), {channel}, {io}, channel); CHECK(process);
   auto* borrowed = WindowsRestartChannel::create(channelApi()); CHECK(borrowed);
-  CHECK(!process->bindHealthyModuleLease(lease, borrowed, 11) && lease);
-  CHECK(!process->bindHealthyModuleLease(lease, channel, 0) && lease);
-  CHECK(process->bindHealthyModuleLease(lease, channel, 11) && !lease && !weak.expired());
+  CHECK(!process->bindHealthyModuleLease(lease, borrowed, 11, binding()) && lease);
+  CHECK(!process->bindHealthyModuleLease(lease, channel, 0, binding()) && lease);
+  auto invalid = binding(); invalid.expectedGrantDigest = {};
+  CHECK(!process->bindHealthyModuleLease(lease, channel, 11, invalid) && lease);
+  CHECK(process->bindHealthyModuleLease(lease, channel, 11, binding()) && !lease && !weak.expired());
   const char byte = 'x';
   CHECK(io->begin(channel->parentHandle(), false, &byte, 1, 100) == IoProgress::Failed);
   CHECK(io->poll() == IoProgress::Failed && io->cancel() == IoProgress::Failed && writes == 0);

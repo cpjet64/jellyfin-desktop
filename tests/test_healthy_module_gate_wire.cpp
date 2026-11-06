@@ -1,4 +1,4 @@
-#include "healthy_restart/module_gate.h"
+#include <healthy_restart/module_gate.h>
 #include <cstdlib>
 using namespace HealthyModuleIdentity;
 #define CHECK(x) do { if (!(x)) std::abort(); } while (false)
@@ -11,6 +11,10 @@ static FileObservation fixture()
   f.identity.volume = 123; f.identity.file[0] = 42;
   f.size = 9000; f.digest = expectedDigest();
   return f;
+}
+static LaunchBinding binding()
+{
+  LaunchBinding b; b.role = LaunchRole::Restore; b.run = 10; b.expectedGrantDigest[0] = 1; return b;
 }
 
 static bool sentinel(const LaunchIdentity& v)
@@ -27,7 +31,7 @@ static void rejectsWithoutOutputChange(const std::vector<std::uint8_t>& bytes)
 static void framing()
 {
   const auto f = fixture(); std::vector<std::uint8_t> bytes;
-  CHECK(encodeIdentity(f, 12, bytes));
+  CHECK(encodeIdentity(f, 12, binding(), bytes));
   LaunchIdentity result; CHECK(decodeIdentity(bytes, result));
   CHECK(result.launch == 12 && result.size == f.size && result.file.volume == f.identity.volume);
   CHECK(result.file.file == f.identity.file && result.digest == f.digest && result.canonicalPath == f.canonicalPath);
@@ -46,14 +50,14 @@ static void framing()
 static void encoderRejectsInvalid()
 {
   auto f = fixture(); std::vector<std::uint8_t> out{7, 8};
-  CHECK(!encodeIdentity(f, 0, out) && out == std::vector<std::uint8_t>({7, 8}));
-  f.pathComplete = false; CHECK(!encodeIdentity(f, 12, out));
-  f = fixture(); f.identityComplete = false; CHECK(!encodeIdentity(f, 12, out));
-  f = fixture(); f.hashComplete = false; CHECK(!encodeIdentity(f, 12, out));
-  f = fixture(); f.digest[0] ^= 1; CHECK(!encodeIdentity(f, 12, out));
-  f = fixture(); f.identity.file = {}; CHECK(!encodeIdentity(f, 12, out));
-  f = fixture(); f.canonicalPath.assign(1025, u'x'); CHECK(!encodeIdentity(f, 12, out));
-  f = fixture(); f.canonicalPath.push_back(u'\0'); CHECK(!encodeIdentity(f, 12, out));
+  CHECK(!encodeIdentity(f, 0, binding(), out) && out == std::vector<std::uint8_t>({7, 8}));
+  f.pathComplete = false; CHECK(!encodeIdentity(f, 12, binding(), out));
+  f = fixture(); f.identityComplete = false; CHECK(!encodeIdentity(f, 12, binding(), out));
+  f = fixture(); f.hashComplete = false; CHECK(!encodeIdentity(f, 12, binding(), out));
+  f = fixture(); f.digest[0] ^= 1; CHECK(!encodeIdentity(f, 12, binding(), out));
+  f = fixture(); f.identity.file = {}; CHECK(!encodeIdentity(f, 12, binding(), out));
+  f = fixture(); f.canonicalPath.assign(1025, u'x'); CHECK(!encodeIdentity(f, 12, binding(), out));
+  f = fixture(); f.canonicalPath.push_back(u'\0'); CHECK(!encodeIdentity(f, 12, binding(), out));
   CHECK(out == std::vector<std::uint8_t>({7, 8}));
 }
 
