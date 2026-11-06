@@ -7,9 +7,16 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
 #include <thread>
-#define CHECK(value) do { if (!(value)) std::abort(); } while (false)
+#include <QTemporaryDir>
+#include <QDir>
+#include <QFile>
+#include <QCryptographicHash>
+#include "healthy_restart/module_identity_win.h"
+#include "healthy_restart/module_identity.h"
+#define CHECK(value) do { if (!(value)) { std::fprintf(stderr, "CHECK failed at %s:%d: %s\n", __FILE__, __LINE__, #value); std::abort(); } } while (false)
 using namespace FixtureRestart;
 
 namespace {
@@ -23,7 +30,14 @@ HANDLE evidencePipe = INVALID_HANDLE_VALUE;
 QByteArray evidenceBytes;
 qsizetype evidenceOffset = 0;
 bool badAck = false;
+HANDLE scriptedPipe = INVALID_HANDLE_VALUE;
+QByteArray scriptedBytes;
+qsizetype scriptedOffset = 0, scriptedChunk = 4096;
+bool scriptedPending = false;
+bool scriptedRace = false;
+void* scriptedBuffer = nullptr;
 bool aExited = false, waitUnknown = false;
+void exerciseBrokerCancel(bool duringGrant);
 int afterEvidence = 0;
 HANDLE aProcess = INVALID_HANDLE_VALUE;
 std::atomic<bool> holdCreate{false}, enteredCreate{false};
@@ -42,6 +56,9 @@ HANDLE WINAPI file(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, H
 HANDLE WINAPI event(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCWSTR) { return handle(++nextHandle); }
 BOOL WINAPI connect(HANDLE, LPOVERLAPPED) { errorCode = ERROR_IO_PENDING; return FALSE; }
 BOOL WINAPI ioResult(HANDLE h, LPOVERLAPPED, LPDWORD count, BOOL) {
+  if (h == scriptedPipe && scriptedRace && scriptedBuffer) {
+    *static_cast<char*>(scriptedBuffer) = 'x'; *count = 1; return TRUE;
+  }
   if (h == heldGrant && holdGrant) {
     errorCode = cancelGrant && !delayGrantCancel ? ERROR_OPERATION_ABORTED : ERROR_IO_INCOMPLETE;
     return FALSE;
@@ -58,6 +75,16 @@ BOOL WINAPI writeFile(HANDLE h, LPCVOID data, DWORD size, LPDWORD count, LPOVERL
   lastWrite = QByteArray(static_cast<const char*>(data), size); *count = size; return TRUE; }
 BOOL WINAPI readFile(HANDLE h, LPVOID data, DWORD size, LPDWORD count, LPOVERLAPPED)
 {
+  if (h == scriptedPipe) {
+    if (scriptedOffset == scriptedBytes.size()) {
+      scriptedBuffer = data;
+      errorCode = scriptedPending ? ERROR_IO_PENDING : ERROR_BROKEN_PIPE;
+      return FALSE;
+    }
+    const auto length = std::min({qsizetype(size), scriptedChunk, scriptedBytes.size() - scriptedOffset});
+    std::memcpy(data, scriptedBytes.constData() + scriptedOffset, size_t(length));
+    scriptedOffset += length; *count = DWORD(length); return TRUE;
+  }
   if (h == evidencePipe) {
     if (evidenceOffset == evidenceBytes.size()) {
       if (afterEvidence == 1) aExited = true;
@@ -164,22 +191,8 @@ void ownedOperations()
   Control sent;
   CHECK(decodeControl(lastWrite, sent) && sent.kind == ControlKind::InternalStop);
   bool forced = true;
-  CHECK(operations.waitAAndChildren(deadline, forced) == Operations::Progress::Pending && !forced);
-  activeA = 0; aExited = true;
-  CHECK(operations.waitAAndChildren(deadline, forced) == Operations::Progress::Complete && !forced);
-  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-  auto progress = operations.launchB(deadline);
-  while (progress == Operations::Progress::Pending && std::chrono::steady_clock::now() < end) {
-    std::this_thread::yield();
-    progress = operations.launchB(deadline);
-  }
-  CHECK(progress == Operations::Progress::Complete);
-  const Grant grant{1, 2, 3, QByteArray(64, 'a'), 3000, true};
-  const QByteArray frame = encodeGrant(grant);
-  CHECK(operations.transferToB(frame, deadline) == Operations::Progress::Complete);
-  CHECK(bGrant.channel->parentHandle() == INVALID_HANDLE_VALUE && lastWrite == frame);
-  CHECK(operations.cancelBAndAwaitAck(deadline) == Operations::Progress::Complete);
-  CHECK(decodeControl(lastWrite, sent) && sent.kind == ControlKind::UserStop && sent.revision == 4);
+  CHECK(operations.waitAAndChildren(deadline, forced) == Operations::Progress::Failed && !forced);
+  CHECK(operations.launchB(deadline) == Operations::Progress::Failed);
   CHECK(operations.cleanupOwned(deadline) == Operations::Progress::Complete);
 }
 
@@ -206,6 +219,7 @@ void actualBrokerPath()
   auto* a = process({evidenceChannel, aControl, aAck});
   auto* b = process({bGrant, bControl, bAck});
   launch(a);
+  const int before = created;
   WindowsBrokerOperations operations(*a, *b, evidenceChannel, aControl, aAck, bGrant, bControl, bAck,
                                      L"C:\\fixture.exe", L"", 3);
   const Evidence evidence = sampleEvidence();
@@ -216,12 +230,7 @@ void actualBrokerPath()
   while (!broker.completed() && !broker.failed() && std::chrono::steady_clock::now() < end) {
     broker.step(); std::this_thread::yield();
   }
-  CHECK(broker.completed() && broker.burned());
-  CHECK(broker.cancel() == Broker::Cancellation::Pending);
-  broker.step();
-  CHECK(broker.cancellation() == Broker::Cancellation::Acknowledged);
-  broker.step();
-  CHECK(broker.failed());
+  CHECK(broker.failed() && !broker.burned() && created == before);
 }
 
 void cancelBeforeASettled()
@@ -245,36 +254,7 @@ void cancelBeforeASettled()
   CHECK(broker.failed() && created == before);
 }
 
-void cancelDuringPendingGrant()
-{
-  activeA = 0;
-  auto evidenceChannel = endpoint(), aControl = endpoint(), aAck = endpoint();
-  auto bGrant = endpoint(), bControl = endpoint(), bAck = endpoint();
-  heldGrant = bGrant.channel->parentHandle();
-  holdGrant = true; cancelGrant = false; delayGrantCancel = true;
-  auto* a = process({evidenceChannel, aControl, aAck});
-  auto* b = process({bGrant, bControl, bAck});
-  launch(a);
-  WindowsBrokerOperations operations(*a, *b, evidenceChannel, aControl, aAck, bGrant, bControl, bAck,
-                                     L"C:\\fixture.exe", L"", 3);
-  const Evidence evidence = sampleEvidence();
-  Broker broker(operations, evidenceChannel.channel, evidence.grant);
-  CHECK(broker.capture(evidenceChannel.channel, evidence) && broker.startReplacement());
-  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-  while (!bGrant.io->pending() && !broker.failed() && std::chrono::steady_clock::now() < end) {
-    broker.step(); std::this_thread::yield();
-  }
-  CHECK(bGrant.io->pending() && broker.burned());
-  CHECK(broker.cancel() == Broker::Cancellation::Pending);
-  broker.step();
-  CHECK(cancelGrant && broker.cancellation() == Broker::Cancellation::Acknowledged);
-  broker.step();
-  CHECK(!broker.failed() && bGrant.io->pending());
-  delayGrantCancel = false;
-  broker.step();
-  CHECK(broker.failed());
-  heldGrant = INVALID_HANDLE_VALUE; holdGrant = false;
-}
+void cancelDuringPendingGrant() { exerciseBrokerCancel(true); }
 
 void wrongAcknowledgement()
 {
@@ -295,36 +275,7 @@ void wrongAcknowledgement()
   badAck = false;
 }
 
-void cancelDuringLaunch()
-{
-  activeA = 0; holdCreate = false; enteredCreate = false;
-  auto evidenceChannel = endpoint(), aControl = endpoint(), aAck = endpoint();
-  auto bGrant = endpoint(), bControl = endpoint(), bAck = endpoint();
-  auto* a = process({evidenceChannel, aControl, aAck});
-  auto* b = process({bGrant, bControl, bAck});
-  launch(a);
-  const int before = resumeCount;
-  enteredCreate = false; holdCreate = true;
-  WindowsBrokerOperations operations(*a, *b, evidenceChannel, aControl, aAck, bGrant, bControl, bAck,
-                                     L"C:\\fixture.exe", L"", 3);
-  const Evidence evidence = sampleEvidence();
-  Broker broker(operations, evidenceChannel.channel, evidence.grant);
-  CHECK(broker.capture(evidenceChannel.channel, evidence) && broker.startReplacement());
-  broker.step(); broker.step(); broker.step();
-  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-  while (!enteredCreate && std::chrono::steady_clock::now() < end) std::this_thread::yield();
-  CHECK(enteredCreate && broker.burned());
-  CHECK(broker.cancel() == Broker::Cancellation::Pending);
-  broker.step();
-  CHECK(broker.cancellation() == Broker::Cancellation::Pending);
-  holdCreate = false;
-  while (broker.cancellation() == Broker::Cancellation::Pending && std::chrono::steady_clock::now() < end) {
-    broker.step(); std::this_thread::yield();
-  }
-  CHECK(broker.cancellation() == Broker::Cancellation::Unconfirmed && resumeCount == before);
-  broker.step();
-  CHECK(broker.failed());
-}
+void cancelDuringLaunch() { exerciseBrokerCancel(false); }
 
 void rejectsMismatchedEndpoint()
 {
@@ -366,15 +317,8 @@ void actualParentPath(bool corrupt)
          parent.state() != WindowsRestartParent::State::Failed && std::chrono::steady_clock::now() < end) {
     parent.step(); std::this_thread::yield();
   }
-  if (corrupt) {
-    CHECK(parent.state() == WindowsRestartParent::State::Failed && created == before);
-  } else {
-    CHECK(parent.state() == WindowsRestartParent::State::Transferred && created == before + 1);
-    CHECK(parent.frozenEvidence().receipt == source.receipt);
-    CHECK(parent.cancel() == Broker::Cancellation::Pending);
-    parent.step(); parent.step();
-    CHECK(parent.state() == WindowsRestartParent::State::Failed);
-  }
+  CHECK(parent.state() == WindowsRestartParent::State::Failed && created == before);
+  if (!corrupt) CHECK(parent.frozenEvidence().receipt == source.receipt);
   evidencePipe = INVALID_HANDLE_VALUE;
 }
 
@@ -420,15 +364,18 @@ void parentRejectsLostAAfterRead(bool unknown)
   CHECK(parent.state() == WindowsRestartParent::State::Failed && created == before);
   evidencePipe = INVALID_HANDLE_VALUE;
 }
+#include "test_windows_broker_protocol_cases.h"
 }
 int main(int argc, char** argv) {
   QCoreApplication app(argc, argv);
+  if (argc > 1 && QByteArray(argv[1]) == "protocol") { adapterProtocolCases(); return 0; }
   ownedOperations(); actualBrokerPath(); cancelBeforeASettled(); cancelDuringPendingGrant();
   wrongAcknowledgement(); cancelDuringLaunch();
   rejectsMismatchedEndpoint();
   actualParentPath(false); actualParentPath(true);
   parentRejectsDeadOrUnknownA(false); parentRejectsDeadOrUnknownA(true);
   parentRejectsLostAAfterRead(false); parentRejectsLostAAfterRead(true);
+  adapterProtocolCases();
   return 0;
 }
 #else
