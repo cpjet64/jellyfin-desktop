@@ -25,6 +25,7 @@ private slots:
   void boundedDrainAndPendingOperations();
   void reentrantUserIntentDuringPreflight();
   void queuedEndAndDrainDeadline();
+  void retirementClaimAdmission();
 };
 
 void TestHealthyAsyncStop::initTestCase()
@@ -46,6 +47,7 @@ void TestHealthyAsyncStop::prepare(PlayerComponent& player, bool active, bool pa
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
   player.m_playbackIntent.play(paused);
+  QVERIFY(player.healthyInstallRetirementClaim(std::make_shared<HealthyRetirement::RetirementClaim>(9), 9));
   player.m_healthyStopClock = [] { return qint64{1}; };
   if (active) {
     const auto intent = player.m_playbackIntent.snapshot();
@@ -205,9 +207,9 @@ void TestHealthyAsyncStop::completedLeaseRevokedByUserIntent()
     player.pollHealthyReplacementStop();
     int idle = 1; property(player, quint64{1} << 57, "idle-active", MPV_FORMAT_FLAG, &idle);
     QCOMPARE(player.pollHealthyReplacementStop(), Stop::Status::Complete);
-    auto lease = player.healthyStopLease(); QVERIFY(lease && lease->load());
+    auto lease = player.healthyStopClaim(); QVERIFY(lease && lease->eligible());
     if (userPlay) player.play(); else player.stop();
-    QVERIFY(!lease->load());
+    QVERIFY(!lease->eligible());
     QCOMPARE(player.pollHealthyReplacementStop(), Stop::Status::Failed);
     QCOMPARE(commands, 1);
   }
@@ -280,6 +282,34 @@ void TestHealthyAsyncStop::queuedEndAndDrainDeadline()
   QCOMPARE(lateCommands, 0);
   QCOMPARE(late.pollHealthyReplacementStop(), Stop::Status::Failed);
   QCOMPARE(lateCommands, 0);
+}
+
+void TestHealthyAsyncStop::retirementClaimAdmission()
+{
+  PlayerComponent uninitialized;
+  auto early = std::make_shared<HealthyRetirement::RetirementClaim>(9);
+  QVERIFY(!uninitialized.healthyInstallRetirementClaim(early, 9));
+  PlayerComponent player;
+  QVERIFY(player.bindNativeReceiptHost(7));
+  player.m_mpvGeneration = 8; player.m_playbackIntent.play(false);
+  player.m_healthyStopClock = [] { return qint64{1}; };
+  int calls = 0;
+  player.m_healthyStopDispatch = [&](quint64, const char**, bool) { ++calls; return 0; };
+  QVERIFY(!player.beginHealthyReplacementStop(7, 2, 100));
+  auto zero = std::make_shared<HealthyRetirement::RetirementClaim>(0);
+  QVERIFY(!player.healthyInstallRetirementClaim(zero, 0));
+  auto wrong = std::make_shared<HealthyRetirement::RetirementClaim>(9);
+  QVERIFY(!player.healthyInstallRetirementClaim(wrong, 10));
+  auto revoked = std::make_shared<HealthyRetirement::RetirementClaim>(9); revoked->revoke();
+  QVERIFY(!player.healthyInstallRetirementClaim(revoked, 9));
+  auto claim = std::make_shared<HealthyRetirement::RetirementClaim>(9);
+  QVERIFY(player.healthyInstallRetirementClaim(claim, 9));
+  QVERIFY(player.healthyStopClaim().get() == claim.get());
+  QVERIFY(!player.healthyInstallRetirementClaim(claim, 9));
+  player.stop();
+  QVERIFY(!claim->eligible());
+  QVERIFY(!player.beginHealthyReplacementStop(7, 2, 100));
+  QCOMPARE(calls, 0);
 }
 
 QTEST_GUILESS_MAIN(TestHealthyAsyncStop)
