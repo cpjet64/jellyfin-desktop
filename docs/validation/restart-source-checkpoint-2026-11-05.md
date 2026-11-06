@@ -63,6 +63,33 @@ checked SHA-256 identities are:
 | Static CTest log | `29a8d6439b31c7f356b21888215406a28875ad4437a392adf8ba30278b039dbc` |
 | System CTest log | `db878f30041a67d6014f067592037275ce19275e98dcc8aea4f72fd69df221e3` |
 
+## Cumulative parent and source-player checkpoint
+
+At `e440802dbc2ab36e7981edcd899fb1e5ac9207aa`, W843 completed full Windows
+static ON/ON and system OFF/OFF builds with `cmake --build <tree> --parallel 2`,
+then headless `ctest --test-dir <tree> -LE gui --no-tests=error
+--output-on-failure --timeout 60`. Static passed 54/54 and system passed 51/51,
+with no skipped or not-run cases. Source remained unchanged throughout;
+evidence is retained under `deps/w843-proof/` in the integration worktree.
+
+The actual Windows broker operations and parent composition and the shared
+source-player adapter are registered and passed their headless tests in both
+local configurations. Their operating-system interfaces are injected: this is
+not evidence of real pipes, child processes or playback. OFF remains an
+unavailable-behavior check, not positive restoration proof. The shared
+source-player test is required by Linux/macOS gates, whose execution for this
+checkpoint remains pending.
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Static application | `e33af3c462379416e3c8b403044b07ada4ec12778bb2d3ec90d7b1f86f74d469` |
+| System application | `f8c28ca7aa98dd3fa921712a442f943e690640cb8f9d7c2611fbe4829921566e` |
+| Static CTest log | `bab01749391e997ee96a5ff61b96e3f2bab854b2eb8809689c5481dbe1d0a72b` |
+| System CTest log | `d0a8e9d1649da5f47795a18dc81bb29c89a8fb4982f9e98045b1289958837367` |
+
+The latest separately proposed healthy-core design question returned a system
+error without a decision; the new core and native attempts remain held.
+
 ## Remaining proof
 
 No operating parent/A/B executable, actual channel inheritance, native fixture
