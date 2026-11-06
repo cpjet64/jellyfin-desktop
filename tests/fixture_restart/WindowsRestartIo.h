@@ -2,6 +2,8 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace FixtureRestart {
@@ -26,12 +28,22 @@ struct WindowsIoApi {
 // A caller must not release the containing allocation while pending() is true.
 class WindowsRestartIo {
 public:
+  struct Settlement {
+    enum class Outcome { Completed, Aborted, Eof, Uncertain };
+    std::uint64_t operation = 0;
+    Outcome outcome = Outcome::Uncertain;
+    DWORD transferred = 0;
+    std::vector<unsigned char> bytes;
+  };
   explicit WindowsRestartIo(const WindowsIoApi& api);
   bool release();
   WindowsRestartIo(const WindowsRestartIo&) = delete;
   WindowsRestartIo& operator=(const WindowsRestartIo&) = delete;
   IoProgress begin(HANDLE pipe, bool read, const void* data, DWORD size,
                    ULONGLONG deadline);
+  IoProgress beginTrackedRead(HANDLE pipe, DWORD size, ULONGLONG deadline);
+  std::shared_ptr<const Settlement> settlement() const { return settlement_; }
+  bool consumeSettlement(std::uint64_t operation);
   IoProgress poll();
   IoProgress cancel();
   bool canBind(HANDLE pipe) const;
@@ -44,12 +56,14 @@ private:
   bool sealIdentityWriter();
   IoProgress beginIdentity(HANDLE pipe, const void* data, DWORD size, ULONGLONG deadline);
   IoProgress pollIdentity();
-  IoProgress beginImpl(HANDLE pipe, bool read, const void* data, DWORD size, ULONGLONG deadline);
+  IoProgress beginImpl(HANDLE pipe, bool read, const void* data, DWORD size, ULONGLONG deadline,
+                       bool tracked = false);
   IoProgress pollImpl();
   IoProgress cancelImpl();
   IoProgress submit();
   IoProgress completion(DWORD count);
   IoProgress completedError(DWORD error);
+  IoProgress settleTracked(Settlement::Outcome outcome);
   WindowsIoApi api_;
   OVERLAPPED overlap_{};
   HANDLE pipe_ = INVALID_HANDLE_VALUE;
@@ -60,6 +74,9 @@ private:
   bool read_ = false, inFlight_ = false, cancelling_ = false;
   bool owned_ = false, closed_ = false;
   bool identityWriter_ = false;
+  bool tracked_ = false, poisoned_ = false, cancelRequested_ = false;
+  std::uint64_t nextOperation_ = 0, operation_ = 0;
+  std::shared_ptr<const Settlement> settlement_;
   IoProgress state_ = IoProgress::Failed;
 };
 }

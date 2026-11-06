@@ -1,6 +1,7 @@
 #include "WindowsRestartIo.h"
 #ifdef _WIN32
 #include <cstring>
+#include <limits>
 
 namespace FixtureRestart {
 WindowsRestartIo::WindowsRestartIo(const WindowsIoApi& api) : api_(api) {}
@@ -11,7 +12,7 @@ WindowsRestartIo::~WindowsRestartIo()
 
 bool WindowsRestartIo::release()
 {
-  if (inFlight_ || owned_) return false;
+  if (inFlight_ || owned_ || settlement_) return false;
   delete this;
   return true;
 }
@@ -36,6 +37,19 @@ IoProgress WindowsRestartIo::begin(HANDLE pipe, bool read, const void* data,
   return beginImpl(pipe, read, data, size, deadline);
 }
 
+IoProgress WindowsRestartIo::beginTrackedRead(HANDLE pipe, DWORD size, ULONGLONG deadline)
+{
+  if (identityWriter_) return IoProgress::Failed;
+  return beginImpl(pipe, true, nullptr, size, deadline, true);
+}
+
+bool WindowsRestartIo::consumeSettlement(std::uint64_t operation)
+{
+  if (!settlement_ || !operation || settlement_->operation != operation) return false;
+  settlement_.reset();
+  return true;
+}
+
 bool WindowsRestartIo::sealIdentityWriter()
 {
   if (!owned_ || closed_ || inFlight_ || identityWriter_) return false;
@@ -54,9 +68,10 @@ IoProgress WindowsRestartIo::pollIdentity()
 }
 
 IoProgress WindowsRestartIo::beginImpl(HANDLE pipe, bool read, const void* data,
-                                       DWORD size, ULONGLONG deadline)
+                                       DWORD size, ULONGLONG deadline, bool tracked)
 {
-  if (inFlight_) return IoProgress::Failed;
+  if (inFlight_ || settlement_ || poisoned_) return IoProgress::Failed;
+  if (tracked && nextOperation_ == (std::numeric_limits<std::uint64_t>::max)()) return IoProgress::Failed;
   if (closed_ || !size || size > 9216 || (!read && !data) ||
       pipe == INVALID_HANDLE_VALUE || !pipe ||
       (bound_ != INVALID_HANDLE_VALUE && pipe != bound_) || api_.now() >= deadline)
@@ -71,15 +86,20 @@ IoProgress WindowsRestartIo::beginImpl(HANDLE pipe, bool read, const void* data,
   offset_ = 0;
   deadline_ = deadline;
   read_ = read;
+  tracked_ = tracked;
+  operation_ = tracked ? ++nextOperation_ : 0;
   cancelling_ = false;
+  cancelRequested_ = false;
   return submit();
 }
 
 IoProgress WindowsRestartIo::submit()
 {
   while (offset_ < bytes_.size()) {
-    if (api_.now() >= deadline_ || !api_.resetEvent(overlap_.hEvent))
+    if (api_.now() >= deadline_ || !api_.resetEvent(overlap_.hEvent)) {
+      if (tracked_) return settleTracked(Settlement::Outcome::Uncertain);
       return state_ = IoProgress::Failed;
+    }
     HANDLE event = overlap_.hEvent;
     overlap_ = {};
     overlap_.hEvent = event;
@@ -95,6 +115,11 @@ IoProgress WindowsRestartIo::submit()
       inFlight_ = true;
       return state_ = IoProgress::Pending;
     }
+    if (tracked_) {
+      if (!count || count > remaining) return settleTracked(Settlement::Outcome::Uncertain);
+      offset_ += count;
+      return settleTracked(Settlement::Outcome::Completed);
+    }
     if (api_.now() >= deadline_ || !count || count > remaining)
       return state_ = IoProgress::Failed;
     offset_ += count;
@@ -104,6 +129,11 @@ IoProgress WindowsRestartIo::submit()
 
 IoProgress WindowsRestartIo::completedError(DWORD error)
 {
+  if (tracked_) {
+    if (!cancelling_ && offset_ == 0 && (error == ERROR_BROKEN_PIPE || error == ERROR_NO_DATA))
+      return settleTracked(Settlement::Outcome::Eof);
+    return settleTracked(Settlement::Outcome::Uncertain);
+  }
   if (read_ && !cancelling_ && offset_ == 0 && api_.now() < deadline_ &&
       (error == ERROR_BROKEN_PIPE || error == ERROR_NO_DATA))
     return state_ = IoProgress::Eof;
@@ -113,11 +143,35 @@ IoProgress WindowsRestartIo::completedError(DWORD error)
 IoProgress WindowsRestartIo::completion(DWORD count)
 {
   inFlight_ = false;
+  if (tracked_) {
+    if (!count || count > bytes_.size() - offset_) return settleTracked(Settlement::Outcome::Uncertain);
+    offset_ += count;
+    return settleTracked(Settlement::Outcome::Completed);
+  }
   if (cancelling_ || api_.now() >= deadline_ || !count || count > bytes_.size() - offset_)
     return state_ = IoProgress::Failed;
   offset_ += count;
   if (offset_ == bytes_.size()) return state_ = IoProgress::Complete;
   return submit();
+}
+
+IoProgress WindowsRestartIo::settleTracked(Settlement::Outcome outcome)
+{
+  try {
+    auto value = std::make_shared<Settlement>();
+    value->operation = operation_;
+    value->outcome = outcome;
+    value->transferred = offset_;
+    value->bytes.assign(bytes_.begin(), bytes_.begin() + offset_);
+    settlement_ = std::move(value);
+  } catch (...) {
+    poisoned_ = true;
+    return state_ = IoProgress::Failed;
+  }
+  if (outcome == Settlement::Outcome::Uncertain) poisoned_ = true;
+  if (outcome == Settlement::Outcome::Completed) return state_ = IoProgress::Complete;
+  if (outcome == Settlement::Outcome::Eof) return state_ = IoProgress::Eof;
+  return state_ = IoProgress::Failed;
 }
 
 IoProgress WindowsRestartIo::poll()
@@ -139,6 +193,10 @@ IoProgress WindowsRestartIo::pollImpl()
       error != ERROR_NO_DATA && error != ERROR_PIPE_NOT_CONNECTED)
     return IoProgress::Unconfirmed;
   inFlight_ = false;
+  if (tracked_ && error == ERROR_OPERATION_ABORTED)
+    return count == 0 ? settleTracked(Settlement::Outcome::Aborted)
+                      : settleTracked(Settlement::Outcome::Uncertain);
+  if (tracked_ && count != 0) return settleTracked(Settlement::Outcome::Uncertain);
   return completedError(error);
 }
 
@@ -151,8 +209,11 @@ IoProgress WindowsRestartIo::cancelImpl()
 {
   if (!inFlight_) return state_;
   cancelling_ = true;
-  if (!api_.cancel(pipe_, &overlap_) && api_.error() != ERROR_NOT_FOUND)
-    return IoProgress::Unconfirmed;
+  if (!cancelRequested_) {
+    cancelRequested_ = true;
+    (void)api_.cancel(pipe_, &overlap_);
+    if (!inFlight_) return state_;
+  }
   DWORD count = 0;
   if (api_.result(pipe_, &overlap_, &count, FALSE)) return completion(count);
   const DWORD error = api_.error();
@@ -160,6 +221,10 @@ IoProgress WindowsRestartIo::cancelImpl()
       error != ERROR_NO_DATA && error != ERROR_PIPE_NOT_CONNECTED)
     return IoProgress::Unconfirmed;
   inFlight_ = false;
+  if (tracked_ && error == ERROR_OPERATION_ABORTED)
+    return count == 0 ? settleTracked(Settlement::Outcome::Aborted)
+                      : settleTracked(Settlement::Outcome::Uncertain);
+  if (tracked_) return settleTracked(Settlement::Outcome::Uncertain);
   return state_ = IoProgress::Failed;
 }
 }
