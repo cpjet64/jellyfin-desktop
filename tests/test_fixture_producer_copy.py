@@ -138,7 +138,9 @@ class FixtureProducerCopyTest(unittest.TestCase):
         self.assertIn('set_source_files_properties("${copied}" PROPERTIES INCLUDE_DIRECTORIES "${original_dir}")', core)
 
     def test_receipt_sources_are_pinned_and_follow_copied_player_graph(self):
-        names = ('PlaybackNativeReceipts.cpp', 'PlaybackNativeReceipts.h', 'PlayerNativeReceipts.cpp')
+        names = ('PlaybackNativeReceipts.cpp', 'PlaybackNativeReceipts.h', 'PlayerNativeReceipts.cpp',
+                 'NativePlaybackObservation.cpp', 'NativePlaybackObservation.h',
+                 'PlayerNativeObservation.cpp', 'PlayerNativeRestore.cpp')
         result = self.configure()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         copied = self.root / 'fixture-producer-copy/player'
@@ -152,7 +154,10 @@ class FixtureProducerCopyTest(unittest.TestCase):
             self.assertNotEqual(self.configure().returncode, 0)
             source.write_bytes(original)
         for unit, headers in (('PlaybackNativeReceipts.cpp', ('PlaybackNativeReceipts.h',)),
-                              ('PlayerNativeReceipts.cpp', ('PlayerComponent.h', 'PlaybackCheckpoint.h'))):
+                              ('PlayerNativeReceipts.cpp', ('PlayerComponent.h', 'PlaybackCheckpoint.h')),
+                              ('NativePlaybackObservation.cpp', ('NativePlaybackObservation.h',)),
+                              ('PlayerNativeObservation.cpp', ('PlayerComponent.h',)),
+                              ('PlayerNativeRestore.cpp', ('PlayerComponent.h',))):
             contents = (copied / unit).read_text(encoding='utf-8')
             for header in headers:
                 self.assertIn(f'#include "{header}"', contents)
