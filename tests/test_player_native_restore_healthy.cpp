@@ -28,11 +28,11 @@ std::unique_ptr<TestPlayerNativeRestore::CleanupHarness> TestPlayerNativeRestore
                                             100, HealthyRestart::FailureCause::None);
   };
   actions.pollCleanup = [] { return Child::CleanupResult{Child::CleanupResult::Status::Pending, {}, FixtureRestart::CancelFailure::None}; };
-  harness->child = std::make_unique<Child>(*gate, gate.get(), &player, binding.run, 9, digest, std::move(actions));
+  harness->child = std::make_unique<Child>(*gate, &player, &player, binding.run, 9, digest, std::move(actions));
   auto claim = TestRetirementClaim::reserve(1);
   if (!claim) return {};
   QByteArray response;
-  if (!harness->child->grant(gate.get(), frame, 10, true, response)) return {};
+  if (!harness->child->grant(&player, frame, 10, true, response)) return {};
   const auto key = player.m_nativeRestore.key;
   const HealthyRetirement::RetirementClaim::ArmIdentity identity{key.host, key.core, key.revision, key.attempt};
   if (!TestRetirementClaim::bind(claim, 1, identity) ||
