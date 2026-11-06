@@ -13,6 +13,7 @@ class PreparedGraph;
 class ChildSession {
 public:
   enum class Progress { Pending, Ready, Failed };
+  struct SourceClosed { std::uint64_t generation = 0, core = 0, closure = 0, revision = 0; };
   ChildSession(PreparedGraph& graph, std::shared_ptr<HealthyModuleIdentity::ChildEndpoints> endpoints,
                std::uint64_t generation);
 #ifdef HEALTHY_CHILD_SESSION_TESTING
@@ -23,6 +24,13 @@ public:
     std::function<bool(const QByteArray&, QByteArray&)> control;
     std::function<bool()> load, seek, revoke;
     std::function<void()> invalidate;
+    std::function<bool(const QString&, bool, std::uint64_t&, std::uint64_t&, std::uint64_t&)> sourceLoad;
+    std::function<bool(QByteArray&)> sourceFreeze;
+    std::function<bool(const QByteArray&)> sourceBeginStop;
+    std::function<Progress(QByteArray&)> sourcePollStop;
+    std::function<bool()> sourceRetire;
+    std::function<Progress()> sourcePollRetire;
+    std::function<bool(SourceClosed&)> sourceClosed;
   };
   ChildSession(std::shared_ptr<HealthyModuleIdentity::ChildEndpoints> endpoints,
                std::uint64_t generation, TestOperations operations);
@@ -49,6 +57,14 @@ private:
   bool pollAck();
   bool queueAck(const QByteArray& frame, bool grant);
   bool sourceControl();
+  bool retained() const;
+  bool sourceLoad(const QString&, bool);
+  bool sourceFreeze(QByteArray&);
+  bool sourceBeginStop(const QByteArray&);
+  Progress sourcePollStop(QByteArray&);
+  bool sourceRetire();
+  Progress sourcePollRetire();
+  bool sourceClosed(SourceClosed&);
   bool initialize(const QString& path);
   bool grant(const QByteArray& frame, QByteArray& response);
   bool control(const QByteArray& frame, QByteArray& response);
@@ -66,6 +82,7 @@ private:
   SourceStage sourceStage_ = SourceStage::Idle;
   Io sourceIo_ = Io::Failed;
   QByteArray closedFrame_;
+  bool controlCancelStarted_ = false;
   std::uint64_t sourceRun_ = 0, sourceLaunch_ = 0, sourceRevision_ = 0, stopSequence_ = 0;
 #ifdef HEALTHY_CHILD_SESSION_TESTING
   TestOperations test_;

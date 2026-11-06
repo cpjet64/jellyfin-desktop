@@ -116,42 +116,45 @@ void ChildSession::revokeGraph()
 
 bool ChildSession::beginSource(const QString& path, bool paused)
 {
-#ifdef HEALTHY_CHILD_SESSION_HEADLESS
-  Q_UNUSED(path); Q_UNUSED(paused); return false;
-#else
   if (started_ || !valid()) return fail();
+  if (!sourceLoad(path, paused)) return fail();
+  started_ = true;
+  return true;
+}
+
+bool ChildSession::sourceLoad(const QString& path, bool paused)
+{
+#ifdef HEALTHY_CHILD_SESSION_TESTING
+  if (testing_) return test_.sourceLoad && test_.sourceLoad(path, paused, sourceRun_, sourceLaunch_, sourceRevision_) &&
+      sourceRun_ && sourceLaunch_ && sourceRevision_;
+#endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
   const auto capability = endpoints_->capability();
   HealthyModuleIdentity::LaunchBinding binding;
   if (!capability->launchBinding(generation_, binding) ||
       binding.role != HealthyModuleIdentity::LaunchRole::Source || !binding.run || !binding.revision ||
       !capability->launchId(generation_, sourceLaunch_) ||
-      !graph_->graphOnGuiThread()->sourceLoad(path, paused)) return fail();
+      !graph_->graphOnGuiThread()->sourceLoad(path, paused)) return false;
   sourceRun_ = binding.run;
   sourceRevision_ = binding.revision;
-  started_ = true;
   return true;
+#else
+  return false;
 #endif
 }
 
 bool ChildSession::freezeSource()
 {
-#ifdef HEALTHY_CHILD_SESSION_HEADLESS
-  return false;
-#else
   if (!started_ || sourceStage_ != SourceStage::Idle || !sourceRun_ || !valid()) return fail();
   QByteArray frame;
-  if (!graph_->graphOnGuiThread()->sourceFreeze(frame) || frame.isEmpty() || !valid()) return fail();
+  if (!sourceFreeze(frame) || frame.isEmpty() || !valid()) return fail();
   sourceIo_ = endpoints_->begin(Role::Evidence, false, frame.constData(), unsigned(frame.size()));
   sourceStage_ = SourceStage::Evidence;
   return sourceIo_ == Io::Pending || sourceIo_ == Io::Complete || fail();
-#endif
 }
 
 bool ChildSession::sourceControl()
 {
-#ifdef HEALTHY_CHILD_SESSION_HEADLESS
-  return false;
-#else
   const auto result = advance(Role::Control, controlIo_);
   if (result == Io::Pending) return true;
   if (result != Io::Complete) return false;
@@ -160,12 +163,103 @@ bool ChildSession::sourceControl()
   const QByteArray frame(reinterpret_cast<const char*>(bytes->data()), qsizetype(bytes->size()));
   FixtureRestart::Control command;
   if (!FixtureRestart::decodeControl(frame, command) || command.kind != FixtureRestart::ControlKind::InternalStop ||
-      command.revision != sourceRevision_ || !graph_->graphOnGuiThread()->sourceBeginStop(frame)) return false;
+      command.revision != sourceRevision_ || !sourceBeginStop(frame)) return false;
   stopSequence_ = command.sequence;
   controlIo_ = beginRead(Role::Control, 24);
   if (controlIo_ != Io::Pending && controlIo_ != Io::Complete) return false;
   sourceStage_ = SourceStage::Stop;
   return true;
+}
+
+bool ChildSession::retained() const
+{
+#ifdef HEALTHY_CHILD_SESSION_TESTING
+  if (testing_) return valid();
+#endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
+  const auto capability = endpoints_ ? endpoints_->capability() : nullptr;
+  return !failed_ && graph_ && capability && capability->stillValid(generation_) && graph_->ownsEndpoints(endpoints_);
+#else
+  return false;
+#endif
+}
+
+bool ChildSession::sourceFreeze(QByteArray& frame)
+{
+#ifdef HEALTHY_CHILD_SESSION_TESTING
+  if (testing_) return test_.sourceFreeze && test_.sourceFreeze(frame);
+#endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
+  return graph_->graphOnGuiThread()->sourceFreeze(frame);
+#else
+  return false;
+#endif
+}
+
+bool ChildSession::sourceBeginStop(const QByteArray& frame)
+{
+#ifdef HEALTHY_CHILD_SESSION_TESTING
+  if (testing_) return test_.sourceBeginStop && test_.sourceBeginStop(frame);
+#endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
+  return graph_->graphOnGuiThread()->sourceBeginStop(frame);
+#else
+  return false;
+#endif
+}
+
+ChildSession::Progress ChildSession::sourcePollStop(QByteArray& response)
+{
+#ifdef HEALTHY_CHILD_SESSION_TESTING
+  if (testing_) return test_.sourcePollStop ? test_.sourcePollStop(response) : Progress::Failed;
+#endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
+  const auto result = graph_->graphOnGuiThread()->sourcePollStop(response);
+  return result == HealthyRestart::AsyncStop::Status::Pending ? Progress::Pending :
+      result == HealthyRestart::AsyncStop::Status::Complete ? Progress::Ready : Progress::Failed;
+#else
+  return Progress::Failed;
+#endif
+}
+
+bool ChildSession::sourceRetire()
+{
+#ifdef HEALTHY_CHILD_SESSION_TESTING
+  if (testing_) return test_.sourceRetire && test_.sourceRetire();
+#endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
+  return graph_->graphOnGuiThread()->requestRetirement();
+#else
+  return false;
+#endif
+}
+
+ChildSession::Progress ChildSession::sourcePollRetire()
+{
+#ifdef HEALTHY_CHILD_SESSION_TESTING
+  if (testing_) return test_.sourcePollRetire ? test_.sourcePollRetire() : Progress::Failed;
+#endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
+  const auto result = graph_->graphOnGuiThread()->pollRetirement();
+  return result == FixtureGraph::Progress::Pending ? Progress::Pending :
+      result == FixtureGraph::Progress::Closed ? Progress::Ready : Progress::Failed;
+#else
+  return Progress::Failed;
+#endif
+}
+
+bool ChildSession::sourceClosed(SourceClosed& result)
+{
+#ifdef HEALTHY_CHILD_SESSION_TESTING
+  if (testing_) return test_.sourceClosed && test_.sourceClosed(result);
+#endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
+  const auto closed = graph_->closedAck();
+  if (!closed) return false;
+  result = {closed->generation, closed->coreGeneration, closed->closureGeneration, closed->revision};
+  return true;
+#else
+  return false;
 #endif
 }
 
@@ -278,17 +372,12 @@ ChildSession::Progress ChildSession::pollRestore()
 
 ChildSession::Progress ChildSession::pollSource()
 {
-#ifdef HEALTHY_CHILD_SESSION_HEADLESS
-  return Progress::Failed;
-#else
-  const auto capability = endpoints_ ? endpoints_->capability() : nullptr;
-  const bool retained = !failed_ && graph_ && capability && capability->stillValid(generation_) &&
-      graph_->ownsEndpoints(endpoints_);
-  if (!started_ || !sourceRun_ || !retained) { fail(); return Progress::Failed; }
+  if (!started_ || !sourceRun_ || !retained()) { fail(); return Progress::Failed; }
   if (sourceStage_ == SourceStage::Done) return Progress::Ready;
   if (sourceStage_ == SourceStage::ControlCancel) {
-    const auto result = endpoints_->cancel(Role::Control);
-    if (result == Io::Pending) return Progress::Pending;
+    const auto result = controlCancelStarted_ ? endpoints_->poll(Role::Control) : endpoints_->cancel(Role::Control);
+    controlCancelStarted_ = true;
+    if (result == Io::Pending || result == Io::Unconfirmed) return Progress::Pending;
     if (result != Io::Failed || !endpoints_->canceledWithoutData(Role::Control) ||
         !queueAck(closedFrame_, false)) { fail(); return Progress::Failed; }
     sourceStage_ = SourceStage::ClosedAck;
@@ -301,8 +390,7 @@ ChildSession::Progress ChildSession::pollSource()
     sourceStage_ = SourceStage::Done;
     return Progress::Ready;
   }
-  auto* graph = graph_->graphOnGuiThread();
-  if (!graph) { fail(); return Progress::Failed; }
+  if (!valid()) { fail(); return Progress::Failed; }
   if (sourceStage_ == SourceStage::Idle) return Progress::Pending;
   if (sourceStage_ == SourceStage::Evidence) {
     const auto result = advance(Role::Evidence, sourceIo_);
@@ -319,32 +407,31 @@ ChildSession::Progress ChildSession::pollSource()
   }
   if (sourceStage_ == SourceStage::Stop) {
     QByteArray response;
-    const auto status = graph->sourcePollStop(response);
-    if (status == HealthyRestart::AsyncStop::Status::Failed || !valid()) { fail(); return Progress::Failed; }
-    if (status == HealthyRestart::AsyncStop::Status::Pending) return Progress::Pending;
+    const auto status = sourcePollStop(response);
+    if (status == Progress::Failed || !valid()) { fail(); return Progress::Failed; }
+    if (status == Progress::Pending) return Progress::Pending;
     if (!queueAck(response, false)) { fail(); return Progress::Failed; }
     sourceStage_ = SourceStage::StopAck;
   }
   if (sourceStage_ == SourceStage::StopAck) {
     if (!pollAck()) { fail(); return Progress::Failed; }
     if (!ackFrame_.isEmpty()) return Progress::Pending;
-    if (!valid() || !graph->requestRetirement()) { fail(); return Progress::Failed; }
+    if (!valid() || !sourceRetire()) { fail(); return Progress::Failed; }
     sourceStage_ = SourceStage::Retirement;
   }
   if (sourceStage_ == SourceStage::Retirement) {
-    const auto status = graph->pollRetirement();
-    if (status == FixtureGraph::Progress::Failed) { fail(); return Progress::Failed; }
-    if (status == FixtureGraph::Progress::Pending) return Progress::Pending;
-    const auto closed = graph_->closedAck();
-    if (!closed || closed->generation != generation_ || closed->revision != sourceRevision_ ||
-        !capability->stillValid(generation_) || !graph_->ownsEndpoints(endpoints_)) { fail(); return Progress::Failed; }
+    const auto status = sourcePollRetire();
+    if (status == Progress::Failed) { fail(); return Progress::Failed; }
+    if (status == Progress::Pending) return Progress::Pending;
+    SourceClosed closed;
+    if (!sourceClosed(closed) || closed.generation != generation_ || closed.revision != sourceRevision_ ||
+        !retained()) { fail(); return Progress::Failed; }
     closedFrame_ = FixtureRestart::encodeClosed({sourceRun_, sourceLaunch_, stopSequence_, sourceRevision_,
-        closed->coreGeneration, closed->generation, closed->closureGeneration});
+        closed.core, closed.generation, closed.closure});
     if (closedFrame_.isEmpty()) { fail(); return Progress::Failed; }
     sourceStage_ = SourceStage::ControlCancel;
   }
   return Progress::Pending;
-#endif
 }
 
 bool ChildSession::load()
