@@ -15,7 +15,7 @@ static void cancelBeforeGrant()
 {
   int grantToken, controlToken, stops = 0, loads = 0;
   ChildGate gate(&grantToken, 100);
-  RestartChild child(gate, &grantToken, &controlToken, binding(), 9, digest(), {
+  RestartChild child(gate, &grantToken, &controlToken, 1, 9, digest(), {
     [] { return true; }, [&] { ++stops; return gate.cancel(yes, nullptr); }, [&] { ++loads; return true; }, [] { return true; }});
   QByteArray ack;
   CHECK(child.control(&controlToken, encodeControl({ControlKind::UserStop, 1, 4}), ack));
@@ -29,7 +29,7 @@ static void cancelAfterLoad()
 {
   int grantToken, controlToken, stops = 0, loads = 0, seeks = 0;
   ChildGate gate(&grantToken, 100);
-  RestartChild child(gate, &grantToken, &controlToken, binding(), 9, digest(), {
+  RestartChild child(gate, &grantToken, &controlToken, 1, 9, digest(), {
     [] { return true; }, [&] { ++stops; return gate.cancel(yes, nullptr); },
     [&] { ++loads; return true; }, [&] { ++seeks; return true; }});
   QByteArray grantAck; CHECK(child.grant(&grantToken, encodeGrant(binding()), 10, true, grantAck));
@@ -50,7 +50,7 @@ static void failedStopAndReentry()
 {
   int grantToken, controlToken, loads = 0;
   ChildGate gate(&grantToken, 100);
-  RestartChild child(gate, &grantToken, &controlToken, binding(), 9, digest(), {
+  RestartChild child(gate, &grantToken, &controlToken, 1, 9, digest(), {
     [] { return true; }, [] { return false; }, [&] { ++loads; return true; }, [] { return true; }});
   QByteArray grantAck; CHECK(child.grant(&grantToken, encodeGrant(binding()), 10, true, grantAck));
   QByteArray ack("unchanged");
@@ -59,7 +59,7 @@ static void failedStopAndReentry()
   ChildGate gate2(&grantToken, 100);
   RestartChild* owner = nullptr;
   QByteArray reentrantAck;
-  RestartChild reentrant(gate2, &grantToken, &controlToken, binding(), 9, digest(), {
+  RestartChild reentrant(gate2, &grantToken, &controlToken, 1, 9, digest(), {
     [] { return true; }, [&] { return gate2.cancel(yes, nullptr); },
     [&] { CHECK(owner->control(&controlToken, encodeControl({ControlKind::UserStop, 2, 4}), reentrantAck)); return true; },
     [] { return true; }});
@@ -75,7 +75,7 @@ static void rejectsBadPermits()
   for (int which = 0; which < 5; ++which) {
     int grantToken, controlToken, loads = 0;
     ChildGate gate(&grantToken, 100);
-    RestartChild child(gate, &grantToken, &controlToken, binding(), 9, digest(), {
+    RestartChild child(gate, &grantToken, &controlToken, 1, 9, digest(), {
       [] { return true; }, [&] { return gate.cancel(yes, nullptr); },
       [&] { ++loads; return true; }, [] { return true; }});
     QByteArray response;
@@ -95,7 +95,7 @@ static void duplicatePermitRevokes()
 {
   int grantToken, controlToken, loads = 0, seeks = 0, stops = 0;
   ChildGate gate(&grantToken, 100);
-  RestartChild child(gate, &grantToken, &controlToken, binding(), 9, digest(), {
+  RestartChild child(gate, &grantToken, &controlToken, 1, 9, digest(), {
     [] { return true; }, [&] { ++stops; return gate.cancel(yes, nullptr); },
     [&] { ++loads; return true; }, [&] { ++seeks; return true; }});
   QByteArray response; CHECK(child.grant(&grantToken, encodeGrant(binding()), 10, true, response));
@@ -104,9 +104,28 @@ static void duplicatePermitRevokes()
   CHECK(!child.seek() && loads == 1 && seeks == 1 && stops == 1);
 }
 
+static void committedGrantMutations()
+{
+  for (int which = 0; which < 3; ++which) {
+    int grantToken, controlToken, loads = 0;
+    ChildGate gate(&grantToken, 100);
+    RestartChild child(gate, &grantToken, &controlToken, 1, 9, digest(), {
+      [] { return true; }, [&] { return gate.cancel(yes, nullptr); },
+      [&] { ++loads; return true; }, [] { return true; }});
+    auto changed = binding();
+    if (which == 0) ++changed.run;
+    if (which == 1) ++changed.positionMs;
+    if (which == 2) changed.desiredPaused = !changed.desiredPaused;
+    QByteArray response("unchanged");
+    CHECK(!child.grant(&grantToken, encodeGrant(changed), 10, true, response));
+    CHECK(response == "unchanged" && !child.load() && !child.seek() && loads == 0);
+  }
+}
+
 int main(int argc, char** argv)
 {
   QCoreApplication app(argc, argv);
-  cancelBeforeGrant(); cancelAfterLoad(); failedStopAndReentry(); rejectsBadPermits(); duplicatePermitRevokes();
+  cancelBeforeGrant(); cancelAfterLoad(); failedStopAndReentry(); rejectsBadPermits();
+  duplicatePermitRevokes(); committedGrantMutations();
   return 0;
 }
