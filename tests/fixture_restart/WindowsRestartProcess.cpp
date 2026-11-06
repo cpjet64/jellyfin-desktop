@@ -86,6 +86,17 @@ bool WindowsRestartProcess::ownsChannel(const WindowsRestartChannel* channel) co
   return channel && std::find(channels_.begin(), channels_.end(), channel) != channels_.end();
 }
 
+bool WindowsRestartProcess::ownsEndpoint(const WindowsRestartChannel* channel,
+                                         const WindowsRestartIo* io) const
+{
+  const auto found = std::find(channels_.begin(), channels_.end(), channel);
+  if (!channel || !io || found == channels_.end()) return false;
+  const size_t index = static_cast<size_t>(found - channels_.begin());
+  return index < io_.size() && io_[index] == io && channel->owned_ && io->owned_ &&
+      channel->connected_ && !channel->pending_ && channel->server_ != INVALID_HANDLE_VALUE &&
+      !io->closed_ && io->bound_ == channel->server_;
+}
+
 bool WindowsRestartProcess::closeParentChannel(WindowsRestartChannel* channel)
 {
   const auto found = std::find(channels_.begin(), channels_.end(), channel);

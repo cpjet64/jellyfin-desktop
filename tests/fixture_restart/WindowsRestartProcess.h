@@ -38,6 +38,7 @@ public:
       const std::vector<WindowsRestartChannel*>& channels, std::vector<WindowsRestartIo*> io);
   bool release();
   bool ownsChannel(const WindowsRestartChannel* channel) const;
+  bool ownsEndpoint(const WindowsRestartChannel* channel, const WindowsRestartIo* io) const;
   bool launchEstablished() const { return established_ && process_ && assigned_; }
   bool closeParentChannel(WindowsRestartChannel* channel);
   ProcessProgress launch(const std::wstring& executable,
