@@ -24,7 +24,7 @@ struct Scenario {
   std::atomic<std::int64_t> now{10};
   std::atomic<bool> capability{true};
   bool capabilityThrows = false;
-  std::shared_ptr<std::atomic_bool> lease = std::make_shared<std::atomic_bool>(true);
+  std::shared_ptr<RetirementClaim> claim = std::make_shared<RetirementClaim>(9);
   std::shared_ptr<std::atomic_bool> revoked = std::make_shared<std::atomic_bool>(false);
   std::optional<Closure::StopKey> stop = Closure::StopKey{
       Closure::StopKey::Origin::InternalReplacement, 1, 2, 3, 4, 5, 6, 7, true};
@@ -38,6 +38,7 @@ struct Scenario {
   std::shared_ptr<Lifetime> lifetime;
   std::shared_ptr<Owner> owner;
   std::shared_ptr<GraphRetirement> retirement;
+  Closure::Operations closureOps;
 
   Scenario() {
     Operations render;
@@ -63,9 +64,10 @@ struct Scenario {
     b.closure.quitWorker = [] {};
     b.closure.joinWorker = [this](std::int64_t) { ++joins; return true; };
     b.closure.destroyCore = [this] { ++destroys; workerClosed = true; };
-    b.stopLease = [this] { return lease; };
-    b.bindStopLease = [this](std::shared_ptr<const std::atomic_bool> value) {
-      return value == lease && slot->bindStopLeaseForTest(std::move(value));
+    closureOps = b.closure;
+    b.stopClaim = [this] { return claim; };
+    b.bindStopClaim = [this](std::shared_ptr<const RetirementClaim> value) {
+      return value == claim && slot->bindStopClaimForTest(std::move(value));
     };
     b.capability = [this](std::uint64_t generation) {
       if (capabilityThrows) throw std::runtime_error("capability unavailable");
@@ -94,13 +96,20 @@ static void qualified_sequence()
   s.stop = Closure::StopKey{Closure::StopKey::Origin::InternalReplacement, 1, 2, 3, 4, 5, 6, 7, true};
   check(s.retirement->request() && s.binds == 1 && s.job);
   check(s.events == 0 && s.joins == 0 && s.destroys == 0 && !s.released);
-  s.job->run(); s.job.reset(); pollUntilDone(s);
+  s.job->run(); s.job.reset();
+  auto other = std::make_shared<RetirementClaim>(9);
+  Closure wrong(s.slot, s.lifetime, 9, 100, *s.stop, other, s.closureOps);
+  check(!wrong.start() && s.events == 0);
+  auto wrongGeneration = std::make_shared<RetirementClaim>(10);
+  Closure stale(s.slot, s.lifetime, 9, 100, *s.stop, wrongGeneration, s.closureOps);
+  check(!stale.start() && s.events == 0);
+  pollUntilDone(s);
   check(s.events == 1 && s.joins == 1 && s.destroys == 1 && s.released);
   check(s.retirement->ack() && s.retirement->ack()->generation == 9);
-  s.lease->store(false); check(!s.retirement->ack());
-  s.lease->store(true); s.capability = false; check(!s.retirement->ack());
+  s.capability = false; check(!s.retirement->ack());
   s.capability = true; s.now = 100; check(!s.retirement->ack());
   s.now = 9; check(!s.retirement->ack());
+  s.now = 10; s.claim->revoke(); check(!s.retirement->ack());
 }
 
 static void missing_job_and_revocation()
@@ -110,7 +119,7 @@ static void missing_job_and_revocation()
   check(missing.retirement->poll() == FixtureGraph::Progress::Failed);
   check(!missing.access->closed && missing.owner->retained() && !missing.released);
   Scenario revoked; check(revoked.retirement->request());
-  revoked.lease->store(false);
+  revoked.claim->revoke();
   revoked.job->run();
   check(revoked.retirement->poll() == FixtureGraph::Progress::Failed);
   revoked.job.reset();
