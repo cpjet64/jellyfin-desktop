@@ -14,17 +14,18 @@ class RuntimeConfigureTest(unittest.TestCase):
         (ROOT / 'deps').mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(prefix='w589-runtime-', dir=ROOT / 'deps') as temporary:
             base = Path(temporary)
-            lines = ['cmake_minimum_required(VERSION 3.16)', 'project(runtime NONE)',
+            (base / 'main.cpp').write_text('int main() { return 0; }\n', encoding='utf-8')
+            lines = ['cmake_minimum_required(VERSION 3.10...3.31 FATAL_ERROR)', 'project(runtime LANGUAGES CXX)',
                      'set(MAIN_TARGET app)', f'set(MPV_LIBRARY "{(base / "mpv/libmpv.lib").as_posix()}")',
-                     'add_executable(test_log IMPORTED GLOBAL)',
-                     f'set_target_properties(test_log PROPERTIES IMPORTED_LOCATION "{(base / "tests/test_log.exe").as_posix()}")']
+                     'add_executable(test_log main.cpp)',
+                     f'set_target_properties(test_log PROPERTIES RUNTIME_OUTPUT_DIRECTORY "{(base / "tests").as_posix()}")']
             for name in ('test_systemcomponent', 'test_settings', 'test_displaymanager',
                          'test_windowmanager', 'test_log_rotation'):
                 if name != missing:
                     lines.append(f'add_custom_target({name})')
             if application:
-                lines += ['add_executable(app IMPORTED GLOBAL)',
-                          f'set_target_properties(app PROPERTIES IMPORTED_LOCATION "{(base / "app/app.exe").as_posix()}")']
+                lines += ['add_executable(app main.cpp)',
+                          f'set_target_properties(app PROPERTIES RUNTIME_OUTPUT_DIRECTORY "{(base / "app").as_posix()}")']
             lines.append(f'include("{MODULE.as_posix()}")')
             (base / 'CMakeLists.txt').write_text('\n'.join(lines), encoding='utf-8')
             result = subprocess.run(['cmake', '-S', str(base), '-B', str(base / 'build'), '-G', 'Ninja'],
@@ -44,6 +45,7 @@ class RuntimeConfigureTest(unittest.TestCase):
     def test_missing_required_consumer_fails(self):
         code, _, output = self.configure(False, missing='test_settings')
         self.assertNotEqual(code, 0)
+        self.assertIn('Cannot add target-level dependencies to non-existent target', output)
         self.assertIn('test_settings', output)
 
 
