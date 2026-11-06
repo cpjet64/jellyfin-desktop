@@ -18,6 +18,12 @@ public:
   VerifiedModule& operator=(const VerifiedModule&) = delete;
   bool stillValid(std::uint64_t generation) const noexcept;
   bool launchBinding(std::uint64_t generation, LaunchBinding& output) const noexcept;
+  bool launchId(std::uint64_t generation, std::uint64_t& output) const noexcept;
+#ifdef HEALTHY_MODULE_TESTING
+  // Dedicated accessor tests only; never present in the native fixture.
+  static std::unique_ptr<VerifiedModule> forAccessorTest(std::uint64_t generation,
+      std::uint64_t launch, bool (*valid)(void*) noexcept, void* context);
+#endif
   SourceContract renderSourceContract(std::uint64_t generation) const noexcept;
   SourceContract wakeSourceContract(std::uint64_t generation) const noexcept;
 private:

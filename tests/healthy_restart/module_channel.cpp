@@ -14,14 +14,21 @@ struct VerifiedModule::State {
   HANDLE identityPipe = nullptr;
   ~State() { if (identityPipe) CloseHandle(identityPipe); if (parent) CloseHandle(parent); }
 #endif
-  std::uint64_t generation = 0, deadline = 0;
+  std::uint64_t generation = 0, deadline = 0, launch = 0;
   LaunchBinding binding;
   std::unique_ptr<ImportedModule> module;
+#ifdef HEALTHY_MODULE_TESTING
+  bool (*testValid)(void*) noexcept = nullptr;
+  void* testContext = nullptr;
+#endif
 };
 VerifiedModule::VerifiedModule(std::unique_ptr<State> state) : state_(std::move(state)) {}
 VerifiedModule::~VerifiedModule() = default;
 bool VerifiedModule::stillValid(std::uint64_t generation) const noexcept
 {
+#ifdef HEALTHY_MODULE_TESTING
+  if (state_ && state_->testValid) return generation && generation == state_->generation && state_->testValid(state_->testContext);
+#endif
 #if defined(_WIN32) && defined(_M_X64)
   return state_ && generation && generation == state_->generation && state_->parent &&
       GetTickCount64() < state_->deadline && WaitForSingleObject(state_->parent, 0) == WAIT_TIMEOUT &&
@@ -31,6 +38,23 @@ bool VerifiedModule::stillValid(std::uint64_t generation) const noexcept
   return false;
 #endif
 }
+bool VerifiedModule::launchId(std::uint64_t generation, std::uint64_t& output) const noexcept
+{
+  if (!stillValid(generation) || !state_->launch) return false;
+  output = state_->launch;
+  return true;
+}
+#ifdef HEALTHY_MODULE_TESTING
+std::unique_ptr<VerifiedModule> VerifiedModule::forAccessorTest(std::uint64_t generation,
+    std::uint64_t launch, bool (*valid)(void*) noexcept, void* context)
+{
+  if (!generation || !launch || !valid) return {};
+  auto state = std::make_unique<State>();
+  state->generation = generation; state->launch = launch;
+  state->testValid = valid; state->testContext = context;
+  return std::unique_ptr<VerifiedModule>(new VerifiedModule(std::move(state)));
+}
+#endif
 SourceContract VerifiedModule::renderSourceContract(std::uint64_t generation) const noexcept
 { return stillValid(generation) ? SourceContract::BuilderSourceQualified : SourceContract::Unqualified; }
 bool VerifiedModule::launchBinding(std::uint64_t generation, LaunchBinding& output) const noexcept
@@ -191,6 +215,7 @@ ModuleGateProgress ChildModuleGate::finish()
         WaitForSingleObject(state_->parent, 0) != WAIT_TIMEOUT) return state_->progress;
     auto verified = std::make_unique<VerifiedModule::State>();
     verified->generation = state_->generation; verified->deadline = state_->deadline;
+    verified->launch = expected.launch;
     verified->binding = expected.binding;
     verified->parent = state_->parent; state_->parent = nullptr;
     verified->identityPipe = state_->pipe; state_->pipe = nullptr;
