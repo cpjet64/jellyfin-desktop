@@ -105,11 +105,15 @@ static void qualified_sequence()
   check(!stale.start() && s.events == 0);
   pollUntilDone(s);
   check(s.events == 1 && s.joins == 1 && s.destroys == 1 && s.released);
-  check(s.retirement->ack() && s.retirement->ack()->generation == 9);
+  const auto ack = s.retirement->ack();
+  check(ack && ack->generation == 9 && ack->coreGeneration == 2 && ack->closureGeneration == 9 &&
+        ack->revision == 5 && ack->attempt == 6 && ack->completedAt == 10);
   s.capability = false; check(!s.retirement->ack());
   s.capability = true; s.now = 100; check(!s.retirement->ack());
   s.now = 9; check(!s.retirement->ack());
   s.now = 10; s.claim->revoke(); check(!s.retirement->ack());
+  check(ack->generation == 9 && ack->coreGeneration == 2 && ack->closureGeneration == 9 &&
+        ack->revision == 5 && ack->attempt == 6 && ack->completedAt == 10);
 }
 
 static void missing_job_and_revocation()

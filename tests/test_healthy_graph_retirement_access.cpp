@@ -40,7 +40,7 @@ static void successful_access_does_not_cycle()
   std::weak_ptr<int> weakModule = module;
   access->capability = GraphAccessOps::capabilityForTest(access,
       [module](std::uint64_t generation) { return *module == 1 && generation == 9; });
-  access->closed.emplace(ClosedAck{9, 10});
+  access->closed.emplace(ClosedAck{9, 2, 9, 5, 6, 10});
   check(access->capability(9));
   module.reset(); access.reset();
   check(weakAccess.expired() && weakModule.expired());
