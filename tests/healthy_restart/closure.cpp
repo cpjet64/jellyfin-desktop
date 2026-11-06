@@ -38,6 +38,11 @@ Closure::~Closure()
 bool Closure::validTime()
 {
   if (invalidated_.load() || !lease_ || !lease_->load() || !ops_.now) return false;
+  auto lifetime = slot_ ? slot_->current() : nullptr;
+#ifdef HEALTHY_RETIREMENT_TESTING
+  if (testLifetime_) lifetime = testLifetime_;
+#endif
+  if (!lifetime || !lifetime->ack(generation_)) return false;
   const auto now = ops_.now();
   if (now < lastTime_ || now >= deadline_) return false;
   lastTime_ = now;
@@ -169,6 +174,11 @@ Closure::Facts Closure::facts() const { std::lock_guard<std::mutex> lock(mutex_)
 bool Closure::closed(std::uint64_t generation) const
 {
   const auto value = facts();
-  return generation == generation_ && lease_ && lease_->load() && value.phase == Phase::Closed;
+  auto lifetime = slot_ ? slot_->current() : nullptr;
+#ifdef HEALTHY_RETIREMENT_TESTING
+  if (testLifetime_) lifetime = testLifetime_;
+#endif
+  return generation == generation_ && lease_ && lease_->load() && lifetime &&
+      lifetime->ack(generation_) && value.phase == Phase::Closed;
 }
 }

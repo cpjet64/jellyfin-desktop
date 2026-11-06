@@ -8,16 +8,19 @@ using HealthyRetirement::Closure;
 using HealthyRetirement::WakeClosure;
 
 bool PlayerComponent::healthyPrepareWake(std::uint64_t generation,
-                                         const HealthyModuleIdentity::VerifiedModule& module)
+                                         const HealthyModuleIdentity::VerifiedModule& module,
+                                         QObject* dispatcher)
 {
   if (QThread::currentThread() != thread() || m_mpv || m_healthyWake || !generation ||
+      !dispatcher || dispatcher->thread() != thread() ||
       !module.stillValid(generation) || module.wakeSourceContract(generation) !=
       HealthyModuleIdentity::SourceContract::BuilderSourceQualified) return false;
   auto weak = std::make_shared<std::weak_ptr<WakeClosure>>();
-  auto wake = std::make_shared<WakeClosure>(generation, [this, weak](std::uint64_t gen) {
-    if (!QMetaObject::invokeMethod(this, [this, weak, gen] {
+  const QPointer<PlayerComponent> player{this};
+  auto wake = std::make_shared<WakeClosure>(generation, [dispatcher, player, weak](std::uint64_t gen) {
+    if (!QMetaObject::invokeMethod(dispatcher, [player, weak, gen] {
       auto state = weak->lock();
-      if (state && state->deliveryAllowed(gen)) emit onMpvEvents();
+      if (player && state && state->deliveryAllowed(gen)) emit player->onMpvEvents();
     }, Qt::QueuedConnection)) throw std::runtime_error("wake delivery was not queued");
   });
   *weak = wake;
@@ -37,18 +40,22 @@ Closure::EventResult PlayerComponent::healthyCloseEvents()
     m_healthyEventFencing = true;
     m_healthyWake->closeAdmission();
     auto* handle = m_mpv->mpv();
-    m_healthyWakeThread = QThread::create([this, handle] {
-      m_healthyWakeSucceeded.store(m_healthyWake->unregisterOnce(
-          [handle] { mpv_set_wakeup_callback(handle, nullptr, nullptr); }, *m_healthyWakeModule));
-      m_healthyWakeReturned.store(true);
+    auto task = std::make_shared<HealthyRetirement::WakeUnregisterTask>();
+    task->wake = m_healthyWake;
+    task->module = m_healthyWakeModule;
+    m_healthyWakeTask = task;
+    m_healthyWakeThread = QThread::create([task, handle] {
+      task->succeeded.store(task->wake->unregisterOnce(
+          [handle] { mpv_set_wakeup_callback(handle, nullptr, nullptr); }, *task->module));
+      task->returned.store(true);
     });
     m_healthyWakeThread->start();
     return Closure::EventResult::Pending;
   }
-  if (!m_healthyWakeReturned.load() || !m_healthyWakeThread->wait(0)) return Closure::EventResult::Pending;
+  if (!m_healthyWakeTask->returned.load() || !m_healthyWakeThread->wait(0)) return Closure::EventResult::Pending;
   delete m_healthyWakeThread;
   m_healthyWakeThread = nullptr;
-  if (!m_healthyWakeSucceeded.load() || !m_healthyWake->drained()) return Closure::EventResult::Failed;
+  if (!m_healthyWakeTask->succeeded.load() || !m_healthyWake->drained()) return Closure::EventResult::Failed;
   m_healthyEventFencing = false;
   handleMpvEvents();
   if (m_healthyHooks || m_healthyEventActive) return Closure::EventResult::Failed;

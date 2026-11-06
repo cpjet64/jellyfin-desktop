@@ -1,12 +1,11 @@
 diff --git a/mpvqt/mpvabstractitem.cpp b/mpvqt/mpvabstractitem.cpp
-index f056284..c5fb6e8 100644
+index f056284..af7934f 100644
 --- a/mpvqt/mpvabstractitem.cpp
 +++ b/mpvqt/mpvabstractitem.cpp
-@@ -12,0 +13,3 @@
-+#include <limits>
-+#include <stdexcept>
+@@ -12,0 +13,2 @@
 +#include "closure.h"
-@@ -56,6 +59 @@ MpvAbstractItem::~MpvAbstractItem()
++#include "closure_native.h"
+@@ -56,6 +58 @@ MpvAbstractItem::~MpvAbstractItem()
 -    mpv_set_wakeup_callback(d_ptr->m_mpv, nullptr, nullptr);
 -
 -    d_ptr->m_workerThread->quit();
@@ -14,73 +13,50 @@ index f056284..c5fb6e8 100644
 -    d_ptr->m_workerThread->deleteLater();
 -    mpv_terminate_destroy(d_ptr->m_mpv);
 +    // The closure already joined and destroyed the core. Never repeat teardown.
-@@ -86 +84,26 @@ bool MpvAbstractItem::healthyBindToken(std::shared_ptr<HealthyRetirement::QtToke
+@@ -86 +83,18 @@ bool MpvAbstractItem::healthyBindToken(std::shared_ptr<HealthyRetirement::QtToke
 -bool MpvAbstractItem::healthyApproveDestruction(bool eventWorkerClosed)
-+void MpvAbstractItem::healthyRequestWorkerQuit()
++std::shared_ptr<HealthyRetirement::NativeTeardownState> MpvAbstractItem::healthyTakeNative()
 +{
-+    if (d_ptr->m_workerThread) d_ptr->m_workerThread->quit();
-+}
-+
-+bool MpvAbstractItem::healthyWaitWorker(std::int64_t remainingNanoseconds)
-+{
-+    if (QThread::currentThread() == thread() || !d_ptr->m_workerThread || remainingNanoseconds <= 0)
-+        return false;
-+    const auto milliseconds = static_cast<std::uint64_t>(remainingNanoseconds / 1000000);
-+    const auto limit = static_cast<std::uint64_t>(std::numeric_limits<unsigned long>::max() - 1);
-+    const auto bounded = static_cast<unsigned long>(milliseconds < limit ? milliseconds : limit);
-+    const bool joined = d_ptr->m_workerThread->wait(bounded);
-+    if (joined) d_ptr->m_healthyJoined.store(true);
-+    return joined;
-+}
-+
-+void MpvAbstractItem::healthyDestroyCore()
-+{
-+    if (!d_ptr->m_healthyJoined.load() || d_ptr->m_healthyDestroyStarted.exchange(true) || !d_ptr->m_mpv)
-+        throw std::logic_error("healthy core destruction is not permitted");
-+    mpv_terminate_destroy(d_ptr->m_mpv);
-+    d_ptr->m_healthyDestroyReturned.store(true);
-+}
-+
-+bool MpvAbstractItem::healthyFinalizeClosed(const HealthyRetirement::Closure &closure)
-@@ -91 +114,8 @@ bool MpvAbstractItem::healthyApproveDestruction(bool eventWorkerClosed)
--    if (!lifetime || !lifetime->mayDestroy(slot->generation(), eventWorkerClosed)) return false;
++    const auto token = d_ptr->m_healthyToken;
++    const auto slot = token ? token->slot() : nullptr;
++    const auto lifetime = slot ? slot->current() : nullptr;
 +    if (QThread::currentThread() != thread() || !slot || !lifetime ||
-+        !closure.closed(slot->generation()) || !d_ptr->m_healthyJoined.load() ||
-+        !d_ptr->m_healthyDestroyReturned.load() || d_ptr->m_mpv_gl ||
-+        !lifetime->mayDestroy(slot->generation(), true)) return false;
-+    delete d_ptr->m_workerThread;
++        !lifetime->ack(slot->generation()) || d_ptr->m_mpv_gl ||
++        !d_ptr->m_workerThread || !d_ptr->m_mpv) return {};
++    auto state = std::make_shared<HealthyRetirement::NativeTeardownState>(
++        d_ptr->m_workerThread, d_ptr->m_mpv, thread());
 +    d_ptr->m_workerThread = nullptr;
 +    d_ptr->m_mpvController = nullptr;
 +    d_ptr->m_mpv = nullptr;
++    return state;
++}
++
++bool MpvAbstractItem::healthyFinalizeClosed(const HealthyRetirement::Closure &closure,
++                                             HealthyRetirement::NativeTeardownState &state)
+@@ -91 +105,4 @@ bool MpvAbstractItem::healthyApproveDestruction(bool eventWorkerClosed)
+-    if (!lifetime || !lifetime->mayDestroy(slot->generation(), eventWorkerClosed)) return false;
++    if (QThread::currentThread() != thread() || !slot || !lifetime ||
++        !closure.closed(slot->generation()) || d_ptr->m_workerThread || d_ptr->m_mpv || d_ptr->m_mpv_gl ||
++        !lifetime->mayDestroy(slot->generation(), true)) return false;
++    if (!state.finalize()) return false;
 diff --git a/mpvqt/mpvabstractitem.h b/mpvqt/mpvabstractitem.h
-index a659a90..ebb179e 100644
+index a659a90..dc9c82e 100644
 --- a/mpvqt/mpvabstractitem.h
 +++ b/mpvqt/mpvabstractitem.h
 @@ -16,0 +17 @@
 +#include <cstdint>
 @@ -18 +19 @@
 -namespace HealthyRetirement { class QtToken; }
-+namespace HealthyRetirement { class QtToken; class Closure; class FixtureGraph; }
++namespace HealthyRetirement { class QtToken; class Closure; class FixtureGraph; class NativeTeardownState; }
 @@ -30 +30,0 @@ public:
 -    bool healthyApproveDestruction(bool eventWorkerClosed);
-@@ -41,0 +42,7 @@ public:
+@@ -41,0 +42,6 @@ public:
 +    friend class HealthyRetirement::FixtureGraph;
 +
 +private:
-+    void healthyRequestWorkerQuit();
-+    bool healthyWaitWorker(std::int64_t remainingNanoseconds);
-+    void healthyDestroyCore();
-+    bool healthyFinalizeClosed(const HealthyRetirement::Closure &closure);
-diff --git a/mpvqt/mpvabstractitem_p.h b/mpvqt/mpvabstractitem_p.h
-index 77fa134..3c0cd1d 100644
---- a/mpvqt/mpvabstractitem_p.h
-+++ b/mpvqt/mpvabstractitem_p.h
-@@ -12,0 +13 @@
-+#include <atomic>
-@@ -25,0 +27,3 @@ public:
-+    std::atomic<bool> m_healthyJoined{false};
-+    std::atomic<bool> m_healthyDestroyStarted{false};
-+    std::atomic<bool> m_healthyDestroyReturned{false};
++    std::shared_ptr<HealthyRetirement::NativeTeardownState> healthyTakeNative();
++    bool healthyFinalizeClosed(const HealthyRetirement::Closure &closure,
++                               HealthyRetirement::NativeTeardownState &state);
 diff --git a/player/PlayerMpvEvents.cpp b/player/PlayerMpvEvents.cpp
 index 4018e5b..b8eb993 100644
 --- a/player/PlayerMpvEvents.cpp
@@ -114,7 +90,7 @@ index 4018e5b..b8eb993 100644
 -  QTimer::singleShot(pause, resume);
 +  QTimer::singleShot(pause, trackedResume);
 diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
-index 3c39505..214d864 100644
+index 3c39505..f9fdc90 100644
 --- a/player/PlayerComponent.h
 +++ b/player/PlayerComponent.h
 @@ -19,0 +20,5 @@
@@ -123,9 +99,10 @@ index 3c39505..214d864 100644
 +#include "module_channel.h"
 +
 +namespace HealthyRetirement { class FixtureGraph; }
-@@ -252,0 +258,10 @@ private:
+@@ -252,0 +258,11 @@ private:
 +  friend class HealthyRetirement::FixtureGraph;
-+  bool healthyPrepareWake(std::uint64_t generation, const HealthyModuleIdentity::VerifiedModule& module);
++  bool healthyPrepareWake(std::uint64_t generation, const HealthyModuleIdentity::VerifiedModule& module,
++                          QObject* dispatcher);
 +  HealthyRetirement::Closure::EventResult healthyCloseEvents();
 +  std::shared_ptr<HealthyRetirement::WakeClosure> m_healthyWake;
 +  const HealthyModuleIdentity::VerifiedModule* m_healthyWakeModule = nullptr;
@@ -133,7 +110,7 @@ index 3c39505..214d864 100644
 +  bool m_healthyEventActive = false, m_healthyEventsClosed = false;
 +  bool m_healthyEventFencing = false;
 +  QThread* m_healthyWakeThread = nullptr;
-+  std::atomic_bool m_healthyWakeReturned{false}, m_healthyWakeSucceeded{false};
++  std::shared_ptr<HealthyRetirement::WakeUnregisterTask> m_healthyWakeTask;
 diff --git a/player/PlayerIntentCommands.cpp b/player/PlayerIntentCommands.cpp
 index 770ef4b..0c6e397 100644
 --- a/player/PlayerIntentCommands.cpp

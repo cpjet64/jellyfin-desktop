@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
 namespace HealthyModuleIdentity { class VerifiedModule; }
 
 namespace HealthyRetirement {
@@ -31,5 +32,10 @@ private:
   const Delivery delivery_;
   std::atomic<bool> open_{true}, attempted_{false}, unregistered_{false}, failed_{false};
   std::atomic<unsigned> active_{0};
+};
+struct WakeUnregisterTask {
+  std::shared_ptr<WakeClosure> wake;
+  const HealthyModuleIdentity::VerifiedModule* module = nullptr;
+  std::atomic_bool returned{false}, succeeded{false};
 };
 }
