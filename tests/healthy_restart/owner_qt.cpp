@@ -17,7 +17,8 @@ private:
   QThread* const guiThread_;
 };
 }
-QtScheduler::QtScheduler(QQuickWindow* window) : window_(window), timer_(new QTimer(this))
+QtScheduler::QtScheduler(QQuickWindow* window, const std::shared_ptr<Containment>& containment)
+  : window_(window), containment_(containment), timer_(new QTimer(this))
 {
   timer_->setInterval(50);
   QObject::connect(timer_, &QTimer::timeout, this, [this] {
@@ -42,10 +43,12 @@ bool QtScheduler::schedule(std::shared_ptr<RenderJob> job)
 void QtScheduler::watch(QObject* dependent)
 {
   if (!dependent) {
+    if (const auto containment = containment_.lock()) containment->markLost();
     if (const auto owner = owner_.lock()) owner->invalidate();
     return;
   }
   QObject::connect(dependent, &QObject::destroyed, this, [this] {
+    if (const auto containment = containment_.lock()) containment->markLost();
     if (const auto owner = owner_.lock()) owner->invalidate();
   }, Qt::DirectConnection);
 }
