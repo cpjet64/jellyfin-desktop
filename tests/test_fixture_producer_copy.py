@@ -25,8 +25,10 @@ class FixtureProducerCopyTest(unittest.TestCase):
             shutil.copy2(ROOT / 'src' / group / name, self.root / 'src' / group)
         (self.root / 'tests').mkdir()
         shutil.copy2(ROOT / 'tests/test_webclient_containment.cpp', self.root / 'tests')
+        shutil.copytree(ROOT / 'tests/fixture_restart', self.root / 'tests/fixture_restart')
         (self.root / 'patches/fixture-producer').mkdir(parents=True)
         shutil.copy2(ROOT / 'patches/fixture-producer/0001-producer-binding.patch', self.root / 'patches/fixture-producer')
+        shutil.copy2(ROOT / 'patches/fixture-producer/0002-render-capture.patch', self.root / 'patches/fixture-producer')
 
     def configure(self, *options):
         args = ['cmake', '-DPLAYER_INTENT_DIAGNOSTIC_ONLY=ON', '-DUSE_STATIC_MPVQT=ON',
@@ -179,8 +181,38 @@ class FixtureProducerCopyTest(unittest.TestCase):
         self.assertNotEqual(self.configure('-DMPVQT_C2_DIAGNOSTIC_ONLY=ON').returncode, 0)
 
     def test_modified_patch_fails(self):
-        patch = self.root / 'patches/fixture-producer/0001-producer-binding.patch'
-        patch.write_bytes(patch.read_bytes() + b'\n')
+        for name in ('0001-producer-binding.patch', '0002-render-capture.patch'):
+            patch = self.root / 'patches/fixture-producer' / name
+            original = patch.read_bytes()
+            patch.write_bytes(original + b'\n')
+            self.assertNotEqual(self.configure().returncode, 0, name)
+            patch.write_bytes(original)
+
+    def test_renderer_and_capture_dependencies_are_bound(self):
+        result = self.configure()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        copied = self.root / 'fixture-producer-copy/mpvqt'
+        renderer = (copied / 'mpvrenderer.cpp').read_text(encoding='utf-8')
+        self.assertLess(renderer.index('mpv_render_context_update(context)'),
+                        renderer.index('mpv_render_context_get_info(context, info)'))
+        self.assertLess(renderer.index('mpv_render_context_get_info(context, info)'),
+                        renderer.index('mpv_render_context_render(context, params)'))
+        self.assertLess(renderer.index('mpv_render_context_render(context, params)'),
+                        renderer.index('fbo->toImage(true)'))
+        core = (ROOT / 'src/CMakeLists.txt').read_text(encoding='utf-8')
+        for name in ('frame_capture.h', 'frame_capture.cpp', 'frame_acceptance.h', 'frame_acceptance.cpp'):
+            source = self.root / 'tests/fixture_restart' / name
+            original = source.read_bytes()
+            self.assertEqual((copied / name).read_bytes().replace(b'\r\n', b'\n'),
+                             original.replace(b'\r\n', b'\n'))
+            if name.endswith('.cpp'):
+                self.assertIn('${_fixture_copy}/mpvqt/' + name, core)
+            source.write_bytes(original + b'\n// mismatch\n')
+            self.assertNotEqual(self.configure().returncode, 0, name)
+            source.write_bytes(original)
+        source = self.root / 'external/mpvqt/src/mpvrenderer.cpp'
+        original = source.read_bytes()
+        source.write_bytes(original + b'\n// mismatch\n')
         self.assertNotEqual(self.configure().returncode, 0)
 
 

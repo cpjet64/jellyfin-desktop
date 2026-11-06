@@ -60,6 +60,11 @@ set(_fixture_player_inputs
   "WindowsMpvLoader.cpp|d26f12893901f4b2896b7c92f4134877926d5a4821fc0367a7c327e52158fc8a")
 set(_fixture_test_inputs
   "test_webclient_containment.cpp|75de059742269bc205841cc2026114f5eb0cf6a478caade681a3a8ff07f8486b")
+set(_fixture_capture_inputs
+  "frame_acceptance.h|bfe7bf1d7506dede2a1279b8138afac06a14a1d65758ed5bbf7e28a8bef67db2"
+  "frame_acceptance.cpp|268f2e813440cce50be70d269031fa180dcd6fbe320f5c80b014fd88aab16231"
+  "frame_capture.h|582f3bbb462fe994df07709d4b86d49107387edfab150c2ab8c79ce27615d66c"
+  "frame_capture.cpp|f0f0c44b9f66282c5314356d10b49325086bfd003b94b39b432c3f792654db0a")
 set(_fixture_core_inputs "ComponentManager.cpp|e69695ac1e88b8044793ccd5245c61a156f483db5d30c74ef284627f701eae66")
 set(_fixture_ui_inputs "WindowManager.cpp|d89e641bad2aa01bf0e2e2855e345a1b155ba73efbe32e30ba708747c1073ae7")
 set(_fixture_input_inputs "InputComponent.cpp|1d8814277c3b901455cfcf25fc31400c78b4be8bcde9e36c09bc624ac7a9b823")
@@ -73,6 +78,7 @@ set(_fixture_output_hashes
   "mpvqt/mpvabstractitem.h|1f6cef7948680f6d5923b721ba9ed471351ccff9099f66fc708ffff7a5c73613"
   "mpvqt/mpvcontroller.cpp|46c3634917f6cdd749da39343512d21c9746dfe5c1383006c76f02b418e631d0"
   "mpvqt/mpvcontroller.h|02d4b3499ec99d3eb0f3d5e5f7bc7e9d283fb027a72a195c2779876e5f5229c7"
+  "mpvqt/mpvrenderer.cpp|ee623a28c4bb694f85280d32708f54d7426a0a3c475deb73c8f97f6c5ce9d90d"
   "player/MpvVideoItem.cpp|df2d8f3429067ef94cf4e737bad91555ff3d47545c6a03502a6763267895c2f8"
   "player/MpvVideoItem.h|697c7c2d34cdf99c266dcab77623a9be5c35ab966cb555739932159e8bed13cf"
   "player/PlayerMpvEvents.cpp|4640cd20afb7539adf4fb5420273f871ce38aead8d64c4f393d8a32b7d02215f"
@@ -107,6 +113,7 @@ endfunction()
 _fixture_copy_inputs("${CMAKE_SOURCE_DIR}/external/mpvqt/src" "${_fixture_copy}/mpvqt" _fixture_mpv_inputs)
 _fixture_copy_inputs("${CMAKE_SOURCE_DIR}/src/player" "${_fixture_copy}/player" _fixture_player_inputs)
 _fixture_copy_inputs("${CMAKE_SOURCE_DIR}/tests" "${_fixture_copy}/tests" _fixture_test_inputs)
+_fixture_copy_inputs("${CMAKE_SOURCE_DIR}/tests/fixture_restart" "${_fixture_copy}/mpvqt" _fixture_capture_inputs)
 foreach(group IN ITEMS core ui input power)
   _fixture_copy_inputs("${CMAKE_SOURCE_DIR}/src/${group}" "${_fixture_copy}/${group}" _fixture_${group}_inputs)
 endforeach()
@@ -124,6 +131,28 @@ execute_process(COMMAND "${CMAKE_COMMAND}" -E env "GIT_CEILING_DIRECTORIES=${CMA
 if(NOT result EQUAL 0)
   message(FATAL_ERROR "Fixture source patch failed: ${error}")
 endif()
+set(_renderer_patch "${CMAKE_SOURCE_DIR}/patches/fixture-producer/0002-render-capture.patch")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_renderer_patch}")
+if(NOT EXISTS "${_renderer_patch}" OR IS_SYMLINK "${_renderer_patch}")
+  message(FATAL_ERROR "Fixture renderer patch missing or linked")
+endif()
+file(READ "${_renderer_patch}" _renderer_patch_contents)
+string(REPLACE "\r\n" "\n" _renderer_patch_contents "${_renderer_patch_contents}")
+string(SHA256 _renderer_patch_hash "${_renderer_patch_contents}")
+if(NOT _renderer_patch_hash STREQUAL "cb95ccdcf16a887fa0ad53b340d1be3d0b8b861cf313b65f39d41b30b43ba7da")
+  message(FATAL_ERROR "Fixture renderer patch hash mismatch")
+endif()
+set(_renderer_patch_copy "${_fixture_copy}/.renderer-patch")
+if(IS_SYMLINK "${_renderer_patch_copy}")
+  message(FATAL_ERROR "Fixture renderer patch copy must not be a link")
+endif()
+file(WRITE "${_renderer_patch_copy}" "${_renderer_patch_contents}")
+execute_process(COMMAND "${CMAKE_COMMAND}" -E env "GIT_CEILING_DIRECTORIES=${CMAKE_BINARY_DIR}"
+  "${GIT_EXECUTABLE}" apply --no-index --unidiff-zero --whitespace=nowarn "${_renderer_patch_copy}"
+  WORKING_DIRECTORY "${_fixture_copy}" RESULT_VARIABLE result ERROR_VARIABLE error)
+if(NOT result EQUAL 0)
+  message(FATAL_ERROR "Fixture renderer patch failed: ${error}")
+endif()
 foreach(entry IN LISTS _fixture_output_hashes)
   string(REPLACE "|" ";" pair "${entry}")
   list(GET pair 0 name)
@@ -137,7 +166,7 @@ foreach(entry IN LISTS _fixture_output_hashes)
 endforeach()
 
 # Every unpatched copied file must also remain byte-identical to its input.
-set(_fixture_changed_mpv mpvabstractitem.cpp mpvabstractitem.h mpvcontroller.cpp mpvcontroller.h)
+set(_fixture_changed_mpv mpvabstractitem.cpp mpvabstractitem.h mpvcontroller.cpp mpvcontroller.h mpvrenderer.cpp)
 set(_fixture_changed_player MpvVideoItem.cpp MpvVideoItem.h PlayerMpvEvents.cpp PlayerComponent.cpp PlayerComponent.h)
 set(_fixture_changed_core ComponentManager.cpp)
 set(_fixture_changed_ui WindowManager.cpp)
@@ -165,5 +194,16 @@ foreach(group IN ITEMS mpv player core ui input power)
       message(FATAL_ERROR "Fixture unchanged output hash mismatch: ${folder}/${name}")
     endif()
   endforeach()
+endforeach()
+foreach(entry IN LISTS _fixture_capture_inputs)
+  string(REPLACE "|" ";" pair "${entry}")
+  list(GET pair 0 name)
+  list(GET pair 1 expected)
+  file(READ "${_fixture_copy}/mpvqt/${name}" contents)
+  string(REPLACE "\r\n" "\n" contents "${contents}")
+  string(SHA256 actual "${contents}")
+  if(NOT actual STREQUAL expected)
+    message(FATAL_ERROR "Fixture capture output hash mismatch: ${name}")
+  endif()
 endforeach()
 file(WRITE "${_fixture_copy}/.fixture-producer-owned" "fixture-producer-copy-v1\n")

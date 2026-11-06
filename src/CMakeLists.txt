@@ -237,6 +237,8 @@ if(LINUX_DBUS)
 endif()
 
 if(FIXTURE_PRODUCER_COPY_ONLY)
+  target_sources(FixtureMpvQt PRIVATE "${_fixture_copy}/mpvqt/frame_capture.cpp"
+    "${_fixture_copy}/mpvqt/frame_acceptance.cpp")
   set(_fixture_core_sources)
   foreach(source IN LISTS ALL_SRCS)
     if(source MATCHES "^${CMAKE_SOURCE_DIR}/src/player/(.+)$")
