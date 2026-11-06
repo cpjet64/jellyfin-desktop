@@ -10,15 +10,43 @@
 
 namespace HealthyRetirement {
 namespace {
+#ifdef HEALTHY_RETIREMENT_TESTING
+std::function<bool()> installHook;
+#endif
 Closure::StopKey closureKey(const HealthyRestart::AsyncStop::Key& key)
 {
   return {Closure::StopKey::Origin::InternalReplacement, key.host, key.core, key.epoch,
           key.request, key.revision, key.attempt, key.entry, key.paused};
 }
 }
+#ifdef HEALTHY_RETIREMENT_TESTING
+void setGraphInstallHookForTest(std::function<bool()> hook) { installHook = std::move(hook); }
+#endif
 bool FixtureGraph::installRetirementClaim()
 {
   const auto containment = containment_.lock();
+  const auto reserved = access_ ? std::atomic_load(&access_->intentClaim) : nullptr;
+  if (reserved && dispatcher_ && dispatcher_->thread() == QThread::currentThread() &&
+      player_ && slot_ && player_->m_nativeRestore.armed) {
+    const auto& key = player_->m_nativeRestore.key;
+    const RetirementClaim::ArmIdentity identity{key.host, key.core, key.revision, key.attempt};
+    if (!containment || !containment->intact() || access_->phase.load() != AccessPhase::Normal ||
+        access_->revoked.load() || !reserved->installable(slot_->generation(), identity) ||
+        !player_->healthyInstallRetirementClaim(reserved, slot_->generation())) {
+      reserved->denyRetirement(slot_->generation(), identity);
+      return false;
+    }
+#ifdef HEALTHY_RETIREMENT_TESTING
+    try {
+      if (installHook && !installHook()) { reserved->denyRetirement(slot_->generation(), identity); return false; }
+    } catch (...) { reserved->denyRetirement(slot_->generation(), identity); return false; }
+#endif
+    if (!reserved->qualifyRetirement(slot_->generation(), identity)) {
+      reserved->denyRetirement(slot_->generation(), identity);
+      return false;
+    }
+    return true;
+  }
   if (!dispatcher_ || dispatcher_->thread() != QThread::currentThread() || !containment ||
       !containment->intact() || access_->phase.load() != AccessPhase::Normal || access_->revoked.load() ||
       !player_ || !owner_ || std::atomic_load(&access_->intentClaim)) return false;

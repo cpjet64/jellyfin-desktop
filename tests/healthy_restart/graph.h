@@ -23,6 +23,9 @@ class TestHealthyGraphArm;
 namespace HealthyModuleIdentity { class VerifiedModule; class ChildEndpoints; }
 
 namespace HealthyRetirement {
+#ifdef HEALTHY_RETIREMENT_TESTING
+void setGraphInstallHookForTest(std::function<bool()> hook);
+#endif
 class Closure;
 class NativeTeardownState;
 class QtScheduler;

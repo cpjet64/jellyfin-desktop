@@ -148,6 +148,15 @@ FixtureRestart::RestartChild::Actions FixtureGraph::restoreActions(
       return session_->gate->canceled() ? session_->adapter->armActual() : Result{};
     const auto binding = *grant;
     session_->binding = binding;
+    auto claim = RetirementClaim::makeArmReservation(slot_->generation());
+    if (!claim || !claim->reserveArm(slot_->generation()) ||
+        access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) return Result{};
+    std::shared_ptr<RetirementClaim> empty;
+    if (!std::atomic_compare_exchange_strong(&access_->intentClaim, &empty, claim)) return Result{};
+    if (access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) {
+      claim->contain();
+      return Result{};
+    }
     Result result;
     {
       QScopedValueRollback<bool> inFlight(session_->armInFlight, true);
@@ -156,13 +165,19 @@ FixtureRestart::RestartChild::Actions FixtureGraph::restoreActions(
     if (result.status != Result::Status::Armed) return result;
     session_->host = result.identity.host; session_->core = result.identity.core;
     session_->intentRevision = result.identity.intentRevision; session_->attempt = result.identity.attempt;
+    const RetirementClaim::ArmIdentity identity{result.identity.host, result.identity.core,
+        result.identity.intentRevision, result.identity.attempt};
+    if (!claim->bindArm(slot_->generation(), identity)) return Result{};
+    if (claim->contained() || !player_->healthyInstallRetirementClaim(claim, slot_->generation(),
+        HealthyRestart::ClaimInstallMode::BindRestoreReservation)) {
+      claim->denyRetirement(slot_->generation(), identity);
+      return Result{};
+    }
     if (session_->firstFailure != HealthyRestart::FailureCause::None) {
       beginRestoreFailure(session_->firstFailure);
       return Result{};
     }
     const bool claimInstalled = installRetirementClaim();
-      if (!claimInstalled && player_->m_healthyStopLease)
-      player_->m_healthyStopLease->revoke();
     if (!claimInstalled) return Result{}; // Actual identity remains in Session for containment.
       const bool retained = cleanupSessionReady();
     if (session_->firstFailure != HealthyRestart::FailureCause::None) {
