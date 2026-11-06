@@ -74,13 +74,14 @@ private:
   bool withinNormal() const;
   enum class Phase { Idle, Stop, Closed, Wait, Launch, Transfer, Accepted, Permit, Monitor, Cleanup, Done, Failed, Unconfirmed };
   void stepCancellation();
+  void completePhase();
   Operations& operations_;
   const void* channel_;
   Grant parentBinding_;
   qint64 start_, normal_, overall_;
   Evidence evidence_;
   bool captured_ = false, canceled_ = false, burned_ = false, replacementStarted_ = false;
-  bool bLaunchStarted_ = false;
+  bool bLaunchStarted_ = false, permitClaimed_ = false;
   bool dispatchActive_ = false;
   QByteArray frame_;
   QByteArray commitment_;

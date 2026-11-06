@@ -38,7 +38,7 @@ bool validateFixtureEvidence(const Evidence& evidence)
       !number(observation, "id", id) || !number(observation, "requestedNs", requested, std::numeric_limits<qint64>::max()) ||
       !number(observation, "receivedNs", received, std::numeric_limits<qint64>::max()) || !number(observation, "positionMs", position) ||
       !observation.value("paused").isBool() || !host || !core || !revision || !attempt || !entry || !id ||
-      requested > received || position >= 10000 || attempt != evidence.sourceAttempt ||
+      requested > received || position >= 10000 || attempt != evidence.sourceAttempt || revision != evidence.grant.revision ||
       qint64(position) != evidence.grant.positionMs || observation.value("paused").toBool() != evidence.grant.desiredPaused)
     return false;
   PlaybackCheckpoint checkpoint;

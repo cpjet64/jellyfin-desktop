@@ -185,7 +185,10 @@ void Broker::step()
   case Phase::Accepted: result = operations_.waitBGrantAccepted(normal_); break;
   case Phase::Permit:
     result = operations_.issueRestorePermit(normal_, [this] {
-      return !canceled_ && withinNormal() && operations_.eligibleForB(evidence_.grant) && !canceled_ && withinNormal();
+      if (permitClaimed_) return true;
+      if (canceled_ || !withinNormal() || !operations_.eligibleForB(evidence_.grant) || canceled_ || !withinNormal() || canceled_) return false;
+      permitClaimed_ = true;
+      return true;
     });
     break;
   case Phase::Monitor: result = operations_.monitorB(normal_); break;
@@ -198,6 +201,16 @@ void Broker::step()
     return;
   }
   if (result == Progress::Pending) return;
+  completePhase();
+}
+
+void Broker::completePhase()
+{
+  if (phase_ == Phase::Monitor && (!operations_.eligibleForB(evidence_.grant) || canceled_ || !withinNormal() || canceled_)) {
+    if (!canceled_) cancel();
+    stepCancellation();
+    return;
+  }
   if (phase_ == Phase::Stop) phase_ = Phase::Closed;
   else if (phase_ == Phase::Closed) phase_ = Phase::Wait;
   else if (phase_ == Phase::Wait) {
