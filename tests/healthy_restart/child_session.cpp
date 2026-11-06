@@ -416,5 +416,21 @@ bool ChildSession::seek()
   return pollRestore() == Progress::Ready && controlStage_ == ControlStage::Header &&
       ackFrame_.isEmpty() && controlIo_ == Io::Pending && valid() && dispatch(true);
 }
+
+ChildSession::Progress ChildSession::pollPlayback()
+{
+  const auto transport = pollRestore();
+  if (transport != Progress::Ready) return transport;
+  if (cancelReceived_) return Progress::Pending;
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
+  auto* graph = graph_ ? graph_->graphOnGuiThread() : nullptr;
+  if (!graph) { fail(); return Progress::Failed; }
+  const auto result = graph->pollRestorePlayback();
+  if (result == FixtureGraph::PlaybackProgress::Failed) { fail(); return Progress::Failed; }
+  return result == FixtureGraph::PlaybackProgress::Ready ? Progress::Ready : Progress::Pending;
+#else
+  return Progress::Failed;
+#endif
+}
 }
 #endif

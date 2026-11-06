@@ -34,12 +34,26 @@ bool FixtureGraph::sessionReady(bool source) const
   const auto containment = containment_.lock();
   if (!dispatcher_ || dispatcher_->thread() != QThread::currentThread() || !containment ||
       !containment->intact() || access_->phase.load() != AccessPhase::Normal ||
-      !player_ || !module_ || !endpoints_ || retirementRequested_) return false;
+      !player_ || retirementRequested_) return false;
   HealthyModuleIdentity::LaunchBinding binding;
   try {
     const auto now = clock_();
     if (now < lastSessionNow_ || now >= normalDeadline_) return false;
     lastSessionNow_ = now;
+#ifdef HEALTHY_RETIREMENT_TESTING
+    if (!source && restoreBootstrapForTest_) {
+      std::uint64_t launch = 0;
+      if (!restoreLaunch(binding, launch) || binding.role != HealthyModuleIdentity::LaunchRole::Restore ||
+          !binding.run || !launch) return false;
+      const QByteArray digest(reinterpret_cast<const char*>(binding.expectedGrantDigest.data()),
+                              int(binding.expectedGrantDigest.size()));
+      return (!session_ || (binding.run == session_->run && launch == session_->launch && digest == session_->digest)) &&
+          restoreToken(HealthyModuleIdentity::EndpointRole::Control) &&
+          restoreToken(HealthyModuleIdentity::EndpointRole::Ack) && containment->intact() &&
+          access_->phase.load() == AccessPhase::Normal && !access_->revoked.load();
+    }
+#endif
+    if (!module_ || !endpoints_) return false;
     return access_->phase.load() == AccessPhase::Normal && containment->intact() &&
         module_->stillValid(slot_->generation()) &&
         module_->launchBinding(slot_->generation(), binding) &&
@@ -54,10 +68,27 @@ bool FixtureGraph::cleanupSessionReady() const
   const auto containment = containment_.lock();
   if (!dispatcher_ || dispatcher_->thread() != QThread::currentThread() || !containment || !containment->intact() ||
       access_->phase.load() != AccessPhase::Normal || access_->revoked.load() ||
-      !module_ || !endpoints_ || retirementRequested_) return false;
+      retirementRequested_) return false;
   try {
     HealthyModuleIdentity::LaunchBinding binding;
     const auto now = clock_();
+#ifdef HEALTHY_RETIREMENT_TESTING
+    if (restoreBootstrapForTest_) {
+      std::uint64_t launch = 0;
+      if (now < lastSessionNow_ || now >= deadline_ || !restoreLaunch(binding, launch) ||
+          binding.role != HealthyModuleIdentity::LaunchRole::Restore || !binding.run || !launch ||
+          !restoreToken(HealthyModuleIdentity::EndpointRole::Control) ||
+          !restoreToken(HealthyModuleIdentity::EndpointRole::Ack) || !containment->intact() ||
+          access_->revoked.load() || access_->phase.load() != AccessPhase::Normal) return false;
+      const QByteArray digest(reinterpret_cast<const char*>(binding.expectedGrantDigest.data()),
+                              int(binding.expectedGrantDigest.size()));
+      if (session_ && (binding.run != session_->run || launch != session_->launch || digest != session_->digest))
+        return false;
+      lastSessionNow_ = now;
+      return true;
+    }
+#endif
+    if (!module_ || !endpoints_) return false;
     if (now < lastSessionNow_ || now >= deadline_ || !containment->intact() || access_->revoked.load() ||
         access_->phase.load() != AccessPhase::Normal || !module_->stillValid(slot_->generation()) ||
         !module_->launchBinding(slot_->generation(), binding) ||
@@ -73,9 +104,25 @@ bool FixtureGraph::failureCleanupReady() const
 {
   const auto containment = containment_.lock();
   if (!dispatcher_ || dispatcher_->thread() != QThread::currentThread() || !containment || !containment->intact() ||
-      !module_ || !player_ || !session_ || !session_->gate || access_->phase.load() != AccessPhase::CleanupOnly) return false;
+      !player_ || !session_ || !session_->gate || access_->phase.load() != AccessPhase::CleanupOnly) return false;
   try {
     const auto now = clock_();
+#ifdef HEALTHY_RETIREMENT_TESTING
+    if (restoreBootstrapForTest_) {
+      HealthyModuleIdentity::LaunchBinding binding;
+      std::uint64_t launch = 0;
+      if (now < lastSessionNow_ || now >= deadline_ || !restoreLaunch(binding, launch) ||
+          binding.role != HealthyModuleIdentity::LaunchRole::Restore || binding.run != session_->run ||
+          launch != session_->launch || !containment->intact() || access_->revoked.load() ||
+          access_->phase.load() != AccessPhase::CleanupOnly) return false;
+      const QByteArray digest(reinterpret_cast<const char*>(binding.expectedGrantDigest.data()),
+                              int(binding.expectedGrantDigest.size()));
+      if (digest != session_->digest) return false;
+      lastSessionNow_ = now;
+      return true;
+    }
+#endif
+    if (!module_) return false;
     if (now < lastSessionNow_ || now >= deadline_ || !containment->intact() || access_->revoked.load() ||
         access_->phase.load() != AccessPhase::CleanupOnly ||
         !module_->stillValid(slot_->generation())) return false;
@@ -208,8 +255,7 @@ FixtureRestart::RestartChild::ArmResult FixtureGraph::restoreArmActual()
   return result;
 }
 
-FixtureRestart::RestartChild::Actions FixtureGraph::restoreActions(
-    const QString& path, quint64 launchId, const QByteArray& digest)
+FixtureRestart::RestartChild::Actions FixtureGraph::restoreActions(const QString& path)
 {
   FixtureRestart::RestartChild::Actions actions;
   actions.now = clock_;
@@ -236,13 +282,12 @@ FixtureRestart::RestartChild::Actions FixtureGraph::restoreActions(
     }
     return result;
   };
-  actions.load = [this, path, launchId, digest] {
-    const auto& binding = session_->binding;
-    if (!player_->m_restoreGate && !player_->healthyBindRestoreGate(session_->gate, binding.run, launchId,
-        binding.grant, binding.revision, digest, clock_)) return false;
-    return sessionReady(false) && session_->adapter->load(path) && sessionReady(false);
+  actions.load = [this, path] {
+    return prepareRestoreAuthority() && session_->adapter->load(path) && sessionReady(false);
   };
-  actions.seek = [] { return false; }; // Held for renderer-issued target-arm capability.
+  actions.seek = [this] {
+    return captureTargetReady() && sessionReady(false) && session_->adapter->seek() && sessionReady(false);
+  };
   return actions;
 }
 
@@ -250,13 +295,13 @@ bool FixtureGraph::restoreInitialize(const QString& path)
 {
   using namespace HealthyModuleIdentity;
   if (!sessionReady(false) || session_) return false;
-  const auto grantChannel = endpoints_->token(EndpointRole::Grant);
+  const auto grantChannel = restoreToken(EndpointRole::Grant);
   if (!grantChannel) return false;
   try {
     LaunchBinding launch;
     std::uint64_t launchId = 0;
-    if (!module_->launchBinding(slot_->generation(), launch) ||
-        !module_->launchId(slot_->generation(), launchId)) { invalidate(); return false; }
+    if (!restoreLaunch(launch, launchId) || launch.role != LaunchRole::Restore || !launch.run || !launchId)
+      { invalidate(); return false; }
     const QByteArray digest(reinterpret_cast<const char*>(launch.expectedGrantDigest.data()),
                             int(launch.expectedGrantDigest.size()));
     session_ = std::make_unique<Session>();
@@ -265,9 +310,9 @@ bool FixtureGraph::restoreInitialize(const QString& path)
     session_->adapter = std::make_unique<FixtureRestartAdapter>(*player_, *session_->gate, freshId(), freshId(),
                                                                 launchId, digest, clock_);
     if (!session_->adapter->bindCleanupGate(session_->gate, deadline_)) { invalidate(); return false; }
-    auto actions = restoreActions(path, launchId, digest);
+    auto actions = restoreActions(path);
     session_->child = std::make_unique<FixtureRestart::RestartChildPlayer>(*session_->gate, grantChannel,
-        endpoints_->token(EndpointRole::Control), launch.run, launchId, digest, std::move(actions));
+        restoreToken(EndpointRole::Control), launch.run, launchId, digest, std::move(actions));
     if (sessionReady(false)) return true;
   } catch (...) {}
   invalidate();
@@ -279,7 +324,7 @@ bool FixtureGraph::restoreGrant(const QByteArray& frame, bool eof, QByteArray& r
   if (!sessionReady(false)) return false;
   if (!session_ || !session_->child) return false;
   try {
-    if (session_->child->grant(endpoints_->token(HealthyModuleIdentity::EndpointRole::Grant),
+    if (session_->child->grant(restoreToken(HealthyModuleIdentity::EndpointRole::Grant),
                                frame, clock_(), eof, response)) {
       if (session_->firstFailure != HealthyRestart::FailureCause::None) { response.clear(); return false; }
       const auto now = clock_();
@@ -298,11 +343,14 @@ bool FixtureGraph::restoreGrant(const QByteArray& frame, bool eof, QByteArray& r
           !player_->m_nativeRestore.loadAttempted && !player_->m_nativeReceipts.snapshot().key.attempt &&
           !player_->m_lastReceiptAttempt &&
           FixtureRestart::decodeCancelNoArm(response, noArm);
+      HealthyModuleIdentity::LaunchBinding liveBinding;
+      std::uint64_t liveLaunch = 0;
       if ((armed || unarmed) && access_->phase.load() == AccessPhase::Normal && !access_->revoked.load() &&
-          now >= lastSessionNow_ && now < deadline_ && module_ &&
-          module_->stillValid(slot_->generation()) && endpoints_ &&
-          endpoints_->token(HealthyModuleIdentity::EndpointRole::Grant) &&
-          endpoints_->token(HealthyModuleIdentity::EndpointRole::Ack)) {
+          now >= lastSessionNow_ && now < deadline_ && restoreLaunch(liveBinding, liveLaunch) &&
+          liveBinding.role == HealthyModuleIdentity::LaunchRole::Restore && liveBinding.run == session_->run &&
+          liveLaunch == session_->launch &&
+          restoreToken(HealthyModuleIdentity::EndpointRole::Grant) &&
+          restoreToken(HealthyModuleIdentity::EndpointRole::Ack)) {
         lastSessionNow_ = now;
         return true;
       }
@@ -322,8 +370,8 @@ bool FixtureGraph::restoreControl(const QByteArray& frame, QByteArray& response)
   try {
     if (!session_ || !session_->child || !available()) return false;
     if (cancel) { session_->cancelSequence = control.sequence; session_->cancelRevision = control.revision; }
-    if (session_->child->control(endpoints_->token(HealthyModuleIdentity::EndpointRole::Control), frame, response) &&
-        available()) return true;
+    if (session_->child->control(restoreToken(HealthyModuleIdentity::EndpointRole::Control), frame, response) &&
+        available() && (frame.left(4) != "JRP1" || prepareRestoreAuthority())) return true;
   } catch (...) {}
   response.clear(); return false;
 }
@@ -338,12 +386,11 @@ bool FixtureGraph::restorePollCancellation(QByteArray& response)
 }
 bool FixtureGraph::restoreLoad()
 {
-  // Held until failure-origin cleanup is retained and pumped by ChildSession.
-  return false;
+  return sessionReady(false) && session_ && session_->child && session_->child->load();
 }
 bool FixtureGraph::restoreSeek()
 {
-  return false;
+  return sessionReady(false) && session_ && session_->child && captureTargetReady() && session_->child->seek();
 }
 bool FixtureGraph::beginRestoreFailure(HealthyRestart::FailureCause cause)
 {

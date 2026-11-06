@@ -53,6 +53,7 @@ public:
   Progress pollSource();
   bool load();
   bool seek();
+  Progress pollPlayback();
   bool grantReadSettled() const { return grantSettled_; }
   void invalidate();
 private:

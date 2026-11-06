@@ -23,9 +23,10 @@ class QString;
 #ifdef HEALTHY_RETIREMENT_TESTING
 class TestHealthyGraphArm;
 class TestHealthyGraphCapture;
+class TestHealthyGraphDispatch;
 class TestHealthyGraphLifetime;
 #endif
-namespace HealthyModuleIdentity { class VerifiedModule; class ChildEndpoints; }
+namespace HealthyModuleIdentity { class VerifiedModule; class ChildEndpoints; enum class EndpointRole; struct LaunchBinding; }
 
 namespace HealthyRetirement {
 #ifdef HEALTHY_RETIREMENT_TESTING
@@ -114,6 +115,7 @@ private:
 #ifdef HEALTHY_RETIREMENT_TESTING
   friend class ::TestHealthyGraphArm;
   friend class ::TestHealthyGraphCapture;
+  friend class ::TestHealthyGraphDispatch;
   friend class ::TestHealthyGraphLifetime;
 #endif
   friend class PreparedGraph;
@@ -135,12 +137,19 @@ private:
   HealthyRestart::AsyncStop::Status sourcePollStop(QByteArray& response);
   bool restoreInitialize(const QString& path);
   FixtureRestart::RestartChild::ArmResult restoreArmActual();
-  FixtureRestart::RestartChild::Actions restoreActions(const QString& path, quint64 launchId, const QByteArray& digest);
+  FixtureRestart::RestartChild::Actions restoreActions(const QString& path);
   bool restoreGrant(const QByteArray& frame, bool eof, QByteArray& response);
   bool restoreControl(const QByteArray& frame, QByteArray& response);
   bool restorePollCancellation(QByteArray& response);
   bool restoreLoad();
   bool restoreSeek();
+  bool bindRestoreAuthority();
+  bool prepareRestoreAuthority();
+  bool restoreLaunch(HealthyModuleIdentity::LaunchBinding& binding, std::uint64_t& launch) const;
+  const void* restoreToken(HealthyModuleIdentity::EndpointRole role) const;
+  enum class PlaybackProgress { Pending, Ready, Failed };
+  PlaybackProgress pollRestorePlayback();
+  bool requestRestoreObservation();
   bool captureBaseline();
   bool captureSessionReady() const;
   bool capturePlayerBound() const;
@@ -171,12 +180,27 @@ private:
   std::shared_ptr<const HealthyModuleIdentity::VerifiedModule> module_;
   std::shared_ptr<HealthyModuleIdentity::ChildEndpoints> endpoints_;
   std::shared_ptr<Owner> owner_;
-  std::unique_ptr<CaptureController> capture_;
+  std::shared_ptr<CaptureController> capture_;
   bool retirementRequested_ = false;
   bool presented_ = false;
   bool captureBaselineRequested_ = false;
   bool captureTargetRequested_ = false;
+  quint64 restoreObservedId_ = 0;
 #ifdef HEALTHY_RETIREMENT_TESTING
+  struct TestBootstrap {
+    HealthyModuleIdentity::LaunchBinding binding;
+    std::uint64_t launch = 0;
+    const void* grant = nullptr;
+    const void* control = nullptr;
+    const void* ack = nullptr;
+    std::weak_ptr<void> storage;
+    std::function<bool()> moduleLive, endpointsLive;
+    bool accepted = false;
+  };
+  bool installRestoreBootstrapForTest(HealthyModuleIdentity::LaunchBinding binding, std::uint64_t launch,
+      const void* grant, const void* control, const void* ack, std::weak_ptr<void> storage,
+      std::function<bool()> moduleLive, std::function<bool()> endpointsLive);
+  std::shared_ptr<const TestBootstrap> restoreBootstrapForTest_;
   bool bindTestFinalizer(std::function<bool()> finalizer, std::function<void()> destroyedObserver);
   bool invokeTestFinalizer();
   struct TestFinalizerBinding {

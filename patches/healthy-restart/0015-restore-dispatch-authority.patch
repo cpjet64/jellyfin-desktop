@@ -1,0 +1,70 @@
+diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
+--- a/player/PlayerComponent.h
++++ b/player/PlayerComponent.h
+@@ -281,6 +281,7 @@ private:
+ #ifdef HEALTHY_RETIREMENT_TESTING
+   friend class TestHealthyGraphArm;
+   friend class TestHealthyGraphCapture;
++  friend class TestHealthyGraphDispatch;
+ #endif
+   friend class FixtureRestartAdapter;
+   friend class TestRestartChildPlayer;
+@@ -314,6 +315,8 @@ private:
+   bool nativeRestoreUnpauseComplete();
+   void observeNativeRestoreUnpause(const mpv_event* event);
+   bool healthyUnpauseAuthorized(bool requireHold) const;
++  bool healthyRestoreSubmissionAllowed(bool seeking) const;
++  bool healthyMarkSeekDispatch();
+   bool healthyBindRestoreGate(std::shared_ptr<const FixtureRestart::ChildGate> gate, quint64 run,
+       quint64 launch, quint64 grant, quint64 revision, QByteArray digest, std::function<qint64()> clock);
+   bool healthyBeginPausedHold(HealthyRestart::PausedHoldBinding binding);
+@@ -382,6 +385,9 @@ private:
+   HealthyRestart::RestoreCleanupState m_restoreCleanup;
+   std::shared_ptr<const FixtureRestart::ChildGate> m_restoreCleanupGate;
+   std::function<int(quint64, const char**)> m_restoreDispatch;
++  std::function<bool(bool)> m_healthyRestoreAuthority;
++  PlaybackNativeReceipts::Key m_healthyRestoreAuthorityKey;
++  qint64 m_healthySeekDispatchNs = 0;
+   struct RestoreUnpauseState {
+     bool attempted = false, submissionKnown = false, submitted = false, replied = false;
+     bool replyOk = false, failed = false;
+diff --git a/player/PlayerNativeReceipts.cpp b/player/PlayerNativeReceipts.cpp
+--- a/player/PlayerNativeReceipts.cpp
++++ b/player/PlayerNativeReceipts.cpp
+@@ -72,6 +72,10 @@ bool PlayerComponent::beginNativeReceipt(FixtureAsset asset, const QString& fixt
+ #else
+     const char* args[] = {"loadfile", path.constData(), "replace", "pause=yes", nullptr};
+ #endif
++    if (m_nativeRestore.armed && !healthyRestoreSubmissionAllowed(false)) {
++      m_nativeReceipts.submitted(result);
++      return false;
++    }
+     if (m_restoreDispatch) result = m_restoreDispatch(receiptTag | attempt, args);
+     else if (m_mpv && m_mpv->mpv()) result = mpv_command_async(m_mpv->mpv(), receiptTag | attempt, args);
+   } else if (m_receiptDispatch) {
+diff --git a/player/PlayerNativeRestore.cpp b/player/PlayerNativeRestore.cpp
+--- a/player/PlayerNativeRestore.cpp
++++ b/player/PlayerNativeRestore.cpp
+@@ -86,13 +86,20 @@ bool PlayerComponent::dispatchNativeRestoreSeek()
+       key.core != m_mpvGeneration || key.revision != m_playbackIntent.snapshot().revision) return false;
+   m_nativeRestore.seekPending = true;
+   m_nativeRestore.seekAttempted = true;
+-  m_nativeObservation.valid = false;
+-  m_nativeObservation.pending = false;
+   const qint64 ms = m_nativeRestore.grant.positionMs;
+   const QByteArray position = QByteArray::number(ms / 1000) + '.' + QByteArray::number(ms % 1000).rightJustified(3, '0');
+   const char* args[] = {"seek", position.constData(), "absolute+exact", nullptr};
+   int result = -1;
++  if (!healthyRestoreSubmissionAllowed(true) || !healthyMarkSeekDispatch()) {
++    m_nativeRestore.seekSubmissionKnown = true;
++    m_nativeRestore.seekPending = false;
++    m_nativeRestore.seekError = result;
++    m_nativeRestore.failed = true;
++    return false;
++  }
++  m_nativeObservation.valid = false;
++  m_nativeObservation.pending = false;
+   if (m_restoreDispatch) result = m_restoreDispatch(seekTag | key.attempt, args);
+   else if (m_mpv && m_mpv->mpv()) result = mpv_command_async(m_mpv->mpv(), seekTag | key.attempt, args);
+   m_nativeRestore.seekSubmissionKnown = true;
+   m_nativeRestore.seekAccepted = result >= 0;

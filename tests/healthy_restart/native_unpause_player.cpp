@@ -97,7 +97,11 @@ bool PlayerComponent::healthyBeginPausedHold(HealthyRestart::PausedHoldBinding b
 bool PlayerComponent::healthyCapturePausedHold()
 {
   if (!intentControlThread() || !m_restorePausedHold || !healthyUnpauseAuthorized(false)) return false;
-  for (auto& capture : fixture_restart::takeCaptures()) m_restorePausedHold->capture(std::move(capture));
+  for (auto& capture : fixture_restart::takeCaptures()) {
+    if (capture && m_healthySeekDispatchNs > 0 && m_nativeRestore.seekSubmissionKnown &&
+        m_nativeRestore.seekAccepted && capture->capturedAt >= static_cast<quint64>(m_healthySeekDispatchNs))
+      m_restorePausedHold->capture(std::move(capture));
+  }
   if (fixture_restart::captureOverflowed()) { m_restorePausedHold->invalidate(); return false; }
   return true;
 }
