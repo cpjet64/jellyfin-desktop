@@ -17,7 +17,7 @@ bool VerifiedModule::acceptsEndpoint(std::uintptr_t, std::uint64_t, std::uint64_
 
 namespace {
 struct Pending { void* buffer; DWORD size; };
-struct Script { std::map<HANDLE, std::deque<char>> bytes; std::map<HANDLE, Pending> pending; DWORD error = 0; bool live = true; };
+struct Script { std::map<HANDLE, std::deque<char>> bytes; std::map<HANDLE, Pending> pending; DWORD error = 0; bool live = true, holdWrite = false, loseDuringResult = false; int writes = 0; };
 Script* script;
 ChildEndpoints* reentrantEndpoint = nullptr;
 bool reenterPoll = false, nestedConsumed = false;
@@ -27,7 +27,12 @@ BOOL WINAPI closeEvent(HANDLE) { return TRUE; }
 BOOL WINAPI resetEvent(HANDLE) { return TRUE; }
 ULONGLONG WINAPI now() { return 1; }
 DWORD WINAPI lastError() { return script->error; }
-BOOL WINAPI writeIo(HANDLE, LPCVOID, DWORD size, LPDWORD count, LPOVERLAPPED) { *count = size; return TRUE; }
+BOOL WINAPI writeIo(HANDLE h, LPCVOID data, DWORD size, LPDWORD count, LPOVERLAPPED)
+{
+  ++script->writes;
+  if (script->holdWrite) { script->pending[h] = {const_cast<void*>(data), size}; script->error = ERROR_IO_PENDING; return FALSE; }
+  *count = size; return TRUE;
+}
 BOOL transfer(HANDLE h, void* buffer, DWORD size, LPDWORD count)
 {
   auto& data = script->bytes[h];
@@ -53,6 +58,10 @@ BOOL WINAPI result(HANDLE h, LPOVERLAPPED, LPDWORD count, BOOL)
     script->error = ERROR_IO_INCOMPLETE; return FALSE;
   }
   auto it = script->pending.find(h);
+  if (it != script->pending.end() && h == handle(103) && script->holdWrite) {
+    if (script->loseDuringResult) script->live = false;
+    *count = 2; script->pending.erase(it); return TRUE;
+  }
   if (it == script->pending.end() || !transfer(h, it->second.buffer, it->second.size, count)) {
     script->error = ERROR_IO_INCOMPLETE; return FALSE;
   }
@@ -137,5 +146,59 @@ void reentrantConsumption()
   CHECK(nestedConsumed && !p->grantReadSettlement() && !p->bytes(EndpointRole::Grant));
   reentrantEndpoint = nullptr;
 }
+void controlReadAndContainment()
+{
+  Script s; script = &s; auto p = trackedEndpoints(); CHECK(p);
+  CHECK(p->beginTrackedRead(EndpointRole::Ack, 4) == IoProgress::Failed);
+  CHECK(p->beginTrackedRead(EndpointRole::Control, 4) == IoProgress::Pending);
+  const auto id = p->trackedReadOperation(EndpointRole::Control); CHECK(id);
+  feed(102, QByteArray("ab")); CHECK(p->poll(EndpointRole::Control) == IoProgress::Complete);
+  const auto value = p->trackedReadSettlement(EndpointRole::Control);
+  CHECK(value && value->transferred == 2 && value->bytes[0] == 'a' && value->bytes[1] == 'b');
+  CHECK(!p->bytes(EndpointRole::Control) && !p->consumeTrackedReadSettlement(EndpointRole::Control, id + 1));
+  CHECK(p->consumeTrackedReadSettlement(EndpointRole::Control, id));
+  CHECK(!p->consumeTrackedReadSettlement(EndpointRole::Control, id));
 }
-int main() { latePartialCompletion(); invalidatedCapabilityStillSettles(); retainedOwnershipAndRole(); reentrantConsumption(); }
+void completedWriteContainment()
+{
+  Script s; script = &s; auto p = trackedEndpoints(); CHECK(p); char data[] = "ack";
+  CHECK(p->begin(EndpointRole::Ack, false, data, 3) == IoProgress::Complete);
+  CHECK(p->begin(EndpointRole::Ack, false, data, 3) == IoProgress::Failed);
+  p->beginContainment(); const auto value = p->retainedSettlement(EndpointRole::Ack);
+  CHECK(value && value->transferred == 3 && QByteArray(reinterpret_cast<const char*>(value->bytes.data()), 3) == "ack");
+  CHECK(!p->token(EndpointRole::Ack) && !p->consumeCompletedWrite(EndpointRole::Ack));
+  CHECK(p->consumeRetainedSettlement(EndpointRole::Ack, value->operation));
+  p->beginContainment(); CHECK(!p->retainedSettlement(EndpointRole::Ack));
+  CHECK(p->begin(EndpointRole::Ack, false, data, 3) == IoProgress::Failed);
+}
+void consumedWriteAndPartialCompletion()
+{
+  Script s; script = &s; auto p = trackedEndpoints(); CHECK(p); char data[] = "ack";
+  CHECK(p->begin(EndpointRole::Ack, false, data, 3) == IoProgress::Complete);
+  CHECK(p->consumeCompletedWrite(EndpointRole::Ack) && !p->consumeCompletedWrite(EndpointRole::Ack));
+  p->beginContainment(); CHECK(!p->retainedSettlement(EndpointRole::Ack));
+  Script t; script = &t; t.holdWrite = true; auto pending = trackedEndpoints(); CHECK(pending);
+  CHECK(pending->begin(EndpointRole::Ack, false, data, 3) == IoProgress::Pending);
+  pending->beginContainment(); CHECK(pending->poll(EndpointRole::Ack) == IoProgress::Failed);
+  const auto value = pending->retainedSettlement(EndpointRole::Ack);
+  CHECK(value && value->outcome == WindowsRestartIo::Settlement::Outcome::Completed &&
+        !value->read && value->requested == 3 && value->transferred == 2 && t.writes == 1);
+  CHECK(!pending->token(EndpointRole::Ack) && pending->begin(EndpointRole::Ack, false, data, 3) == IoProgress::Failed);
+}
+void reentrantAuthorityLoss()
+{
+  Script s; script = &s; s.holdWrite = true; s.loseDuringResult = true;
+  auto p = trackedEndpoints(); CHECK(p); char data[] = "ack";
+  CHECK(p->begin(EndpointRole::Ack, false, data, 3) == IoProgress::Pending);
+  CHECK(p->poll(EndpointRole::Ack) == IoProgress::Failed);
+  const auto value = p->retainedSettlement(EndpointRole::Ack);
+  CHECK(value && value->transferred == 2 && value->requested == 3 && s.writes == 1);
+  s.live = true;
+  CHECK(!p->token(EndpointRole::Ack) && p->begin(EndpointRole::Ack, false, data, 3) == IoProgress::Failed);
+}
+}
+int main()
+{
+  latePartialCompletion(); invalidatedCapabilityStillSettles(); retainedOwnershipAndRole(); reentrantConsumption();
+  controlReadAndContainment(); completedWriteContainment(); consumedWriteAndPartialCompletion(); reentrantAuthorityLoss();
+}
