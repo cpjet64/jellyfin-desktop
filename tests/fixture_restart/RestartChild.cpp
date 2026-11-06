@@ -30,7 +30,8 @@ bool RestartChild::grant(const void* channel, const QByteArray& frame, qint64 no
   if (!grantChannel_ || channel != grantChannel_) return false;
   if (currentRevision_ != binding_.revision) return false;
   if (granted_ || !actions_.arm || !actions_.cancel || !launch_ || expectedDigest_.size() != 32 ||
-      !gate_.accept(channel, frame, binding_, expectedDigest_, now, eof)) {
+      frame != encodeGrant(binding_) ||
+      !gate_.accept(channel, frame, binding_.run, expectedDigest_, now, eof)) {
     revoke(); return false;
   }
   granted_ = actions_.arm();
