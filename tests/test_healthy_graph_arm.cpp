@@ -1,7 +1,7 @@
-#include "healthy_restart/graph.h"
-#include "healthy_restart/graph_session.h"
-#include "healthy_restart/module_endpoints.h"
-#include "fixture_restart/RestartWire.h"
+#include "graph.h"
+#include "graph_session.h"
+#include "module_endpoints.h"
+#include "RestartWire.h"
 #include "player/PlayerComponent.h"
 #include "player_test_cache.h"
 #include <QCoreApplication>
