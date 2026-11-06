@@ -19,7 +19,7 @@ From the Desktop repository root, with Node and Git available, set
 `JELLYFIN_WEB_SOURCE` to that pristine file and run:
 
 ```text
-node --test tests/test_jellyfin_recovery_transaction.mjs tests/test_jellyfin_recovery_manager.cjs
+node --test tests/test_jellyfin_recovery_transaction.mjs tests/test_jellyfin_recovery_manager.cjs tests/test_jellyfin_recovery_transition.cjs
 ```
 
 The harness verifies source bytes, applies the patch to a unique disposable
@@ -30,6 +30,8 @@ that a real host, document, adapter or terminal/settlement observer is trusted.
 That boundary requires every recovery-origin callback to carry its correlation
 envelope. Untagged callbacks remain ordinary events; they cannot independently
 establish recovery ownership or settlement.
+An error correlated synchronously during dispatch is reflected by `dispatchError`
+in the begin outcome; acceptance still does not establish successful playback.
 The manager's ordinary no-argument construction has no test binding and rejects
 recovery. A provisional bridge attachment is not a test binding.
 

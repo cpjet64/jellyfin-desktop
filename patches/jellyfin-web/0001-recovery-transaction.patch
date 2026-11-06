@@ -1,8 +1,8 @@
 diff --git a/src/components/playback/playbackmanager.js b/src/components/playback/playbackmanager.js
-index a5d76ad..279a096 100644
+index a5d76ad..e9c6656 100644
 --- a/src/components/playback/playbackmanager.js
 +++ b/src/components/playback/playbackmanager.js
-@@ -32,8 +32,10 @@ import { MediaError } from 'types/mediaError';
+@@ -32,8 +32,11 @@ import { MediaError } from 'types/mediaError';
  import { getMediaError } from 'utils/mediaError';
  import { toApi } from 'utils/jellyfin-apiclient/compat';
  import { bindSkipSegment } from './skipsegment.ts';
@@ -10,10 +10,11 @@ index a5d76ad..279a096 100644
  
  const UNLIMITED_ITEMS = -1;
 +const recoveryManagers = new WeakMap();
++const stoppedBindingVersions = new WeakMap();
  
  function enableLocalPlaylistManagement(player) {
      if (player.getPlaylist) {
-@@ -72,7 +74,8 @@ function triggerPlayerChange(playbackManagerInstance, newPlayer, newTarget, prev
+@@ -72,7 +75,8 @@ function triggerPlayerChange(playbackManagerInstance, newPlayer, newTarget, prev
      Events.trigger(playbackManagerInstance, 'playerchange', [newPlayer, newTarget, previousPlayer]);
  }
  
@@ -23,7 +24,7 @@ index a5d76ad..279a096 100644
      if (!serverId) {
          // Not a server item
          // We can expand on this later and possibly report them
-@@ -92,11 +95,13 @@ function reportPlayback(playbackManagerInstance, state, player, reportPlaylist,
+@@ -92,11 +96,13 @@ function reportPlayback(playbackManagerInstance, state, player, reportPlaylist,
      }
  
      const apiClient = ServerConnections.getApiClient(serverId);
@@ -38,7 +39,7 @@ index a5d76ad..279a096 100644
  }
  
  function getPlaylistSync(playbackManagerInstance, player) {
-@@ -708,8 +713,16 @@ function sortPlayerTargets(a, b) {
+@@ -708,8 +714,16 @@ function sortPlayerTargets(a, b) {
  }
  
  export class PlaybackManager {
@@ -56,7 +57,7 @@ index a5d76ad..279a096 100644
  
          const players = [];
          let currentTargetInfo;
-@@ -934,7 +947,8 @@ export class PlaybackManager {
+@@ -934,7 +948,8 @@ export class PlaybackManager {
              }
          }
  
@@ -66,7 +67,7 @@ index a5d76ad..279a096 100644
              const previousPlayer = self._currentPlayer;
              const previousTargetInfo = currentTargetInfo;
  
-@@ -946,6 +960,8 @@ export class PlaybackManager {
+@@ -946,6 +961,8 @@ export class PlaybackManager {
                  throw new Error('targetInfo cannot be null');
              }
  
@@ -75,7 +76,7 @@ index a5d76ad..279a096 100644
              currentPairingId = null;
              self._currentPlayer = player;
              currentTargetInfo = targetInfo;
-@@ -958,10 +974,14 @@ export class PlaybackManager {
+@@ -958,10 +975,14 @@ export class PlaybackManager {
                  self.endPlayerUpdates(previousPlayer);
              }
  
@@ -90,7 +91,7 @@ index a5d76ad..279a096 100644
              triggerPlayerChange(self, player, targetInfo, previousPlayer, previousTargetInfo);
          }
  
-@@ -2083,7 +2103,40 @@ export class PlaybackManager {
+@@ -2083,7 +2104,40 @@ export class PlaybackManager {
          self.translateItemsForPlayback = translateItemsForPlayback;
          self.getItemsForPlayback = getItemsForPlayback;
  
@@ -132,7 +133,7 @@ index a5d76ad..279a096 100644
              normalizePlayOptions(options);
  
              if (self._currentPlayer) {
-@@ -2110,12 +2163,17 @@ export class PlaybackManager {
+@@ -2110,12 +2164,17 @@ export class PlaybackManager {
                  items = (await getItemsForPlayback(options.serverId, {
                      Ids: options.ids.join(',')
                  })).Items;
@@ -150,7 +151,7 @@ index a5d76ad..279a096 100644
              // Adjust the start index for additional parts added to the queue
              if (options.startIndex) {
                  let adjustedStartIndex = 0;
-@@ -2127,8 +2185,9 @@ export class PlaybackManager {
+@@ -2127,8 +2186,9 @@ export class PlaybackManager {
              }
              // getAdditionalParts returns an array of arrays of items, so flatten it
              items = items.flat();
@@ -161,7 +162,7 @@ index a5d76ad..279a096 100644
          };
  
          function getPlayerData(player) {
-@@ -2286,7 +2345,7 @@ export class PlaybackManager {
+@@ -2286,7 +2346,7 @@ export class PlaybackManager {
              return Promise.all(items.map(getItemAndParts));
          };
  
@@ -170,7 +171,7 @@ index a5d76ad..279a096 100644
              let playStartIndex = options.startIndex || 0;
              let firstItem = items[playStartIndex];
  
-@@ -2309,6 +2368,8 @@ export class PlaybackManager {
+@@ -2309,6 +2369,8 @@ export class PlaybackManager {
              const apiClient = ServerConnections.getApiClient(firstItem.ServerId);
  
              return getIntros(firstItem, apiClient, options).then(function (introsResult) {
@@ -179,7 +180,7 @@ index a5d76ad..279a096 100644
                  const introItems = introsResult.Items;
                  let introPlayOptions;
  
-@@ -2328,12 +2389,17 @@ export class PlaybackManager {
+@@ -2328,12 +2390,17 @@ export class PlaybackManager {
                  introPlayOptions.items = items;
                  introPlayOptions.startIndex = playStartIndex;
  
@@ -199,7 +200,7 @@ index a5d76ad..279a096 100644
              });
          }
  
-@@ -2344,7 +2410,80 @@ export class PlaybackManager {
+@@ -2344,7 +2411,80 @@ export class PlaybackManager {
              }
          }
  
@@ -280,7 +281,7 @@ index a5d76ad..279a096 100644
              if (item.IsPlaceHolder) {
                  loading.hide();
                  showPlaybackInfoErrorMessage(self, 'PlaybackErrorPlaceHolder');
-@@ -3258,12 +3397,14 @@ export class PlaybackManager {
+@@ -3258,12 +3398,14 @@ export class PlaybackManager {
              }
          }
  
@@ -297,7 +298,7 @@ index a5d76ad..279a096 100644
  
              const playerData = getPlayerData(player);
  
-@@ -3286,13 +3427,18 @@ export class PlaybackManager {
+@@ -3286,13 +3428,18 @@ export class PlaybackManager {
              const fullscreen = playOptions.fullscreen;
  
              const state = self.getPlayerState(player, streamInfo.item, streamInfo.mediaSource);
@@ -317,15 +318,16 @@ index a5d76ad..279a096 100644
  
              // only used internally as a safeguard to avoid reporting other events to the server before playback start
              streamInfo.started = true;
-@@ -3394,6 +3540,7 @@ export class PlaybackManager {
+@@ -3394,6 +3541,8 @@ export class PlaybackManager {
           * @param {MediaError} error.type
           */
          function onPlaybackError(e, error) {
++            if (recovery.dispatchError(e?.recovery)) return;
 +            if (!recovery.allowsEvent(e?.recovery)) return;
              const player = this;
              error = error || {};
  
-@@ -3432,6 +3579,7 @@ export class PlaybackManager {
+@@ -3432,6 +3581,7 @@ export class PlaybackManager {
          }
  
          function onPlaybackStopped(e, displayErrorCode) {
@@ -333,7 +335,7 @@ index a5d76ad..279a096 100644
              const player = this;
  
              if (getPlayerData(player).isChangingStream) {
-@@ -3502,10 +3650,13 @@ export class PlaybackManager {
+@@ -3502,17 +3652,30 @@ export class PlaybackManager {
              }
          }
  
@@ -348,15 +350,59 @@ index a5d76ad..279a096 100644
  
              // User started playing something new while existing content is playing
              let promise;
-@@ -3522,6 +3673,7 @@ export class PlaybackManager {
-             }
  
-             return promise.then(function () {
+             stopPlaybackProgressTimer(activePlayer);
+             unbindStopped(activePlayer);
++            const stoppedVersion = stoppedBindingVersions.get(activePlayer);
+ 
++            const restoreStopped = () => {
++                if (self._currentPlayer === activePlayer && stoppedBindingVersions.get(activePlayer) === stoppedVersion) {
++                    bindStopped(activePlayer);
++                }
++                if (transaction?.transitionCleanup === restoreStopped) transaction.transitionCleanup = null;
++            };
++            if (transaction) transaction.transitionCleanup = restoreStopped;
++
++            try {
+             if (activePlayer === newPlayer) {
+                 // If we're staying with the same player, stop it
+                 promise = activePlayer.stop(false);
+@@ -3520,13 +3683,17 @@ export class PlaybackManager {
+                 // If we're switching players, tear down the current one
+                 promise = activePlayer.stop(true);
+             }
++            } catch (error) {
++                restoreStopped();
++                throw error;
++            }
+ 
+-            return promise.then(function () {
++            return Promise.resolve(promise).then(function () {
++                restoreStopped();
 +                requireRecoveryOwner(transaction);
                  // Clear the data since we were not listening 'stopped'
                  getPlayerData(activePlayer).streamInfo = null;
  
-@@ -3547,22 +3699,26 @@ export class PlaybackManager {
+-                bindStopped(activePlayer);
+-
+                 if (enableLocalPlaylistManagement(activePlayer)) {
+                     reportPlayback(self, state, activePlayer, true, serverId, 'reportPlaybackStopped');
+                 }
+@@ -3537,32 +3704,40 @@ export class PlaybackManager {
+                     nextItem: newItem,
+                     nextMediaType: newItem.MediaType
+                 }]);
++            }, function (error) {
++                restoreStopped();
++                throw error;
+             });
+         }
+ 
+         function bindStopped(player) {
++            stoppedBindingVersions.set(player, (stoppedBindingVersions.get(player) || 0) + 1);
+             if (enableLocalPlaylistManagement(player)) {
+                 Events.off(player, 'stopped', onPlaybackStopped);
+                 Events.on(player, 'stopped', onPlaybackStopped);
              }
          }
  
@@ -387,7 +433,15 @@ index a5d76ad..279a096 100644
              const player = this;
              sendProgressUpdate(player, 'volumechange');
          }
-@@ -3931,6 +4087,7 @@ export class PlaybackManager {
+@@ -3593,6 +3768,7 @@ export class PlaybackManager {
+         }
+ 
+         function unbindStopped(player) {
++            stoppedBindingVersions.set(player, (stoppedBindingVersions.get(player) || 0) + 1);
+             Events.off(player, 'stopped', onPlaybackStopped);
+         }
+ 
+@@ -3931,6 +4107,7 @@ export class PlaybackManager {
      }
  
      stop(player) {

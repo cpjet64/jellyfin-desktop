@@ -70,11 +70,26 @@ export class RecoveryTransaction {
         return !!this.current && this.current.accepted && this.owns(this.current) && matches(this.current, envelope);
     }
 
+    dispatchError(envelope) {
+        const record = this.current;
+        if (!record || record.accepted || this.unsettled !== record || !this.owns(record) || !matches(record, envelope)) return false;
+        record.dispatchError = true;
+        return true;
+    }
+
     complete(record, status) {
         if (record.completed) return false;
         record.completed = true;
-        record.resolve({ ...record.key, status });
+        record.resolve({ ...record.key, status, ...(record.dispatchError ? { dispatchError: true } : {}) });
+        this.releaseSettled(record);
         return true;
+    }
+
+    releaseSettled(record) {
+        if (!record.completed || !record.terminal || !record.settled || this.unsettled !== record) return;
+        if (this.current === record) this.current = null;
+        record.active = false;
+        this.unsettled = null;
     }
 
     accept(record) {
@@ -101,6 +116,11 @@ export class RecoveryTransaction {
         if (!record) return;
         record.active = false;
         this.current = null;
+        if (record.transitionCleanup) {
+            const cleanup = record.transitionCleanup;
+            record.transitionCleanup = null;
+            try { cleanup(); } catch (_) { /* invalidation still settles */ }
+        }
         if (!record.accepted) this.complete(record, 'canceled');
     }
 
@@ -121,11 +141,7 @@ export class RecoveryTransaction {
         if (evidence.kind === 'terminal' && !record.terminal) record.terminal = true;
         else if (evidence.kind === 'settled' && !record.settled) record.settled = true;
         else return false;
-        if (record.terminal && record.settled) {
-            if (this.current === record) this.current = null;
-            record.active = false;
-            this.unsettled = null;
-        }
+        this.releaseSettled(record);
         return true;
     }
 }

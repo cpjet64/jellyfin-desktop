@@ -25,13 +25,13 @@ function patchedSource(baseline = false) {
         fs.writeFileSync(dest, bytes, { flag: 'wx' });
         const patch = path.join(root, 'patches/jellyfin-web/0001-recovery-transaction.patch');
         const patchBytes = Buffer.from(fs.readFileSync(patch, 'utf8').replace(/\r\n/g, '\n'));
-        assert.equal(sha(patchBytes), 'bd7091aabd6e471eed7838c9040b1a9e4ac3af7f562e3f28f17aa0b48b1ca88d');
+        assert.equal(sha(patchBytes), '520fb9cfa7cd17dbc3de76188038345e0e6be9dab4fa1f2e3251a5d669b83938');
         const applied = spawnSync('git', ['apply', '--no-index', '-'],
             { cwd: scratch, encoding: 'utf8', timeout: 10000, windowsHide: true,
                 input: patchBytes, env: { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(scratch) } });
         assert.equal(applied.status, 0, applied.stderr);
         const result = fs.readFileSync(dest, 'utf8').replace(/\r\n/g, '\n');
-        assert.equal(sha(Buffer.from(result)), '7954b11d008cb58684f9ab8fd1bb8569f6691fad69e9ed0a44ab09ee413582e8');
+        assert.equal(sha(Buffer.from(result)), '37a7797dffad4356a6440a975e9b55612f88bd72340c775a736af8f87231e8eb');
         assert.match(result, /this\.recoveryV1 = Object\.freeze/);
         return result;
     } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
@@ -40,7 +40,7 @@ function patchedSource(baseline = false) {
 function loadManager(fakes, baseline = false) {
     const helperBytes = fs.readFileSync(path.join(root, 'patches/jellyfin-web/recoveryTransaction.js'), 'utf8')
         .replace(/\r\n/g, '\n');
-    assert.equal(sha(Buffer.from(helperBytes)), '37e122c872fc4f52c75ab40c6ee675bc9a32df0480a8eafbdd7701e77b4d3a99');
+    assert.equal(sha(Buffer.from(helperBytes)), 'b80bc9a7cd8f3f8f098721c39ce031cd7847b5449550a9d4c2a65414b66e92e0');
     const helper = helperBytes.replace(/^export /gm, '');
     const manager = patchedSource(baseline).replace(/^import .*;\s*$/gm, '')
         .replace(/^export class PlaybackManager/m, 'class PlaybackManager')
