@@ -1,0 +1,24 @@
+diff --git a/fixture_restart/FixtureRestartAdapter.cpp b/fixture_restart/FixtureRestartAdapter.cpp
+index e4238375..9846657d 100644
+--- a/fixture_restart/FixtureRestartAdapter.cpp
++++ b/fixture_restart/FixtureRestartAdapter.cpp
+@@ -1,0 +2,5 @@
++#include <utility>
++#ifdef HEALTHY_RETIREMENT_TESTING
++namespace { std::function<void()> fixtureArmHook; }
++void setFixtureArmHookForTest(std::function<void()> hook) { fixtureArmHook = std::move(hook); }
++#endif
+@@ -9 +13,0 @@
+-#include <utility>
+@@ -67,0 +72,3 @@ FixtureRestart::RestartChild::ArmResult FixtureRestartAdapter::armActual()
++#ifdef HEALTHY_RETIREMENT_TESTING
++  try { if (fixtureArmHook) fixtureArmHook(); } catch (...) { return {}; }
++#endif
+diff --git a/fixture_restart/FixtureRestartAdapter.h b/fixture_restart/FixtureRestartAdapter.h
+index a6df28dc..94ed7d7a 100644
+--- a/fixture_restart/FixtureRestartAdapter.h
++++ b/fixture_restart/FixtureRestartAdapter.h
+@@ -9,0 +10,3 @@ class PlayerComponent;
++#ifdef HEALTHY_RETIREMENT_TESTING
++void setFixtureArmHookForTest(std::function<void()> hook);
++#endif
