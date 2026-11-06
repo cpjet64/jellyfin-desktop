@@ -1,0 +1,501 @@
+diff --git a/fixture_restart/FixtureRestartAdapter.cpp b/fixture_restart/FixtureRestartAdapter.cpp
+index a02f890..0cde0af 100644
+--- a/fixture_restart/FixtureRestartAdapter.cpp
++++ b/fixture_restart/FixtureRestartAdapter.cpp
+@@ -34 +34 @@ bool FixtureRestartAdapter::arm()
+-  if (armed_ || !grant || !gate_.allowed(grant->revision) || !host_ || !attempt_) return false;
++  if (player_.m_healthyStopAdmissionClosed.load() || armed_ || !grant || !gate_.allowed(grant->revision) || !host_ || !attempt_) return false;
+@@ -49,0 +50 @@ bool FixtureRestartAdapter::load(const QString& resolvedFixturePath)
++  if (player_.m_healthyStopAdmissionClosed.load()) return false;
+@@ -57,0 +59 @@ bool FixtureRestartAdapter::seek()
++  if (player_.m_healthyStopAdmissionClosed.load()) return false;
+@@ -72,0 +75,5 @@ bool FixtureRestartAdapter::cancel()
++  if (player_.m_healthyStopAdmissionClosed.load()) {
++    if (!player_.intentControlThread()) return false;
++    player_.cancelHealthyReplacementStop();
++    return true;
++  }
+@@ -77,0 +85 @@ bool FixtureRestartAdapter::loadA(const QString& path, const QByteArray& expecte
++  if (player_.m_healthyStopAdmissionClosed.load()) return false;
+@@ -90,0 +99 @@ bool FixtureRestartAdapter::captureA(const FixtureRestart::Grant& binding, Fixtu
++  if (player.m_healthyStopAdmissionClosed.load()) return false;
+@@ -121 +130 @@ bool FixtureRestartAdapter::captureA(const FixtureRestart::Grant& binding, Fixtu
+-bool FixtureRestartAdapter::internalReplacementStop(const FixtureRestart::Evidence& frozen)
++bool FixtureRestartAdapter::beginInternalReplacementStop(const FixtureRestart::Evidence& frozen, qint64 deadlineNs)
+@@ -127,5 +136,6 @@ bool FixtureRestartAdapter::internalReplacementStop(const FixtureRestart::Eviden
+-  const auto revision = player.m_playbackIntent.snapshot().revision;
+-  player.invalidateNativeReceipt();
+-  const auto result = player.stopMpv();
+-  return result.status == PlayerComponent::NativeStopResult::Status::Accepted &&
+-      player.m_playbackIntent.snapshot().revision == revision;
++  return player.beginHealthyReplacementStop(host_, attempt_, deadlineNs);
++}
++
++HealthyRestart::AsyncStop::Status FixtureRestartAdapter::pollInternalReplacementStop()
++{
++  return player_.pollHealthyReplacementStop();
+diff --git a/fixture_restart/FixtureRestartAdapter.h b/fixture_restart/FixtureRestartAdapter.h
+index 1f43ee4..feff249 100644
+--- a/fixture_restart/FixtureRestartAdapter.h
++++ b/fixture_restart/FixtureRestartAdapter.h
+@@ -2,0 +3 @@
++#include "async_stop.h"
+@@ -18 +19,2 @@ public:
+-  bool internalReplacementStop(const FixtureRestart::Evidence& frozen);
++  bool beginInternalReplacementStop(const FixtureRestart::Evidence& frozen, qint64 deadlineNs);
++  HealthyRestart::AsyncStop::Status pollInternalReplacementStop();
+diff --git a/fixture_restart/RestartSource.cpp b/fixture_restart/RestartSource.cpp
+index e2510cf..c03b9e0 100644
+--- a/fixture_restart/RestartSource.cpp
++++ b/fixture_restart/RestartSource.cpp
+@@ -6 +6 @@ RestartSource::RestartSource(const void* evidenceChannel, const void* controlCha
+-                             Capture capture, Stop stop)
++                             Capture capture, BeginStop beginStop, PollStop pollStop)
+@@ -8 +8 @@ RestartSource::RestartSource(const void* evidenceChannel, const void* controlCha
+-    capture_(std::move(capture)), stop_(std::move(stop))
++    capture_(std::move(capture)), beginStop_(std::move(beginStop)), pollStop_(std::move(pollStop))
+@@ -26 +26 @@ bool RestartSource::freeze(const void* channel, QByteArray& frame)
+-bool RestartSource::control(const void* channel, const QByteArray& request, QByteArray& response)
++bool RestartSource::beginControl(const void* channel, const QByteArray& request, qint64 deadlineNs)
+@@ -29 +29 @@ bool RestartSource::control(const void* channel, const QByteArray& request, QByt
+-  if (!frozen_ || stopAttempted_ || !controlChannel_ || channel != controlChannel_ || !stop_ ||
++  if (!frozen_ || stopAttempted_ || !controlChannel_ || channel != controlChannel_ || !beginStop_ || !pollStop_ ||
+@@ -31 +31 @@ bool RestartSource::control(const void* channel, const QByteArray& request, QByt
+-      command.sequence != 1 || command.revision != revision_) return false;
++      command.sequence != 1 || command.revision != revision_ || deadlineNs <= 0) return false;
+@@ -33,3 +33,24 @@ bool RestartSource::control(const void* channel, const QByteArray& request, QByt
+-  if (!stop_(evidence_)) return false;
+-  response = encodeControl({ControlKind::Ack, command.sequence, command.revision});
+-  return !response.isEmpty();
++  try { beginAccepted_ = beginStop_(evidence_, deadlineNs); }
++  catch (...) { controlFailed_ = true; return false; }
++  if (!beginAccepted_) controlFailed_ = true;
++  return beginAccepted_;
++}
++
++HealthyRestart::AsyncStop::Status RestartSource::pollControl(const void* channel, QByteArray& response)
++{
++  using Status = HealthyRestart::AsyncStop::Status;
++  response.clear();
++  if (!stopAttempted_ || !beginAccepted_ || controlFailed_ || polling_ || acknowledged_ || channel != controlChannel_ || !pollStop_)
++    return Status::Failed;
++  Status status;
++  polling_ = true;
++  try { status = pollStop_(); }
++  catch (...) { polling_ = false; controlFailed_ = true; return Status::Failed; }
++  polling_ = false;
++  if (status == Status::Failed || status == Status::Unstarted) { controlFailed_ = true; return Status::Failed; }
++  if (status != Status::Complete) return status;
++  try { response = encodeControl({ControlKind::Ack, 1, revision_}); }
++  catch (...) { controlFailed_ = true; return Status::Failed; }
++  if (response.isEmpty()) { controlFailed_ = true; return Status::Failed; }
++  acknowledged_ = true;
++  return Status::Complete;
+diff --git a/fixture_restart/RestartSource.h b/fixture_restart/RestartSource.h
+index 742ac10..4d48f06 100644
+--- a/fixture_restart/RestartSource.h
++++ b/fixture_restart/RestartSource.h
+@@ -2,0 +3 @@
++#include "async_stop.h"
+@@ -10,2 +11,4 @@ public:
+-  using Stop = std::function<bool(const Evidence&)>;
+-  RestartSource(const void* evidenceChannel, const void* controlChannel, quint64 revision, Capture capture, Stop stop);
++  using BeginStop = std::function<bool(const Evidence&, qint64)>;
++  using PollStop = std::function<HealthyRestart::AsyncStop::Status()>;
++  RestartSource(const void* evidenceChannel, const void* controlChannel, quint64 revision,
++                Capture capture, BeginStop beginStop, PollStop pollStop);
+@@ -13 +16,2 @@ public:
+-  bool control(const void* channel, const QByteArray& request, QByteArray& response);
++  bool beginControl(const void* channel, const QByteArray& request, qint64 deadlineNs);
++  HealthyRestart::AsyncStop::Status pollControl(const void* channel, QByteArray& response);
+@@ -19 +23,2 @@ private:
+-  Stop stop_;
++  BeginStop beginStop_;
++  PollStop pollStop_;
+@@ -21,0 +27 @@ private:
++  bool beginAccepted_ = false, controlFailed_ = false, polling_ = false, acknowledged_ = false;
+diff --git a/fixture_restart/RestartSourcePlayer.cpp b/fixture_restart/RestartSourcePlayer.cpp
+index a7a8cf2..db5f7b1 100644
+--- a/fixture_restart/RestartSourcePlayer.cpp
++++ b/fixture_restart/RestartSourcePlayer.cpp
+@@ -10 +10,2 @@ RestartSourcePlayer::RestartSourcePlayer(FixtureRestartAdapter& player, const vo
+-      [&player](const Evidence& evidence) { return player.internalReplacementStop(evidence); })
++      [&player](const Evidence& evidence, qint64 deadline) { return player.beginInternalReplacementStop(evidence, deadline); },
++      [&player] { return player.pollInternalReplacementStop(); })
+diff --git a/fixture_restart/RestartSourcePlayer.h b/fixture_restart/RestartSourcePlayer.h
+index ee5e239..1aaa9b8 100644
+--- a/fixture_restart/RestartSourcePlayer.h
++++ b/fixture_restart/RestartSourcePlayer.h
+@@ -11,2 +11,4 @@ public:
+-  bool control(const void* channel, const QByteArray& request, QByteArray& response)
+-  { return source_.control(channel, request, response); }
++  bool beginControl(const void* channel, const QByteArray& request, qint64 deadlineNs)
++  { return source_.beginControl(channel, request, deadlineNs); }
++  HealthyRestart::AsyncStop::Status pollControl(const void* channel, QByteArray& response)
++  { return source_.pollControl(channel, response); }
+diff --git a/player/PlaybackIntent.cpp b/player/PlaybackIntent.cpp
+index 16d6e39..d6270d7 100644
+--- a/player/PlaybackIntent.cpp
++++ b/player/PlaybackIntent.cpp
+@@ -10,0 +11 @@ bool PlaybackIntent::advance(bool newRequest) noexcept
++  if (const auto lease = retirementLease_.lock()) lease->store(false);
+diff --git a/player/PlaybackIntent.h b/player/PlaybackIntent.h
+index a8a590a..1d79778 100644
+--- a/player/PlaybackIntent.h
++++ b/player/PlaybackIntent.h
+@@ -3,0 +4,2 @@
++#include <atomic>
++#include <memory>
+@@ -41,0 +44,2 @@ private:
++  friend class PlayerComponent;
++  void watchRetirement(const std::shared_ptr<std::atomic_bool>& lease) noexcept { retirementLease_ = lease; }
+@@ -42,0 +47 @@ private:
++  std::weak_ptr<std::atomic_bool> retirementLease_;
+diff --git a/player/PlayerComponent.cpp b/player/PlayerComponent.cpp
+index a0baeef..8bb9074 100644
+--- a/player/PlayerComponent.cpp
++++ b/player/PlayerComponent.cpp
+@@ -94,0 +95 @@ void PlayerComponent::initializeMpv()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -228,0 +230 @@ void PlayerComponent::setVideoRectangle(int x, int y, int w, int h)
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -239,0 +242 @@ void PlayerComponent::setQtQuickWindow(QQuickWindow* window)
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -253,0 +257 @@ void PlayerComponent::setWindow(QQuickWindow* window)
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -281,0 +286 @@ void PlayerComponent::streamSwitch()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -287,0 +293 @@ bool PlayerComponent::switchDisplayFrameRate()
++  if (m_healthyStopAdmissionClosed.load()) return false;
+@@ -330,0 +337 @@ void PlayerComponent::onRestoreDisplay()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -338,0 +346 @@ void PlayerComponent::onRefreshRateChange()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -602,0 +611 @@ void PlayerComponent::setVideoOnlyMode(bool enable)
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -698,68 +706,0 @@ void PlayerComponent::notifyVolumeChange(double volume)
+-///////////////////////////////////////////////////////////////////////////////////////////////////
+-QVariant PlayerComponent::getAudioDeviceList()
+-{
+-  if (!m_mpv) {
+-    qWarning() << "PlayerComponent::getAudioDeviceList: mpv not initialized yet";
+-    return QVariant();
+-  }
+-  return m_mpv->getProperty( "audio-device-list");
+-}
+-
+-///////////////////////////////////////////////////////////////////////////////////////////////////
+-void PlayerComponent::setAudioDevice(const QString& name)
+-{
+-  if (!m_mpv) {
+-    qWarning() << "PlayerComponent::setAudioDevice: mpv not initialized yet";
+-    return;
+-  }
+-  m_mpv->setProperty( "audio-device", name);
+-}
+-
+-///////////////////////////////////////////////////////////////////////////////////////////////////
+-void PlayerComponent::setVolume(int volume)
+-{
+-  if (!m_mpv) {
+-    qWarning() << "PlayerComponent::setVolume: mpv not initialized yet";
+-    return;
+-  }
+-  // Will fail if no audio output opened (i.e. no file playing)
+-  m_mpv->setProperty( "volume", volume);
+-}
+-
+-///////////////////////////////////////////////////////////////////////////////////////////////////
+-int PlayerComponent::volume()
+-{
+-  if (!m_mpv) {
+-    qWarning() << "PlayerComponent::volume: mpv not initialized yet";
+-    return 0;
+-  }
+-  QVariant volume = m_mpv->getProperty( "volume");
+-  if (volume.isValid())
+-    return volume.toInt();
+-  return 0;
+-}
+-
+-///////////////////////////////////////////////////////////////////////////////////////////////////
+-void PlayerComponent::setMuted(bool muted)
+-{
+-  if (!m_mpv) {
+-    qWarning() << "PlayerComponent::setMuted: mpv not initialized yet";
+-    return;
+-  }
+-  // Will fail if no audio output opened (i.e. no file playing)
+-  m_mpv->setProperty( "mute", muted);
+-}
+-
+-///////////////////////////////////////////////////////////////////////////////////////////////////
+-bool PlayerComponent::muted()
+-{
+-  if (!m_mpv) {
+-    qWarning() << "PlayerComponent::muted: mpv not initialized yet";
+-    return false;
+-  }
+-  QVariant mute = m_mpv->getProperty( "mute");
+-  if (mute.isValid())
+-    return mute.toBool();
+-  return false;
+-}
+-
+@@ -768,0 +710 @@ QVariantList PlayerComponent::findStreamsForURL(const QString &url)
++  if (m_healthyStopAdmissionClosed.load()) return {};
+@@ -793,0 +736 @@ void PlayerComponent::reselectStream(const QVariant &streamSelection, MediaType
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -906,0 +850 @@ void PlayerComponent::setSubtitleDelay(qint64 milliseconds)
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -916,0 +861 @@ void PlayerComponent::setPlaybackRate(int rate)
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -928,0 +874 @@ qint64 PlayerComponent::getPosition()
++  if (m_healthyStopAdmissionClosed.load()) return 0;
+@@ -941,0 +888 @@ qint64 PlayerComponent::getDuration()
++  if (m_healthyStopAdmissionClosed.load()) return 0;
+@@ -982,0 +930 @@ void PlayerComponent::updateAudioDeviceList()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -1027,0 +976 @@ void PlayerComponent::updateAudioConfiguration()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -1034,0 +984 @@ void PlayerComponent::setAudioConfiguration()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -1093,0 +1044 @@ void PlayerComponent::updateSubtitleConfiguration()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -1100,0 +1052 @@ void PlayerComponent::setSubtitleConfiguration()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -1161,0 +1114 @@ void PlayerComponent::updateVideoAspectSettings()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -1208,0 +1162 @@ void PlayerComponent::updateVideoConfiguration()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -1215,0 +1170 @@ void PlayerComponent::setVideoConfiguration()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -1259,0 +1215 @@ void PlayerComponent::setOtherConfiguration()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -1281,0 +1238 @@ void PlayerComponent::updateConfiguration()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -1328,0 +1286 @@ QString PlayerComponent::videoInformation() const
++  if (m_healthyStopAdmissionClosed.load()) return {};
+diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
+index f9fdc90..e4e9c3e 100644
+--- a/player/PlayerComponent.h
++++ b/player/PlayerComponent.h
+@@ -24,0 +25,2 @@ namespace HealthyRetirement { class FixtureGraph; }
++#include "async_stop.h"
++#include <atomic>
+@@ -272,0 +275 @@ private:
++  friend class TestHealthyAsyncStop;
+@@ -300,0 +304,19 @@ private:
++  bool beginHealthyReplacementStop(quint64 host, quint64 attempt, qint64 deadlineNs);
++  HealthyRestart::AsyncStop::Status pollHealthyReplacementStop();
++  std::optional<HealthyRestart::AsyncStop::Key> healthyCompletedStop();
++  std::shared_ptr<const std::atomic_bool> healthyStopLease() const { return m_healthyStopLease; }
++  bool observeHealthyReplacementStop(const mpv_event* event);
++  void cancelHealthyReplacementStop();
++  void failHealthyReplacementStop();
++  bool healthyStopCurrent() const;
++  void pumpHealthyReplacementStop();
++  void submitHealthyStopQuery(HealthyRestart::AsyncStop::Query query);
++  void submitHealthyStopCommand();
++  void reconcileHealthyStopFailure();
++  HealthyRestart::AsyncStop m_healthyStop;
++  std::atomic_bool m_healthyStopAdmissionClosed{false};
++  bool m_healthyStopDraining = false, m_healthyStopQueueEmpty = false;
++  std::shared_ptr<std::atomic_bool> m_healthyStopLease;
++  std::function<int(quint64, const char**, bool)> m_healthyStopDispatch;
++  std::function<qint64()> m_healthyStopClock;
++  std::function<mpv_event*()> m_healthyStopEventWait;
+diff --git a/player/PlayerComponentCommands.cpp b/player/PlayerComponentCommands.cpp
+index d6815b8..a10eaa7 100644
+--- a/player/PlayerComponentCommands.cpp
++++ b/player/PlayerComponentCommands.cpp
+@@ -24,0 +25 @@ bool PlayerComponent::load(const QString& url, const QVariantMap& options, const
++  if (m_healthyStopAdmissionClosed.load()) return false;
+@@ -39,0 +41,4 @@ void PlayerComponent::stop()
++  if (m_healthyStopAdmissionClosed.load()) {
++    if (!m_replacementStop) m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
++    return;
++  }
+@@ -72,0 +78,4 @@ PlayerComponent::NativeStopResult PlayerComponent::requestNativeStop()
++  if (m_healthyStopAdmissionClosed.load()) {
++    m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
++    return {NativeStopResult::Status::Unavailable, 0};
++  }
+diff --git a/player/PlayerIntentCommands.cpp b/player/PlayerIntentCommands.cpp
+index c127041..47b365b 100644
+--- a/player/PlayerIntentCommands.cpp
++++ b/player/PlayerIntentCommands.cpp
+@@ -8,0 +9 @@
++#include <QScopedValueRollback>
+@@ -50,0 +52 @@ void PlayerComponent::clearQueue()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -64,0 +67,4 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
++  if (m_healthyStopAdmissionClosed.load()) {
++    if (replacement) m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
++    return;
++  }
+@@ -135,0 +142 @@ void PlayerComponent::play()
++  if (m_healthyStopAdmissionClosed.load()) { m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable); return; }
+@@ -150,0 +158 @@ void PlayerComponent::pause()
++  if (m_healthyStopAdmissionClosed.load()) { m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable); return; }
+@@ -165,0 +174 @@ void PlayerComponent::seekTo(qint64 ms)
++  if (m_healthyStopAdmissionClosed.load()) { m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable); return; }
+@@ -181,0 +191,4 @@ PlayerComponent::NativeSeekResult PlayerComponent::requestNativeSeek(qint64 mill
++  if (m_healthyStopAdmissionClosed.load()) {
++    m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
++    return {NativeSeekResult::Status::Unavailable, 0};
++  }
+@@ -202,0 +216 @@ void PlayerComponent::setSubtitleStream(const QVariant &subtitleStream)
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -210,0 +225 @@ void PlayerComponent::setAudioStream(const QVariant &audioStream)
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -222 +237,4 @@ void PlayerComponent::handleMpvEvents()
+-  if (!m_mpv) return;
++  if (!m_mpv && !(m_healthyStopAdmissionClosed.load() && m_healthyStopEventWait)) return;
++  if (m_healthyStopAdmissionClosed.load() && !m_healthyStopEventWait && m_mpv && !m_mpv->mpv()) {
++    failHealthyReplacementStop(); return;
++  }
+@@ -223,0 +242,4 @@ void PlayerComponent::handleMpvEvents()
++  if (m_healthyStopAdmissionClosed.load() && m_healthyStopDraining) return;
++  QScopedValueRollback<bool> draining(m_healthyStopDraining, true);
++  int healthyEvents = 0;
++  if (m_healthyStopAdmissionClosed.load()) m_healthyStopQueueEmpty = false;
+@@ -227,2 +249,14 @@ void PlayerComponent::handleMpvEvents()
+-    mpv_event *event = mpv_wait_event(m_mpv->mpv(), 0);
+-    if (event->event_id == MPV_EVENT_NONE)
++    if (m_healthyStopAdmissionClosed.load()) {
++      if (m_healthyStop.status() == HealthyRestart::AsyncStop::Status::Failed) {
++        failHealthyReplacementStop(); return;
++      }
++      if (healthyEvents++ == 64) { emit onMpvEvents(); return; }
++    }
++    mpv_event *event = nullptr;
++    try {
++      event = m_healthyStopAdmissionClosed.load() && m_healthyStopEventWait
++        ? m_healthyStopEventWait() : mpv_wait_event(m_mpv->mpv(), 0);
++    } catch (...) { failHealthyReplacementStop(); return; }
++    if (!event) { if (m_healthyStopAdmissionClosed.load()) failHealthyReplacementStop(); return; }
++    if (event->event_id == MPV_EVENT_NONE) {
++      if (m_healthyStopAdmissionClosed.load()) m_healthyStopQueueEmpty = true;
+@@ -229,0 +264,2 @@ void PlayerComponent::handleMpvEvents()
++    }
++    const bool internalStopEnd = observeHealthyReplacementStop(event);
+@@ -231 +267 @@ void PlayerComponent::handleMpvEvents()
+-    if (event->event_id == MPV_EVENT_END_FILE)
++    if (event->event_id == MPV_EVENT_END_FILE && !internalStopEnd)
+@@ -232,0 +269,2 @@ void PlayerComponent::handleMpvEvents()
++    if (event->event_id == MPV_EVENT_END_FILE && !event->data) continue;
++    if (m_healthyStopAdmissionClosed.load()) continue;
+@@ -236 +274 @@ void PlayerComponent::handleMpvEvents()
+-  updatePlaybackState();
++  if (!m_healthyStopAdmissionClosed.load()) updatePlaybackState();
+diff --git a/player/PlayerNativeObservation.cpp b/player/PlayerNativeObservation.cpp
+index 4623ac6..ce5c610 100644
+--- a/player/PlayerNativeObservation.cpp
++++ b/player/PlayerNativeObservation.cpp
+@@ -23,0 +24 @@ bool PlayerComponent::requestNativeObservation(PlaybackNativeReceipts::Key key,
++  if (m_healthyStopAdmissionClosed.load()) return false;
+diff --git a/player/PlayerNativeReceipts.cpp b/player/PlayerNativeReceipts.cpp
+index d07ab7e..1af40b4 100644
+--- a/player/PlayerNativeReceipts.cpp
++++ b/player/PlayerNativeReceipts.cpp
+@@ -48,0 +49 @@ bool PlayerComponent::beginNativeReceipt(FixtureAsset asset, const QString& fixt
++  if (m_healthyStopAdmissionClosed.load()) return false;
+diff --git a/player/PlayerNativeRestore.cpp b/player/PlayerNativeRestore.cpp
+index ac43e98..47fa2d5 100644
+--- a/player/PlayerNativeRestore.cpp
++++ b/player/PlayerNativeRestore.cpp
+@@ -43,0 +44 @@ bool PlayerComponent::armNativeRestore(const RestoreGrant& grant, quint64 host,
++  if (m_healthyStopAdmissionClosed.load()) return false;
+@@ -62,0 +64 @@ bool PlayerComponent::dispatchNativeRestoreLoad(const QString& fixturePath)
++  if (m_healthyStopAdmissionClosed.load()) return false;
+@@ -76,0 +79 @@ bool PlayerComponent::dispatchNativeRestoreSeek()
++  if (m_healthyStopAdmissionClosed.load()) return false;
+@@ -110,0 +114 @@ PlayerComponent::NativeStopResult PlayerComponent::cancelNativeRestore()
++  if (m_healthyStopAdmissionClosed.load()) return {NativeStopResult::Status::Unavailable, 0};
+diff --git a/player/PlayerReleasedState.cpp b/player/PlayerReleasedState.cpp
+index 94a45de..eb53249 100644
+--- a/player/PlayerReleasedState.cpp
++++ b/player/PlayerReleasedState.cpp
+@@ -10,0 +11 @@ void PlayerComponent::setAudioDelay(qint64 milliseconds)
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -23,0 +25 @@ void PlayerComponent::updateAudioDevice()
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -54,0 +57 @@ void PlayerComponent::userCommand(QString command)
++  if (m_healthyStopAdmissionClosed.load()) return;
+@@ -58,0 +62,75 @@ void PlayerComponent::userCommand(QString command)
++
++QVariant PlayerComponent::getAudioDeviceList()
++{
++  if (m_healthyStopAdmissionClosed.load()) return {};
++  if (!m_mpv) {
++    qWarning() << "PlayerComponent::getAudioDeviceList: mpv not initialized yet";
++    return QVariant();
++  }
++  return m_mpv->getProperty( "audio-device-list");
++}
++
++///////////////////////////////////////////////////////////////////////////////////////////////////
++void PlayerComponent::setAudioDevice(const QString& name)
++{
++  if (m_healthyStopAdmissionClosed.load()) return;
++  if (!m_mpv) {
++    qWarning() << "PlayerComponent::setAudioDevice: mpv not initialized yet";
++    return;
++  }
++  m_mpv->setProperty( "audio-device", name);
++}
++
++///////////////////////////////////////////////////////////////////////////////////////////////////
++void PlayerComponent::setVolume(int volume)
++{
++  if (m_healthyStopAdmissionClosed.load()) return;
++  if (!m_mpv) {
++    qWarning() << "PlayerComponent::setVolume: mpv not initialized yet";
++    return;
++  }
++  // Will fail if no audio output opened (i.e. no file playing)
++  m_mpv->setProperty( "volume", volume);
++}
++
++///////////////////////////////////////////////////////////////////////////////////////////////////
++int PlayerComponent::volume()
++{
++  if (m_healthyStopAdmissionClosed.load()) return 0;
++  if (!m_mpv) {
++    qWarning() << "PlayerComponent::volume: mpv not initialized yet";
++    return 0;
++  }
++  QVariant volume = m_mpv->getProperty( "volume");
++  if (volume.isValid())
++    return volume.toInt();
++  return 0;
++}
++
++///////////////////////////////////////////////////////////////////////////////////////////////////
++void PlayerComponent::setMuted(bool muted)
++{
++  if (m_healthyStopAdmissionClosed.load()) return;
++  if (!m_mpv) {
++    qWarning() << "PlayerComponent::setMuted: mpv not initialized yet";
++    return;
++  }
++  // Will fail if no audio output opened (i.e. no file playing)
++  m_mpv->setProperty( "mute", muted);
++}
++
++///////////////////////////////////////////////////////////////////////////////////////////////////
++bool PlayerComponent::muted()
++{
++  if (m_healthyStopAdmissionClosed.load()) return false;
++  if (!m_mpv) {
++    qWarning() << "PlayerComponent::muted: mpv not initialized yet";
++    return false;
++  }
++  QVariant mute = m_mpv->getProperty( "mute");
++  if (mute.isValid())
++    return mute.toBool();
++  return false;
++}
++
++///////////////////////////////////////////////////////////////////////////////////////////////////
