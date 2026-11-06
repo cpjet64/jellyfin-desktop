@@ -1,15 +1,21 @@
 #include "player/PlayerComponent.h"
+#include "shared/Paths.h"
 #include <QtTest/QtTest>
+#include <QDir>
+#include <QFileInfo>
+#include <QTemporaryDir>
 
 class TestHealthyAsyncStop : public QObject
 {
   Q_OBJECT
   using Stop = HealthyRestart::AsyncStop;
+  std::unique_ptr<QTemporaryDir> cache;
   static void prepare(PlayerComponent& player, bool active, bool paused);
   static void reply(PlayerComponent& player, quint64 tag, int error = 0);
   static void property(PlayerComponent& player, quint64 tag, const char* name, mpv_format format, void* data, int error = 0);
   static bool end(PlayerComponent& player, qint64 entry, mpv_end_file_reason reason);
 private slots:
+  void initTestCase();
   void activeOrders();
   void noEntryRequiresFreshPreflight();
   void errorsDuplicatesAndRevocation();
@@ -20,6 +26,20 @@ private slots:
   void reentrantUserIntentDuringPreflight();
   void queuedEndAndDrainDeadline();
 };
+
+void TestHealthyAsyncStop::initTestCase()
+{
+  const QFileInfo root(QString::fromLocal8Bit(qgetenv("JELLYFIN_TEST_OWNED_ROOT")));
+  QVERIFY(root.isAbsolute() && root.isDir() && !root.isSymLink());
+  const QString canonical = root.canonicalFilePath();
+  QVERIFY(!canonical.isEmpty());
+  cache = std::make_unique<QTemporaryDir>(QDir(canonical).filePath("async-stop-cache-XXXXXX"));
+  QVERIFY(cache->isValid());
+  const QFileInfo actual(cache->path());
+  QVERIFY(actual.isDir() && !actual.isSymLink());
+  QCOMPARE(QFileInfo(actual.canonicalPath()).canonicalFilePath(), canonical);
+  Paths::setCacheDir(actual.canonicalFilePath());
+}
 
 void TestHealthyAsyncStop::prepare(PlayerComponent& player, bool active, bool paused)
 {
