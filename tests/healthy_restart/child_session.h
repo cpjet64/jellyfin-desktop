@@ -29,6 +29,9 @@ public:
 #endif
   bool beginRestore(const QString& fixturePath);
   Progress pollRestore();
+  bool beginSource(const QString& fixturePath, bool paused);
+  bool freezeSource();
+  Progress pollSource();
   bool load();
   bool seek();
   void invalidate();
@@ -45,6 +48,7 @@ private:
   bool pollControl();
   bool pollAck();
   bool queueAck(const QByteArray& frame, bool grant);
+  bool sourceControl();
   bool initialize(const QString& path);
   bool grant(const QByteArray& frame, QByteArray& response);
   bool control(const QByteArray& frame, QByteArray& response);
@@ -58,6 +62,11 @@ private:
   Io grantIo_ = Io::Failed, controlIo_ = Io::Failed, ackIo_ = Io::Failed;
   QByteArray grantFrame_, controlFrame_, ackFrame_;
   bool started_ = false, failed_ = false, grantAck_ = false, ackIsGrant_ = false;
+  enum class SourceStage { Idle, Evidence, Control, Stop, StopAck, Retirement, ControlCancel, ClosedAck, Done };
+  SourceStage sourceStage_ = SourceStage::Idle;
+  Io sourceIo_ = Io::Failed;
+  QByteArray closedFrame_;
+  std::uint64_t sourceRun_ = 0, sourceLaunch_ = 0, sourceRevision_ = 0, stopSequence_ = 0;
 #ifdef HEALTHY_CHILD_SESSION_TESTING
   TestOperations test_;
   bool testing_ = false;
