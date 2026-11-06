@@ -1,0 +1,42 @@
+diff --git a/fixture_restart/FixtureRestartAdapter.cpp b/fixture_restart/FixtureRestartAdapter.cpp
+index 5a65d4a5..e4238375 100644
+--- a/fixture_restart/FixtureRestartAdapter.cpp
++++ b/fixture_restart/FixtureRestartAdapter.cpp
+@@ -41 +41 @@ FixtureRestartAdapter::FixtureRestartAdapter(PlayerComponent& player, FixtureRes
+-bool FixtureRestartAdapter::bindCleanupGate(std::shared_ptr<const FixtureRestart::ChildGate> gate)
++bool FixtureRestartAdapter::bindCleanupGate(std::shared_ptr<const FixtureRestart::ChildGate> gate, qint64 deadlineNs)
+@@ -43 +43 @@ bool FixtureRestartAdapter::bindCleanupGate(std::shared_ptr<const FixtureRestart
+-  if (!gate || gate.get() != &gate_ || cleanupGate_ || !player_.healthyBindRestoreCleanupGate(gate)) return false;
++  if (!gate || gate.get() != &gate_ || cleanupGate_ || !player_.healthyBindRestoreCleanupGate(gate, deadlineNs)) return false;
+@@ -78 +78,2 @@ bool FixtureRestartAdapter::beginCleanup(quint64 sequence, quint64 cancelRevisio
+-  const bool begun = player_.beginNativeRestoreCancellation(cleanupGate_, sequence, deadlineNs);
++  const bool begun = player_.beginNativeRestoreCleanup(cleanupGate_, HealthyRestart::VerifiedCleanupCancel{sequence, cancelRevision}, deadlineNs,
++      HealthyRestart::FailureCause::None);
+@@ -80 +81,2 @@ bool FixtureRestartAdapter::beginCleanup(quint64 sequence, quint64 cancelRevisio
+-  return begun || (cleanup.claimed && cleanup.sequence == sequence && cleanup.key.host == armIdentity_.host &&
++  return begun || (cleanup.claimed && cleanup.cancel && cleanup.cancel->sequence == sequence &&
++      cleanup.cancel->revision == cancelRevision && cleanup.key.host == armIdentity_.host &&
+@@ -107 +109,2 @@ bool FixtureRestartAdapter::arm()
+-  if (player_.m_healthyStopAdmissionClosed.load() || armed_ || !grant || !gate_.allowed(grant->revision) || !host_ || !attempt_) return false;
++  if (!cleanupGate_ || player_.m_healthyStopAdmissionClosed.load() || armed_ || !grant ||
++      !gate_.allowed(grant->revision) || !host_ || !attempt_) return false;
+diff --git a/fixture_restart/FixtureRestartAdapter.h b/fixture_restart/FixtureRestartAdapter.h
+index e1c7437d..a6df28dc 100644
+--- a/fixture_restart/FixtureRestartAdapter.h
++++ b/fixture_restart/FixtureRestartAdapter.h
+@@ -20 +20 @@ public:
+-  bool bindCleanupGate(std::shared_ptr<const FixtureRestart::ChildGate> gate);
++  bool bindCleanupGate(std::shared_ptr<const FixtureRestart::ChildGate> gate, qint64 deadlineNs);
+diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
+index a04f4c5a..cba19426 100644
+--- a/player/PlayerComponent.h
++++ b/player/PlayerComponent.h
+@@ -299,3 +299,3 @@ private:
+-  bool healthyBindRestoreCleanupGate(std::shared_ptr<const FixtureRestart::ChildGate> gate);
+-  bool beginNativeRestoreCancellation(std::shared_ptr<const FixtureRestart::ChildGate> gate,
+-                                      quint64 cancelSequence, qint64 deadlineNs);
++  bool healthyBindRestoreCleanupGate(std::shared_ptr<const FixtureRestart::ChildGate> gate, qint64 deadlineNs);
++  bool beginNativeRestoreCleanup(std::shared_ptr<const FixtureRestart::ChildGate> gate,
++      std::optional<HealthyRestart::VerifiedCleanupCancel> cancel, qint64 deadlineNs, HealthyRestart::FailureCause failure);
+@@ -303,0 +304 @@ private:
++  bool recordRestoreCleanupStopReply(const mpv_event* event);
