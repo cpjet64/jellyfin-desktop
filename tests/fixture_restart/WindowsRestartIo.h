@@ -50,6 +50,7 @@ public:
   bool canBind(HANDLE pipe) const;
   bool bind(HANDLE pipe);
   bool pending() const { return inFlight_; }
+  bool canReleaseStorage() const { return !retainedWork(); }
   const std::vector<unsigned char>& bytes() const { return bytes_; }
 private:
   friend class WindowsRestartProcess;

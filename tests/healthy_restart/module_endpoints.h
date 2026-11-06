@@ -26,7 +26,7 @@ public:
     std::function<bool(std::uintptr_t)> accepts;
     std::function<EndpointComparison(std::uintptr_t, std::uintptr_t)> compare;
     std::function<bool(std::uintptr_t, HANDLE&)> duplicate;
-    std::function<void(HANDLE)> close;
+    std::function<bool(HANDLE)> close;
     FixtureRestart::WindowsIoApi io;
   };
   static std::unique_ptr<ChildEndpoints> createForTest(std::uint64_t deadline, EndpointMode mode,
@@ -46,6 +46,7 @@ public:
   FixtureRestart::IoProgress begin(EndpointRole role, bool read, const void* data, DWORD size);
   FixtureRestart::IoProgress poll(EndpointRole role);
   FixtureRestart::IoProgress cancel(EndpointRole role);
+  bool closeSettled(EndpointRole role);
   const std::vector<unsigned char>* bytes(EndpointRole role) const noexcept;
 #endif
 private:
