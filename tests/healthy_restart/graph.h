@@ -15,6 +15,9 @@ class QQuickWindow;
 class QThread;
 class QByteArray;
 class QString;
+#ifdef HEALTHY_RETIREMENT_TESTING
+class TestHealthyGraphArm;
+#endif
 namespace HealthyModuleIdentity { class VerifiedModule; class ChildEndpoints; }
 
 namespace HealthyRetirement {
@@ -90,6 +93,9 @@ public:
   FixtureGraph(const FixtureGraph&) = delete;
   FixtureGraph& operator=(const FixtureGraph&) = delete;
 private:
+#ifdef HEALTHY_RETIREMENT_TESTING
+  friend class ::TestHealthyGraphArm;
+#endif
   friend class PreparedGraph;
   friend class GraphAccessOps;
   friend class ChildSession;
@@ -101,6 +107,7 @@ private:
   void deliverRedraw();
   void invalidate() noexcept;
   bool sessionReady(bool source) const;
+  bool cleanupSessionReady() const;
   bool sourceLoad(const QString& path, bool paused);
   bool sourceFreeze(QByteArray& frame);
   bool sourceBeginStop(const QByteArray& control);
@@ -108,6 +115,7 @@ private:
   bool restoreInitialize(const QString& path);
   bool restoreGrant(const QByteArray& frame, bool eof, QByteArray& response);
   bool restoreControl(const QByteArray& frame, QByteArray& response);
+  bool restorePollCancellation(QByteArray& response);
   bool restoreLoad();
   bool restoreSeek();
   bool restoreRevoke();
