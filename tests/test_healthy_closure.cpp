@@ -105,8 +105,9 @@ static void event_and_join_failures()
 static void claim_identity_and_revocation()
 {
   Scenario s; auto life = s.retired();
-  auto other = std::make_shared<RetirementClaim>(9);
-  Closure wrong(s.slot, life, 9, 100, s.expected, other, s.operations());
+  Scenario other; auto otherLife = other.retired();
+  require(otherLife->ack(9).has_value());
+  Closure wrong(s.slot, life, 9, 100, s.expected, other.claim, s.operations());
   require(!wrong.start() && !wrong.closed(9) && s.destroys == 0);
   Closure valid(s.slot, life, 9, 100, s.expected, s.claim, s.operations());
   require(valid.start()); drain(valid); require(valid.closed(9));
