@@ -22,7 +22,10 @@ PATCHES = ('patches/mpvqt/0001-event-ownership.patch',
            'patches/healthy-restart/0003-render-retirement.patch',
            'patches/healthy-restart/0004-async-teardown.patch',
            'patches/healthy-restart/0005-async-stop.patch',
-           'patches/healthy-restart/0006-checked-unpause.patch')
+           'patches/healthy-restart/0006-checked-unpause.patch',
+           'patches/healthy-restart/0007-async-restore-cleanup.patch',
+           'patches/healthy-restart/0008-renderer-capture-capability.patch',
+           'patches/healthy-restart/0009-adapter-cleanup.patch')
 
 
 class HealthyRestartAcceptance(unittest.TestCase):
@@ -140,7 +143,7 @@ class HealthyRestartWrapper(unittest.TestCase):
             mpvqt.mkdir(parents=True)
             for name in ('mpvabstractitem.cpp', 'mpvcontroller.cpp', 'frame_capture.cpp',
                          'frame_acceptance.cpp', 'lifetime.cpp', 'lifetime_qt.cpp',
-                         'owner.cpp', 'owner_qt.cpp', 'closure.cpp', 'closure_native.cpp'):
+                         'owner.cpp', 'owner_qt.cpp', 'closure.cpp', 'closure_native.cpp', 'capture_capability.cpp'):
                 (mpvqt / name).write_text('// configure-only source\n', encoding='utf-8')
             targets = ROOT / 'CMakeModules/HealthyRestartTargets.cmake'
             project = ('cmake_minimum_required(VERSION 3.20)\nproject(OwnerProbe CXX)\n'
@@ -162,7 +165,7 @@ class HealthyRestartWrapper(unittest.TestCase):
             defs = (work / 'build/defs.txt').read_text(encoding='utf-8').split(';')
             sources = (work / 'build/sources.txt').read_text(encoding='utf-8').split(';')
             self.assertNotIn('HEALTHY_RETIREMENT_TESTING', defs)
-            for name in ('lifetime.cpp', 'lifetime_qt.cpp', 'owner.cpp', 'owner_qt.cpp'):
+            for name in ('lifetime.cpp', 'lifetime_qt.cpp', 'owner.cpp', 'owner_qt.cpp', 'capture_capability.cpp'):
                 self.assertEqual(sources.count((mpvqt / name).as_posix()), 1, name)
 
     def test_copied_include_interface_propagates_to_consumer(self):
@@ -184,6 +187,7 @@ class HealthyRestartWrapper(unittest.TestCase):
                          'module_endpoints.cpp', 'lifetime_module.cpp', 'graph_access.cpp', 'graph_close.cpp',
                          'graph_prepare.cpp', 'graph_retire.cpp', 'graph_retirement.cpp', 'graph_start.cpp',
                          'graph_session.cpp', 'child_session.cpp', 'paused_hold.cpp', 'native_unpause_player.cpp',
+                         'native_cleanup_player.cpp', 'child_session_grant.cpp', 'resume_progress.cpp',
                          '../fixture_restart/FixtureRestartAdapter.cpp', '../fixture_restart/FixtureEvidence.cpp',
                          '../fixture_restart/RestartBroker.cpp', '../fixture_restart/RestartWire.cpp',
                          '../fixture_restart/RestartChild.cpp', '../fixture_restart/RestartChildPlayer.cpp',
@@ -241,7 +245,8 @@ class HealthyRestartWrapper(unittest.TestCase):
                          'module_gate.cpp', 'module_channel.cpp', 'module_endpoints.cpp', 'lifetime_module.cpp',
                          'graph_access.cpp', 'graph_close.cpp', 'graph_prepare.cpp', 'graph_retire.cpp',
                          'graph_retirement.cpp', 'graph_start.cpp', 'graph_session.cpp', 'child_session.cpp',
-                         'paused_hold.cpp', 'native_unpause_player.cpp'):
+                         'paused_hold.cpp', 'native_unpause_player.cpp', 'native_cleanup_player.cpp',
+                         'child_session_grant.cpp', 'resume_progress.cpp'):
                 self.assertEqual(sources.count((work / 'build/copy/mpvqt' / name).as_posix()), 1, name)
             defs = (work / 'build/core-defs.txt').read_text(encoding='utf-8')
             self.assertNotIn('HEALTHY_RETIREMENT_TESTING', defs)

@@ -132,7 +132,10 @@ foreach(_entry IN ITEMS
     "patches/healthy-restart/0003-render-retirement.patch|69c000e2a5abf8ce2b562336bdfc1b208a8fe4d0c7b99dad2ccc92ca4aa84374"
     "patches/healthy-restart/0004-async-teardown.patch|46f00c5804c5051d258591fdb9abf3c6ab574bc1492c40df81c159e27af5192b"
     "patches/healthy-restart/0005-async-stop.patch|b2daf3485b672d8d2f624de350ae3351f1b82dd60940ac69232350499263ec19"
-    "patches/healthy-restart/0006-checked-unpause.patch|cb44f304e55b71e4e4742a45dd8ccea05d9d6323c016c5adbd9a36620b7e3680")
+    "patches/healthy-restart/0006-checked-unpause.patch|cb44f304e55b71e4e4742a45dd8ccea05d9d6323c016c5adbd9a36620b7e3680"
+    "patches/healthy-restart/0007-async-restore-cleanup.patch|3db6b0568be4f9ea6ed577eeca0f415a259db086d9d6bf343b8f4eb2bfc990da"
+    "patches/healthy-restart/0008-renderer-capture-capability.patch|47d7be5b1040ba824a795d4fae6c59fcde707f221b48451eeb6606ba5bf2792c"
+    "patches/healthy-restart/0009-adapter-cleanup.patch|2fe6910fa124fbadfa9ebe7ba46d78bce81733057efa8f88c26dedc1d70d94c0")
   string(REPLACE "|" ";" _pair "${_entry}")
   list(GET _pair 0 _relative)
   list(GET _pair 1 _hash)
@@ -183,6 +186,9 @@ _healthy_apply("patches/healthy-restart/0003-render-retirement.patch" "69c000e2a
 _healthy_apply("patches/healthy-restart/0004-async-teardown.patch" "46f00c5804c5051d258591fdb9abf3c6ab574bc1492c40df81c159e27af5192b" FALSE)
 _healthy_apply("patches/healthy-restart/0005-async-stop.patch" "b2daf3485b672d8d2f624de350ae3351f1b82dd60940ac69232350499263ec19" FALSE)
 _healthy_apply("patches/healthy-restart/0006-checked-unpause.patch" "cb44f304e55b71e4e4742a45dd8ccea05d9d6323c016c5adbd9a36620b7e3680" FALSE)
+_healthy_apply("patches/healthy-restart/0007-async-restore-cleanup.patch" "3db6b0568be4f9ea6ed577eeca0f415a259db086d9d6bf343b8f4eb2bfc990da" FALSE)
+_healthy_apply("patches/healthy-restart/0008-renderer-capture-capability.patch" "47d7be5b1040ba824a795d4fae6c59fcde707f221b48451eeb6606ba5bf2792c" FALSE)
+_healthy_apply("patches/healthy-restart/0009-adapter-cleanup.patch" "2fe6910fa124fbadfa9ebe7ba46d78bce81733057efa8f88c26dedc1d70d94c0" FALSE)
 
 foreach(_entry IN LISTS _healthy_output_pins)
   string(REPLACE "|" ";" _pair "${_entry}")

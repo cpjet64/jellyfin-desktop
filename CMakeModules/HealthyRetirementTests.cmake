@@ -1,5 +1,35 @@
 # Headless tests of the diagnostic retirement protocol and its Qt adapter.
 find_package(Threads REQUIRED)
+foreach(name IN ITEMS cancel_wire child_cancel)
+  add_executable(test_restart_${name} "${CMAKE_SOURCE_DIR}/tests/test_restart_${name}.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartWire.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/fixture_restart/FixtureEvidence.cpp"
+    "${CMAKE_SOURCE_DIR}/src/player/PlaybackCheckpoint.cpp")
+  target_include_directories(test_restart_${name} PRIVATE "${CMAKE_SOURCE_DIR}/tests" "${CMAKE_SOURCE_DIR}/src")
+  target_compile_features(test_restart_${name} PRIVATE cxx_std_17)
+  target_link_libraries(test_restart_${name} PRIVATE Qt6::Core)
+  if(name STREQUAL "child_cancel")
+    target_sources(test_restart_${name} PRIVATE "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartChild.cpp"
+      "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartBroker.cpp")
+    target_compile_definitions(test_restart_${name} PRIVATE HEALTHY_CHILD_RESTART_TESTING)
+  endif()
+  add_test(NAME test_restart_${name} COMMAND test_restart_${name})
+  set_tests_properties(test_restart_${name} PROPERTIES TIMEOUT 60)
+endforeach()
+
+add_executable(test_healthy_capture_capability "${CMAKE_SOURCE_DIR}/tests/test_healthy_capture_capability.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/capture_capability.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/fixture_restart/frame_capture.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/fixture_restart/frame_acceptance.cpp")
+target_include_directories(test_healthy_capture_capability PRIVATE "${CMAKE_SOURCE_DIR}/tests/healthy_restart"
+  "${CMAKE_SOURCE_DIR}/tests/fixture_restart")
+target_compile_features(test_healthy_capture_capability PRIVATE cxx_std_17)
+target_compile_definitions(test_healthy_capture_capability PRIVATE HEALTHY_RETIREMENT_TESTING)
+target_link_libraries(test_healthy_capture_capability PRIVATE Threads::Threads Qt6::Core Qt6::Gui)
+add_test(NAME test_healthy_capture_capability COMMAND test_healthy_capture_capability)
+set_tests_properties(test_healthy_capture_capability PROPERTIES TIMEOUT 60)
+
 add_executable(test_healthy_module_launch "${CMAKE_SOURCE_DIR}/tests/test_healthy_module_launch.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_channel.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_gate.cpp"
@@ -18,22 +48,28 @@ set_tests_properties(test_healthy_module_launch PROPERTIES TIMEOUT 60)
 
 add_executable(test_healthy_paused_hold "${CMAKE_SOURCE_DIR}/tests/test_healthy_paused_hold.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/paused_hold.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/capture_capability.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp"
   "${CMAKE_SOURCE_DIR}/tests/fixture_restart/frame_acceptance.cpp")
 target_include_directories(test_healthy_paused_hold PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_include_directories(test_healthy_paused_hold PRIVATE "${CMAKE_SOURCE_DIR}/tests/fixture_restart")
 target_compile_features(test_healthy_paused_hold PRIVATE cxx_std_17)
 target_compile_definitions(test_healthy_paused_hold PRIVATE HEALTHY_RETIREMENT_TESTING)
+target_link_libraries(test_healthy_paused_hold PRIVATE Threads::Threads)
 add_test(NAME test_healthy_paused_hold COMMAND test_healthy_paused_hold)
 set_tests_properties(test_healthy_paused_hold PROPERTIES TIMEOUT 60)
 
 add_executable(test_healthy_resume_progress "${CMAKE_SOURCE_DIR}/tests/test_healthy_resume_progress.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/resume_progress.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/paused_hold.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/capture_capability.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp"
   "${CMAKE_SOURCE_DIR}/tests/fixture_restart/frame_acceptance.cpp")
 target_include_directories(test_healthy_resume_progress PRIVATE "${CMAKE_SOURCE_DIR}/tests"
   "${CMAKE_SOURCE_DIR}/tests/fixture_restart")
 target_compile_features(test_healthy_resume_progress PRIVATE cxx_std_17)
 target_compile_definitions(test_healthy_resume_progress PRIVATE HEALTHY_RETIREMENT_TESTING)
+target_link_libraries(test_healthy_resume_progress PRIVATE Threads::Threads)
 add_test(NAME test_healthy_resume_progress COMMAND test_healthy_resume_progress)
 set_tests_properties(test_healthy_resume_progress PROPERTIES TIMEOUT 60)
 
@@ -140,9 +176,10 @@ add_test(NAME test_healthy_identity_commitment COMMAND test_healthy_identity_com
 set_tests_properties(test_healthy_identity_commitment PROPERTIES TIMEOUT 60)
 
 if(WIN32)
-  foreach(name IN ITEMS child_session child_session_source)
+  foreach(name IN ITEMS child_session child_session_source child_session_cancel)
     add_executable(test_healthy_${name} "${CMAKE_SOURCE_DIR}/tests/test_healthy_${name}.cpp"
       "${CMAKE_SOURCE_DIR}/tests/healthy_restart/child_session.cpp"
+      "${CMAKE_SOURCE_DIR}/tests/healthy_restart/child_session_grant.cpp"
       "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_endpoints.cpp"
       "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartIo.cpp"
       "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartWire.cpp"
@@ -156,6 +193,16 @@ if(WIN32)
     add_test(NAME test_healthy_${name} COMMAND test_healthy_${name})
     set_tests_properties(test_healthy_${name} PROPERTIES TIMEOUT 60)
   endforeach()
+  add_executable(test_healthy_child_session_grant_io
+    "${CMAKE_SOURCE_DIR}/tests/test_healthy_child_session_grant_io.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_endpoints.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartIo.cpp")
+  target_include_directories(test_healthy_child_session_grant_io PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+  target_compile_features(test_healthy_child_session_grant_io PRIVATE cxx_std_17)
+  target_compile_definitions(test_healthy_child_session_grant_io PRIVATE HEALTHY_ENDPOINT_TESTING)
+  target_link_libraries(test_healthy_child_session_grant_io PRIVATE Qt6::Core onecore)
+  add_test(NAME test_healthy_child_session_grant_io COMMAND test_healthy_child_session_grant_io)
+  set_tests_properties(test_healthy_child_session_grant_io PROPERTIES TIMEOUT 60)
   add_executable(test_healthy_module_gate_endpoints "${CMAKE_SOURCE_DIR}/tests/test_healthy_module_gate_endpoints.cpp"
     "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_endpoints.cpp" "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartIo.cpp")
   target_include_directories(test_healthy_module_gate_endpoints PRIVATE "${CMAKE_SOURCE_DIR}/tests")
