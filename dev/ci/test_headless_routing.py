@@ -62,9 +62,9 @@ class TestHeadlessRouting(unittest.TestCase):
         calls = []
         with redirect_stdout(io.StringIO()), patch.object(native, "command", side_effect=lambda name, args, **kw: calls.append((name, args))):
             native.headless_checks()
-        self.assertEqual(len(native.HEADLESS_TESTS), 30)
+        self.assertEqual(len(native.HEADLESS_TESTS), 32)
         names = set(native.HEADLESS_TESTS)
-        self.assertTrue({"test_recovery_bridge_session", "test_recovery_bridge_host", "test_windows_loader_mode", "test_playback_native_receipts", "test_player_native_receipts"}.issubset(names))
+        self.assertTrue({"test_recovery_bridge_session", "test_recovery_bridge_host", "test_windows_loader_mode", "test_playback_native_receipts", "test_player_native_receipts", "test_native_observation", "test_player_native_restore"}.issubset(names))
         self.assertEqual(len(native.HEADLESS_TESTS), len(names))
         self.assertTrue({"test_c2_fault_restore_permission", "test_c2_fault_restore_frame", "test_c2_capture_observation", "test_c2_quiescence_observation", "test_player_intent_observation", "test_synchronous_stop_trace", "test_synchronous_stop_events", "test_healthy_cleanup_coordinator", "test_healthy_wake_binding", "test_playback_intent_acceptance", "test_playback_checkpoint", "test_player_intent_boundary"}.issubset(names))
         self.assertTrue({"test_systemcomponent", "test_log", "test_webclient_transport", "test_mpv_test_bootstrap_pure", "test_smtc_admission_model", "test_c2a_hold_gate", "test_c2_error_terminal", "test_c2_fault_quiescence_policy", "test_c2_synthetic_service"}.issubset(names))
@@ -144,7 +144,8 @@ class TestHeadlessRouting(unittest.TestCase):
         self.assertIn("'test_healthy_cleanup_coordinator'", script)
         self.assertIn("'test_healthy_wake_binding'", script)
         for name in ('test_recovery_bridge_session', 'test_recovery_bridge_host', 'test_windows_loader_mode',
-                     'test_playback_native_receipts', 'test_player_native_receipts'):
+                     'test_playback_native_receipts', 'test_player_native_receipts', 'test_native_observation',
+                     'test_player_native_restore'):
             self.assertEqual(script.count("'" + name + "'"), 1)
         self.assertEqual(script.count("'tests/test_windows_loader_driver.py'"), 1)
         self.assertEqual(script.count("tests/test_windows_mpv_runtime_configure.py"), 1)
