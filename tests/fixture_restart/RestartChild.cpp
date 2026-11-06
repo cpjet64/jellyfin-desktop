@@ -57,6 +57,14 @@ bool RestartChild::grant(const void* channel, const QByteArray& frame, qint64 no
     protocolFailed_ = true; revoke(); return false;
   }
   armPhase_ = ArmPhase::InFlight;
+#ifdef HEALTHY_CHILD_RESTART_TESTING
+  if (actions_.beforeArm) actions_.beforeArm();
+#endif
+  if (!gate_.allowed(binding_.revision)) {
+    armPhase_ = ArmPhase::NotArmed;
+    if (cancelPhase_ == CancelPhase::AwaitArm) return pollCancellation(response);
+    return false;
+  }
   const auto armed = actions_.armActual();
   armPhase_ = armed.status == ArmResult::Status::Armed ? ArmPhase::Armed :
       armed.status == ArmResult::Status::NotArmed ? ArmPhase::NotArmed : ArmPhase::Unknown;

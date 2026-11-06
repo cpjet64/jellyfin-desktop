@@ -23,6 +23,9 @@ public:
     std::function<ArmResult()> armActual;
     std::function<bool(quint64, quint64)> beginCleanup;
     std::function<CleanupResult()> pollCleanup;
+#ifdef HEALTHY_CHILD_RESTART_TESTING
+    std::function<void()> beforeArm;
+#endif
   };
   RestartChild(ChildGate& gate, const void* grantChannel, const void* controlChannel,
                Grant binding, Actions actions);
