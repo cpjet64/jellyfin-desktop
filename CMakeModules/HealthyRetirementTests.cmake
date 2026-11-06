@@ -1,5 +1,17 @@
 # Headless tests of the diagnostic retirement protocol and its Qt adapter.
 find_package(Threads REQUIRED)
+add_executable(test_verified_cancel_gate "${CMAKE_SOURCE_DIR}/tests/test_verified_cancel_gate.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartChild.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartWire.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartBroker.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/fixture_restart/FixtureEvidence.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/PlaybackCheckpoint.cpp")
+target_include_directories(test_verified_cancel_gate PRIVATE "${CMAKE_SOURCE_DIR}/tests" "${CMAKE_SOURCE_DIR}/src")
+target_compile_features(test_verified_cancel_gate PRIVATE cxx_std_17)
+target_link_libraries(test_verified_cancel_gate PRIVATE Qt6::Core)
+add_test(NAME test_verified_cancel_gate COMMAND test_verified_cancel_gate)
+set_tests_properties(test_verified_cancel_gate PROPERTIES TIMEOUT 60)
+
 foreach(name IN ITEMS cancel_wire child_cancel)
   add_executable(test_restart_${name} "${CMAKE_SOURCE_DIR}/tests/test_restart_${name}.cpp"
     "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartWire.cpp"

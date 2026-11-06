@@ -62,7 +62,7 @@ class TestHeadlessRouting(unittest.TestCase):
         calls = []
         with redirect_stdout(io.StringIO()), patch.object(native, "command", side_effect=lambda name, args, **kw: calls.append((name, args))):
             native.headless_checks()
-        self.assertEqual(len(native.HEADLESS_TESTS), 63)
+        self.assertEqual(len(native.HEADLESS_TESTS), 64)
         names = set(native.HEADLESS_TESTS)
         self.assertTrue({'test_healthy_retirement_lifetime', 'test_healthy_retirement_races',
                          'test_healthy_retirement_qt'}.issubset(names))
@@ -74,7 +74,7 @@ class TestHeadlessRouting(unittest.TestCase):
                          'test_healthy_graph_retirement_access', 'test_healthy_identity_commitment',
                          'test_healthy_paused_hold', 'test_healthy_resume_progress', 'test_restart_closed_wire',
                          'test_healthy_module_launch', 'test_restart_cancel_wire', 'test_restart_child_cancel',
-                         'test_healthy_capture_capability'}.issubset(names))
+                         'test_healthy_capture_capability', 'test_verified_cancel_gate'}.issubset(names))
         self.assertTrue({"test_recovery_bridge_session", "test_recovery_bridge_host", "test_windows_loader_mode", "test_playback_native_receipts", "test_player_native_receipts", "test_native_observation", "test_player_native_restore", "test_fixture_restart_broker", "test_fixture_frame_acceptance", "test_fixture_frame_capture", "test_player_restore_cleanup", "test_player_restore_observation", "test_fixture_restart_wire", "test_fixture_restart_child", "test_restart_child_player", "test_restart_source_player"}.issubset(names))
         self.assertEqual(len(native.HEADLESS_TESTS), len(names))
         self.assertTrue({"test_c2_fault_restore_permission", "test_c2_fault_restore_frame", "test_c2_capture_observation", "test_c2_quiescence_observation", "test_player_intent_observation", "test_synchronous_stop_trace", "test_synchronous_stop_events", "test_healthy_cleanup_coordinator", "test_healthy_wake_binding", "test_playback_intent_acceptance", "test_playback_checkpoint", "test_player_intent_boundary"}.issubset(names))
@@ -170,7 +170,7 @@ class TestHeadlessRouting(unittest.TestCase):
                      'test_healthy_paused_hold', 'test_healthy_resume_progress', 'test_restart_closed_wire', 'test_healthy_module_launch',
                      'test_healthy_child_session', 'test_healthy_child_session_source',
                      'test_restart_cancel_wire', 'test_restart_child_cancel', 'test_healthy_capture_capability',
-                     'test_healthy_child_session_cancel', 'test_healthy_child_session_grant_io'):
+                     'test_healthy_child_session_cancel', 'test_healthy_child_session_grant_io', 'test_verified_cancel_gate'):
             self.assertEqual(script.count("'" + name + "'"), 1)
         self.assertEqual(script.count("'tests/test_windows_loader_driver.py'"), 1)
         self.assertEqual(script.count("tests/test_windows_mpv_runtime_configure.py"), 1)
