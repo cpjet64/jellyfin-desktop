@@ -1,4 +1,5 @@
 #include "player/PlayerComponent.h"
+#include "player_test_cache.h"
 #include "player/PlaybackCheckpoint.h"
 #include "system/WebClientFaultGuard.h"
 #include <QThread>
@@ -8,6 +9,7 @@
 class TestPlaybackIntent : public QObject
 {
   Q_OBJECT
+  PlayerTestCache cache_;
 private slots:
   void replacementAndStopResults();
   void unexpectedThreadCannotMutateOrDispatch();

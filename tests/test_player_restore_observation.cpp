@@ -1,9 +1,11 @@
 #include "player/PlayerComponent.h"
+#include "player_test_cache.h"
 #include <QtTest/QtTest>
 
 class TestPlayerRestoreObservation : public QObject
 {
   Q_OBJECT
+  PlayerTestCache cache_;
   static void reply(PlayerComponent& player, quint64 id, const QByteArray& value);
   static void seekReply(PlayerComponent& player, int error = 0);
   static void restart(PlayerComponent& player);

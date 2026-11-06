@@ -2,6 +2,7 @@
 #include "fixture_restart/OwnedFixtureFile.h"
 #include "fixture_restart/RestartSourcePlayer.h"
 #include "player/PlayerComponent.h"
+#include "player_test_cache.h"
 #include <QCryptographicHash>
 #include <QTemporaryFile>
 #include <QtTest/QtTest>
@@ -10,6 +11,7 @@
 class TestRestartChildPlayer : public QObject
 {
   Q_OBJECT
+  PlayerTestCache cache_;
 private slots:
   void freezesNativeEvidenceBeforeInternalStop();
   void staleEvidenceNeverStopsNewIntent();

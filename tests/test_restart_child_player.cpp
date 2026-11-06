@@ -1,6 +1,7 @@
 #include "fixture_restart/FixtureRestartAdapter.h"
 #include "fixture_restart/RestartChildPlayer.h"
 #include "player/PlayerComponent.h"
+#include "player_test_cache.h"
 #include <QCryptographicHash>
 #include "fixture_restart/OwnedFixtureFile.h"
 #include <QTemporaryFile>
@@ -9,6 +10,7 @@
 class TestRestartChildPlayer : public QObject
 {
   Q_OBJECT
+  PlayerTestCache cache_;
 private slots:
   void cancelBeforeGrant();
   void cancelAfterLoad();

@@ -1,10 +1,12 @@
 #include "player/PlayerComponent.h"
 #include "player/PlaybackCheckpoint.h"
+#include "player_test_cache.h"
 #include <QtTest/QtTest>
 
 class TestPlayerNativeReceipts : public QObject
 {
   Q_OBJECT
+  PlayerTestCache cache_;
 private:
   static void reply(PlayerComponent& player, quint64 attempt, qint64 entry, int error = 0);
   static void start(PlayerComponent& player, qint64 entry);

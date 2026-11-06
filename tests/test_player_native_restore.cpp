@@ -1,5 +1,6 @@
 #include "player/PlayerComponent.h"
 #include "player/PlaybackCheckpoint.h"
+#include "player_test_cache.h"
 #include "fixture_restart/FixtureRestartAdapter.h"
 #include <QCryptographicHash>
 #include "fixture_restart/OwnedFixtureFile.h"
@@ -9,6 +10,7 @@
 class TestPlayerNativeRestore : public QObject
 {
   Q_OBJECT
+  PlayerTestCache cache_;
 private:
   static void prepare(PlayerComponent& player);
   static void observationReply(PlayerComponent& player, quint64 id, const QByteArray& text, int error = 0);

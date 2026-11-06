@@ -1,9 +1,11 @@
 #include "player/PlayerComponent.h"
+#include "player_test_cache.h"
 #include <QtTest/QtTest>
 
 class TestPlayerRestoreCleanup : public QObject
 {
   Q_OBJECT
+  PlayerTestCache cache_;
 private:
   static bool arm(PlayerComponent& player, bool load);
   static bool readyToSeek(PlayerComponent& player);

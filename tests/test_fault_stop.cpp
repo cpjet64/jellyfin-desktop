@@ -11,6 +11,7 @@
 #include "input/InputComponent.h"
 #include "input/InputKeyboard.h"
 #include "player/PlayerComponent.h"
+#include "player_test_cache.h"
 #include "shared/Paths.h"
 #include "system/SystemComponent.h"
 #include "system/WebClientFaultGuard.h"
@@ -21,6 +22,7 @@
 class TestFaultStop : public QObject
 {
   Q_OBJECT
+  PlayerTestCache cache_;
 private:
   void healthyRoute(InputComponent& input, QSignalSpy& forwarded, QSignalSpy& nativeStops);
   void detachedRoute(InputComponent& input, QSignalSpy& forwarded, QSignalSpy& nativeStops);
