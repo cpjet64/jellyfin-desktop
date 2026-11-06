@@ -182,6 +182,7 @@ $required += @('test_fixture_frame_acceptance', 'test_fixture_frame_capture', 't
 $required += @('test_player_restore_cleanup', 'test_player_restore_observation')
 $required += @('test_fixture_restart_wire', 'test_fixture_restart_child', 'test_restart_child_player', 'test_windows_frame_reader')
 $required += @('test_windows_broker_operations', 'test_restart_source_player')
+$required += @('test_healthy_retirement_lifetime', 'test_healthy_retirement_races', 'test_healthy_retirement_qt')
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs
 Run-Native $venvPython @('dev/ci/evidence.py', 'build_core', 'passed', 'Native build and core tests passed')
