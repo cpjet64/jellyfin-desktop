@@ -1,5 +1,6 @@
 #include "lifetime_qt.h"
 #include <QMetaObject>
+#include <QObject>
 #include <QOpenGLContext>
 #include <utility>
 

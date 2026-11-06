@@ -1,8 +1,8 @@
 #pragma once
 #include "lifetime.h"
-#include <QObject>
 #include <functional>
 #include <memory>
+class QObject;
 class QOpenGLContext;
 
 namespace HealthyRetirement {
