@@ -105,7 +105,8 @@ bool PlayerComponent::beginNativeRestoreCleanup(std::shared_ptr<const FixtureRes
       !m_healthyStopLease->enterCleanup(m_healthyRendererGeneration)) return false;
   bool stopAdmitted = false;
   if (m_nativeRestore.loadAttempted) {
-    if (m_healthyStopLease->admitCleanupStop(m_healthyRendererGeneration) !=
+    if (m_healthyStopLease->admitCleanupStop(m_healthyRendererGeneration,
+        {key.host, key.core, key.revision, key.attempt}) !=
         HealthyRetirement::RetirementClaim::Admission::New) return false;
     stopAdmitted = true;
   }
@@ -150,6 +151,7 @@ void PlayerComponent::submitRestoreCleanupStop()
       state.status != RestoreCleanupStatus::Pending) {
     state.status = RestoreCleanupStatus::Failed; return;
   }
+  if (!restoreCleanupPriorSettled()) return;
   const char* args[] = {"stop", nullptr};
   state.stopIssued = true;
   int result = MPV_ERROR_UNINITIALIZED;
@@ -200,7 +202,8 @@ PlayerComponent::RestoreCleanupStatus PlayerComponent::pollNativeRestoreCancella
     return state.status = RestoreCleanupStatus::Failed;
   if (state.status == RestoreCleanupStatus::NoLoad || state.status == RestoreCleanupStatus::Stopped) {
     if (!m_healthyStopLease || m_healthyStopLease->contained() ||
-        (state.origin == HealthyRestart::RestoreCleanupState::Origin::InternalFailure && !m_healthyStopLease->eligible()))
+        !m_healthyStopLease->matchesArm(m_healthyRendererGeneration,
+            {state.key.host, state.key.core, state.key.revision, state.key.attempt}))
       state.status = RestoreCleanupStatus::Failed;
     return state.status;
   }
@@ -224,9 +227,12 @@ PlayerComponent::RestoreCleanupStatus PlayerComponent::pollNativeRestoreCancella
         !finalReceipt.key.attempt && !finalReceipt.consumed &&
         !m_lastReceiptAttempt &&
         restoreCleanupPriorSettled() && restoreCleanupTimeValid() &&
-        restoreCleanupOwnsCurrent() && m_healthyStopLease && !m_healthyStopLease->contained()) {
+        restoreCleanupOwnsCurrent() && m_healthyStopLease && !m_healthyStopLease->contained() &&
+        m_healthyStopLease->matchesArm(m_healthyRendererGeneration,
+            {state.key.host, state.key.core, state.key.revision, state.key.attempt})) {
       if (state.origin == HealthyRestart::RestoreCleanupState::Origin::InternalFailure &&
-          !m_healthyStopLease->qualifyCleanup(m_healthyRendererGeneration)) state.status = RestoreCleanupStatus::Failed;
+          !m_healthyStopLease->qualifyCleanup(m_healthyRendererGeneration,
+              {state.key.host, state.key.core, state.key.revision, state.key.attempt})) state.status = RestoreCleanupStatus::Failed;
       else state.status = RestoreCleanupStatus::NoLoad;
     }
     return state.status;
@@ -255,10 +261,13 @@ PlayerComponent::RestoreCleanupStatus PlayerComponent::pollNativeRestoreCancella
   const auto finalReceipt = m_nativeReceipts.snapshot();
   if (state.propertiesReady() && m_healthyStopQueueEmpty && state.terminalReceiptMatches(finalReceipt, receipt.started) &&
       restoreCleanupPriorSettled() && restoreCleanupTimeValid() && restoreCleanupOwnsCurrent() &&
-      m_healthyStopLease && !m_healthyStopLease->contained()) {
+      m_healthyStopLease && !m_healthyStopLease->contained() &&
+      m_healthyStopLease->matchesArm(m_healthyRendererGeneration,
+          {state.key.host, state.key.core, state.key.revision, state.key.attempt})) {
     if (receipt.started) {
       if (state.origin == HealthyRestart::RestoreCleanupState::Origin::InternalFailure &&
-          !m_healthyStopLease->qualifyCleanup(m_healthyRendererGeneration)) state.status = RestoreCleanupStatus::Failed;
+          !m_healthyStopLease->qualifyCleanup(m_healthyRendererGeneration,
+              {state.key.host, state.key.core, state.key.revision, state.key.attempt})) state.status = RestoreCleanupStatus::Failed;
       else state.status = RestoreCleanupStatus::Stopped;
     } else state.noStartTerminalObserved = true; // No qualified barrier excludes later activation.
   }

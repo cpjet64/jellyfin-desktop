@@ -1,0 +1,7 @@
+diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
+index cba19426..b857b0f0 100644
+--- a/player/PlayerComponent.h
++++ b/player/PlayerComponent.h
+@@ -336 +336 @@ private:
+-  bool healthyInstallRetirementClaim(std::shared_ptr<HealthyRetirement::RetirementClaim> claim, quint64 generation);
++  bool healthyInstallRetirementClaim(std::shared_ptr<HealthyRetirement::RetirementClaim> claim, quint64 generation, HealthyRestart::ClaimInstallMode mode = HealthyRestart::ClaimInstallMode::Install);

@@ -35,10 +35,26 @@ bool PlayerComponent::healthyStopCurrent() const
       intent.desired == (key.paused ? PlaybackIntent::Desired::Paused : PlaybackIntent::Desired::Playing);
 }
 
-bool PlayerComponent::healthyInstallRetirementClaim(std::shared_ptr<HealthyRetirement::RetirementClaim> claim, quint64 generation)
+bool PlayerComponent::healthyInstallRetirementClaim(std::shared_ptr<HealthyRetirement::RetirementClaim> claim, quint64 generation, HealthyRestart::ClaimInstallMode mode)
 {
-  if (!intentControlThread() || m_healthyStopAdmissionClosed.load() || m_healthyStopLease || !claim ||
-      !generation || claim->generation() != generation || !claim->open()) return false;
+  if (!intentControlThread() || m_healthyStopAdmissionClosed.load() || !claim ||
+      !generation || claim->generation() != generation) return false;
+  if (mode == HealthyRestart::ClaimInstallMode::BindRestoreReservation) {
+    if (m_healthyStopLease || !m_nativeRestore.armed || !restoreOwnsCurrent()) return false;
+    const auto& key = m_nativeRestore.key;
+    if (!claim->matchesArm(generation, {key.host, key.core, key.revision, key.attempt}) || claim->contained()) return false;
+    m_healthyRendererGeneration = generation;
+    m_healthyStopLease = std::move(claim);
+    m_playbackIntent.watchRetirement(m_healthyStopLease);
+    return true;
+  }
+  if (m_healthyStopLease) {
+    const auto& key = m_nativeRestore.key;
+    return m_healthyStopLease == claim && m_healthyRendererGeneration == generation &&
+        m_nativeRestore.armed && restoreOwnsCurrent() &&
+        claim->installable(generation, {key.host, key.core, key.revision, key.attempt});
+  }
+  if (!claim->open()) return false;
   const auto intent = m_playbackIntent.snapshot();
   if (!intent.epoch || !intent.request || !intent.revision ||
       (intent.desired != PlaybackIntent::Desired::Playing && intent.desired != PlaybackIntent::Desired::Paused)) return false;

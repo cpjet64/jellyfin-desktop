@@ -5,6 +5,7 @@
 #include <optional>
 
 namespace HealthyRestart {
+enum class ClaimInstallMode { Install, BindRestoreReservation };
 // Control-thread ledger shared by the copied Player and its fixture adapter.
 // Native events must be decoded and matched to the held Player before entry.
 class AsyncStop {
