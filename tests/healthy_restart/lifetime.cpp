@@ -400,6 +400,45 @@ bool Slot::captureAdmission(const std::shared_ptr<Lifetime>& lifetime)
   return false;
 }
 
+bool Slot::captureSnapshot(const std::shared_ptr<Lifetime>& lifetime) const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (closed_ || !lifetime || lifetime != lifetime_) return false;
+  std::lock_guard<std::mutex> lifetimeLock(lifetime->mutex_);
+  return lifetime->ownerValid_ && lifetime->facts_.phase == Phase::Active &&
+         !lifetime->facts_.admissionClosed;
+}
+
+bool Slot::admitCaptureDispatch(const std::shared_ptr<Lifetime>& lifetime,
+                                const std::shared_ptr<const RetirementClaim>& claim,
+                                RetirementClaim::ArmIdentity identity) const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  return admitDispatchLocked(lifetime, claim, identity, true);
+}
+
+bool Slot::admitLoadDispatch(const std::shared_ptr<const RetirementClaim>& claim,
+                             RetirementClaim::ArmIdentity identity) const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  return admitDispatchLocked(lifetime_, claim, identity, false);
+}
+
+bool Slot::admitDispatchLocked(const std::shared_ptr<Lifetime>& lifetime,
+                               const std::shared_ptr<const RetirementClaim>& claim,
+                               RetirementClaim::ArmIdentity identity, bool seek) const
+{
+  if (closed_ || !lifetime || lifetime != lifetime_ || !claim || claim->generation() != generation_)
+    return false;
+  const auto boundClaim = claimState_ ? std::atomic_load(&claimState_->claim) : nullptr;
+  if (boundClaim != claim) return false;
+  std::lock_guard<std::mutex> lifetimeLock(lifetime->mutex_);
+  if (!lifetime->ownerValid_ || lifetime->facts_.phase != Phase::Active ||
+      lifetime->facts_.admissionClosed) return false;
+  const auto operation = seek ? RetirementClaim::Dispatch::Seek : RetirementClaim::Dispatch::Load;
+  return claim->admitRestoreDispatch(generation_, identity, operation);
+}
+
 void Slot::invalidate(std::uint64_t generation)
 {
   if (generation != generation_) return;

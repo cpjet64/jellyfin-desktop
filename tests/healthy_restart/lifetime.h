@@ -114,6 +114,7 @@ public:
   std::shared_ptr<Lifetime> current() const;
   std::shared_ptr<CaptureBridge> captureBridge() const;
   bool captureAdmission(const std::shared_ptr<Lifetime>& lifetime);
+  bool captureSnapshot(const std::shared_ptr<Lifetime>& lifetime) const;
   void invalidate(std::uint64_t generation);
   std::uint64_t generation() const { return generation_; }
 #ifdef HEALTHY_RETIREMENT_TESTING
@@ -123,6 +124,16 @@ public:
 private:
   friend class FixtureGraph;
   friend class CaptureController;
+  friend class CaptureBridge;
+  friend class ::PlayerComponent;
+  bool admitLoadDispatch(const std::shared_ptr<const RetirementClaim>& claim,
+                         RetirementClaim::ArmIdentity identity) const;
+  bool admitCaptureDispatch(const std::shared_ptr<Lifetime>& lifetime,
+                            const std::shared_ptr<const RetirementClaim>& claim,
+                            RetirementClaim::ArmIdentity identity) const;
+  bool admitDispatchLocked(const std::shared_ptr<Lifetime>& lifetime,
+                           const std::shared_ptr<const RetirementClaim>& claim,
+                           RetirementClaim::ArmIdentity identity, bool seek) const;
   bool bindCaptureBridge(const std::shared_ptr<CaptureBridge>& bridge);
   bool bindModule(std::shared_ptr<const HealthyModuleIdentity::VerifiedModule> module,
                   std::shared_ptr<const std::atomic_bool> revoked);

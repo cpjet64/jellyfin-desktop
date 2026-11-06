@@ -50,8 +50,9 @@ bool Slot::bindStopClaimForTest(std::shared_ptr<const RetirementClaim> claim)
 bool Slot::bindStopClaim(std::shared_ptr<const RetirementClaim> claim)
 {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (closed_ || !lifetime_ || !claimState_ || !claim || claim->generation() != generation_ ||
-      !claim->open() || std::atomic_load(&claimState_->claim)) return false;
+  if (closed_ || !claimState_ || !claim || claim->generation() != generation_ || !claim->open()) return false;
+  const auto bound = std::atomic_load(&claimState_->claim);
+  if (bound) return bound == claim;
   std::atomic_store(&claimState_->claim, std::move(claim));
   return true;
 }

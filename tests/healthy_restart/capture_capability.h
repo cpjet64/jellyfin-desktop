@@ -40,6 +40,7 @@ private:
 class CaptureBridge final : public std::enable_shared_from_this<CaptureBridge> {
 public:
   enum class Phase { Baseline, Target };
+  enum class Status { Pending, Ready, Rejected };
   bool ready(std::uint64_t attempt, Phase phase) const;
   void cancel() noexcept;
 private:
@@ -52,6 +53,10 @@ private:
   explicit CaptureBridge(std::weak_ptr<Slot> slot);
   bool request(fixture_restart::FrameKey key, std::uint64_t attempt, Phase phase,
                std::shared_ptr<const RetirementClaim> claim);
+  Status status(std::uint64_t attempt, Phase phase) const;
+  bool admitTarget(const fixture_restart::FrameKey& key, std::uint64_t attempt,
+                   const std::shared_ptr<const RetirementClaim>& claim,
+                   RetirementClaim::ArmIdentity identity) const;
   struct Ticket {
     fixture_restart::FrameKey key;
     std::uint64_t request = 0, renderer = 0, framebuffer = 0, serial = 0;
@@ -92,6 +97,10 @@ public:
   bool request(fixture_restart::FrameKey key, std::uint64_t attempt, CaptureBridge::Phase phase,
                std::shared_ptr<const RetirementClaim> claim);
   bool ready(std::uint64_t attempt, CaptureBridge::Phase phase) const;
+  CaptureBridge::Status status(std::uint64_t attempt, CaptureBridge::Phase phase) const;
+  bool admitTarget(const fixture_restart::FrameKey& key, std::uint64_t attempt,
+                   const std::shared_ptr<const RetirementClaim>& claim,
+                   RetirementClaim::ArmIdentity identity) const;
   void cancel() noexcept;
 private:
   explicit CaptureController(std::shared_ptr<CaptureBridge> bridge) : bridge_(std::move(bridge)) {}

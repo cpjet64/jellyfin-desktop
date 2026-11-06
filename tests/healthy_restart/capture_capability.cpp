@@ -69,6 +69,35 @@ bool CaptureBridge::ready(std::uint64_t attempt, Phase phase) const
          framebufferQualified_ && attachment_ && width_ == 160 && height_ == 90 && live(original_);
 }
 
+CaptureBridge::Status CaptureBridge::status(std::uint64_t attempt, Phase phase) const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto slot = slot_.lock();
+  const auto lifetime = slot ? slot->current() : nullptr;
+  if (!requested_ || destroyed_ || !attempt || attempt != attempt_ || phase != phase_ ||
+      !claim_ || !claim_->open() || !slot || !lifetime ||
+      !same(original_, lifetime->originalIdentity()) || !slot->captureSnapshot(lifetime) ||
+      !renderer_ || !framebuffer_ || !framebufferQualified_ || !attachment_ || width_ != 160 || height_ != 90)
+    return Status::Rejected;
+  return acknowledged_ ? Status::Ready : Status::Pending;
+}
+
+bool CaptureBridge::admitTarget(const fixture_restart::FrameKey& key, std::uint64_t attempt,
+                                const std::shared_ptr<const RetirementClaim>& claim,
+                                RetirementClaim::ArmIdentity identity) const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto slot = slot_.lock();
+  const auto lifetime = slot ? slot->current() : nullptr;
+  if (!requested_ || !acknowledged_ || destroyed_ || phase_ != Phase::Target ||
+      !attempt || attempt != attempt_ || !(key == key_) || !claim || claim != claim_ ||
+      identity.attempt != attempt || identity.core != key.core || !slot || !lifetime ||
+      !same(original_, lifetime->originalIdentity()) ||
+      !renderer_ || !framebuffer_ || !framebufferQualified_ || !attachment_ || width_ != 160 || height_ != 90)
+    return false;
+  return slot->admitCaptureDispatch(lifetime, claim, identity);
+}
+
 void CaptureBridge::cancel() noexcept
 {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -200,6 +229,18 @@ bool CaptureController::request(fixture_restart::FrameKey key, std::uint64_t att
 bool CaptureController::ready(std::uint64_t attempt, CaptureBridge::Phase phase) const
 {
   return bridge_->ready(attempt, phase);
+}
+
+CaptureBridge::Status CaptureController::status(std::uint64_t attempt, CaptureBridge::Phase phase) const
+{
+  return bridge_->status(attempt, phase);
+}
+
+bool CaptureController::admitTarget(const fixture_restart::FrameKey& key, std::uint64_t attempt,
+                                    const std::shared_ptr<const RetirementClaim>& claim,
+                                    RetirementClaim::ArmIdentity identity) const
+{
+  return bridge_->admitTarget(key, attempt, claim, identity);
 }
 
 void CaptureController::cancel() noexcept { bridge_->cancel(); }

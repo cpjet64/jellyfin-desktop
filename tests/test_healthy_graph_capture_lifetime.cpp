@@ -125,6 +125,9 @@ class TestHealthyGraphLifetime {
       access = graph->access_;
       auto slot = prepared->slot();
       CHECK(slot->bindModuleForTest([this] { return capability.load(); }, revoked));
+      CHECK(slot->bindStopClaimForTest(claim));
+      CHECK(slot->bindStopClaimForTest(claim));
+      CHECK(!slot->bindStopClaimForTest(std::make_shared<RetirementClaim>(9)));
       CHECK(slot->beginCreation() && slot->beforeCreate() && slot->recordCreated(&context));
       Operations ops;
       ops.currentIdentity = [] { return Identity{reinterpret_cast<std::uintptr_t>(QThread::currentThreadId()), 12, 13}; };
