@@ -21,6 +21,7 @@ class TestHealthyRestoreCleanup : public QObject
 private slots:
   void beforeLoad();
   void noLoadRejectsUnsolicitedEvents();
+  void reentrantQueriesRequireLaterDrain();
   void canceledGateCannotBind();
   void submittedWithoutStart();
   void bufferedStartBeforeReply();
@@ -145,10 +146,34 @@ void TestHealthyRestoreCleanup::canceledGateCannotBind()
 #endif
 }
 
+void TestHealthyRestoreCleanup::reentrantQueriesRequireLaterDrain()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent player; int stops = 0; auto gate = prepare(player, stops, false); QVERIFY(gate);
+  mpv_event none{}; none.event_id = MPV_EVENT_NONE; int drains = 0;
+  player.m_healthyStopEventWait = [&]() -> mpv_event* { ++drains; return &none; };
+  int idle = 1; qint64 position = -1; int queries = 0;
+  player.m_healthyStopDispatch = [&](quint64 id, const char**, bool query) {
+    if (!query) return -1;
+    ++queries;
+    if (id == ((quint64{1} << 54) | 2))
+      property(player, quint64{1} << 54, "idle-active", MPV_FORMAT_FLAG, &idle);
+    else property(player, quint64{1} << 53, "playlist-pos", MPV_FORMAT_INT64, &position);
+    return 0;
+  };
+  QVERIFY(cancel(player, gate));
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
+  QCOMPARE(drains, 1); QCOMPARE(queries, 2); QCOMPARE(stops, 0);
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::NoLoad);
+  QCOMPARE(drains, 2); QCOMPARE(stops, 0);
+#endif
+}
+
 void TestHealthyRestoreCleanup::submittedWithoutStart()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   PlayerComponent player; int stops = 0; auto gate = prepare(player, stops, true); QVERIFY(gate);
+  qint64 now = 1; player.m_healthyStopClock = [&] { return now; };
   QVERIFY(cancel(player, gate)); QCOMPARE(stops, 0);
   QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending); QCOMPARE(stops, 1);
   reply(player, quint64{1} << 55);
@@ -158,7 +183,8 @@ void TestHealthyRestoreCleanup::submittedWithoutStart()
   int idle = 1; qint64 position = -1;
   property(player, quint64{1} << 54, "idle-active", MPV_FORMAT_FLAG, &idle);
   property(player, quint64{1} << 53, "playlist-pos", MPV_FORMAT_INT64, &position);
-  QCOMPARE(player.pollNativeRestoreCancellation(), Status::Stopped);
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
+  now = 100; QCOMPARE(player.pollNativeRestoreCancellation(), Status::Failed);
 #endif
 }
 
