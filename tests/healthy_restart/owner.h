@@ -34,18 +34,26 @@ public:
   Owner(std::unique_ptr<Graph> graph, std::shared_ptr<Slot> slot,
         std::shared_ptr<void> token, std::int64_t deadline, Clock clock,
         Schedule schedule);
+#ifdef HEALTHY_RETIREMENT_TESTING
+  // Compiled only into headless tests; native Slot::install remains unqualified.
+  Owner(std::unique_ptr<Graph> graph, std::shared_ptr<Slot> slot,
+        std::shared_ptr<void> token, std::int64_t deadline, Clock clock,
+        Schedule schedule, std::shared_ptr<Lifetime> testLifetime);
+#endif
   ~Owner();
   bool request();
   void poll();
   void invalidate();
   bool acceptAndRelease();
   bool retained() const;
+  bool renderThreadIs(std::uintptr_t thread) const;
 private:
   friend class RenderJob;
   void runJob();
   void droppedJob();
   bool post();
   bool validTime();
+  std::shared_ptr<Lifetime> lifetime() const;
   void fail();
   mutable std::mutex mutex_;
   std::unique_ptr<Graph> graph_;
@@ -54,7 +62,10 @@ private:
   const std::int64_t deadline_;
   Clock clock_;
   Schedule schedule_;
+#ifdef HEALTHY_RETIREMENT_TESTING
+  std::shared_ptr<Lifetime> testLifetime_;
+#endif
   std::int64_t lastTime_ = 0;
-  bool requested_ = false, pending_ = false, failed_ = false, released_ = false;
+  bool requested_ = false, pending_ = false, failed_ = false, released_ = false, accepting_ = false;
 };
 }

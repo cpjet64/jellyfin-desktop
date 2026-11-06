@@ -9,10 +9,12 @@ namespace HealthyRetirement {
 namespace {
 class QtRenderJob final : public QRunnable {
 public:
-  explicit QtRenderJob(std::shared_ptr<RenderJob> job) : job_(std::move(job)) {}
-  void run() override { job_->run(); }
+  QtRenderJob(std::shared_ptr<RenderJob> job, QThread* guiThread)
+    : job_(std::move(job)), guiThread_(guiThread) {}
+  void run() override { if (QThread::currentThread() != guiThread_) job_->run(); }
 private:
   std::shared_ptr<RenderJob> job_;
+  QThread* const guiThread_;
 };
 }
 QtScheduler::QtScheduler(QQuickWindow* window) : window_(window), timer_(new QTimer(this))
@@ -31,7 +33,9 @@ void QtScheduler::bind(const std::shared_ptr<Owner>& owner)
 bool QtScheduler::schedule(std::shared_ptr<RenderJob> job)
 {
   if (!job || !window_ || QThread::currentThread() != thread() || !window_->isExposed()) return false;
-  window_->scheduleRenderJob(new QtRenderJob(std::move(job)), QQuickWindow::BeforeRenderingStage);
+  const auto owner = owner_.lock();
+  if (!owner || owner->renderThreadIs(reinterpret_cast<std::uintptr_t>(QThread::currentThreadId()))) return false;
+  window_->scheduleRenderJob(new QtRenderJob(std::move(job), thread()), QQuickWindow::BeforeRenderingStage);
   window_->update();
   return true;
 }

@@ -32,6 +32,24 @@ Owner::Owner(std::unique_ptr<Graph> graph, std::shared_ptr<Slot> slot,
 {
   if (!graph_ || !slot_ || !token_ || !clock_ || !schedule_ || !graph_->intact() || !validTime()) fail();
 }
+#ifdef HEALTHY_RETIREMENT_TESTING
+Owner::Owner(std::unique_ptr<Graph> graph, std::shared_ptr<Slot> slot,
+             std::shared_ptr<void> token, std::int64_t deadline, Clock clock,
+             Schedule schedule, std::shared_ptr<Lifetime> testLifetime)
+  : Owner(std::move(graph), std::move(slot), std::move(token), deadline,
+          std::move(clock), std::move(schedule))
+{
+  testLifetime_ = std::move(testLifetime);
+  if (!testLifetime_) fail();
+}
+#endif
+std::shared_ptr<Lifetime> Owner::lifetime() const
+{
+#ifdef HEALTHY_RETIREMENT_TESTING
+  if (testLifetime_) return testLifetime_;
+#endif
+  return slot_->current();
+}
 Owner::~Owner()
 {
   if (graph_) contain(std::move(graph_), std::move(slot_), std::move(token_));
@@ -48,6 +66,9 @@ void Owner::fail()
 {
   failed_ = true;
   if (slot_) slot_->invalidate(slot_->generation());
+#ifdef HEALTHY_RETIREMENT_TESTING
+  if (slot_ && testLifetime_) testLifetime_->invalidate(slot_->generation());
+#endif
 }
 bool Owner::request()
 {
@@ -55,7 +76,12 @@ bool Owner::request()
     std::lock_guard<std::mutex> lock(mutex_);
     if (requested_ || failed_ || released_ || !graph_->intact() || !validTime()) { fail(); return false; }
     requested_ = true;
-    if (slot_->request(slot_->generation()) != Result::Pending) { fail(); return false; }
+#ifdef HEALTHY_RETIREMENT_TESTING
+    const auto result = testLifetime_ ? testLifetime_->request(slot_->generation()) : slot_->request(slot_->generation());
+#else
+    const auto result = slot_->request(slot_->generation());
+#endif
+    if (result != Result::Pending) { fail(); return false; }
   }
   return post();
 }
@@ -79,7 +105,7 @@ void Owner::runJob()
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (failed_ || released_ || !pending_ || !graph_->intact() || !validTime()) { fail(); return; }
-    lifetime = slot_->current();
+    lifetime = this->lifetime();
     if (!lifetime) { fail(); return; }
   }
   const auto result = lifetime->retireOnRenderThread(slot_->generation());
@@ -98,7 +124,7 @@ void Owner::poll()
     std::lock_guard<std::mutex> lock(mutex_);
     if (failed_ || released_) return;
     if (!graph_->intact() || !validTime()) { fail(); return; }
-    const auto lifetime = slot_->current();
+    const auto lifetime = this->lifetime();
     if (!lifetime) { fail(); return; }
     const auto phase = lifetime->facts().phase;
     if (phase == Phase::Retained) { fail(); return; }
@@ -114,14 +140,40 @@ void Owner::invalidate()
 bool Owner::acceptAndRelease()
 {
   std::unique_ptr<Graph> graph;
+  Graph* candidate = nullptr;
+  std::shared_ptr<Lifetime> state;
+  std::uint64_t generation = 0;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (failed_ || released_ || pending_ || !graph_->intact() || !validTime()) { fail(); return false; }
-    const auto lifetime = slot_->current();
-    if (!lifetime || !graph_->eventWorkerClosed()) return false;
-    const auto generation = slot_->generation();
-    if (!lifetime->acceptAck(generation) || !lifetime->mayDestroy(generation, true) ||
-        !graph_->approveDestruction()) { fail(); return false; }
+    if (accepting_ || failed_ || released_ || pending_) return false;
+    if (!graph_->intact() || !validTime()) { fail(); return false; }
+    state = lifetime();
+    if (!state) { fail(); return false; }
+    generation = slot_->generation();
+    candidate = graph_.get();
+    accepting_ = true;
+  }
+  bool workerClosed = false;
+  try { workerClosed = candidate->eventWorkerClosed(); } catch (...) { invalidate(); }
+  if (!workerClosed) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    accepting_ = false;
+    return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (failed_ || released_ || graph_.get() != candidate || !validTime() ||
+        !state->acceptAck(generation) || !state->mayDestroy(generation, true)) {
+      accepting_ = false; fail(); return false;
+    }
+  }
+  bool approved = false;
+  try { approved = candidate->approveDestruction(); } catch (...) {}
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    accepting_ = false;
+    if (!approved || failed_ || released_ || graph_.get() != candidate || !validTime() ||
+        !state->mayDestroy(generation, true)) { fail(); return false; }
     released_ = true;
     graph = std::move(graph_);
   }
@@ -133,5 +185,11 @@ bool Owner::retained() const
 {
   std::lock_guard<std::mutex> lock(mutex_);
   return !released_;
+}
+bool Owner::renderThreadIs(std::uintptr_t thread) const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto state = slot_ ? lifetime() : nullptr;
+  return state && thread && state->originalIdentity().thread == thread;
 }
 }
