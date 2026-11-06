@@ -10,6 +10,8 @@ namespace HealthyModuleIdentity { class VerifiedModule; }
 
 namespace HealthyRetirement {
 class FixtureGraph;
+class CaptureBridge;
+class CaptureController;
 struct ClaimState { std::shared_ptr<const RetirementClaim> claim; };
 struct Identity {
   std::uintptr_t thread = 0;
@@ -110,6 +112,8 @@ public:
   void creationFailed();
   Result request(std::uint64_t generation);
   std::shared_ptr<Lifetime> current() const;
+  std::shared_ptr<CaptureBridge> captureBridge() const;
+  bool captureAdmission(const std::shared_ptr<Lifetime>& lifetime) const;
   void invalidate(std::uint64_t generation);
   std::uint64_t generation() const { return generation_; }
 #ifdef HEALTHY_RETIREMENT_TESTING
@@ -118,6 +122,8 @@ public:
 #endif
 private:
   friend class FixtureGraph;
+  friend class CaptureController;
+  bool bindCaptureBridge(const std::shared_ptr<CaptureBridge>& bridge);
   bool bindModule(std::shared_ptr<const HealthyModuleIdentity::VerifiedModule> module,
                   std::shared_ptr<const std::atomic_bool> revoked);
   bool bindStopClaim(std::shared_ptr<const RetirementClaim> claim);
@@ -126,11 +132,12 @@ private:
   const std::int64_t deadline_;
   const std::function<std::int64_t()> clock_;
   mutable std::mutex mutex_;
-  bool closed_ = false, creating_ = false;
+  bool closed_ = false, creating_ = false, captureBound_ = false;
   std::int64_t lastTime_ = 0;
   void* retainedContext_ = nullptr;
   std::shared_ptr<Lifetime> lifetime_;
   std::function<bool()> moduleQualification_;
   std::shared_ptr<ClaimState> claimState_;
+  std::weak_ptr<CaptureBridge> captureBridge_;
 };
 }

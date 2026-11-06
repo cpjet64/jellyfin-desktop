@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <vector>
+namespace HealthyRetirement { class CaptureEvidence; }
 
 namespace fixture_restart {
 
@@ -18,6 +19,7 @@ struct FrameKey {
 // Fixture output is grayscale and opaque; acknowledgement inputs must already
 // reflect the broker's checked seek, restart and position-qualified snapshot.
 struct FrameRecord {
+    std::shared_ptr<const HealthyRetirement::CaptureEvidence> captureEvidence;
     FrameKey key;
     std::uint64_t serial = 0;
     int width = 0, height = 0;

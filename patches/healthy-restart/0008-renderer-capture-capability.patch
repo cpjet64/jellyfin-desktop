@@ -1,0 +1,93 @@
+diff --git a/mpvqt/mpvrenderer.cpp b/mpvqt/mpvrenderer.cpp
+index b3bb339..3e76350 100644
+--- a/mpvqt/mpvrenderer.cpp
++++ b/mpvqt/mpvrenderer.cpp
+@@ -11,0 +12 @@
++#include "capture_capability.h"
+@@ -15,0 +17 @@
++#include <QOpenGLExtraFunctions>
+@@ -21,0 +24,39 @@
++namespace {
++HealthyRetirement::FramebufferObservation captureAttachment(QOpenGLFramebufferObject *fbo)
++{
++    HealthyRetirement::FramebufferObservation observation;
++    auto *context = QOpenGLContext::currentContext();
++    if (!context || !context->isValid() || !fbo) return observation;
++    auto *gl = context->extraFunctions();
++    GLint bound = 0, type = 0, name = 0, level = -1, face = -1, layer = -1;
++    GLint old = 0, w = 0, h = 0;
++    if (gl->glGetError() != GL_NO_ERROR) return observation;
++    gl->glGetIntegerv(GL_FRAMEBUFFER_BINDING, &bound);
++    if (bound != static_cast<GLint>(fbo->handle())) return observation;
++    observation.bound = true;
++    gl->glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
++                                               GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &type);
++    gl->glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
++                                               GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &name);
++    if (type != GL_TEXTURE || name <= 0) return observation;
++    gl->glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
++                                               GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL, &level);
++    gl->glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
++                                               GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE, &face);
++    gl->glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
++                                               GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER, &layer);
++    if (gl->glGetError() != GL_NO_ERROR) return observation;
++    observation.level = level; observation.face = face; observation.layer = layer;
++    if (level != 0 || face != 0 || layer != 0) { observation.queried = true; return observation; }
++    gl->glGetIntegerv(GL_TEXTURE_BINDING_2D, &old);
++    gl->glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(name));
++    gl->glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &w);
++    gl->glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &h);
++    gl->glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(old));
++    if (gl->glGetError() != GL_NO_ERROR) return observation;
++    observation.attachment = (static_cast<std::uint64_t>(type) << 32) | static_cast<std::uint32_t>(name);
++    observation.width = w; observation.height = h; observation.queried = true;
++    return observation;
++}
++}
++
+@@ -48,0 +90 @@ MpvRenderer::~MpvRenderer()
++    if (const auto capture = slot ? slot->captureBridge() : nullptr) capture->rendererDestroyed();
+@@ -83 +125,14 @@ void MpvRenderer::render()
+-    const auto ticket = fixture_restart::captureTicket(reinterpret_cast<std::uintptr_t>(this));
++    const auto capture = slot->captureBridge();
++    const auto identity = HealthyRetirement::Identity{
++        reinterpret_cast<std::uintptr_t>(QThread::currentThreadId()),
++        reinterpret_cast<std::uintptr_t>(QOpenGLContext::currentContext()), state->originalIdentity().epoch};
++    bool captureReady = false;
++    if (capture) {
++        if (!m_captureRendererReady) m_captureRendererReady = capture->rendererCreated(identity);
++        const auto observed = captureAttachment(fbo);
++        if (m_captureFboPending) {
++            capture->framebuffer(identity, observed);
++            m_captureFboPending = false;
++        }
++        captureReady = capture->framebufferCurrent(identity, observed) && m_captureRendererReady;
++    }
+@@ -90,0 +146 @@ void MpvRenderer::render()
++    const auto ticket = captureReady ? capture->issue(identity, serial) : HealthyRetirement::CaptureBridge::Ticket{};
+@@ -92,4 +148,3 @@ void MpvRenderer::render()
+-    if (ticket.generation && fbo->width() == 160 && fbo->height() == 90) {
+-        const auto glContext = reinterpret_cast<std::uintptr_t>(QOpenGLContext::currentContext());
+-        fixture_restart::publishCapture(ticket, fbo->toImage(true), updates, infoResult,
+-                                        next.flags, renderResult, glContext, serial);
++    if (ticket.request && capture->framebufferCurrent(identity, captureAttachment(fbo))) {
++        // Qt converts GL coordinates to raster coordinates when flipped is true.
++        capture->publish(ticket, identity, fbo->toImage(true), updates, infoResult, next.flags, renderResult);
+@@ -100,0 +156 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
++    m_captureFboPending = true;
+@@ -103,0 +160,7 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
++    if (existing) {
++        const auto capture = slot->captureBridge();
++        const auto identity = HealthyRetirement::Identity{
++            reinterpret_cast<std::uintptr_t>(QThread::currentThreadId()),
++            reinterpret_cast<std::uintptr_t>(QOpenGLContext::currentContext()), existing->originalIdentity().epoch};
++        if (capture) capture->framebuffer(identity, {});
++    }
+diff --git a/mpvqt/mpvrenderer.h b/mpvqt/mpvrenderer.h
+index aa23a2c..dcc9d98 100644
+--- a/mpvqt/mpvrenderer.h
++++ b/mpvqt/mpvrenderer.h
+@@ -26,0 +27,2 @@ public:
++    bool m_captureRendererReady{false};
++    bool m_captureFboPending{true};
