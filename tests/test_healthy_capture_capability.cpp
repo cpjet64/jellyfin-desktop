@@ -146,6 +146,22 @@ class TestCaptureCapability {
     check(f.bridge->framebuffer(identity, fbo()));
     check(!f.bridge->framebufferCurrent(identity, fbo(8)));
   }
+  static void wrong_identity_during_render() {
+    Fixture f;
+    check(f.bridge->request(f.key, 20, CaptureBridge::Phase::Baseline, f.claim));
+    const auto wrongThread = f.bridge->issue(Identity{99, 12, 13}, 1);
+    const auto wrongEpoch = f.bridge->issue(Identity{11, 12, 99}, 1);
+    QImage image(160, 90, QImage::Format_RGBA8888); image.fill(Qt::black);
+    f.bridge->publish(wrongThread, identity, image, 0, 0, 0, 0);
+    f.bridge->publish(wrongEpoch, identity, image, 0, 0, 0, 0);
+    check(fixture_restart::takeCaptures().empty());
+    const auto ticket = f.bridge->issue(identity, 1);
+    f.bridge->publish(ticket, Identity{99, 12, 13}, image, 0, 0, 0, 0);
+    f.bridge->publish(ticket, Identity{11, 12, 99}, image, 0, 0, 0, 0);
+    check(fixture_restart::takeCaptures().empty());
+    f.bridge->publish(ticket, identity, image, 0, 0, 0, 0);
+    check(fixture_restart::takeCaptures().size() == 1);
+  }
   static void lifetime_replacement_and_late() {
     Fixture first, replacement;
     check(first.bridge->request(first.key, 20, CaptureBridge::Phase::Baseline, first.claim));
@@ -164,7 +180,8 @@ class TestCaptureCapability {
 public:
   static void run() {
     issue_and_revoke(); framebuffer_and_phase(); forged_and_replayed(); incomplete_or_late();
-    physical_and_identity(); lifetime_replacement_and_late(); original_deadline_cannot_revive();
+    physical_and_identity(); wrong_identity_during_render(); lifetime_replacement_and_late();
+    original_deadline_cannot_revive();
   }
 };
 constexpr Identity TestCaptureCapability::identity;
