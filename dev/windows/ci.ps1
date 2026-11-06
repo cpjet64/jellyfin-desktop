@@ -12,6 +12,7 @@ $mpvVersion = '20261018-git-01e2533f31'
 . "$PSScriptRoot/ci-gui.ps1"
 . "$PSScriptRoot/ci-mpvqt.ps1"
 . "$PSScriptRoot/ci-preflight.ps1"
+. "$PSScriptRoot/ci-healthy.ps1"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 function Run-Native {
@@ -109,6 +110,9 @@ Install-Mpv 'x86_64' "$build/mpv-fallback" $sevenZip $ci $mpvVersion 'D7F5621F42
 Run-Native $python @('-m', 'venv', "$ci/venv")
 $venvPython = Join-Path $ci 'venv/Scripts/python.exe'
 Run-Native $venvPython @('tests/test_ci_results.py')
+Run-Native $venvPython @('dev/ci/test_healthy_diagnostic.py')
+Run-Native $venvPython @('dev/windows/test_healthy_results.py')
+Run-Native 'powershell.exe' @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', 'dev/windows/test_ci_healthy.ps1')
 Run-Native $venvPython @('tests/test_windows_loader_driver.py')
 Run-Native $venvPython @('dev/ci/test_provision_jellyfin_web.py')
 Run-Native $venvPython @('dev/ci/test_evidence.py')
@@ -195,6 +199,9 @@ try {
 $env:APPDATA = "$testHome/roaming"
 $env:LOCALAPPDATA = "$testHome/local"
 $env:JELLYFIN_TEST_OWNED_ROOT = $build
+if ($mode -eq 'static') {
+    Invoke-HealthyDiagnostic $root (Join-Path $ci 'healthy-diagnostic-build') $qt "$build/mpv" $venvPython $results
+}
 Run-Native 'ctest.exe' @('--test-dir', $build, '-LE', 'gui', '--no-tests=error', '--output-on-failure', '--timeout', '60', '--output-junit', "$results/headless-ctest.xml")
 $reportArgs = @('dev/ci/check_results.py', 'junit', "$results/headless-ctest.xml")
 $required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard', 'test_mpv_test_bootstrap', 'test_mpv_test_bootstrap_pure', 'test_smtc_admission_model', 'test_c2a_hold_gate', 'test_c2_error_terminal', 'test_c2_fault_quiescence_policy', 'test_c2_synthetic_service', 'test_c2_fault_restore_permission', 'test_c2_fault_restore_frame', 'test_c2_capture_observation', 'test_c2_quiescence_observation', 'test_player_intent_observation', 'test_synchronous_stop_trace', 'test_synchronous_stop_events', 'test_healthy_cleanup_coordinator', 'test_healthy_wake_binding', 'test_playback_intent_acceptance', 'test_playback_checkpoint', 'test_player_intent_boundary', 'test_recovery_bridge_session', 'test_recovery_bridge_host', 'test_windows_loader_mode', 'test_playback_native_receipts', 'test_player_native_receipts', 'test_native_observation', 'test_player_native_restore', 'test_fixture_restart_broker')
