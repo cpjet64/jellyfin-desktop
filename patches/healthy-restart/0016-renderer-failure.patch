@@ -1,0 +1,39 @@
+diff --git a/mpvqt/mpvabstractitem.cpp b/mpvqt/mpvabstractitem.cpp
+index 33c5808..56a0b58 100644
+--- a/mpvqt/mpvabstractitem.cpp
++++ b/mpvqt/mpvabstractitem.cpp
+@@ -70,0 +71 @@ bool MpvAbstractItem::healthyBindToken(std::shared_ptr<HealthyRetirement::QtToke
++        if (!token->slot()->bindRendererOwner(token, this)) return false;
+@@ -117 +118,3 @@ QQuickFramebufferObject::Renderer *MpvAbstractItem::createRenderer() const
+-    return new MpvRenderer(const_cast<MpvAbstractItem *>(this), std::move(token));
++    auto *renderer = new MpvRenderer(const_cast<MpvAbstractItem *>(this), token);
++    if (token) renderer->m_healthyIncarnation = token->slot()->bindRenderer(token, this);
++    return renderer;
+diff --git a/mpvqt/mpvrenderer.cpp b/mpvqt/mpvrenderer.cpp
+index 3e76350..16bf025 100644
+--- a/mpvqt/mpvrenderer.cpp
++++ b/mpvqt/mpvrenderer.cpp
+@@ -88,0 +89 @@ MpvRenderer::~MpvRenderer()
++    if (!m_healthyIncarnation) return;
+@@ -97,0 +99 @@ void MpvRenderer::render()
++    if (!m_healthyIncarnation) return;
+@@ -131 +133,4 @@ void MpvRenderer::render()
+-        if (!m_captureRendererReady) m_captureRendererReady = capture->rendererCreated(identity);
++        if (!m_captureAttempted && m_healthyIncarnation) {
++            m_captureAttempted = true;
++            m_captureRendererReady = capture->firstRendererAttempt(m_healthyToken, m_healthyIncarnation, state, identity);
++        }
+@@ -155,0 +161 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
++    if (!m_healthyIncarnation) return nullptr;
+diff --git a/mpvqt/mpvrenderer.h b/mpvqt/mpvrenderer.h
+index dcc9d98..d1543b2 100644
+--- a/mpvqt/mpvrenderer.h
++++ b/mpvqt/mpvrenderer.h
+@@ -12 +12 @@
+-namespace HealthyRetirement { class QtToken; class Slot; class Lifetime; struct RenderContextState; }
++namespace HealthyRetirement { class QtToken; class Slot; class Lifetime; class RendererIncarnation; struct RenderContextState; }
+@@ -36,0 +37,4 @@ public:
++private:
++    friend class MpvAbstractItem;
++    std::shared_ptr<HealthyRetirement::RendererIncarnation> m_healthyIncarnation;
++    bool m_captureAttempted{false};

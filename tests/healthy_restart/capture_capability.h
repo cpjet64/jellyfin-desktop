@@ -6,6 +6,7 @@
 
 class MpvRenderer;
 class TestCaptureCapability;
+class TestRendererFailure;
 class QImage;
 namespace HealthyRetirement {
 class FixtureGraph;
@@ -49,6 +50,7 @@ private:
   friend class CaptureEvidence;
 #ifdef HEALTHY_RETIREMENT_TESTING
   friend class ::TestCaptureCapability;
+  friend class ::TestRendererFailure;
 #endif
   explicit CaptureBridge(std::weak_ptr<Slot> slot);
   bool request(fixture_restart::FrameKey key, std::uint64_t attempt, Phase phase,
@@ -64,6 +66,10 @@ private:
     bool first = false;
   };
   bool rendererCreated(Identity identity);
+  bool firstRendererAttempt(const std::shared_ptr<QtToken>& token,
+                            const std::shared_ptr<RendererIncarnation>& incarnation,
+                            const std::shared_ptr<Lifetime>& lifetime, Identity identity);
+  bool rendererCreatedLocked(Identity identity);
   bool framebuffer(Identity identity, const FramebufferObservation& observation);
   bool framebufferCurrent(Identity identity, const FramebufferObservation& observation);
   Ticket issue(Identity identity, std::uint64_t serial);
@@ -89,6 +95,10 @@ private:
   Phase phase_ = Phase::Baseline;
   bool requested_ = false, acknowledged_ = false, destroyed_ = false, baselineIssued_ = false;
   bool framebufferQualified_ = false;
+  bool cancelled_ = false;
+#ifdef HEALTHY_RETIREMENT_TESTING
+  bool failFirstRendererForTest_ = false;
+#endif
 };
 
 // Graph-side facade cannot issue renderer tickets or construct evidence.

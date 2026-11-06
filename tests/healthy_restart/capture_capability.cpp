@@ -58,6 +58,7 @@ bool CaptureBridge::request(fixture_restart::FrameKey key, std::uint64_t attempt
   phase_ = phase;
   claim_ = std::move(claim);
   requested_ = true;
+  cancelled_ = false;
   acknowledged_ = false;
   return true;
 }
@@ -116,6 +117,7 @@ void CaptureBridge::cancel() noexcept
 {
   std::lock_guard<std::mutex> lock(mutex_);
   requested_ = acknowledged_ = false;
+  cancelled_ = true;
   baselineIssued_ = false;
   claim_.reset();
 }
@@ -123,6 +125,11 @@ void CaptureBridge::cancel() noexcept
 bool CaptureBridge::rendererCreated(Identity identity)
 {
   std::lock_guard<std::mutex> lock(mutex_);
+  return rendererCreatedLocked(identity);
+}
+
+bool CaptureBridge::rendererCreatedLocked(Identity identity)
+{
   const auto slot = slot_.lock();
   const auto lifetime = slot ? slot->current() : nullptr;
   if (destroyed_ || renderer_ || !lifetime || !same(identity, lifetime->originalIdentity())) return false;
@@ -134,6 +141,29 @@ bool CaptureBridge::rendererCreated(Identity identity)
       return true;
     }
   }
+  return false;
+}
+
+bool CaptureBridge::firstRendererAttempt(const std::shared_ptr<QtToken>& token,
+                                         const std::shared_ptr<RendererIncarnation>& incarnation,
+                                         const std::shared_ptr<Lifetime>& lifetime, Identity identity)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto slot = slot_.lock();
+  if (!slot || destroyed_ || cancelled_ || renderer_ || !slot->rendererMatches(token, incarnation, lifetime, identity)) return false;
+#ifdef HEALTHY_RETIREMENT_TESTING
+  const bool accepted = !failFirstRendererForTest_ && rendererCreatedLocked(identity);
+#else
+  const bool accepted = rendererCreatedLocked(identity);
+#endif
+  if (accepted) {
+    if (slot->rendererMatches(token, incarnation, lifetime, identity)) return true;
+    renderer_ = 0;
+    return false;
+  }
+  if (!slot->rejectRendererFailure(token, incarnation, lifetime, identity)) return false;
+  destroyed_ = true;
+  requested_ = acknowledged_ = baselineIssued_ = framebufferQualified_ = false;
   return false;
 }
 

@@ -6,12 +6,20 @@
 #include <mutex>
 #include <optional>
 #include "retirement_claim.h"
+class MpvAbstractItem;
+class MpvRenderer;
+class TestRendererFailure;
 namespace HealthyModuleIdentity { class VerifiedModule; }
 
 namespace HealthyRetirement {
 class FixtureGraph;
 class CaptureBridge;
 class CaptureController;
+class QtToken;
+class RendererIncarnation final {
+  friend class Slot;
+  RendererIncarnation() = default;
+};
 struct ClaimState { std::shared_ptr<const RetirementClaim> claim; };
 struct Identity {
   std::uintptr_t thread = 0;
@@ -128,6 +136,23 @@ private:
   friend class CaptureController;
   friend class CaptureBridge;
   friend class ::PlayerComponent;
+  friend class ::MpvAbstractItem;
+  friend class ::MpvRenderer;
+#ifdef HEALTHY_RETIREMENT_TESTING
+  friend class ::TestRendererFailure;
+#endif
+  bool bindRendererOwner(const std::shared_ptr<QtToken>& token, const void* item);
+  std::shared_ptr<RendererIncarnation> bindRenderer(const std::shared_ptr<QtToken>& token,
+                                                     const void* item);
+  bool rejectRendererFailure(const std::shared_ptr<QtToken>& token,
+                             const std::shared_ptr<RendererIncarnation>& incarnation,
+                             const std::shared_ptr<Lifetime>& lifetime, Identity identity);
+  bool rendererMatches(const std::shared_ptr<QtToken>& token,
+                       const std::shared_ptr<RendererIncarnation>& incarnation,
+                       const std::shared_ptr<Lifetime>& lifetime, Identity identity) const;
+  bool rendererMatchesLocked(const std::shared_ptr<QtToken>& token,
+                             const std::shared_ptr<RendererIncarnation>& incarnation,
+                             const std::shared_ptr<Lifetime>& lifetime, Identity identity) const;
   bool admitLoadDispatch(const std::shared_ptr<const RetirementClaim>& claim,
                          RetirementClaim::ArmIdentity identity) const;
   bool admitCaptureDispatch(const std::shared_ptr<Lifetime>& lifetime,
@@ -152,5 +177,8 @@ private:
   std::function<bool()> moduleQualification_;
   std::shared_ptr<ClaimState> claimState_;
   std::weak_ptr<CaptureBridge> captureBridge_;
+  std::weak_ptr<QtToken> rendererToken_;
+  const void* rendererItem_ = nullptr;
+  std::shared_ptr<RendererIncarnation> rendererIncarnation_;
 };
 }

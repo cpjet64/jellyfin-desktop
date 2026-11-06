@@ -1,8 +1,62 @@
 #include "lifetime.h"
+#include "lifetime_qt.h"
 #include "module_channel.h"
 #include <utility>
 
 namespace HealthyRetirement {
+bool Slot::bindRendererOwner(const std::shared_ptr<QtToken>& token, const void* item)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (closed_ || !token || token->slot().get() != this || !item || rendererItem_) return false;
+  rendererToken_ = token;
+  rendererItem_ = item;
+  return true;
+}
+
+std::shared_ptr<RendererIncarnation> Slot::bindRenderer(const std::shared_ptr<QtToken>& token,
+                                                       const void* item)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (closed_ || !token || rendererToken_.lock() != token || !item || item != rendererItem_ ||
+      rendererIncarnation_) return {};
+  rendererIncarnation_ = std::shared_ptr<RendererIncarnation>(new RendererIncarnation);
+  return rendererIncarnation_;
+}
+
+bool Slot::rejectRendererFailure(const std::shared_ptr<QtToken>& token,
+                                 const std::shared_ptr<RendererIncarnation>& incarnation,
+                                 const std::shared_ptr<Lifetime>& lifetime, Identity identity)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!rendererMatchesLocked(token, incarnation, lifetime, identity)) return false;
+  std::lock_guard<std::mutex> lifetimeLock(lifetime->mutex_);
+  if (!lifetime->ownerValid_ || lifetime->facts_.phase != Phase::Active || !lifetime->facts_.renders) return false;
+  closed_ = true;
+  lifetime->ownerValid_ = false;
+  lifetime->retain();
+  return true;
+}
+
+bool Slot::rendererMatches(const std::shared_ptr<QtToken>& token,
+                           const std::shared_ptr<RendererIncarnation>& incarnation,
+                           const std::shared_ptr<Lifetime>& lifetime, Identity identity) const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  return rendererMatchesLocked(token, incarnation, lifetime, identity);
+}
+
+bool Slot::rendererMatchesLocked(const std::shared_ptr<QtToken>& token,
+                                 const std::shared_ptr<RendererIncarnation>& incarnation,
+                                 const std::shared_ptr<Lifetime>& lifetime, Identity identity) const
+{
+  if (closed_ || !token || rendererToken_.lock() != token || !incarnation ||
+      incarnation != rendererIncarnation_ || !lifetime || lifetime != lifetime_) return false;
+  const auto claim = claimState_ ? std::atomic_load(&claimState_->claim) : nullptr;
+  if (claim && !claim->open()) return false;
+  std::lock_guard<std::mutex> lifetimeLock(lifetime->mutex_);
+  return lifetime->generation_ == generation_ && lifetime->ownerValid_ && lifetime->facts_.phase == Phase::Active &&
+      !lifetime->facts_.admissionClosed && lifetime->facts_.renders && lifetime->matches(identity);
+}
 namespace {
 struct ModuleGuard {
   std::function<bool()> capability;
