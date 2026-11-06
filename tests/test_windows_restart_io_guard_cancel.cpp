@@ -6,6 +6,7 @@ using namespace FixtureRestart;
 
 namespace {
 bool authority = true;
+bool synchronousRead = false;
 int reads = 0, cancels = 0, results = 0;
 void* buffer = nullptr;
 DWORD error = ERROR_IO_PENDING;
@@ -14,9 +15,14 @@ BOOL WINAPI closeFake(HANDLE) { return TRUE; }
 BOOL WINAPI resetFake(HANDLE) { return TRUE; }
 DWORD WINAPI errorFake() { return error; }
 ULONGLONG WINAPI clockFake() { return 1; }
-BOOL WINAPI readFake(HANDLE, LPVOID out, DWORD, LPDWORD, LPOVERLAPPED)
+BOOL WINAPI readFake(HANDLE, LPVOID out, DWORD size, LPDWORD count, LPOVERLAPPED)
 {
+  if (synchronousRead) { std::memset(out, 'x', size); *count = size; return TRUE; }
   ++reads; buffer = out; error = ERROR_IO_PENDING; return FALSE;
+}
+BOOL WINAPI writeFake(HANDLE, LPCVOID, DWORD size, LPDWORD count, LPOVERLAPPED)
+{
+  *count = size; return TRUE;
 }
 BOOL WINAPI cancelFake(HANDLE, LPOVERLAPPED)
 {
@@ -30,7 +36,7 @@ WindowsIoApi api()
 {
   WindowsIoApi result;
   result.createEvent = eventFake; result.closeHandle = closeFake; result.resetEvent = resetFake;
-  result.readFile = readFake; result.cancel = cancelFake; result.result = resultFake;
+  result.readFile = readFake; result.writeFile = writeFake; result.cancel = cancelFake; result.result = resultFake;
   result.error = errorFake; result.now = clockFake;
   return result;
 }
@@ -47,5 +53,31 @@ void cancellationRace()
   CHECK(io->consumeSettlement(result->operation) && !io->consumeSettlement(result->operation));
   CHECK(io->release() && result->transferred == 3 && std::memcmp(result->bytes.data(), "abc", 3) == 0);
 }
+void completedWriteSnapshot()
+{
+  authority = true; auto* io = new WindowsRestartIo(api()); const char bytes[] = "hello";
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), false, bytes, 5, 10) == IoProgress::Complete);
+  CHECK(io->retainCompleted() && !io->retainCompleted());
+  const auto result = io->settlement();
+  CHECK(result && !result->read && result->requested == 5 && result->transferred == 5);
+  CHECK(result->bytes.size() == 5 && std::memcmp(result->bytes.data(), bytes, 5) == 0);
+  CHECK(!io->release() && io->consumeSettlement(result->operation));
+  CHECK(!io->consumeSettlement(result->operation) && !io->retainCompleted() && io->release());
+  CHECK(std::memcmp(result->bytes.data(), bytes, 5) == 0);
 }
-int main() { cancellationRace(); }
+void guardedTrackedRead()
+{
+  authority = true; reads = 0; auto* io = new WindowsRestartIo(api());
+  CHECK(io->beginTrackedReadGuarded(reinterpret_cast<HANDLE>(2), 8, 10, [] { return authority; }) == IoProgress::Pending);
+  authority = false;
+  CHECK(io->pollGuarded([] { return authority; }) == IoProgress::Complete);
+  const auto result = io->settlement();
+  CHECK(result && result->read && result->transferred == 3 && reads == 1 && !io->retainCompleted());
+  CHECK(std::memcmp(result->bytes.data(), "abc", 3) == 0);
+  CHECK(io->consumeSettlement(result->operation) && !io->retainCompleted() && io->release());
+  synchronousRead = true; io = new WindowsRestartIo(api());
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), true, nullptr, 2, 10) == IoProgress::Complete);
+  CHECK(!io->retainCompleted() && !io->settlement() && io->release());
+}
+}
+int main() { cancellationRace(); completedWriteSnapshot(); guardedTrackedRead(); }
