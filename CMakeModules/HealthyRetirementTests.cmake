@@ -1,5 +1,15 @@
 # Headless tests of the diagnostic retirement protocol and its Qt adapter.
 find_package(Threads REQUIRED)
+add_executable(test_healthy_renderer_failure "${CMAKE_SOURCE_DIR}/tests/test_healthy_renderer_failure.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime_module.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime_qt.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/capture_capability.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/fixture_restart/frame_capture.cpp" "${CMAKE_SOURCE_DIR}/tests/fixture_restart/frame_acceptance.cpp")
+target_include_directories(test_healthy_renderer_failure PRIVATE "${CMAKE_SOURCE_DIR}/tests/healthy_restart" "${CMAKE_SOURCE_DIR}/tests/fixture_restart")
+target_compile_features(test_healthy_renderer_failure PRIVATE cxx_std_17)
+target_compile_definitions(test_healthy_renderer_failure PRIVATE HEALTHY_RETIREMENT_TESTING)
+target_link_libraries(test_healthy_renderer_failure PRIVATE Threads::Threads Qt6::Core Qt6::Gui)
+add_test(NAME test_healthy_renderer_failure COMMAND test_healthy_renderer_failure)
+set_tests_properties(test_healthy_renderer_failure PROPERTIES TIMEOUT 60)
 add_executable(test_restore_dispatch_claim "${CMAKE_SOURCE_DIR}/tests/test_restore_dispatch_claim.cpp")
 target_include_directories(test_restore_dispatch_claim PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_compile_features(test_restore_dispatch_claim PRIVATE cxx_std_17)

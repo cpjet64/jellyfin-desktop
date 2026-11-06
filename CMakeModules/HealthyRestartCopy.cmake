@@ -144,7 +144,8 @@ foreach(_entry IN ITEMS
     "patches/healthy-restart/0012-contained-stop-continuation.patch|1cc78786f8671a6f8920f4fcb46cf268188274daf79f16d4a5f78e3f51b5e44d"
     "patches/healthy-restart/0013-arm-test-hooks.patch|a91339de3b6564437a957f5cd9ca81be91c9e0b37fe21bb01aaab953d17cc4cc"
     "patches/healthy-restart/0014-graph-capture-test-friend.patch|e98019cf81a53a1212a53e2554f87c0bc36d3e1f2263b9b79ca9e5375bc1fd83"
-    "patches/healthy-restart/0015-restore-dispatch-authority.patch|67c46e81bdd69507c95b3bcc061dbb476c5181cccdf79ad9f785d79b69c521a4")
+    "patches/healthy-restart/0015-restore-dispatch-authority.patch|67c46e81bdd69507c95b3bcc061dbb476c5181cccdf79ad9f785d79b69c521a4"
+    "patches/healthy-restart/0016-renderer-failure.patch|01295f13a5d362196caabcfa1bde81ce4f101bad02c4fce30513beb1276e23d8")
   string(REPLACE "|" ";" _pair "${_entry}")
   list(GET _pair 0 _relative)
   list(GET _pair 1 _hash)
@@ -204,6 +205,7 @@ _healthy_apply("patches/healthy-restart/0012-contained-stop-continuation.patch" 
 _healthy_apply("patches/healthy-restart/0013-arm-test-hooks.patch" "a91339de3b6564437a957f5cd9ca81be91c9e0b37fe21bb01aaab953d17cc4cc" FALSE)
 _healthy_apply("patches/healthy-restart/0014-graph-capture-test-friend.patch" "e98019cf81a53a1212a53e2554f87c0bc36d3e1f2263b9b79ca9e5375bc1fd83" FALSE)
 _healthy_apply("patches/healthy-restart/0015-restore-dispatch-authority.patch" "67c46e81bdd69507c95b3bcc061dbb476c5181cccdf79ad9f785d79b69c521a4" FALSE)
+_healthy_apply("patches/healthy-restart/0016-renderer-failure.patch" "01295f13a5d362196caabcfa1bde81ce4f101bad02c4fce30513beb1276e23d8" FALSE)
 
 foreach(_entry IN LISTS _healthy_output_pins)
   string(REPLACE "|" ";" _pair "${_entry}")
