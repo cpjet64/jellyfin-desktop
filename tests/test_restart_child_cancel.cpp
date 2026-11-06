@@ -23,6 +23,25 @@ static void beforeGrant()
   CHECK(!child.pollCancellation(result));
 }
 
+#ifdef HEALTHY_CHILD_RESTART_TESTING
+static void cancelAfterValidationBeforeArm()
+{
+  int g, c, arms = 0; ChildGate gate(&g, 100);
+  RestartChild* owner = nullptr; QByteArray during;
+  RestartChild::Actions a; a.now = [] { return 10; };
+  a.armActual = [&] { ++arms; return RestartChild::ArmResult{RestartChild::ArmResult::Status::Armed, identity()}; };
+  a.beforeArm = [&] {
+    CHECK(owner->control(&c, encodeControl({ControlKind::UserStop, 1, 4}), during));
+    CHECK(during.isEmpty());
+  };
+  RestartChild child(gate, &g, &c, 1, 9, digest(), a); owner = &child;
+  QByteArray response;
+  CHECK(child.grant(&g, encodeGrant(grant()), 10, true, response));
+  CHECK(decodeCancelNoArm(response, {1, 9, 4, 1, digest()}));
+  CHECK(arms == 0 && !child.load() && !child.seek() && !child.pollCancellation(response));
+}
+#endif
+
 static void reentrantArm()
 {
   int g, c, begins = 0, polls = 0, loads = 0; ChildGate gate(&g, 100);
@@ -47,6 +66,25 @@ static void reentrantArm()
   CHECK(decodeCancelResult(terminal, {1, 9, 2, 3, 1, 10, 11, 12, 13}, parsed));
   CHECK(parsed.outcome == CancelOutcome::Stopped && begins == 1 && polls == 1);
   CHECK(!child.pollCancellation(terminal));
+}
+
+static void canceledDuringUnsuccessfulArm()
+{
+  for (int unknown = 0; unknown < 2; ++unknown) {
+    int g, c, calls = 0; ChildGate gate(&g, 100); RestartChild* owner = nullptr;
+    QByteArray during, response; RestartChild::Actions a; a.now = [] { return 10; };
+    a.armActual = [&] {
+      ++calls; CHECK(owner->control(&c, encodeControl({ControlKind::UserStop, 1, 4}), during));
+      CHECK(during.isEmpty());
+      return RestartChild::ArmResult{unknown ? RestartChild::ArmResult::Status::Unknown :
+          RestartChild::ArmResult::Status::NotArmed, {}};
+    };
+    RestartChild child(gate, &g, &c, 1, 9, digest(), a); owner = &child;
+    const bool result = child.grant(&g, encodeGrant(grant()), 10, true, response);
+    CHECK(calls == 1 && !child.load() && !child.seek());
+    if (unknown) CHECK(!result && response.isEmpty());
+    else CHECK(result && decodeCancelNoArm(response, {1, 9, 4, 1, digest()}));
+  }
 }
 
 static void rejectsWrongCleanupIdentity()
@@ -95,5 +133,9 @@ static void unknownArmCannotBecomeNoArm()
 int main(int argc, char** argv)
 {
   QCoreApplication app(argc, argv);
-  beforeGrant(); reentrantArm(); rejectsWrongCleanupIdentity(); cancellationAfterAcceptance(); unknownArmCannotBecomeNoArm();
+  beforeGrant(); reentrantArm(); canceledDuringUnsuccessfulArm(); rejectsWrongCleanupIdentity();
+  cancellationAfterAcceptance(); unknownArmCannotBecomeNoArm();
+#ifdef HEALTHY_CHILD_RESTART_TESTING
+  cancelAfterValidationBeforeArm();
+#endif
 }
