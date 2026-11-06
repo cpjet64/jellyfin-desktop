@@ -1,13 +1,8 @@
 #include "player/PlayerComponent.h"
 #include "player/PlaybackCheckpoint.h"
 #include "player_test_cache.h"
-#ifdef HEALTHY_COPIED_SOURCE_TEST
-#include "FixtureRestartAdapter.h"
-#include "RestartWire.h"
-#else
-#include "fixture_restart/FixtureRestartAdapter.h"
-#include "fixture_restart/RestartWire.h"
-#endif
+#include <FixtureRestartAdapter.h>
+#include <RestartWire.h>
 #include <QCryptographicHash>
 #include "fixture_restart/OwnedFixtureFile.h"
 #include <QTemporaryFile>
