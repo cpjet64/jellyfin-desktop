@@ -1,6 +1,6 @@
 #pragma once
 
-#include "module_endpoints.h"
+#include <module_endpoints.h>
 #include <algorithm>
 #include <cstring>
 #include <vector>

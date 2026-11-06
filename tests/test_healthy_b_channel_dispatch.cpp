@@ -2,8 +2,8 @@
 #include "graph_session.h"
 #include "graph_access.h"
 #include "child_session.h"
-#include "b_channel_test_io.h"
-#include "b_channel_capture.h"
+#include "healthy_restart/b_channel_test_io.h"
+#include "healthy_restart/b_channel_capture.h"
 #include "RestartWire.h"
 #include "player/PlayerComponent.h"
 #include "player_test_cache.h"
@@ -88,7 +88,7 @@ class TestHealthyGraphArm {
   {
     const auto slot = prepared_->slot();
     CHECK(slot->beginCreation() && slot->beforeCreate() && slot->recordCreated(&context_));
-    Operations ops;
+    HealthyRetirement::Operations ops;
     ops.currentIdentity = [] { return Identity{11, 12, 13}; };
     ops.unregisterCallback = [](void*) {};
     ops.invalidateQueued = [](std::uint64_t) { return true; };

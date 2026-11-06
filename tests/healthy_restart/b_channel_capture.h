@@ -1,6 +1,6 @@
 #pragma once
-#include "capture_capability.h"
-#include "frame_capture.h"
+#include <capture_capability.h>
+#include <frame_capture.h>
 #include <QPainter>
 
 // The capture bridge is real; only the renderer boundary is injected.
