@@ -1,4 +1,5 @@
 #include "paused_hold.h"
+#include "capture_capability.h"
 #include <cstdlib>
 #include <utility>
 
@@ -14,10 +15,10 @@ bool sameBinding(const PausedHoldBinding& a, const PausedHoldBinding& b)
 }
 }
 
-PausedHoldProof::PausedHoldProof(PausedHoldBinding binding, fixture_restart::Capture target,
+PausedHoldProof::PausedHoldProof(PausedHoldBinding binding, fixture_restart::Capture baseline, fixture_restart::Capture target,
                                  std::shared_ptr<const std::atomic_bool> validity, std::int64_t lastRequestNs,
                                  std::int64_t completedNs)
-  : binding_(std::move(binding)), target_(std::move(target)), validity_(std::move(validity)),
+  : binding_(std::move(binding)), baseline_(std::move(baseline)), target_(std::move(target)), validity_(std::move(validity)),
     lastRequestNs_(lastRequestNs), completedNs_(completedNs) {}
 
 bool PausedHoldProof::matches(const PausedHoldBinding& binding, std::int64_t nowNs) const
@@ -28,7 +29,11 @@ bool PausedHoldProof::matches(const PausedHoldBinding& binding, std::int64_t now
 
 bool PausedHoldProof::retained() const
 {
-  return target_ && validity_ && validity_->load() && binding_.claim && binding_.claim->open();
+  return baseline_ && baseline_->captureEvidence &&
+      baseline_->captureEvidence->matches(baseline_->key, binding_.attempt, false, baseline_->serial) &&
+      target_ && target_->captureEvidence &&
+      target_->captureEvidence->matches(target_->key, binding_.attempt, true, target_->serial) &&
+      validity_ && validity_->load() && binding_.claim && binding_.claim->open();
 }
 
 PausedHold::PausedHold(PausedHoldBinding binding) : binding_(std::move(binding)) {}
@@ -45,13 +50,18 @@ bool PausedHold::live(std::int64_t nowNs) const
 
 bool PausedHold::baseline(fixture_restart::Capture record)
 {
-  if (armed_ || invalid_ || !record || !frames_.baseline(std::move(record))) { invalidate(); return false; }
+  if (armed_ || invalid_ || !record || !record->captureEvidence ||
+      !record->captureEvidence->matches(record->key, binding_.attempt, false, record->serial)) { invalidate(); return false; }
+  baseline_ = std::make_shared<const fixture_restart::FrameRecord>(*record);
+  if (!frames_.baseline(baseline_)) { invalidate(); return false; }
   return true;
 }
 
 bool PausedHold::arm(std::uint64_t afterSerial, std::int64_t armedNs)
 {
-  if (armed_ || !live(armedNs) || !frames_.arm(binding_.frame, afterSerial, static_cast<int>(binding_.checkpointMs))) {
+  if (armed_ || !live(armedNs) || !baseline_ || !baseline_->captureEvidence ||
+      !baseline_->captureEvidence->matches(baseline_->key, binding_.attempt, false, baseline_->serial) ||
+      !frames_.arm(binding_.frame, afterSerial, static_cast<int>(binding_.checkpointMs))) {
     invalidate(); return false;
   }
   armedNs_ = armedNs; armed_ = true; return true;
@@ -59,7 +69,9 @@ bool PausedHold::arm(std::uint64_t afterSerial, std::int64_t armedNs)
 
 void PausedHold::capture(fixture_restart::Capture record)
 {
-  if (!armed_ || invalid_ || !record || record->capturedAt < static_cast<std::uint64_t>(armedNs_)) return;
+  if (!armed_ || invalid_ || !record || !record->captureEvidence ||
+      !record->captureEvidence->matches(record->key, binding_.attempt, true, record->serial) ||
+      record->capturedAt < static_cast<std::uint64_t>(armedNs_)) return;
   frames_.capture(std::move(record));
 }
 
@@ -85,12 +97,16 @@ std::shared_ptr<const PausedHoldProof> PausedHold::finish(std::int64_t nowNs)
   const auto target = frames_.target();
   if (!armed_ || !live(nowNs) || !lastId_ || nowNs < lastReceivedNs_ ||
       nowNs - lastRequestNs_ > maxGapNs || lastRequestNs_ - firstReceivedNs_ < holdNs ||
-      !target || target->capturedAt > static_cast<std::uint64_t>(nowNs)) return {};
-  return std::shared_ptr<const PausedHoldProof>(new PausedHoldProof(binding_, target, validity_, lastRequestNs_, nowNs));
+      !target || !target->captureEvidence ||
+      !target->captureEvidence->matches(target->key, binding_.attempt, true, target->serial) ||
+      !baseline_ || !baseline_->captureEvidence ||
+      !baseline_->captureEvidence->matches(baseline_->key, binding_.attempt, false, baseline_->serial) ||
+      target->capturedAt > static_cast<std::uint64_t>(nowNs)) return {};
+  return std::shared_ptr<const PausedHoldProof>(new PausedHoldProof(binding_, baseline_, target, validity_, lastRequestNs_, nowNs));
 }
 
 void PausedHold::invalidate()
 {
-  validity_->store(false); invalid_ = true; armed_ = false; frames_.invalidate();
+  validity_->store(false); invalid_ = true; armed_ = false; frames_.invalidate(); baseline_.reset();
 }
 }

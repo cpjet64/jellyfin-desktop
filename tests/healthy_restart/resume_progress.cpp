@@ -1,4 +1,5 @@
 #include "resume_progress.h"
+#include "capture_capability.h"
 #include <limits>
 #include <utility>
 
@@ -22,7 +23,10 @@ ResumeProgressProof::ResumeProgressProof(PausedHoldBinding binding, std::shared_
 
 bool ResumeProgressProof::matches(const PausedHoldBinding& binding, std::int64_t nowNs) const
 {
-  return validity_ && validity_->load() && hold_ && hold_->retained() && first_ && second_ &&
+  return validity_ && validity_->load() && hold_ && hold_->retained() && first_ && first_->captureEvidence &&
+      first_->captureEvidence->matches(first_->key, binding_.attempt, true, first_->serial) &&
+      second_ && second_->captureEvidence &&
+      second_->captureEvidence->matches(second_->key, binding_.attempt, true, second_->serial) &&
       sameBinding(binding_, binding) && nowNs >= completedNs_ && nowNs < binding_.deadlineNs;
 }
 
@@ -45,7 +49,9 @@ void ResumeProgress::capture(fixture_restart::Capture record)
 {
   if (!record || record->capturedAt > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) return;
   const auto time = static_cast<std::int64_t>(record->capturedAt);
-  if (!live(time) || !(record->key == binding_.frame) || record->serial <= boundary_ ||
+  if (!live(time) || !record->captureEvidence ||
+      !record->captureEvidence->matches(record->key, binding_.attempt, true, record->serial) ||
+      !(record->key == binding_.frame) || record->serial <= boundary_ ||
       record->thread != hold_->target_->thread || record->actualContext != hold_->target_->actualContext) return;
   const auto index = fixture_restart::decodeFrame(*record);
   if (!index) return;
@@ -80,7 +86,10 @@ bool ResumeProgress::advance(std::uint64_t id, std::int64_t requestedNs, std::in
 
 std::shared_ptr<const ResumeProgressProof> ResumeProgress::finish(std::int64_t nowNs)
 {
-  if (!live(nowNs) || !advanced_ || !first_ || !second_ || nowNs < lastReceivedNs_ ||
+  if (!live(nowNs) || !advanced_ || !first_ || !first_->captureEvidence ||
+      !first_->captureEvidence->matches(first_->key, binding_.attempt, true, first_->serial) ||
+      !second_ || !second_->captureEvidence ||
+      !second_->captureEvidence->matches(second_->key, binding_.attempt, true, second_->serial) || nowNs < lastReceivedNs_ ||
       second_->capturedAt > static_cast<std::uint64_t>(nowNs)) return {};
   return std::shared_ptr<const ResumeProgressProof>(new ResumeProgressProof(binding_, hold_, first_, second_, validity_, nowNs));
 }

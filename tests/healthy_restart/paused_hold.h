@@ -28,12 +28,13 @@ class PausedHoldProof final {
 #ifdef HEALTHY_RETIREMENT_TESTING
   friend class ::TestPausedHold;
 #endif
-  PausedHoldProof(PausedHoldBinding binding, fixture_restart::Capture target,
+  PausedHoldProof(PausedHoldBinding binding, fixture_restart::Capture baseline, fixture_restart::Capture target,
                   std::shared_ptr<const std::atomic_bool> validity, std::int64_t lastRequestNs,
                   std::int64_t completedNs);
   bool matches(const PausedHoldBinding& binding, std::int64_t nowNs) const;
   bool retained() const;
   const PausedHoldBinding binding_;
+  const fixture_restart::Capture baseline_;
   const fixture_restart::Capture target_;
   const std::shared_ptr<const std::atomic_bool> validity_;
   const std::int64_t lastRequestNs_, completedNs_;
@@ -60,6 +61,7 @@ private:
   PausedHoldBinding binding_;
   std::shared_ptr<std::atomic_bool> validity_ = std::make_shared<std::atomic_bool>(true);
   fixture_restart::FrameAcceptance frames_;
+  fixture_restart::Capture baseline_;
   std::uint64_t lastId_ = 0;
   std::int64_t armedNs_ = 0, firstReceivedNs_ = 0, lastRequestNs_ = 0, lastReceivedNs_ = 0;
   std::int64_t firstPositionMs_ = -1;
