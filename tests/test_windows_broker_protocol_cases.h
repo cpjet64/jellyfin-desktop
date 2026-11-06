@@ -74,7 +74,7 @@ void bAcceptanceCase(WindowsBrokerOperations& operations, WindowsEndpoint grantE
   CHECK(grantEndpoint.channel->parentHandle() == INVALID_HANDLE_VALUE && lastWrite == frame);
   CHECK(operations.issueRestorePermit(deadline, [] { return permitCurrent; }) == Operations::Progress::Failed);
   scriptedPipe = ack.channel->parentHandle(); scriptedOffset = 0; scriptedChunk = 3;
-  auto acceptance = GrantAccepted{1, 7, 2, 3, digest};
+  auto acceptance = GrantAccepted{1, 7, 2, 3, digest, 10, 11, 12, 13};
   if (bStream == BStream::WrongRun) ++acceptance.run;
   if (bStream == BStream::WrongLaunch) ++acceptance.launch;
   if (bStream == BStream::WrongGrant) ++acceptance.grant;
@@ -108,7 +108,11 @@ void bAcceptanceCase(WindowsBrokerOperations& operations, WindowsEndpoint grantE
   if (bStream == BStream::CancelRead) {
     CHECK(monitor == Operations::Progress::Pending);
     scriptedRace = true;
-    CHECK(operations.cancelBAndAwaitAck(deadline) == Operations::Progress::Failed);
+    auto cancel = operations.cancelBAndAwaitAck(deadline);
+    scriptedRace = false; scriptedPending = false;
+    while (cancel == Operations::Progress::Pending && std::chrono::steady_clock::now() < end)
+      cancel = operations.cancelBAndAwaitAck(deadline);
+    CHECK(cancel == Operations::Progress::Failed);
     Control stop;
     CHECK(decodeControl(lastWrite, stop) && stop.kind == ControlKind::UserStop);
   } else CHECK(monitor == Operations::Progress::Failed);
@@ -203,6 +207,9 @@ void exerciseBrokerCancel(bool duringGrant)
   CHECK(operations.configureHealthyTransfer({1, 2, 1, 3, 4, 5, 6}, 7, identity.channel, lease,
                                              [](const Grant&) { return true; }));
   const Evidence source = sampleEvidence();
+  const auto digest = QCryptographicHash::hash(encodeGrant(source.grant), QCryptographicHash::Sha256);
+  cancelReplyPipe = bAck.channel->parentHandle();
+  cancelReplyBytes = encodeControl({ControlKind::Ack, 2, 4}) + encodeCancelNoArm({1, 7, 4, 2, digest});
   Broker broker(operations, evidence.channel, source.grant);
   CHECK(broker.capture(evidence.channel, source) && broker.startReplacement());
   scriptedPipe = ack.channel->parentHandle(); scriptedOffset = 0; scriptedChunk = 3;
@@ -219,6 +226,7 @@ void exerciseBrokerCancel(bool duringGrant)
   CHECK(broker.cancel() == Broker::Cancellation::Pending);
   broker.step();
   if (duringGrant) {
+    while (broker.cancellation() == Broker::Cancellation::Pending && std::chrono::steady_clock::now() < end) broker.step();
     CHECK(cancelGrant && broker.cancellation() == Broker::Cancellation::Acknowledged);
     broker.step(); CHECK(!broker.failed() && grant.io->pending());
     delayGrantCancel = false;
@@ -233,6 +241,7 @@ void exerciseBrokerCancel(bool duringGrant)
   while (!broker.failed() && !broker.unconfirmed() && std::chrono::steady_clock::now() < end) broker.step();
   CHECK(broker.failed());
   heldGrant = INVALID_HANDLE_VALUE; holdGrant = false; scriptedPipe = INVALID_HANDLE_VALUE;
+  cancelReplyPipe = INVALID_HANDLE_VALUE;
 }
 
 void exercisePermitClaim(int mode)
@@ -251,6 +260,10 @@ void exercisePermitClaim(int mode)
   CHECK(operations.configureHealthyTransfer({1, 2, 1, 3, 4, 5, 6}, 7, identity.channel, lease,
                                              [](const Grant&) { return callbackIntent; }));
   const Evidence source = sampleEvidence();
+  const auto digest = QCryptographicHash::hash(encodeGrant(source.grant), QCryptographicHash::Sha256);
+  cancelReplyPipe = bAck.channel->parentHandle();
+  const CancelResult terminal{1, 7, 2, 3, 2, 10, 11, 12, 13, CancelOutcome::NoLoad, CancelFailure::None};
+  cancelReplyBytes = encodeControl({ControlKind::Ack, 2, 4}) + encodeCancelResult(terminal);
   Broker broker(operations, evidence.channel, source.grant);
   CHECK(broker.capture(evidence.channel, source) && broker.startReplacement());
   callbackBroker = &broker; callbackControl = bControl.channel->parentHandle();
@@ -264,8 +277,7 @@ void exercisePermitClaim(int mode)
     broker.step();
     if (!acceptanceReady && grant.channel->parentHandle() == INVALID_HANDLE_VALUE) {
       acceptanceReady = true; scriptedPipe = callbackAck; scriptedOffset = 0;
-      const auto digest = QCryptographicHash::hash(encodeGrant(source.grant), QCryptographicHash::Sha256);
-      scriptedBytes = encodeGrantAccepted({1, 7, 2, 3, digest});
+      scriptedBytes = encodeGrantAccepted({1, 7, 2, 3, digest, 10, 11, 12, 13});
     }
     std::this_thread::yield();
   }
@@ -277,6 +289,7 @@ void exercisePermitClaim(int mode)
   broker.step();
   CHECK(!broker.completed() && permitWrites == (mode == 1 ? 0 : 1) && stopWrites == 1);
   callbackBroker = nullptr; callbackControl = callbackAck = INVALID_HANDLE_VALUE;
+  cancelReplyPipe = INVALID_HANDLE_VALUE;
   callbackMode = 0; scriptedPipe = INVALID_HANDLE_VALUE;
 }
 

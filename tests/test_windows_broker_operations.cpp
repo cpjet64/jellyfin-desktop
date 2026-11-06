@@ -33,6 +33,7 @@ bool badAck = false;
 HANDLE scriptedPipe = INVALID_HANDLE_VALUE;
 QByteArray scriptedBytes;
 qsizetype scriptedOffset = 0, scriptedChunk = 4096;
+qsizetype scriptedPauseAt = -1;
 bool scriptedPending = false;
 bool scriptedRace = false;
 void* scriptedBuffer = nullptr;
@@ -40,6 +41,8 @@ Broker* callbackBroker = nullptr;
 int callbackMode = 0, permitWrites = 0, stopWrites = 0;
 bool callbackArmed = false, callbackIntent = true;
 HANDLE callbackControl = INVALID_HANDLE_VALUE, callbackAck = INVALID_HANDLE_VALUE;
+HANDLE cancelReplyPipe = INVALID_HANDLE_VALUE;
+QByteArray cancelReplyBytes;
 bool aExited = false, waitUnknown = false;
 void exerciseBrokerCancel(bool duringGrant);
 int afterEvidence = 0;
@@ -61,7 +64,8 @@ HANDLE WINAPI event(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCWSTR) { return handle(
 BOOL WINAPI connect(HANDLE, LPOVERLAPPED) { errorCode = ERROR_IO_PENDING; return FALSE; }
 BOOL WINAPI ioResult(HANDLE h, LPOVERLAPPED, LPDWORD count, BOOL) {
   if (h == scriptedPipe && scriptedRace && scriptedBuffer) {
-    *static_cast<char*>(scriptedBuffer) = 'x'; *count = 1; return TRUE;
+    *static_cast<char*>(scriptedBuffer) = scriptedOffset < scriptedBytes.size() ? scriptedBytes.at(scriptedOffset++) : 'x';
+    scriptedPauseAt = -1; *count = 1; return TRUE;
   }
   if (h == heldGrant && holdGrant) {
     errorCode = cancelGrant && !delayGrantCancel ? ERROR_OPERATION_ABORTED : ERROR_IO_INCOMPLETE;
@@ -82,23 +86,31 @@ BOOL WINAPI resetEvent(HANDLE) {
 BOOL WINAPI writeFile(HANDLE h, LPCVOID data, DWORD size, LPDWORD count, LPOVERLAPPED)
 { if (h == heldGrant && holdGrant) { errorCode = ERROR_IO_PENDING; return FALSE; }
   lastWrite = QByteArray(static_cast<const char*>(data), size);
+  Control message;
+  const bool stop = decodeControl(lastWrite, message) && message.kind == ControlKind::UserStop;
   if (h == callbackControl) {
-    Control control;
-    if (decodeControl(lastWrite, control) && control.kind == ControlKind::UserStop) {
-      ++stopWrites; scriptedPipe = INVALID_HANDLE_VALUE;
-    } else ++permitWrites;
+    if (stop) ++stopWrites; else ++permitWrites;
+  }
+  if (stop && cancelReplyPipe != INVALID_HANDLE_VALUE) {
+    scriptedPipe = cancelReplyPipe; scriptedBytes = cancelReplyBytes; scriptedOffset = 0;
+    scriptedPending = false; scriptedPauseAt = -1;
   }
   *count = size; return TRUE; }
 BOOL WINAPI readFile(HANDLE h, LPVOID data, DWORD size, LPDWORD count, LPOVERLAPPED)
 {
   if (h == scriptedPipe) {
+    if (scriptedPauseAt >= 0 && scriptedOffset >= scriptedPauseAt) {
+      scriptedBuffer = data; errorCode = ERROR_IO_PENDING; return FALSE;
+    }
     if (scriptedOffset == scriptedBytes.size()) {
       if (h == callbackAck && callbackMode == 3 && permitWrites) callbackIntent = false;
       scriptedBuffer = data;
       errorCode = scriptedPending ? ERROR_IO_PENDING : ERROR_BROKEN_PIPE;
+      if (!scriptedPending) *count = 0;
       return FALSE;
     }
-    const auto length = std::min({qsizetype(size), scriptedChunk, scriptedBytes.size() - scriptedOffset});
+    const auto available = scriptedPauseAt >= 0 ? std::min(scriptedBytes.size(), scriptedPauseAt) : scriptedBytes.size();
+    const auto length = std::min({qsizetype(size), scriptedChunk, available - scriptedOffset});
     std::memcpy(data, scriptedBytes.constData() + scriptedOffset, size_t(length));
     scriptedOffset += length; *count = DWORD(length); return TRUE;
   }
@@ -382,9 +394,11 @@ void parentRejectsLostAAfterRead(bool unknown)
   evidencePipe = INVALID_HANDLE_VALUE;
 }
 #include "test_windows_broker_protocol_cases.h"
+#include "test_windows_broker_v2_cases.h"
 }
 int main(int argc, char** argv) {
   QCoreApplication app(argc, argv);
+  if (argc > 1 && QByteArray(argv[1]) == "v2") { v2AdapterCases(); return 0; }
   if (argc > 1 && QByteArray(argv[1]) == "protocol") { adapterProtocolCases(); return 0; }
   ownedOperations(); actualBrokerPath(); cancelBeforeASettled(); cancelDuringPendingGrant();
   wrongAcknowledgement(); cancelDuringLaunch();
@@ -393,6 +407,7 @@ int main(int argc, char** argv) {
   parentRejectsDeadOrUnknownA(false); parentRejectsDeadOrUnknownA(true);
   parentRejectsLostAAfterRead(false); parentRejectsLostAAfterRead(true);
   adapterProtocolCases();
+  v2AdapterCases();
   return 0;
 }
 #else
