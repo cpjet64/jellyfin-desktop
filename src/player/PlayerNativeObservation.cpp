@@ -50,7 +50,7 @@ bool PlayerComponent::requestNativeObservation(PlaybackNativeReceipts::Key key, 
 bool PlayerComponent::nativePostSeekObservationCurrent() const
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
-  return m_nativeObservation.postSeek && restorePostSeekReady() && nativeObservationCurrent() &&
+  return m_nativeObservation.postSeek && m_nativeObservation.paused && restorePostSeekReady() && nativeObservationCurrent() &&
          qAbs(m_nativeObservation.positionMs - m_nativeRestore.grant.positionMs) <= 100;
 #else
   return false;

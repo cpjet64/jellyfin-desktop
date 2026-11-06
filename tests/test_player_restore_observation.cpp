@@ -85,6 +85,10 @@ void TestPlayerRestoreObservation::barrierAndStaleReply()
   QVERIFY(player.requestNativeObservation(key, 4, 10000, true));
   reply(player, 4, "NR1|1|42|yes|yes|3.225|yes|no|no");
   QVERIFY(player.nativePostSeekObservationCurrent());
+  QVERIFY(player.requestNativeObservation(key, 5, 10000, false));
+  reply(player, 5, "NR1|1|42|yes|yes|3.125|no|no|no");
+  QVERIFY(player.nativeObservationCurrent());
+  QVERIFY(!player.nativePostSeekObservationCurrent());
 #endif
 }
 
@@ -137,7 +141,7 @@ void TestPlayerRestoreObservation::ordinaryObservation()
   player.m_nativeReceipts.start(42);
   player.m_observationDispatch = [](quint64, const char**) { return 0; };
   QVERIFY(player.requestNativeObservation(key, 1, 10000, false));
-  reply(player, 1, "NR1|1|42|yes|no|2.000|yes|no|no");
+  reply(player, 1, "NR1|1|42|yes|yes|2.000|no|no|no");
   QVERIFY(player.nativeObservationCurrent());
   QVERIFY(!player.nativePostSeekObservationCurrent());
 #endif
