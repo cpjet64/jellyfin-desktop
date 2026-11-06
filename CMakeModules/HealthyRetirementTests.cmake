@@ -67,6 +67,7 @@ endforeach()
 add_executable(test_healthy_capture_capability "${CMAKE_SOURCE_DIR}/tests/test_healthy_capture_capability.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/capture_capability.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime_module.cpp"
   "${CMAKE_SOURCE_DIR}/tests/fixture_restart/frame_capture.cpp"
   "${CMAKE_SOURCE_DIR}/tests/fixture_restart/frame_acceptance.cpp")
 target_include_directories(test_healthy_capture_capability PRIVATE "${CMAKE_SOURCE_DIR}/tests/healthy_restart"
@@ -111,6 +112,7 @@ add_executable(test_healthy_paused_hold "${CMAKE_SOURCE_DIR}/tests/test_healthy_
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/paused_hold.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/capture_capability.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime_module.cpp"
   "${CMAKE_SOURCE_DIR}/tests/fixture_restart/frame_acceptance.cpp")
 target_include_directories(test_healthy_paused_hold PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_include_directories(test_healthy_paused_hold PRIVATE "${CMAKE_SOURCE_DIR}/tests/fixture_restart")
@@ -125,6 +127,7 @@ add_executable(test_healthy_resume_progress "${CMAKE_SOURCE_DIR}/tests/test_heal
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/paused_hold.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/capture_capability.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime_module.cpp"
   "${CMAKE_SOURCE_DIR}/tests/fixture_restart/frame_acceptance.cpp")
 target_include_directories(test_healthy_resume_progress PRIVATE "${CMAKE_SOURCE_DIR}/tests"
   "${CMAKE_SOURCE_DIR}/tests/fixture_restart")
