@@ -1,5 +1,8 @@
 #include "player/PlayerComponent.h"
 #include "player/PlaybackCheckpoint.h"
+#include "fixture_restart/FixtureRestartAdapter.h"
+#include <QCryptographicHash>
+#include <QTemporaryFile>
 #include <QtTest/QtTest>
 
 class TestPlayerNativeRestore : public QObject
@@ -16,6 +19,8 @@ private slots:
   void cancellationBeforeLoad();
   void staleObservationAndGrant();
   void cancellationAfterLoad();
+  void fixtureBridgeControl();
+  void fixtureBridgeCapture();
   void unavailableSystemMode();
   void lateAfterEndAndCoreChange();
   void malformedAndUnrelatedReplies();
@@ -398,6 +403,88 @@ void TestPlayerNativeRestore::reentrantCancellationAndSeekFailure()
   QVERIFY(!player.m_nativeRestore.restarted);
   QCOMPARE(commands, 2);
   QCOMPARE(stops, 1);
+#endif
+}
+
+void TestPlayerNativeRestore::fixtureBridgeControl()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  QTemporaryFile file;
+  QVERIFY(file.open());
+  const QByteArray data("fixture");
+  QCOMPARE(file.write(data), qint64(data.size()));
+  QVERIFY(file.flush());
+  FixtureRestart::Grant grant{1, 2, 3, QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex(), 3125, false};
+  PlayerComponent player;
+  player.m_mpvGeneration = 8;
+  int stops = 0, loads = 0;
+  player.m_restoreDispatch = [&](quint64, const char**) { ++loads; return 0; };
+  player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
+  FixtureRestart::ChildGate gate(&player, 100);
+  FixtureRestartAdapter bridge(player, gate, 7, 2);
+  QVERIFY(gate.accept(&player, FixtureRestart::encodeGrant(grant), grant, 10, true));
+  QVERIFY(bridge.arm());
+  QVERIFY(bridge.load(file.fileName()));
+  QCOMPARE(loads, 1);
+  QVERIFY(bridge.cancel());
+  QCOMPARE(stops, 1);
+  QVERIFY(!bridge.seek());
+  QVERIFY(!bridge.load(file.fileName()));
+  PlayerComponent other;
+  other.m_mpvGeneration = 9;
+  FixtureRestart::ChildGate blocked(&other, 100);
+  FixtureRestartAdapter cancelled(other, blocked, 8, 3);
+  QVERIFY(cancelled.cancel());
+  QVERIFY(!blocked.accept(&other, FixtureRestart::encodeGrant(grant), grant, 10, true));
+  QVERIFY(!cancelled.arm());
+  PlayerComponent stale;
+  stale.m_mpvGeneration = 10;
+  FixtureRestart::ChildGate gate2(&stale, 100);
+  FixtureRestartAdapter staleBridge(stale, gate2, 9, 4);
+  stale.m_playbackIntent.stop(PlaybackIntent::Reason::NativeStop);
+  QVERIFY(gate2.accept(&stale, FixtureRestart::encodeGrant(grant), grant, 10, true));
+  QVERIFY(!staleBridge.arm());
+#endif
+}
+
+void TestPlayerNativeRestore::fixtureBridgeCapture()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent player;
+  player.m_mpvGeneration = 3;
+  player.m_receiptDispatch = [](quint64, const QString&) { return 0; };
+  QTemporaryFile file;
+  QVERIFY(file.open());
+  const QByteArray data("fixture-a");
+  QCOMPARE(file.write(data), qint64(data.size()));
+  QVERIFY(file.flush());
+  const auto hash = QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex();
+  FixtureRestart::ChildGate gate(&player, 100);
+  FixtureRestartAdapter adapter(player, gate, 4, 1);
+  QVERIFY(adapter.loadA(file.fileName(), hash, false));
+  loadReplyAndStart(player, 1, 42);
+  const auto key = player.m_nativeReceipts.snapshot().key;
+  FixtureRestart::Grant binding{1, 2, 3, hash, 0, false};
+  FixtureRestart::Evidence frozen;
+  QVERIFY(player.recordFixturePosition(PlayerComponent::FixtureAsset::TestClip, key, 42, 3000));
+  QVERIFY(!adapter.captureA(binding, frozen));
+  player.m_observationDispatch = [](quint64, const char**) { return 0; };
+  QVERIFY(player.requestNativeObservation(key, 9, 10000, false));
+  observationReply(player, 9, "NR1|1|42|yes|yes|3|no|no|no");
+  QVERIFY(adapter.captureA(binding, frozen));
+  QVERIFY(FixtureRestart::validateFixtureEvidence(frozen));
+  QVERIFY(file.seek(file.size()));
+  QCOMPARE(file.write("x", 1), qint64(1));
+  QVERIFY(file.flush());
+  QVERIFY(!adapter.internalReplacementStop(frozen));
+  QVERIFY(file.resize(data.size()));
+  QVERIFY(file.flush());
+  const auto revision = player.m_playbackIntent.snapshot().revision;
+  player.m_stopDispatch = [] { return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
+  QVERIFY(adapter.internalReplacementStop(frozen));
+  QCOMPARE(player.m_playbackIntent.snapshot().revision, revision);
+  QVERIFY(player.m_nativeReceipts.snapshot().invalid);
+  QVERIFY(!adapter.internalReplacementStop(frozen));
 #endif
 }
 

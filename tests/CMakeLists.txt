@@ -4,6 +4,14 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+add_executable(test_fixture_restart_broker test_fixture_restart_broker.cpp fixture_restart/RestartBroker.cpp
+  fixture_restart/FixtureEvidence.cpp ${CMAKE_SOURCE_DIR}/src/player/PlaybackCheckpoint.cpp)
+target_include_directories(test_fixture_restart_broker PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_fixture_restart_broker PRIVATE Qt6::Core)
+target_compile_features(test_fixture_restart_broker PRIVATE cxx_std_17)
+add_test(NAME test_fixture_restart_broker COMMAND test_fixture_restart_broker)
+set_tests_properties(test_fixture_restart_broker PROPERTIES TIMEOUT 60)
+
 add_executable(test_windows_loader_mode windows_loader_mode_test.cpp)
 target_compile_features(test_windows_loader_mode PRIVATE cxx_std_17)
 add_test(NAME test_windows_loader_mode COMMAND test_windows_loader_mode)
@@ -53,7 +61,8 @@ target_link_libraries(test_native_observation PRIVATE Qt6::Core)
 add_test(NAME test_native_observation COMMAND test_native_observation)
 set_tests_properties(test_native_observation PROPERTIES TIMEOUT 60)
 
-add_executable(test_player_native_restore test_player_native_restore.cpp)
+add_executable(test_player_native_restore test_player_native_restore.cpp fixture_restart/FixtureRestartAdapter.cpp
+  fixture_restart/RestartBroker.cpp fixture_restart/FixtureEvidence.cpp)
 target_include_directories(test_player_native_restore PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
 target_link_libraries(test_player_native_restore PRIVATE jmp_core Qt6::Test)
 add_test(NAME test_player_native_restore COMMAND test_player_native_restore)
