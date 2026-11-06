@@ -10,8 +10,9 @@
 
 namespace HealthyRetirement {
 #ifdef HEALTHY_RETIREMENT_TESTING
-namespace { std::function<void()> preArmHook; }
+namespace { std::function<void()> preArmHook, bindHook; }
 void setGraphPreArmHookForTest(std::function<void()> hook) { preArmHook = std::move(hook); }
+void setGraphBindHookForTest(std::function<void()> hook) { bindHook = std::move(hook); }
 #endif
 namespace {
 quint64 freshId()
@@ -179,6 +180,9 @@ FixtureRestart::RestartChild::Actions FixtureGraph::restoreActions(
     const RetirementClaim::ArmIdentity identity{result.identity.host, result.identity.core,
         result.identity.intentRevision, result.identity.attempt};
     if (!claim->bindArm(slot_->generation(), identity)) return Result{};
+#ifdef HEALTHY_RETIREMENT_TESTING
+    try { if (bindHook) bindHook(); } catch (...) { claim->denyRetirement(slot_->generation(), identity); return Result{}; }
+#endif
     if (claim->contained() || !player_->healthyInstallRetirementClaim(claim, slot_->generation(),
         HealthyRestart::ClaimInstallMode::BindRestoreReservation)) {
       claim->denyRetirement(slot_->generation(), identity);
@@ -195,11 +199,16 @@ FixtureRestart::RestartChild::Actions FixtureGraph::restoreActions(
       beginRestoreFailure(session_->firstFailure);
       return Result{};
     }
-      if (!retained) {
-        if (session_->gate->canceled()) player_->m_healthyStopLease->enterCleanup(slot_->generation());
-        return result; // Preserve actual arm; the caller still checks endpoint validity.
+    if (!retained) {
+      if (session_->gate->matchesVerifiedCancel(session_->cancelSequence, session_->cancelRevision)) {
+        player_->m_healthyStopLease->enterCleanup(slot_->generation());
+        return result; // Preserve authenticated cancellation's actual arm receipt.
       }
-      if (session_->gate->canceled()) player_->m_healthyStopLease->enterCleanup(slot_->generation());
+      session_->firstFailure = HealthyRestart::FailureCause::OwnershipLost;
+      session_->gate->cancel(closeFailedGate, nullptr);
+      return Result{};
+    }
+    if (session_->gate->canceled()) player_->m_healthyStopLease->enterCleanup(slot_->generation());
     return result;
   };
   actions.beginCleanup = [this](quint64 sequence, quint64 revision) {
