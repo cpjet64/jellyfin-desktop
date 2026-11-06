@@ -304,6 +304,20 @@ bool ChildGate::cancel(bool (*checkedStop)(void*), void* context)
   return checkedStop(context);
 }
 
+bool ChildGate::cancelVerified(quint64 sequence, quint64 revision)
+{
+  if (canceled_ || cancelSequence_ || cancelRevision_ || !sequence || !revision) return false;
+  cancelSequence_ = sequence;
+  cancelRevision_ = revision;
+  canceled_ = true;
+  return true;
+}
+
+bool ChildGate::matchesVerifiedCancel(quint64 sequence, quint64 revision) const
+{
+  return canceled_ && sequence && revision && sequence == cancelSequence_ && revision == cancelRevision_;
+}
+
 bool ChildGate::allowed(quint64 revision) const
 {
   return accepted_ && !canceled_ && revision == grant_.revision;

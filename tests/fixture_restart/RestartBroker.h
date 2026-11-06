@@ -102,16 +102,20 @@ public:
   bool cancel(bool (*checkedStop)(void*), void* context);
   bool allowed(quint64 revision) const;
   bool canceled() const { return canceled_; }
+  bool matchesVerifiedCancel(quint64 sequence, quint64 revision) const;
   bool installPermit(const QByteArray& frame, const RestorePermit& expected, qint64 now);
   bool allowsRestore(quint64 run, quint64 launch, quint64 grant, quint64 revision,
                      const QByteArray& digest, qint64 now) const;
   const Grant* acceptedGrant() const { return accepted_ && !canceled_ ? &grant_ : nullptr; }
 private:
+  friend class RestartChild;
+  bool cancelVerified(quint64 sequence, quint64 revision);
   const void* channel_;
   qint64 deadline_;
   Grant grant_;
   QByteArray acceptedDigest_;
   std::shared_ptr<const RestorePermit> permit_;
+  quint64 cancelSequence_ = 0, cancelRevision_ = 0;
   bool attempted_ = false, accepted_ = false, canceled_ = false;
 };
 }
