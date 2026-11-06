@@ -1,0 +1,99 @@
+diff --git a/fixture_restart/FixtureRestartAdapter.cpp b/fixture_restart/FixtureRestartAdapter.cpp
+index 8b166f7..5a65d4a 100644
+--- a/fixture_restart/FixtureRestartAdapter.cpp
++++ b/fixture_restart/FixtureRestartAdapter.cpp
+@@ -40,0 +41,63 @@ FixtureRestartAdapter::FixtureRestartAdapter(PlayerComponent& player, FixtureRes
++bool FixtureRestartAdapter::bindCleanupGate(std::shared_ptr<const FixtureRestart::ChildGate> gate)
++{
++  if (!gate || gate.get() != &gate_ || cleanupGate_ || !player_.healthyBindRestoreCleanupGate(gate)) return false;
++  cleanupGate_ = std::move(gate);
++  return true;
++}
++
++FixtureRestart::RestartChild::ArmResult FixtureRestartAdapter::armActual()
++{
++  using Result = FixtureRestart::RestartChild::ArmResult;
++#ifdef MPVQT_EXTERNAL_EVENTS
++  if (!cleanupGate_ || cleanupGate_.get() != &gate_ || armIdentity_.attempt) return {};
++  if (gate_.canceled()) {
++    const auto receipt = player_.m_nativeReceipts.snapshot();
++    if (!player_.m_nativeRestore.armed && !player_.m_nativeRestore.loadAttempted &&
++        !player_.m_nativeRestore.seekAttempted && !player_.m_restoreUnpause.attempted && !player_.m_nativeObservation.pending &&
++        !receipt.key.attempt && !receipt.consumed && !player_.m_lastReceiptAttempt)
++      return {Result::Status::NotArmed, {}};
++    return {};
++  }
++  if (!arm()) return {};
++  const auto key = player_.m_nativeRestore.key;
++  const auto intent = player_.m_playbackIntent.snapshot();
++  if (!player_.m_nativeRestore.armed || !key.host || !key.core || !key.revision || !key.attempt ||
++      key.host != player_.m_receiptHost || key.core != player_.m_mpvGeneration || key.revision != intent.revision ||
++      key.host != host_ || key.attempt != attempt_) return {};
++  armIdentity_ = {key.host, key.core, key.revision, key.attempt};
++  return {Result::Status::Armed, armIdentity_};
++#else
++  return Result{};
++#endif
++}
++
++bool FixtureRestartAdapter::beginCleanup(quint64 sequence, quint64 cancelRevision, qint64 deadlineNs)
++{
++  if (!cleanupGate_ || !cleanupGate_->canceled() || !armIdentity_.attempt || !sequence ||
++      cancelRevision <= parentRevision_) return false;
++  const bool begun = player_.beginNativeRestoreCancellation(cleanupGate_, sequence, deadlineNs);
++  const auto& cleanup = player_.m_restoreCleanup;
++  return begun || (cleanup.claimed && cleanup.sequence == sequence && cleanup.key.host == armIdentity_.host &&
++      cleanup.key.core == armIdentity_.core && cleanup.key.revision == armIdentity_.intentRevision &&
++      cleanup.key.attempt == armIdentity_.attempt);
++}
++
++FixtureRestart::RestartChild::CleanupResult FixtureRestartAdapter::pollCleanup()
++{
++  using Result = FixtureRestart::RestartChild::CleanupResult;
++  using Status = PlayerComponent::RestoreCleanupStatus;
++  Result result;
++  result.identity = armIdentity_;
++  result.reason = FixtureRestart::CancelFailure::CleanupUnconfirmed;
++  if (!cleanupGate_ || !cleanupGate_->canceled() || !armIdentity_.attempt) return result;
++  const auto status = player_.pollNativeRestoreCancellation();
++  const auto key = player_.m_restoreCleanup.key;
++  if (key.host != armIdentity_.host || key.core != armIdentity_.core ||
++      key.revision != armIdentity_.intentRevision || key.attempt != armIdentity_.attempt) return result;
++  result.status = status == Status::Pending ? Result::Status::Pending :
++      status == Status::NoLoad ? Result::Status::NoLoad :
++      status == Status::Stopped ? Result::Status::Stopped : Result::Status::Failed;
++  if (result.status != Result::Status::Failed) result.reason = FixtureRestart::CancelFailure::None;
++  return result;
++}
++
+@@ -62,0 +126 @@ bool FixtureRestartAdapter::load(const QString& resolvedFixturePath)
++  if (!player_.m_healthyStopLease || !player_.m_healthyStopLease->open()) return false;
+@@ -71,2 +135,2 @@ bool FixtureRestartAdapter::seek()
+-  if (player_.m_healthyStopAdmissionClosed.load()) return false;
+-  return current() && player_.dispatchNativeRestoreSeek();
++  // Held until the renderer-issued target-arm capability is wired here.
++  return false;
+diff --git a/fixture_restart/FixtureRestartAdapter.h b/fixture_restart/FixtureRestartAdapter.h
+index 18f999d..e1c7437 100644
+--- a/fixture_restart/FixtureRestartAdapter.h
++++ b/fixture_restart/FixtureRestartAdapter.h
+@@ -2,0 +3 @@
++#include "RestartChild.h"
+@@ -5,0 +7 @@
++#include <memory>
+@@ -17,0 +20,4 @@ public:
++  bool bindCleanupGate(std::shared_ptr<const FixtureRestart::ChildGate> gate);
++  FixtureRestart::RestartChild::ArmResult armActual();
++  bool beginCleanup(quint64 sequence, quint64 cancelRevision, qint64 deadlineNs);
++  FixtureRestart::RestartChild::CleanupResult pollCleanup();
+@@ -33,0 +40,2 @@ private:
++  std::shared_ptr<const FixtureRestart::ChildGate> cleanupGate_;
++  FixtureRestart::RestartChild::ArmIdentity armIdentity_;
+diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
+index fea4195..a04f4c5 100644
+--- a/player/PlayerComponent.h
++++ b/player/PlayerComponent.h
+@@ -280,0 +281,3 @@ private:
++#ifdef HEALTHY_RETIREMENT_TESTING
++  friend class TestHealthyGraphArm;
++#endif
