@@ -1,10 +1,79 @@
 #include "healthy_restart/paused_hold.h"
+#include "healthy_restart/capture_capability.h"
+#include <algorithm>
+#include <cstdio>
+#include <functional>
 #include <cstdlib>
 #include <limits>
 
-#define CHECK(x) do { if (!(x)) std::abort(); } while (false)
+#define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "CHECK failed at line %d: %s\n", __LINE__, #x); std::abort(); } } while (false)
 using namespace HealthyRestart;
 using namespace fixture_restart;
+
+class TestCaptureCapability {
+  using Bridge = HealthyRetirement::CaptureBridge;
+  using Identity = HealthyRetirement::Identity;
+  using Fbo = HealthyRetirement::FramebufferObservation;
+  struct Issuer {
+    std::shared_ptr<HealthyRetirement::Slot> slot;
+    std::shared_ptr<Bridge> bridge;
+    std::unique_ptr<HealthyRetirement::CaptureController> controller;
+    FrameKey target;
+    int context = 0;
+    std::uint64_t last = 0;
+    Issuer() {
+      slot = std::make_shared<HealthyRetirement::Slot>(17, 100, [] { return std::int64_t{10}; });
+      CHECK(slot->beginCreation() && slot->beforeCreate() && slot->recordCreated(&context));
+      HealthyRetirement::Operations ops;
+      ops.currentIdentity = [] { return Identity{11, 12, 13}; };
+      ops.unregisterCallback = [](void*) {};
+      ops.invalidateQueued = [](std::uint64_t) { return true; };
+      ops.freeContext = [](void*) {};
+      ops.clearPointer = [](void*) { return true; };
+      CHECK(slot->install({11, 12, 13}, &context, ops));
+      controller = HealthyRetirement::CaptureController::create(slot);
+      CHECK(controller); bridge = slot->captureBridge(); CHECK(bridge);
+      CHECK(bridge->rendererCreated({11, 12, 13}));
+      CHECK(bridge->framebuffer({11, 12, 13}, Fbo{7, 160, 90, 0, 0, 0, true, true}));
+    }
+  };
+  static std::shared_ptr<Issuer> current;
+  static std::vector<std::shared_ptr<Issuer>> retained;
+public:
+  static std::shared_ptr<const HealthyRetirement::RetirementClaim> claim;
+  static void revoke(int mode) {
+    if (mode == 0) CHECK(current->bridge->framebuffer({11, 12, 13}, Fbo{8, 160, 90, 0, 0, 0, true, true}));
+    if (mode == 1) current->slot->invalidate(17);
+    if (mode == 2) { current->controller.reset(); current->bridge.reset(); }
+    if (mode == 3) current->controller->cancel();
+    if (mode == 4) CHECK(!current->bridge->framebufferCurrent({11, 99, 13}, Fbo{7, 160, 90, 0, 0, 0, true, true}));
+  }
+  static void attach(const std::shared_ptr<FrameRecord>& record, bool baseline) {
+    auto& r = *record;
+    if (baseline) {
+      current = std::make_shared<Issuer>(); retained.push_back(current);
+      current->target = r.key;
+      r.key.seek = 0; r.key.phase = 4;
+      CHECK(current->controller->request(r.key, 9, Bridge::Phase::Baseline, claim));
+    } else if (current->last == 1) {
+      CHECK(current->controller->request(current->target, 9, Bridge::Phase::Target, claim));
+    }
+    const auto serial = std::max(r.serial, current->last + 1);
+    CHECK(current->bridge->framebufferCurrent({11, 12, 13}, Fbo{7, 160, 90, 0, 0, 0, true, true}));
+    auto ticket = current->bridge->issue({11, 12, 13}, serial);
+    if (!current->bridge->consume(ticket, {11, 12, 13})) {
+      std::fprintf(stderr, "capture failed baseline=%d serial=%llu last=%llu claim=%d ticket=%llu fixture=%zu\n", baseline,
+                   static_cast<unsigned long long>(serial), static_cast<unsigned long long>(current->last), claim->open(),
+                   static_cast<unsigned long long>(ticket.request), retained.size());
+      std::abort();
+    }
+    r.captureEvidence = current->bridge->evidence(ticket, {11, 12, 13}, r);
+    CHECK(r.captureEvidence); current->last = serial;
+  }
+};
+std::shared_ptr<TestCaptureCapability::Issuer> TestCaptureCapability::current;
+std::vector<std::shared_ptr<TestCaptureCapability::Issuer>> TestCaptureCapability::retained;
+std::shared_ptr<const HealthyRetirement::RetirementClaim> TestCaptureCapability::claim;
 
 namespace {
 constexpr std::int64_t start = 1000000000LL;
@@ -17,7 +86,8 @@ void paint(FrameRecord& r, int x, int y, int width, int height, int value)
     r.rgba[offset] = r.rgba[offset + 1] = r.rgba[offset + 2] = std::uint8_t(value);
   }
 }
-Capture frame(const FrameKey& key, int index, std::uint64_t serial, std::uint64_t capturedAt)
+Capture frame(const FrameKey& key, int index, std::uint64_t serial, std::uint64_t capturedAt,
+              const std::function<void(FrameRecord&)>& mutate = {})
 {
   auto r = std::make_shared<FrameRecord>();
   r->key = key; r->serial = serial; r->width = 160; r->height = 90;
@@ -26,6 +96,8 @@ Capture frame(const FrameKey& key, int index, std::uint64_t serial, std::uint64_
   for (std::size_t i = 3; i < r->rgba.size(); i += 4) r->rgba[i] = 255;
   for (int bit = 0; bit < 9; ++bit) paint(*r, 5 + bit * 16, 8, 12, 12, index & (1 << bit) ? 220 : 70);
   paint(*r, (index * 3) % 140, 35, 20, 20, 220);
+  if (mutate) mutate(*r);
+  TestCaptureCapability::attach(r, index == 0);
   return r;
 }
 PausedHoldBinding binding()
@@ -35,6 +107,7 @@ PausedHoldBinding binding()
   b.host = 7; b.revision = 8; b.attempt = 9; b.grant = 10;
   b.checkpointMs = 3000; b.deadlineNs = 10000000000LL;
   b.claim = std::make_shared<HealthyRetirement::RetirementClaim>(17);
+  TestCaptureCapability::claim = b.claim;
   return b;
 }
 }
@@ -125,8 +198,8 @@ class TestPausedHold {
     for (int i = 0; i <= 15; ++i) sample(wrongSerial, i);
     CHECK(!wrongSerial.finish(start + 15 * step));
     PausedHold wrongContext(b); prepare(wrongContext, b);
-    auto image = std::make_shared<FrameRecord>(*frame(b.frame, 90, 2, start + 1));
-    ++image->actualContext; wrongContext.capture(image);
+    auto image = frame(b.frame, 90, 2, start + 1, [](FrameRecord& value) { ++value.actualContext; });
+    wrongContext.capture(image);
     for (int i = 0; i <= 15; ++i) sample(wrongContext, i);
     CHECK(!wrongContext.finish(start + 15 * step));
   }
@@ -156,7 +229,57 @@ class TestPausedHold {
     for (int i = 0; i <= 15; ++i) sample(beyond, i);
     CHECK(!beyond.finish(start + 15 * step));
   }
+  static void captureGuardRevocation()
+  {
+    for (int mode = 0; mode != 5; ++mode) {
+      auto b = binding(); PausedHold hold(b);
+      const auto proof = complete(hold, b);
+      CHECK(proof && proof->matches(b, start + 15 * step));
+      TestCaptureCapability::revoke(mode);
+      CHECK(!proof->matches(b, start + 15 * step));
+    }
+  }
+  static void rejectMissingEvidence()
+  {
+    auto b = binding(); PausedHold missingBaseline(b);
+    auto baseline = std::make_shared<FrameRecord>(*frame(b.frame, 0, 1, start - 1));
+    baseline->captureEvidence.reset(); CHECK(!missingBaseline.baseline(baseline));
+    PausedHold missingTarget(b); prepare(missingTarget, b);
+    auto target = std::make_shared<FrameRecord>(*frame(b.frame, 90, 2, start + 1));
+    target->captureEvidence.reset(); missingTarget.capture(target);
+    for (int i = 0; i <= 15; ++i) sample(missingTarget, i);
+    CHECK(!missingTarget.finish(start + 15 * step));
+  }
+  static void invertedRowsAreRejected()
+  {
+    auto b = binding();
+    auto baseline = frame(b.frame, 0, 1, start - 1);
+    auto target = std::make_shared<FrameRecord>(*frame(b.frame, 90, 2, start + 1));
+    CHECK(decodeFrame(*target) == 90);
+    constexpr std::size_t rowBytes = 160 * 4;
+    for (std::size_t y = 0; y < 45; ++y)
+      std::swap_ranges(target->rgba.begin() + y * rowBytes,
+                       target->rgba.begin() + (y + 1) * rowBytes,
+                       target->rgba.begin() + (89 - y) * rowBytes);
+    CHECK(!decodeFrame(*target));
+    FrameAcceptance acceptance;
+    CHECK(acceptance.baseline(baseline));
+    CHECK(acceptance.arm(b.frame, 1, 3000));
+    acceptance.capture(target); acceptance.acknowledge(b.frame, true, true, true);
+    CHECK(!acceptance.accepted() && !acceptance.target());
+  }
+  static void rejectAlteredPixels()
+  {
+    auto b = binding(); PausedHold hold(b); prepare(hold, b);
+    auto target = std::make_shared<FrameRecord>(*frame(b.frame, 90, 2, start + 1));
+    const auto other = frame(b.frame, 91, 3, start + 2);
+    target->rgba = other->rgba;
+    CHECK(decodeFrame(*target) == 91);
+    hold.capture(target);
+    for (int i = 0; i <= 15; ++i) sample(hold, i);
+    CHECK(!hold.finish(start + 15 * step));
+  }
 public:
-  static void run() { goodAndBinding(); timeAndPosition(); captureAndLifetime(); revokedAndUnqualifiedImages(); timingBoundaries(); targetTolerance(); }
+  static void run() { goodAndBinding(); timeAndPosition(); captureAndLifetime(); revokedAndUnqualifiedImages(); timingBoundaries(); targetTolerance(); captureGuardRevocation(); rejectMissingEvidence(); invertedRowsAreRejected(); rejectAlteredPixels(); }
 };
 int main() { TestPausedHold::run(); }

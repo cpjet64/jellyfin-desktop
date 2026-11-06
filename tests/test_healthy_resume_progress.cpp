@@ -1,10 +1,74 @@
 #include "healthy_restart/resume_progress.h"
+#include "healthy_restart/capture_capability.h"
+#include <algorithm>
+#include <cstdio>
+#include <functional>
 #include <cstdlib>
 #include <limits>
 
-#define CHECK(x) do { if (!(x)) std::abort(); } while (false)
+#define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "CHECK failed at line %d: %s\n", __LINE__, #x); std::abort(); } } while (false)
 using namespace HealthyRestart;
 using namespace fixture_restart;
+
+class TestCaptureCapability {
+  using Bridge = HealthyRetirement::CaptureBridge;
+  using Identity = HealthyRetirement::Identity;
+  using Fbo = HealthyRetirement::FramebufferObservation;
+  struct Issuer {
+    std::shared_ptr<HealthyRetirement::Slot> slot;
+    std::shared_ptr<Bridge> bridge;
+    std::unique_ptr<HealthyRetirement::CaptureController> controller;
+    FrameKey target;
+    int context = 0;
+    std::uint64_t last = 0;
+    Issuer() {
+      slot = std::make_shared<HealthyRetirement::Slot>(17, 100, [] { return std::int64_t{10}; });
+      CHECK(slot->beginCreation() && slot->beforeCreate() && slot->recordCreated(&context));
+      HealthyRetirement::Operations ops;
+      ops.currentIdentity = [] { return Identity{11, 12, 13}; };
+      ops.unregisterCallback = [](void*) {};
+      ops.invalidateQueued = [](std::uint64_t) { return true; };
+      ops.freeContext = [](void*) {};
+      ops.clearPointer = [](void*) { return true; };
+      CHECK(slot->install({11, 12, 13}, &context, ops));
+      controller = HealthyRetirement::CaptureController::create(slot);
+      CHECK(controller); bridge = slot->captureBridge(); CHECK(bridge);
+      CHECK(bridge->rendererCreated({11, 12, 13}));
+      CHECK(bridge->framebuffer({11, 12, 13}, Fbo{7, 160, 90, 0, 0, 0, true, true}));
+    }
+  };
+  static std::shared_ptr<Issuer> current;
+  static std::vector<std::shared_ptr<Issuer>> retained;
+public:
+  static std::shared_ptr<const HealthyRetirement::RetirementClaim> claim;
+  static void revoke(int mode) {
+    if (mode == 0) CHECK(current->bridge->framebuffer({11, 12, 13}, Fbo{8, 160, 90, 0, 0, 0, true, true}));
+    if (mode == 1) current->slot->invalidate(17);
+    if (mode == 2) { current->controller.reset(); current->bridge.reset(); }
+    if (mode == 3) current->controller->cancel();
+    if (mode == 4) CHECK(!current->bridge->framebufferCurrent({11, 99, 13}, Fbo{7, 160, 90, 0, 0, 0, true, true}));
+  }
+  static void attach(const std::shared_ptr<FrameRecord>& record, bool baseline) {
+    auto& r = *record;
+    if (baseline) {
+      current = std::make_shared<Issuer>(); retained.push_back(current);
+      current->target = r.key;
+      r.key.seek = 0; r.key.phase = 4;
+      CHECK(current->controller->request(r.key, 9, Bridge::Phase::Baseline, claim));
+    } else if (current->last == 1) {
+      CHECK(current->controller->request(current->target, 9, Bridge::Phase::Target, claim));
+    }
+    const auto serial = std::max(r.serial, current->last + 1);
+    CHECK(current->bridge->framebufferCurrent({11, 12, 13}, Fbo{7, 160, 90, 0, 0, 0, true, true}));
+    auto ticket = current->bridge->issue({11, 12, 13}, serial);
+    CHECK(current->bridge->consume(ticket, {11, 12, 13}));
+    r.captureEvidence = current->bridge->evidence(ticket, {11, 12, 13}, r);
+    CHECK(r.captureEvidence); current->last = serial;
+  }
+};
+std::shared_ptr<TestCaptureCapability::Issuer> TestCaptureCapability::current;
+std::vector<std::shared_ptr<TestCaptureCapability::Issuer>> TestCaptureCapability::retained;
+std::shared_ptr<const HealthyRetirement::RetirementClaim> TestCaptureCapability::claim;
 
 namespace {
 constexpr std::int64_t start = 1000000000LL, step = 200000000LL;
@@ -16,7 +80,8 @@ void paint(FrameRecord& r, int x, int y, int width, int height, int value)
     r.rgba[p] = r.rgba[p + 1] = r.rgba[p + 2] = std::uint8_t(value);
   }
 }
-Capture frame(const FrameKey& key, int index, std::uint64_t serial, std::uint64_t time)
+Capture frame(const FrameKey& key, int index, std::uint64_t serial, std::uint64_t time,
+              const std::function<void(FrameRecord&)>& mutate = {})
 {
   auto r = std::make_shared<FrameRecord>();
   r->key = key; r->serial = serial; r->width = 160; r->height = 90;
@@ -25,6 +90,8 @@ Capture frame(const FrameKey& key, int index, std::uint64_t serial, std::uint64_
   for (std::size_t i = 3; i < r->rgba.size(); i += 4) r->rgba[i] = 255;
   for (int bit = 0; bit < 9; ++bit) paint(*r, 5 + bit * 16, 8, 12, 12, index & (1 << bit) ? 220 : 70);
   paint(*r, (index * 3) % 140, 35, 20, 20, 220);
+  if (mutate) mutate(*r);
+  TestCaptureCapability::attach(r, index == 0);
   return r;
 }
 PausedHoldBinding binding()
@@ -33,6 +100,7 @@ PausedHoldBinding binding()
   b.frame = {1, 2, 3, 4, 5, 6}; b.host = 7; b.revision = 8; b.attempt = 9; b.grant = 10;
   b.checkpointMs = 3000; b.deadlineNs = 20000000000LL;
   b.claim = std::make_shared<HealthyRetirement::RetirementClaim>(17);
+  TestCaptureCapability::claim = b.claim;
   return b;
 }
 }
@@ -79,25 +147,16 @@ class TestResumeProgress {
   }
   static void imageFailures()
   {
-    auto b = binding(); std::shared_ptr<const PausedHoldProof> proof;
-    auto hold = TestPausedHold::make(b, proof);
-    ResumeProgress still(b, proof, 2, dispatch);
-    still.capture(frame(b.frame, 91, 3, dispatch + 1));
-    still.capture(frame(b.frame, 91, 4, dispatch + 1000000001LL));
-    observations(still); CHECK(!still.finish(dispatch + 1000000001LL));
-    ResumeProgress shortGap(b, proof, 2, dispatch);
-    shortGap.capture(frame(b.frame, 91, 3, dispatch + 1));
-    shortGap.capture(frame(b.frame, 121, 4, dispatch + 1000000000LL));
-    observations(shortGap); CHECK(!shortGap.finish(dispatch + 1000000001LL));
-    ResumeProgress wrongKey(b, proof, 2, dispatch);
-    auto key = b.frame; ++key.entry;
-    wrongKey.capture(frame(key, 91, 3, dispatch + 1));
-    wrongKey.capture(frame(key, 121, 4, dispatch + 1000000001LL));
-    observations(wrongKey); CHECK(!wrongKey.finish(dispatch + 1000000001LL));
-    ResumeProgress old(b, proof, 2, dispatch);
-    old.capture(frame(b.frame, 91, 3, dispatch - 1));
-    old.capture(frame(b.frame, 121, 4, dispatch + 1000000001LL));
-    observations(old); CHECK(!old.finish(dispatch + 1000000001LL));
+    for (int scenario = 0; scenario != 4; ++scenario) {
+      auto b = binding(); std::shared_ptr<const PausedHoldProof> proof;
+      auto hold = TestPausedHold::make(b, proof);
+      ResumeProgress progress(b, proof, 2, dispatch);
+      auto key = b.frame; if (scenario == 2) ++key.entry;
+      progress.capture(frame(key, 91, 3, scenario == 3 ? dispatch - 1 : dispatch + 1));
+      progress.capture(frame(key, scenario == 0 ? 91 : 121, 4,
+                             dispatch + (scenario == 1 ? 1000000000LL : 1000000001LL)));
+      observations(progress); CHECK(!progress.finish(dispatch + 1000000001LL));
+    }
   }
   static void observationFailures()
   {
@@ -129,20 +188,23 @@ class TestResumeProgress {
   }
   static void rejectBadCaptures()
   {
-    auto b = binding(); std::shared_ptr<const PausedHoldProof> proof;
-    auto hold = TestPausedHold::make(b, proof);
     for (int scenario = 0; scenario < 5; ++scenario) {
+      auto b = binding(); std::shared_ptr<const PausedHoldProof> proof;
+      auto hold = TestPausedHold::make(b, proof);
       ResumeProgress progress(b, proof, 2, dispatch);
-      auto record = std::make_shared<FrameRecord>(*frame(b.frame, 91, 3, dispatch + 1));
-      if (scenario == 0) ++record->thread;
-      if (scenario == 1) ++record->actualContext;
-      if (scenario == 2) record->serial = 2;
-      if (scenario == 3) record->rgba.clear();
-      if (scenario == 4) record->capturedAt = std::numeric_limits<std::uint64_t>::max();
+      auto record = frame(b.frame, 91, 3, dispatch + 1, [scenario](FrameRecord& value) {
+        if (scenario == 0) ++value.thread;
+        if (scenario == 1) ++value.actualContext;
+        if (scenario == 2) value.serial = 2;
+        if (scenario == 3) value.rgba.clear();
+        if (scenario == 4) value.capturedAt = std::numeric_limits<std::uint64_t>::max();
+      });
       progress.capture(record);
       progress.capture(frame(b.frame, 121, 4, dispatch + 1000000001LL));
       observations(progress); CHECK(!progress.finish(dispatch + 1000000001LL));
     }
+    auto b = binding(); std::shared_ptr<const PausedHoldProof> proof;
+    auto hold = TestPausedHold::make(b, proof);
     ResumeProgress wrongBinding(b, proof, 2, dispatch);
     auto key = b.frame; ++key.phase;
     wrongBinding.capture(frame(key, 91, 3, dispatch + 1));
@@ -174,7 +236,47 @@ class TestResumeProgress {
     const auto proof = progress.finish(dispatch + 1000000001LL);
     CHECK(proof && proof->matches(b, dispatch + 1000000001LL));
   }
+  static void captureGuardRevocation()
+  {
+    for (int mode = 0; mode != 5; ++mode) {
+      auto b = binding(); std::shared_ptr<const PausedHoldProof> holdProof;
+      auto hold = TestPausedHold::make(b, holdProof);
+      ResumeProgress progress(b, holdProof, 2, dispatch);
+      frames(progress, b); observations(progress);
+      const auto proof = progress.finish(dispatch + 1000000001LL);
+      CHECK(proof && proof->matches(b, dispatch + 1000000001LL));
+      TestCaptureCapability::revoke(mode);
+      CHECK(!proof->matches(b, dispatch + 1000000001LL));
+    }
+  }
+  static void rejectMissingEvidence()
+  {
+    for (int missing = 0; missing != 2; ++missing) {
+      auto b = binding(); std::shared_ptr<const PausedHoldProof> holdProof;
+      auto hold = TestPausedHold::make(b, holdProof);
+      ResumeProgress progress(b, holdProof, 2, dispatch);
+      auto first = std::make_shared<FrameRecord>(*frame(b.frame, 91, 3, dispatch + 1));
+      auto second = std::make_shared<FrameRecord>(*frame(b.frame, 121, 4, dispatch + 1000000001LL));
+      (missing == 0 ? first : second)->captureEvidence.reset();
+      progress.capture(first); progress.capture(second); observations(progress);
+      CHECK(!progress.finish(dispatch + 1000000001LL));
+    }
+  }
+  static void rejectAlteredPixels()
+  {
+    for (int altered = 0; altered != 2; ++altered) {
+      auto b = binding(); std::shared_ptr<const PausedHoldProof> holdProof;
+      auto hold = TestPausedHold::make(b, holdProof);
+      ResumeProgress progress(b, holdProof, 2, dispatch);
+      auto first = std::make_shared<FrameRecord>(*frame(b.frame, 91, 3, dispatch + 1));
+      auto second = std::make_shared<FrameRecord>(*frame(b.frame, 121, 4, dispatch + 1000000001LL));
+      (altered == 0 ? first : second)->rgba[0] ^= 1;
+      CHECK(decodeFrame(*first) == 91 && decodeFrame(*second) == 121);
+      progress.capture(first); progress.capture(second); observations(progress);
+      CHECK(!progress.finish(dispatch + 1000000001LL));
+    }
+  }
 public:
-  static void run() { goodAndLifetime(); imageFailures(); observationFailures(); revokedAndDestroyed(); rejectBadCaptures(); holdRevocation(); captureIsCopied(); }
+  static void run() { goodAndLifetime(); imageFailures(); observationFailures(); revokedAndDestroyed(); rejectBadCaptures(); holdRevocation(); captureIsCopied(); captureGuardRevocation(); rejectMissingEvidence(); rejectAlteredPixels(); }
 };
 int main() { TestResumeProgress::run(); }
