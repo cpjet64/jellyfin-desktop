@@ -72,7 +72,7 @@ WindowsRestartProcess::~WindowsRestartProcess()
 
 bool WindowsRestartProcess::release()
 {
-  if (!settled_) return false;
+  if (!settled_ || worker_.joinable()) return false;
   for (auto* item : io_) if (item->pending()) return false;
   delete this;
   return true;
@@ -91,13 +91,31 @@ ProcessProgress WindowsRestartProcess::launch(const std::wstring& executable,
   limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
   if (!job_ || !api_.setJob(job_, JobObjectExtendedLimitInformation, &limits, sizeof(limits)))
     return ProcessProgress::Failed;
+  launchDeadline_ = deadline;
+  settled_ = false;
+  try {
+    worker_ = std::thread(&WindowsRestartProcess::runCreate, this, executable, arguments, deadline);
+  } catch (...) {
+    settled_ = true;
+    return ProcessProgress::Failed;
+  }
+  return ProcessProgress::Pending;
+}
+
+void WindowsRestartProcess::runCreate(std::wstring executable, std::wstring arguments,
+                                     ULONGLONG deadline) noexcept
+{
+  try {
+  std::wstring command = L"\"" + executable + L"\" " + arguments;
   SIZE_T bytes = 0;
   api_.initAttributes(nullptr, 2, 0, &bytes);
-  if (!bytes) return ProcessProgress::Failed;
+  if (!bytes) { workerDone_.store(true, std::memory_order_release); return; }
   std::vector<std::max_align_t> storage((bytes + sizeof(std::max_align_t) - 1) /
                                         sizeof(std::max_align_t));
   auto* attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(storage.data());
-  if (!api_.initAttributes(attributes, 2, 0, &bytes)) return ProcessProgress::Failed;
+  if (!api_.initAttributes(attributes, 2, 0, &bytes)) {
+    workerDone_.store(true, std::memory_order_release); return;
+  }
   const bool ready = api_.updateAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
       handles_.data(), handles_.size() * sizeof(HANDLE), nullptr, nullptr) &&
       api_.updateAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_JOB_LIST,
@@ -105,23 +123,35 @@ ProcessProgress WindowsRestartProcess::launch(const std::wstring& executable,
   STARTUPINFOEXW startup{};
   startup.StartupInfo.cb = sizeof(startup);
   startup.lpAttributeList = attributes;
-  PROCESS_INFORMATION process{};
-  std::wstring command = L"\"" + executable + L"\" " + arguments;
-  const bool created = ready && api_.now() < deadline && api_.createProcess(executable.c_str(),
+  workerCreated_ = ready && api_.now() < deadline && api_.createProcess(executable.c_str(),
       command.data(), nullptr, nullptr, TRUE, EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED |
-      CREATE_NO_WINDOW, nullptr, nullptr, &startup.StartupInfo, &process);
+      CREATE_NO_WINDOW, nullptr, nullptr, &startup.StartupInfo, &workerResult_);
   api_.deleteAttributes(attributes);
-  if (!created) return ProcessProgress::Failed;
-  process_ = process.hProcess;
-  settled_ = false;
+  } catch (...) {}
+  workerDone_.store(true, std::memory_order_release);
+}
+
+ProcessProgress WindowsRestartProcess::pollLaunch()
+{
+  if (!worker_.joinable()) return ProcessProgress::Failed;
+  if (!workerDone_.load(std::memory_order_acquire))
+    return api_.now() >= launchDeadline_ || forced_ ? ProcessProgress::Unconfirmed : ProcessProgress::Pending;
+  const DWORD workerWait = WaitForSingleObject(worker_.native_handle(), 0);
+  if (workerWait == WAIT_FAILED) return ProcessProgress::Unconfirmed;
+  if (workerWait != WAIT_OBJECT_0)
+    return api_.now() >= launchDeadline_ || forced_ ? ProcessProgress::Unconfirmed : ProcessProgress::Pending;
+  worker_.join();
+  if (!workerCreated_) { settled_ = true; return ProcessProgress::Failed; }
+  process_ = workerResult_.hProcess;
   closeChildren();
   BOOL inJob = FALSE;
   assigned_ = api_.inJob(process_, job_, &inJob) && inJob;
-  const bool resumed = assigned_ && api_.now() < deadline && api_.resume(process.hThread) != DWORD(-1);
-  api_.close(process.hThread);
-  if (!resumed || api_.now() >= deadline) {
+  const bool resumed = !forced_ && assigned_ && api_.now() < launchDeadline_ &&
+      api_.resume(workerResult_.hThread) != DWORD(-1);
+  api_.close(workerResult_.hThread);
+  if (!resumed || api_.now() >= launchDeadline_) {
     forced_ = true;
-    return forceCleanup(deadline) == ProcessProgress::Complete
+    return forceCleanup(launchDeadline_) == ProcessProgress::Complete
         ? ProcessProgress::Failed : ProcessProgress::Unconfirmed;
   }
   return ProcessProgress::Complete;
@@ -154,6 +184,11 @@ ProcessProgress WindowsRestartProcess::pollHealthy(ULONGLONG deadline)
 ProcessProgress WindowsRestartProcess::forceCleanup(ULONGLONG deadline)
 {
   forced_ = true;
+  if (worker_.joinable()) {
+    pollLaunch();
+    if (worker_.joinable()) return ProcessProgress::Unconfirmed;
+    if (!process_ && settled_) return ProcessProgress::Complete;
+  }
   if (!process_ || !job_) return ProcessProgress::Failed;
   if (!terminationRequested_) {
     terminationRequested_ = true;

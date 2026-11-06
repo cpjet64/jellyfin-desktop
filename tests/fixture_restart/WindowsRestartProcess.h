@@ -2,7 +2,9 @@
 #ifdef _WIN32
 #include "WindowsRestartIo.h"
 #include <windows.h>
+#include <atomic>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace FixtureRestart {
@@ -37,6 +39,7 @@ public:
   bool release();
   ProcessProgress launch(const std::wstring& executable,
       const std::wstring& arguments, ULONGLONG deadline);
+  ProcessProgress pollLaunch();
   ProcessProgress pollHealthy(ULONGLONG deadline);
   ProcessProgress forceCleanup(ULONGLONG deadline);
 private:
@@ -46,12 +49,18 @@ private:
   WindowsRestartProcess(const WindowsRestartProcess&) = delete;
   WindowsRestartProcess& operator=(const WindowsRestartProcess&) = delete;
   ProcessProgress settle(ULONGLONG deadline, bool healthy);
+  void runCreate(std::wstring executable, std::wstring arguments, ULONGLONG deadline) noexcept;
   void closeChildren();
   WindowsProcessApi api_;
   std::vector<HANDLE> handles_;
   std::vector<WindowsRestartIo*> io_;
   std::vector<WindowsRestartChannel*> channels_;
   HANDLE job_ = nullptr, process_ = nullptr;
+  std::thread worker_;
+  std::atomic<bool> workerDone_{false};
+  PROCESS_INFORMATION workerResult_{};
+  ULONGLONG launchDeadline_ = 0;
+  bool workerCreated_ = false;
   bool assigned_ = false, forced_ = false, terminationRequested_ = false;
   bool settled_ = true, launched_ = false;
 };

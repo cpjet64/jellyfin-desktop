@@ -1,5 +1,9 @@
 #include "fixture_restart/WindowsRestartProcess.h"
 #include <cstdlib>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <vector>
 using namespace FixtureRestart;
 #define CHECK(condition) do { if (!(condition)) std::abort(); } while (false)
@@ -12,11 +16,15 @@ DWORD active, exitValue, attributes, creates, resumes;
 DWORD ioError;
 bool ioDone;
 ULONGLONG ticks;
+std::mutex createMutex;
+std::condition_variable createCondition;
+bool holdCreate, enteredCreate, releaseCreate;
 void reset()
 {
   createOk = membershipOk = member = resumeOk = true;
   signaled = terminated = false;
   active = 1; exitValue = 0; attributes = creates = resumes = 0; ticks = 1;
+  holdCreate = enteredCreate = releaseCreate = false;
 }
 HANDLE WINAPI createJob(LPSECURITY_ATTRIBUTES, LPCWSTR) { return job; }
 BOOL WINAPI setJob(HANDLE h, JOBOBJECTINFOCLASS type, LPVOID value, DWORD)
@@ -49,6 +57,11 @@ BOOL WINAPI createProcess(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATT
   CHECK(attributes == 3 && inherit && startup->cb == sizeof(STARTUPINFOEXW));
   CHECK((flags & (EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED | CREATE_NO_WINDOW)) ==
         (EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED | CREATE_NO_WINDOW));
+  {
+    std::unique_lock<std::mutex> lock(createMutex);
+    enteredCreate = true; createCondition.notify_all();
+    if (holdCreate) createCondition.wait(lock, [] { return releaseCreate; });
+  }
   if (!createOk) return FALSE;
   out->hProcess = process; out->hThread = thread;
   return TRUE;
@@ -91,16 +104,32 @@ WindowsProcessApi api()
 }
 WindowsRestartProcess* fixture()
 { auto* p = WindowsRestartProcess::create(api(), {child}, {}); CHECK(p); return p; }
+ProcessProgress finishLaunch(WindowsRestartProcess* p)
+{
+  const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  ProcessProgress result;
+  do {
+    result = p->pollLaunch();
+    if (result != ProcessProgress::Pending) return result;
+    std::this_thread::yield();
+  } while (std::chrono::steady_clock::now() < limit);
+  std::abort();
+}
+ProcessProgress launchFinished(WindowsRestartProcess* p)
+{
+  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Pending);
+  return finishLaunch(p);
+}
 void createFailure()
 {
   reset(); createOk = false; auto* p = fixture();
-  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Failed);
+  CHECK(launchFinished(p) == ProcessProgress::Failed);
   CHECK(creates == 1 && resumes == 0 && p->release());
 }
 void membershipFailure()
 {
   reset(); membershipOk = false; auto* p = fixture();
-  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Unconfirmed);
+  CHECK(launchFinished(p) == ProcessProgress::Unconfirmed);
   CHECK(terminated && resumes == 0 && !p->release());
   signaled = true; active = 0;
   CHECK(p->forceCleanup(10) == ProcessProgress::Complete && p->release());
@@ -108,7 +137,7 @@ void membershipFailure()
 void resumeFailure()
 {
   reset(); resumeOk = false; auto* p = fixture();
-  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Unconfirmed);
+  CHECK(launchFinished(p) == ProcessProgress::Unconfirmed);
   CHECK(terminated && resumes == 1 && p->pollHealthy(10) == ProcessProgress::Failed);
   signaled = true; active = 0;
   CHECK(p->forceCleanup(10) == ProcessProgress::Complete && p->release());
@@ -116,7 +145,7 @@ void resumeFailure()
 void healthyRequiresJobEmpty()
 {
   reset(); auto* p = fixture();
-  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Complete);
+  CHECK(launchFinished(p) == ProcessProgress::Complete);
   signaled = true;
   CHECK(p->pollHealthy(10) == ProcessProgress::Pending && !p->release());
   active = 0;
@@ -125,7 +154,7 @@ void healthyRequiresJobEmpty()
 void forcedIsNotHealthy()
 {
   reset(); auto* p = fixture();
-  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Complete);
+  CHECK(launchFinished(p) == ProcessProgress::Complete);
   CHECK(p->forceCleanup(10) == ProcessProgress::Pending && terminated);
   CHECK(p->pollHealthy(10) == ProcessProgress::Failed);
   signaled = true; active = 0;
@@ -141,7 +170,7 @@ void retainsPendingIo()
   auto* io = new WindowsRestartIo(ioApi);
   CHECK(io->begin(reinterpret_cast<HANDLE>(16), true, nullptr, 4, 10) == IoProgress::Pending);
   auto* p = WindowsRestartProcess::create(api(), {child}, {io});
-  CHECK(p && p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Complete);
+  CHECK(p && launchFinished(p) == ProcessProgress::Complete);
   signaled = true; active = 0;
   CHECK(p->pollHealthy(10) == ProcessProgress::Complete && !p->release());
   CHECK(io->cancel() == IoProgress::Unconfirmed);
@@ -151,15 +180,83 @@ void retainsPendingIo()
 void unhealthyExitAndDeadline()
 {
   reset(); auto* p = fixture();
-  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Complete);
+  CHECK(launchFinished(p) == ProcessProgress::Complete);
   signaled = true; active = 0; exitValue = 1;
   CHECK(p->pollHealthy(10) == ProcessProgress::Failed && p->release());
   reset(); p = fixture();
-  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Complete);
+  CHECK(launchFinished(p) == ProcessProgress::Complete);
   ticks = 10;
   CHECK(p->pollHealthy(10) == ProcessProgress::Unconfirmed && !p->release());
   signaled = true; active = 0;
   CHECK(p->forceCleanup(10) == ProcessProgress::Failed && p->release());
+}
+void lateCreatedChildIsNeverResumed()
+{
+  reset(); holdCreate = true; auto* p = fixture();
+  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Pending);
+  {
+    std::unique_lock<std::mutex> lock(createMutex);
+    CHECK(createCondition.wait_for(lock, std::chrono::seconds(5), [] { return enteredCreate; }));
+  }
+  CHECK(p->forceCleanup(10) == ProcessProgress::Unconfirmed && !p->release());
+  CHECK(p->pollLaunch() == ProcessProgress::Unconfirmed);
+  {
+    std::lock_guard<std::mutex> lock(createMutex);
+    releaseCreate = true;
+  }
+  createCondition.notify_all();
+  const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!terminated && std::chrono::steady_clock::now() < limit) {
+    const auto status = p->forceCleanup(10);
+    CHECK(status == ProcessProgress::Unconfirmed || status == ProcessProgress::Pending);
+    std::this_thread::yield();
+  }
+  CHECK(terminated && resumes == 0 && !p->release());
+  signaled = true; active = 0;
+  CHECK(p->forceCleanup(10) == ProcessProgress::Complete && p->release());
+}
+void lateAfterDeadlineIsNeverResumed()
+{
+  reset(); holdCreate = true; auto* p = fixture();
+  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Pending);
+  {
+    std::unique_lock<std::mutex> lock(createMutex);
+    CHECK(createCondition.wait_for(lock, std::chrono::seconds(5), [] { return enteredCreate; }));
+    ticks = 10; releaseCreate = true;
+  }
+  createCondition.notify_all();
+  const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!terminated && std::chrono::steady_clock::now() < limit) {
+    CHECK(p->pollLaunch() == ProcessProgress::Unconfirmed);
+    std::this_thread::yield();
+  }
+  CHECK(terminated && resumes == 0 && !p->release());
+  signaled = true; active = 0;
+  CHECK(p->forceCleanup(20) == ProcessProgress::Complete && p->release());
+}
+void cancelledFailedCreateSettles()
+{
+  reset(); holdCreate = true; createOk = false; auto* p = fixture();
+  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Pending);
+  {
+    std::unique_lock<std::mutex> lock(createMutex);
+    CHECK(createCondition.wait_for(lock, std::chrono::seconds(5), [] { return enteredCreate; }));
+  }
+  CHECK(p->forceCleanup(10) == ProcessProgress::Unconfirmed && !p->release());
+  {
+    std::lock_guard<std::mutex> lock(createMutex);
+    releaseCreate = true;
+  }
+  createCondition.notify_all();
+  const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  ProcessProgress status;
+  do {
+    status = p->forceCleanup(10);
+    if (status == ProcessProgress::Complete) break;
+    CHECK(status == ProcessProgress::Unconfirmed);
+    std::this_thread::yield();
+  } while (std::chrono::steady_clock::now() < limit);
+  CHECK(status == ProcessProgress::Complete && !terminated && resumes == 0 && p->release());
 }
 }
 int main()
@@ -167,4 +264,7 @@ int main()
   createFailure(); membershipFailure(); resumeFailure();
   healthyRequiresJobEmpty(); forcedIsNotHealthy();
   retainsPendingIo(); unhealthyExitAndDeadline();
+  lateCreatedChildIsNeverResumed();
+  lateAfterDeadlineIsNeverResumed();
+  cancelledFailedCreateSettles();
 }
