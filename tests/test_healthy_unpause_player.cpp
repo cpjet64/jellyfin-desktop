@@ -3,11 +3,59 @@
 #include "RestartBroker.h"
 #include "RestartWire.h"
 #include "frame_capture.h"
+#include "capture_capability.h"
 #include <QCryptographicHash>
 #include <QPainter>
 #include <QThread>
 #include <QtTest/QtTest>
 #include <limits>
+
+class TestCaptureCapability {
+  using Bridge = HealthyRetirement::CaptureBridge;
+  using Identity = HealthyRetirement::Identity;
+  using Fbo = HealthyRetirement::FramebufferObservation;
+  static constexpr Identity identity{11, 12, 13};
+  int context_ = 0;
+  std::shared_ptr<HealthyRetirement::Slot> slot_;
+  std::unique_ptr<HealthyRetirement::CaptureController> controller_;
+  std::shared_ptr<Bridge> bridge_;
+  std::shared_ptr<const HealthyRetirement::RetirementClaim> claim_;
+public:
+  explicit TestCaptureCapability(std::shared_ptr<const HealthyRetirement::RetirementClaim> claim)
+    : slot_(std::make_shared<HealthyRetirement::Slot>(9, std::numeric_limits<qint64>::max(), [] { return qint64{1}; })),
+      claim_(std::move(claim)) {}
+  bool initialize() {
+    HealthyRetirement::Operations ops;
+    ops.currentIdentity = [] { return identity; };
+    ops.unregisterCallback = [](void*) {};
+    ops.invalidateQueued = [](std::uint64_t) { return true; };
+    ops.freeContext = [](void*) {};
+    ops.clearPointer = [](void*) { return true; };
+    if (!slot_->beginCreation() || !slot_->beforeCreate() || !slot_->recordCreated(&context_) ||
+        !slot_->install(identity, &context_, ops)) return false;
+    controller_ = HealthyRetirement::CaptureController::create(slot_);
+    bridge_ = slot_->captureBridge();
+    return controller_ && bridge_ && bridge_->rendererCreated(identity) && bridge_->framebuffer(identity, fbo());
+  }
+  bool request(const fixture_restart::FrameKey& key, bool target) {
+    return controller_->request(key, 2, target ? Bridge::Phase::Target : Bridge::Phase::Baseline, claim_);
+  }
+  bool acknowledgeTarget() {
+    if (!bridge_->framebufferCurrent(identity, fbo())) return false;
+    const auto ticket = bridge_->issue(identity, fixture_restart::nextRenderSerial());
+    return ticket.request && controller_->ready(2, Bridge::Phase::Target);
+  }
+  bool publish(const QImage& image, bool target) {
+    if (!bridge_->framebufferCurrent(identity, fbo())) return false;
+    const auto ticket = bridge_->issue(identity, fixture_restart::nextRenderSerial());
+    if (!ticket.request) return false;
+    bridge_->publish(ticket, identity, image, 0, 0, 0, 0);
+    return controller_->ready(2, target ? Bridge::Phase::Target : Bridge::Phase::Baseline);
+  }
+private:
+  static Fbo fbo() { return {7, 160, 90, 0, 0, 0, true, true}; }
+};
+constexpr TestCaptureCapability::Identity TestCaptureCapability::identity;
 
 class TestHealthyUnpausePlayer : public QObject
 {
@@ -16,7 +64,7 @@ class TestHealthyUnpausePlayer : public QObject
   static void prepare(PlayerComponent& player, bool paused);
   static std::shared_ptr<FixtureRestart::ChildGate> gate(bool permit);
   static void observe(PlayerComponent& player, quint64 id, bool paused);
-  static void image(const fixture_restart::CaptureTicket& ticket, int index);
+  static QImage image(int index);
 private slots:
   void missingPermitAndImage();
   void actualPausedHoldAndUnpause();
@@ -48,7 +96,7 @@ void TestHealthyUnpausePlayer::observe(PlayerComponent& player, quint64 id, bool
   QCOMPARE(player.m_nativeObservation.paused, paused);
 }
 
-void TestHealthyUnpausePlayer::image(const fixture_restart::CaptureTicket& ticket, int index)
+QImage TestHealthyUnpausePlayer::image(int index)
 {
   QImage image(160, 90, QImage::Format_RGBA8888); image.fill(Qt::black);
   QPainter painter(&image);
@@ -58,8 +106,7 @@ void TestHealthyUnpausePlayer::image(const fixture_restart::CaptureTicket& ticke
   }
   painter.fillRect((index * 3) % 140, 35, 20, 20, QColor(220, 220, 220));
   painter.end();
-  fixture_restart::publishCapture(ticket, image, 0, 0, 0, 0, ticket.key.context,
-                                  fixture_restart::nextRenderSerial());
+  return image;
 }
 
 void TestHealthyUnpausePlayer::actualPausedHoldAndUnpause()
@@ -70,20 +117,22 @@ void TestHealthyUnpausePlayer::actualPausedHoldAndUnpause()
   const auto digest = QCryptographicHash::hash(FixtureRestart::encodeGrant(grant), QCryptographicHash::Sha256);
   QVERIFY(player.healthyBindRestoreGate(child, 1, 5, 3, 4, digest, [] { return qint64{1}; }));
   observe(player, 1, true);
-  fixture_restart::FrameKey key{11, 8, 12, 42, 1, 1};
-  fixture_restart::armCapture(key, 13);
-  const auto ticket = fixture_restart::captureTicket(13); QVERIFY(ticket.generation);
-  image(ticket, 0);
+  fixture_restart::FrameKey baseline{11, 8, 12, 42, 1, 0};
+  fixture_restart::FrameKey key{11, 8, 12, 42, 2, 1};
+  TestCaptureCapability capture(player.healthyStopClaim());
+  QVERIFY(capture.initialize()); QVERIFY(capture.request(baseline, false));
+  QVERIFY(capture.publish(image(0), false));
   HealthyRestart::PausedHoldBinding binding;
   binding.frame = key; binding.host = 7; binding.revision = player.m_nativeRestore.key.revision;
   binding.attempt = 2; binding.grant = 3; binding.checkpointMs = 3000;
   binding.deadlineNs = std::numeric_limits<qint64>::max(); binding.claim = player.healthyStopClaim();
   QVERIFY(player.healthyBeginPausedHold(binding));
+  QVERIFY(capture.request(key, true)); QVERIFY(capture.acknowledgeTarget());
   QVERIFY(player.dispatchNativeRestoreSeek());
   mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 61) | 2;
   player.observeNativeReceipt(&event);
   event = {}; event.event_id = MPV_EVENT_PLAYBACK_RESTART; player.observeNativeReceipt(&event);
-  image(ticket, 90); QVERIFY(player.healthyCapturePausedHold());
+  QVERIFY(capture.publish(image(90), true)); QVERIFY(player.healthyCapturePausedHold());
   for (quint64 id = 2; id <= 18; ++id) {
     observe(player, id, true); QVERIFY(player.healthyObservePausedHold());
     if (id != 18) QThread::msleep(200);
