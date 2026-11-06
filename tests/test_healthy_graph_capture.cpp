@@ -17,7 +17,8 @@
 
 using namespace HealthyRetirement;
 using namespace FixtureRestart;
-#define CHECK(value) do { if (!(value)) { std::fprintf(stderr, "check failed at line %d: %s\n", __LINE__, #value); std::abort(); } } while (false)
+static const char* activeCase = "setup";
+#define CHECK(value) do { if (!(value)) { std::fprintf(stderr, "%s: check failed at line %d: %s\n", activeCase, __LINE__, #value); std::_Exit(3); } } while (false)
 
 class TestRetirementClaim {
 public:
@@ -41,6 +42,7 @@ class TestCaptureCapability {
 public:
   explicit TestCaptureCapability(const std::shared_ptr<Slot>& slot) : bridge_(slot->captureBridge()) {}
   bool initialize() { return bridge_ && bridge_->rendererCreated(identity) && bridge_->framebuffer(identity, fbo()); }
+  bool baselineReady() const { return bridge_->ready(2, Bridge::Phase::Baseline); }
   bool issue(bool publish, int index = 0)
   {
     if (!bridge_->framebufferCurrent(identity, fbo())) return false;
@@ -210,6 +212,7 @@ class TestHealthyGraphCapture {
     fixture_restart::disarmCapture();
     prepared_ = prepare(); CHECK(prepared_);
     graph_ = prepared_->graphOnGuiThread(); CHECK(graph_);
+    graph_->containment_ = prepared_->containment();
     graph_->captureSessionReadyForTest_ = [] { return true; };
     installRenderer(); installPlayer(failClaim);
     if (!failClaim) observe(1, "0.000");
@@ -341,6 +344,25 @@ class TestHealthyGraphCapture {
     CHECK(!prepared_->graphOnGuiThread());
     CHECK(!claim_->open());
   }
+  void slotInvalidatedBeforeRendererIssue()
+  {
+    initialize(); CHECK(graph_->captureBaseline()); CHECK(!renderer_->baselineReady());
+    prepared_->slot()->invalidate(9);
+    CHECK(!renderer_->queue() && !renderer_->baselineReady());
+    CHECK(renderer_->lateDeliveryRejected());
+    CHECK(!renderer_->issue(true, 0) && !renderer_->baselineReady());
+    CHECK(!graph_->captureTarget() && !graph_->captureTargetReady());
+    checkNoPlaybackAdvance();
+  }
+  void slotInvalidatesQueuedTicket()
+  {
+    initialize(); CHECK(graph_->captureBaseline()); CHECK(renderer_->queue());
+    prepared_->slot()->invalidate(9);
+    CHECK(!renderer_->baselineReady() && renderer_->lateDeliveryRejected());
+    CHECK(!renderer_->issue(true, 0) && !renderer_->baselineReady());
+    CHECK(!graph_->captureTarget() && !graph_->captureTargetReady());
+    checkNoPlaybackAdvance();
+  }
   void failedClaimInstallationCannotCapture()
   {
     initialize(true);
@@ -378,24 +400,30 @@ class TestHealthyGraphCapture {
 public:
   static void run()
   {
+    activeCase = "uninitializedGraphRejectsCapture";
     uninitializedGraphRejectsCapture();
-    { TestHealthyGraphCapture test; test.positiveHandoff(); }
-    { TestHealthyGraphCapture test; test.wrongBindingRejected(); }
-    { TestHealthyGraphCapture test; test.wrongLaunchBindingRejected(); }
-    { TestHealthyGraphCapture test; test.framebufferReplacementRevokesBaseline(); }
-    { TestHealthyGraphCapture test; test.revokedClaimRejectsCapture(); }
-    { TestHealthyGraphCapture test; test.cleanupRetainsAccessButClosesCapture(); }
-    { TestHealthyGraphCapture test; test.rendererDestructionRejectsCapture(); }
+#define RUN_CASE(name) do { activeCase = #name; TestHealthyGraphCapture test; test.name(); } while (false)
+    RUN_CASE(positiveHandoff);
+    RUN_CASE(wrongBindingRejected);
+    RUN_CASE(wrongLaunchBindingRejected);
+    RUN_CASE(framebufferReplacementRevokesBaseline);
+    RUN_CASE(revokedClaimRejectsCapture);
+    RUN_CASE(cleanupRetainsAccessButClosesCapture);
+    RUN_CASE(rendererDestructionRejectsCapture);
     for (int mode = 0; mode != 3; ++mode) {
+      activeCase = "badBaselineRejected";
       TestHealthyGraphCapture test; test.badImage_ = mode; test.badBaselineRejected();
     }
-    { TestHealthyGraphCapture test; test.replayAndContextRejected(); }
-    { TestHealthyGraphCapture test; test.changedEntryRejected(); }
-    { TestHealthyGraphCapture test; test.lateDeliveryAfterContainment(); }
-    { TestHealthyGraphCapture test; test.failedClaimInstallationCannotCapture(); }
-    { TestHealthyGraphCapture test; test.baselinePixelsCannotQualifyTarget(); }
-    { TestHealthyGraphCapture test; test.targetPixelsBeforeTargetArmRejected(); }
-    { TestHealthyGraphCapture test; test.sameIdentityRejectsOldRendererGeneration(); }
+    RUN_CASE(replayAndContextRejected);
+    RUN_CASE(changedEntryRejected);
+    RUN_CASE(lateDeliveryAfterContainment);
+    RUN_CASE(slotInvalidatedBeforeRendererIssue);
+    RUN_CASE(slotInvalidatesQueuedTicket);
+    RUN_CASE(failedClaimInstallationCannotCapture);
+    RUN_CASE(baselinePixelsCannotQualifyTarget);
+    RUN_CASE(targetPixelsBeforeTargetArmRejected);
+    RUN_CASE(sameIdentityRejectsOldRendererGeneration);
+#undef RUN_CASE
   }
 };
 
