@@ -19,8 +19,10 @@ DWORD errorBytes = 0;
 DWORD cancelError = ERROR_SUCCESS;
 bool reenterCancel = false;
 bool reenterRead = false;
+bool reenterResult = false;
 WindowsRestartIo* reentrantIo = nullptr;
 bool readRetained = false;
+bool nestedBlocked = false;
 int closeCount = 0;
 int resultCalls = 0;
 HANDLE WINAPI eventCreate(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCWSTR)
@@ -47,6 +49,14 @@ BOOL WINAPI readFake(HANDLE, LPVOID buffer, DWORD size, LPDWORD count, LPOVERLAP
 BOOL WINAPI resultFake(HANDLE, LPOVERLAPPED, LPDWORD count, BOOL)
 {
   ++resultCalls;
+  if (reenterResult) {
+    reenterResult = false;
+    CHECK(reentrantIo->poll() == IoProgress::Complete);
+    const auto settled = reentrantIo->settlement();
+    CHECK(settled && reentrantIo->consumeSettlement(settled->operation));
+    nestedBlocked = !reentrantIo->release() &&
+        reentrantIo->beginTrackedRead(reinterpret_cast<HANDLE>(2), 8, 10) == IoProgress::Failed;
+  }
   if (resultEof) { errorCode = ERROR_NO_DATA; return FALSE; }
   if (!complete) { *count = errorBytes; errorCode = resultError; return FALSE; }
   *count = completedBytes;
@@ -146,6 +156,7 @@ void resetTracked()
   completedBytes = 0; errorBytes = 0; clockValue = 1; pendingBuffer = nullptr;
   pendingOverlap = nullptr; reenterCancel = false; reentrantIo = nullptr; closeCount = 0;
   resultCalls = 0; reenterRead = false; readRetained = false;
+  reenterResult = false; nestedBlocked = false;
 }
 
 WindowsRestartIo* trackedRead()
@@ -271,6 +282,16 @@ void trackedSynchronousErrorsAndReentrantSubmission()
   CHECK(aborted && aborted->outcome == WindowsRestartIo::Settlement::Outcome::Aborted);
   CHECK(io->consumeSettlement(aborted->operation) && io->release());
 }
+
+void nestedPollCannotReuseActiveOperation()
+{
+  resetTracked(); auto* io = trackedRead(); reentrantIo = io;
+  std::memcpy(pendingBuffer, "abc", 3); complete = true; completedBytes = 3;
+  reenterResult = true;
+  CHECK(io->poll() == IoProgress::Complete);
+  CHECK(nestedBlocked && resultCalls == 2 && !io->settlement());
+  CHECK(io->release());
+}
 }
 int main()
 {
@@ -288,4 +309,5 @@ int main()
   trackedPartialReadsRemainDistinct();
   trackedTimeoutAndReentrantCompletion();
   trackedSynchronousErrorsAndReentrantSubmission();
+  nestedPollCannotReuseActiveOperation();
 }
