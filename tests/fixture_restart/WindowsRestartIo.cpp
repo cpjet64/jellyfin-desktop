@@ -4,6 +4,13 @@
 #include <limits>
 
 namespace FixtureRestart {
+namespace {
+struct ActiveCall {
+  unsigned& count;
+  explicit ActiveCall(unsigned& value) : count(value) { ++count; }
+  ~ActiveCall() { --count; }
+};
+}
 WindowsRestartIo::WindowsRestartIo(const WindowsIoApi& api) : api_(api) {}
 WindowsRestartIo::~WindowsRestartIo()
 {
@@ -12,14 +19,14 @@ WindowsRestartIo::~WindowsRestartIo()
 
 bool WindowsRestartIo::release()
 {
-  if (inFlight_ || submitting_ || owned_ || settlement_) return false;
+  if (inFlight_ || submitting_ || activeCalls_ || owned_ || settlement_) return false;
   delete this;
   return true;
 }
 
 bool WindowsRestartIo::canBind(HANDLE pipe) const
 {
-  return !closed_ && !inFlight_ && pipe && pipe != INVALID_HANDLE_VALUE &&
+  return !closed_ && !inFlight_ && !activeCalls_ && pipe && pipe != INVALID_HANDLE_VALUE &&
       (bound_ == INVALID_HANDLE_VALUE || bound_ == pipe);
 }
 
@@ -70,8 +77,9 @@ IoProgress WindowsRestartIo::pollIdentity()
 IoProgress WindowsRestartIo::beginImpl(HANDLE pipe, bool read, const void* data,
                                        DWORD size, ULONGLONG deadline, bool tracked)
 {
-  if (inFlight_ || submitting_ || settlement_ || poisoned_) return IoProgress::Failed;
+  if (inFlight_ || submitting_ || activeCalls_ || settlement_ || poisoned_) return IoProgress::Failed;
   if (tracked && nextOperation_ == (std::numeric_limits<std::uint64_t>::max)()) return IoProgress::Failed;
+  ActiveCall active(activeCalls_);
   if (closed_ || !size || size > 9216 || (!read && !data) ||
       pipe == INVALID_HANDLE_VALUE || !pipe ||
       (bound_ != INVALID_HANDLE_VALUE && pipe != bound_) || api_.now() >= deadline)
@@ -189,9 +197,12 @@ IoProgress WindowsRestartIo::poll()
 
 IoProgress WindowsRestartIo::pollImpl()
 {
+  ActiveCall active(activeCalls_);
   if (!inFlight_) return state_;
   DWORD count = 0;
-  if (api_.result(pipe_, &overlap_, &count, FALSE)) return completion(count);
+  const BOOL completed = api_.result(pipe_, &overlap_, &count, FALSE);
+  if (!inFlight_) return state_;
+  if (completed) return completion(count);
   const DWORD error = api_.error();
   if (error == ERROR_IO_INCOMPLETE) {
     if (api_.now() >= deadline_) return cancelImpl();
@@ -215,6 +226,7 @@ IoProgress WindowsRestartIo::cancel()
 
 IoProgress WindowsRestartIo::cancelImpl()
 {
+  ActiveCall active(activeCalls_);
   if (!inFlight_) return state_;
   cancelling_ = true;
   if (!cancelRequested_) {
@@ -223,7 +235,9 @@ IoProgress WindowsRestartIo::cancelImpl()
     if (!inFlight_) return state_;
   }
   DWORD count = 0;
-  if (api_.result(pipe_, &overlap_, &count, FALSE)) return completion(count);
+  const BOOL completed = api_.result(pipe_, &overlap_, &count, FALSE);
+  if (!inFlight_) return state_;
+  if (completed) return completion(count);
   const DWORD error = api_.error();
   if (error != ERROR_OPERATION_ABORTED && error != ERROR_BROKEN_PIPE &&
       error != ERROR_NO_DATA && error != ERROR_PIPE_NOT_CONNECTED)
