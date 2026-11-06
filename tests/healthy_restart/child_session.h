@@ -42,9 +42,11 @@ public:
 #endif
   bool beginRestore(const QString& fixturePath);
   Progress pollRestore();
+  // Ready means only that this I/O operation settled; it is not wire success.
   Progress settleGrantRead();
   Progress settleAckWrite();
   Progress settleControlRead();
+  // Ready means Player cleanup qualified, not renderer or core closure.
   Progress pollFailureCleanup();
   bool beginSource(const QString& fixturePath, bool paused);
   bool freezeSource();
