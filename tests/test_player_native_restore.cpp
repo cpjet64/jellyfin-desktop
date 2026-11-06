@@ -16,6 +16,12 @@ private slots:
   void cancellationBeforeLoad();
   void staleObservationAndGrant();
   void cancellationAfterLoad();
+  void unavailableSystemMode();
+  void lateAfterEndAndCoreChange();
+  void malformedAndUnrelatedReplies();
+  void reorderedLoadAndNativeConsumption();
+  void cancellationDuringSeek();
+  void reentrantCancellationAndSeekFailure();
 };
 
 void TestPlayerNativeRestore::loadReplyAndStart(PlayerComponent& player, quint64 attempt, qint64 entry)
@@ -210,6 +216,188 @@ void TestPlayerNativeRestore::cancellationAfterLoad()
   player.cancelNativeRestore();
   QCOMPARE(stops, 1);
   QCOMPARE(commands, 1);
+#endif
+}
+
+void TestPlayerNativeRestore::unavailableSystemMode()
+{
+#ifndef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent player;
+  QVERIFY(player.bindNativeReceiptHost(7));
+  const auto before = player.m_playbackIntent.snapshot();
+  int calls = 0;
+  player.m_restoreDispatch = [&](quint64, const char**) { ++calls; return 0; };
+  const PlayerComponent::RestoreGrant grant{3, 4, before.revision, 1000, true};
+  QVERIFY(!player.armNativeRestore(grant, 7, 2));
+  QVERIFY(!player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
+  QVERIFY(!player.dispatchNativeRestoreSeek());
+  QCOMPARE(calls, 0);
+  const auto after = player.m_playbackIntent.snapshot();
+  QCOMPARE(after.revision, before.revision);
+  QCOMPARE(after.desired, before.desired);
+#endif
+}
+
+void TestPlayerNativeRestore::lateAfterEndAndCoreChange()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent ended;
+  prepare(ended);
+  ended.m_observationDispatch = [](quint64, const char**) { return 0; };
+  const auto key = ended.m_nativeReceipts.snapshot().key;
+  QVERIFY(ended.requestNativeObservation(key, 1, 10000, true));
+  mpv_event_end_file data{}; data.playlist_entry_id = 42; data.reason = MPV_END_FILE_REASON_STOP;
+  mpv_event event{}; event.event_id = MPV_EVENT_END_FILE; event.data = &data;
+  ended.observeNativeReceipt(&event);
+  observationReply(ended, 1, "NR1|1|42|yes|yes|3|yes|no|no");
+  QVERIFY(!ended.nativeObservationCurrent());
+  QVERIFY(!ended.makePlaybackCheckpoint().positionKnown);
+
+  PlayerComponent changed;
+  prepare(changed);
+  changed.m_observationDispatch = [](quint64, const char**) { return 0; };
+  QVERIFY(changed.requestNativeObservation(changed.m_nativeReceipts.snapshot().key, 1, 10000, true));
+  ++changed.m_mpvGeneration;
+  observationReply(changed, 1, "NR1|1|42|yes|yes|3|yes|no|no");
+  QVERIFY(!changed.nativeObservationCurrent());
+  QVERIFY(!changed.makePlaybackCheckpoint().positionKnown);
+
+  PlayerComponent replaced;
+  prepare(replaced);
+  replaced.m_observationDispatch = [](quint64, const char**) { return 0; };
+  QVERIFY(replaced.requestNativeObservation(replaced.m_nativeReceipts.snapshot().key, 1, 10000, true));
+  replaced.load(QStringLiteral("new"), {{"autoplay", true}}, {});
+  observationReply(replaced, 1, "NR1|1|42|yes|yes|3|yes|no|no");
+  QVERIFY(!replaced.nativeObservationCurrent());
+  QVERIFY(!replaced.makePlaybackCheckpoint().positionKnown);
+#endif
+}
+
+void TestPlayerNativeRestore::malformedAndUnrelatedReplies()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent player;
+  prepare(player);
+  player.m_observationDispatch = [](quint64, const char**) { return 0; };
+  const auto key = player.m_nativeReceipts.snapshot().key;
+  const QByteArray invalid[] = {"NR1|1|41|yes|yes|3|yes|no|no", "NR1|1|42|yes|yes|ERR|yes|no|no",
+                                "NR1|1|42|yes|yes|NaN|yes|no|no", "NR1|1|42|yes|yes|3|yes|no|no|extra"};
+  quint64 id = 1;
+  for (const auto& value : invalid) {
+    QVERIFY(player.requestNativeObservation(key, id, 10000, true));
+    observationReply(player, id + 100, "NR1|1|42|yes|yes|3|yes|no|no");
+    QVERIFY(player.m_nativeObservation.pending);
+    observationReply(player, id, value);
+    QVERIFY(!player.nativeObservationCurrent());
+    QVERIFY(!player.makePlaybackCheckpoint().positionKnown);
+    ++id;
+  }
+#endif
+}
+
+void TestPlayerNativeRestore::reorderedLoadAndNativeConsumption()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent player;
+  QVERIFY(player.bindNativeReceiptHost(7));
+  player.m_mpvGeneration = 8;
+  const PlayerComponent::RestoreGrant grant{3, 4, 0, 3125, false};
+  QVERIFY(player.armNativeRestore(grant, 7, 2));
+  player.m_restoreDispatch = [](quint64, const char**) { return 0; };
+  QVERIFY(player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
+  mpv_event_start_file start{}; start.playlist_entry_id = 42;
+  mpv_event event{}; event.event_id = MPV_EVENT_START_FILE; event.data = &start;
+  player.observeNativeReceipt(&event);
+  mpv_node value{}; value.format = MPV_FORMAT_INT64; value.u.int64 = 42;
+  char field[] = "playlist_entry_id"; char* fields[] = {field};
+  mpv_node_list list{}; list.num = 1; list.keys = fields; list.values = &value;
+  mpv_event_command command{}; command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
+  event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 63) | 2; event.data = &command;
+  player.observeNativeReceipt(&event);
+  const auto key = player.m_nativeReceipts.snapshot().key;
+  QVERIFY(player.m_nativeReceipts.snapshot().started);
+  player.m_observationDispatch = [](quint64, const char**) { return 0; };
+  QVERIFY(player.requestNativeObservation(key, 1, 10000, true));
+  observationReply(player, 1, "NR1|1|42|yes|yes|3|yes|no|no");
+  QByteArray encoded;
+  QVERIFY(PlaybackCheckpointCodec::encode(player.makePlaybackCheckpoint(), encoded));
+  QVERIFY(player.consumeFixtureCheckpoint(key, encoded));
+  QVERIFY(!player.consumeFixtureCheckpoint(key, encoded));
+  player.requestNativeStop();
+  QVERIFY(!player.consumeFixtureCheckpoint(key, encoded));
+#endif
+}
+
+void TestPlayerNativeRestore::cancellationDuringSeek()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent player;
+  QVERIFY(player.bindNativeReceiptHost(7));
+  player.m_mpvGeneration = 8;
+  const PlayerComponent::RestoreGrant grant{3, 4, 0, 3125, false};
+  QVERIFY(player.armNativeRestore(grant, 7, 2));
+  int commands = 0, stops = 0;
+  player.m_restoreDispatch = [&](quint64, const char**) { ++commands; return 0; };
+  player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
+  QVERIFY(player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
+  loadReplyAndStart(player, 2, 42);
+  const auto key = player.m_nativeReceipts.snapshot().key;
+  player.m_observationDispatch = [](quint64, const char**) { return 0; };
+  QVERIFY(player.requestNativeObservation(key, 1, 10000, true));
+  observationReply(player, 1, "NR1|1|42|yes|yes|0|yes|no|no");
+  QVERIFY(player.dispatchNativeRestoreSeek());
+  player.cancelNativeRestore();
+  mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 61) | 2;
+  player.observeNativeReceipt(&event);
+  QVERIFY(player.m_nativeRestore.cancelled && player.m_nativeRestore.seekReply);
+  event.event_id = MPV_EVENT_PLAYBACK_RESTART;
+  player.observeNativeReceipt(&event);
+  QVERIFY(!player.m_nativeRestore.restarted);
+  QVERIFY(!player.dispatchNativeRestoreSeek());
+  QCOMPARE(commands, 2);
+  QCOMPARE(stops, 1);
+#endif
+}
+
+void TestPlayerNativeRestore::reentrantCancellationAndSeekFailure()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent observation;
+  prepare(observation);
+  observation.m_observationDispatch = [&](quint64, const char**) { observation.requestNativeStop(); return 0; };
+  const auto observationKey = observation.m_nativeReceipts.snapshot().key;
+  QVERIFY(observation.requestNativeObservation(observationKey, 1, 10000, true));
+  observationReply(observation, 1, "NR1|1|42|yes|yes|3|yes|no|no");
+  QVERIFY(!observation.nativeObservationCurrent());
+
+  PlayerComponent player;
+  QVERIFY(player.bindNativeReceiptHost(7));
+  player.m_mpvGeneration = 8;
+  const PlayerComponent::RestoreGrant grant{3, 4, 0, 3125, false};
+  QVERIFY(player.armNativeRestore(grant, 7, 2));
+  int commands = 0, stops = 0;
+  player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
+  player.m_restoreDispatch = [&](quint64, const char**) {
+    ++commands;
+    if (commands == 2) player.cancelNativeRestore();
+    return 0;
+  };
+  QVERIFY(player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
+  loadReplyAndStart(player, 2, 42);
+  player.m_observationDispatch = [](quint64, const char**) { return 0; };
+  QVERIFY(player.requestNativeObservation(player.m_nativeReceipts.snapshot().key, 1, 10000, true));
+  observationReply(player, 1, "NR1|1|42|yes|yes|0|yes|no|no");
+  QVERIFY(player.dispatchNativeRestoreSeek());
+  QVERIFY(player.m_nativeRestore.cancelled && player.m_nativeRestore.seekPending);
+  mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 61) | 2;
+  event.error = -1;
+  player.observeNativeReceipt(&event);
+  QVERIFY(player.m_nativeRestore.seekReply && !player.m_nativeRestore.seekOk);
+  event.event_id = MPV_EVENT_PLAYBACK_RESTART;
+  player.observeNativeReceipt(&event);
+  QVERIFY(!player.m_nativeRestore.restarted);
+  QCOMPARE(commands, 2);
+  QCOMPARE(stops, 1);
 #endif
 }
 
