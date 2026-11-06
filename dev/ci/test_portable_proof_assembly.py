@@ -15,10 +15,9 @@ class AssemblyTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(dir=ROOT)
         self.addCleanup(self.temp.cleanup)
-        if os.name == 'nt':
-            helper = patch.object(assembly, 'validate_root')
-            helper.start()
-            self.addCleanup(helper.stop)
+        helper = patch.object(assembly, 'validate_root')
+        helper.start()
+        self.addCleanup(helper.stop)
         self.path = assembly.workspace(self.temp.name, TASK)
         chunks = tuple((len(x), hashlib.sha256(x).hexdigest()) for x in DATA)
         patches = (patch.object(assembly, 'CHUNKS', chunks), patch.object(assembly, 'TOTAL', 11),
