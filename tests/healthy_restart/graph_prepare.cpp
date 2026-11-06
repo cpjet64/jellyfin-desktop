@@ -1,5 +1,6 @@
 #include "graph.h"
 #include "graph_retirement.h"
+#include "graph_access.h"
 #include "owner_qt.h"
 #include "module_endpoints.h"
 #include "player/MpvVideoItem.h"
@@ -33,6 +34,9 @@ std::unique_ptr<PreparedGraph> FixtureGraph::prepare(std::uint64_t generation,
   prepared->containment_ = std::make_shared<Containment>();
   prepared->slot_ = std::make_shared<Slot>(generation, deadline, clock);
   prepared->access_ = std::make_shared<GraphAccess>();
+  prepared->access_->guiThread = std::this_thread::get_id();
+  prepared->access_->guiQtThread = QThread::currentThread();
+  prepared->access_->guiInvalidate = [](FixtureGraph* graph) { graph->invalidate(); };
   auto concrete = std::unique_ptr<FixtureGraph>(new FixtureGraph(prepared->slot_, prepared->access_, normalDeadline,
                                                                  deadline, std::move(clock)));
   const auto access = prepared->access_;
@@ -48,9 +52,7 @@ std::unique_ptr<PreparedGraph> FixtureGraph::prepare(std::uint64_t generation,
 
 FixtureGraph* PreparedGraph::graphOnGuiThread() const noexcept
 {
-  const auto graph = access_ ? access_->graph.load() : nullptr;
-  if (!graph || !graph->dispatcher_ || graph->dispatcher_->thread() != QThread::currentThread()) return nullptr;
-  return graph;
+  return GraphAccessOps::graphOnGui(access_);
 }
 
 std::optional<ClosedAck> PreparedGraph::closedAck() const
@@ -60,9 +62,7 @@ std::optional<ClosedAck> PreparedGraph::closedAck() const
 
 void PreparedGraph::invalidate() noexcept
 {
-  if (!access_) return;
-  access_->revoked.store(true);
-  if (auto* graph = graphOnGuiThread()) graph->invalidate();
+  GraphAccessOps::invalidate(access_);
 }
 
 void FixtureGraph::deliverRedraw()

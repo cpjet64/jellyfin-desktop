@@ -21,13 +21,13 @@ Lifetime::Lifetime(std::uint64_t generation, Identity original, void* renderCont
 
 Lifetime::Lifetime(std::uint64_t generation, Identity original, void* renderContext,
                    std::int64_t deadline, Operations operations, std::int64_t minimumTime,
-                   std::function<bool()> qualification, std::function<bool()> permit)
+                   std::function<bool()> qualification, std::shared_ptr<ClaimState> claimState)
   : Lifetime(generation, original, renderContext, deadline, std::move(operations),
              Barrier::Unqualified, minimumTime)
 {
   moduleQualification_ = std::move(qualification);
-  retirementPermit_ = std::move(permit);
-  if (!moduleQualification_ || !retirementPermit_ || !timeValid()) facts_.phase = Phase::Retained;
+  claimState_ = std::move(claimState);
+  if (!moduleQualification_ || !claimState_ || !timeValid()) facts_.phase = Phase::Retained;
 }
 
 bool Lifetime::matches(Identity value) const
@@ -38,6 +38,10 @@ bool Lifetime::timeValid() const
 {
   if (facts_.phase == Phase::Retained) return false;
   try {
+    if (claimState_) {
+      const auto claim = std::atomic_load(&claimState_->claim);
+      if (claim && !claim->eligible()) { facts_.phase = Phase::Retained; return false; }
+    }
     if (moduleQualification_ && !moduleQualification_()) { facts_.phase = Phase::Retained; return false; }
     const auto now = ops_.now();
     if (now >= 0 && now >= lastTime_ && now < deadline_) { lastTime_ = now; return true; }
@@ -105,7 +109,12 @@ Result Lifetime::request(std::uint64_t generation)
 {
   std::lock_guard<std::mutex> lock(mutex_);
   if (generation != generation_ || facts_.phase != Phase::Active || !ownerValid_) return Result::Blocked;
-  try { if (moduleQualification_ && (!retirementPermit_ || !retirementPermit_())) return retain(); }
+  try {
+    if (claimState_) {
+      const auto claim = claimState_ ? std::atomic_load(&claimState_->claim) : nullptr;
+      if (!claim || claim->generation() != generation_ || !claim->eligible()) return retain();
+    }
+  }
   catch (...) { return retain(); }
   try { if (!timeValid()) return retain(); } catch (...) { return retain(); }
   facts_.admissionClosed = true;
@@ -183,6 +192,10 @@ Result Lifetime::retireSteps()
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (facts_.phase != Phase::Closing || !ownerValid_ || !timeValid()) return retain();
+    if (claimState_) {
+      const auto claim = claimState_ ? std::atomic_load(&claimState_->claim) : nullptr;
+      if (!claim || !claim->claim(generation_)) return retain();
+    }
     facts_.phase = Phase::Freeing;
     facts_.freeInvoked = true;
   }
@@ -233,6 +246,22 @@ bool Lifetime::mayDestroy(std::uint64_t generation, bool eventWorkerClosed) cons
   catch (...) { return false; }
 }
 Facts Lifetime::facts() const { std::lock_guard<std::mutex> lock(mutex_); return facts_; }
+bool Lifetime::matchesClaim(const std::shared_ptr<const RetirementClaim>& claim) const noexcept
+{
+  if (!claimState_ || !claim || claim->generation() != generation_) return false;
+  return std::atomic_load(&claimState_->claim) == claim && claim->committed();
+}
+#ifdef HEALTHY_RETIREMENT_TESTING
+bool Lifetime::bindClaimForTest(std::shared_ptr<const RetirementClaim> claim)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (facts_.phase != Phase::Active || claimState_ || !claim || claim->generation() != generation_ || !claim->open())
+    return false;
+  claimState_ = std::make_shared<ClaimState>();
+  std::atomic_store(&claimState_->claim, std::move(claim));
+  return true;
+}
+#endif
 
 Slot::Slot(std::uint64_t generation, std::int64_t deadline, std::function<std::int64_t()> clock)
   : generation_(generation), deadline_(deadline), clock_(std::move(clock))
@@ -293,7 +322,7 @@ std::shared_ptr<Lifetime> Slot::install(Identity original, void* context, Operat
   operations.now = clock_;
   if (moduleQualification_)
     lifetime_ = std::shared_ptr<Lifetime>(new Lifetime(generation_, original, context, deadline_,
-                                                       std::move(operations), lastTime_, moduleQualification_, retirementPermit_));
+                                                       std::move(operations), lastTime_, moduleQualification_, claimState_));
   else
     lifetime_ = std::make_shared<Lifetime>(generation_, original, context, deadline_, std::move(operations),
                                            Barrier::Unqualified, lastTime_);

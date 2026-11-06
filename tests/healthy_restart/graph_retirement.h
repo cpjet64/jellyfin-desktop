@@ -9,8 +9,8 @@ class GraphRetirement : public std::enable_shared_from_this<GraphRetirement> {
 public:
   struct Boundaries {
     Closure::Operations closure;
-    std::function<std::shared_ptr<const std::atomic_bool>()> stopLease;
-    std::function<bool(std::shared_ptr<const std::atomic_bool>)> bindStopLease;
+    std::function<std::shared_ptr<const RetirementClaim>()> stopClaim;
+    std::function<bool(std::shared_ptr<const RetirementClaim>)> bindStopClaim;
     std::function<bool(std::uint64_t)> capability;
     std::function<void()> bindScheduler;
   };
@@ -37,7 +37,7 @@ private:
   const std::int64_t deadline_;
   Boundaries boundaries_;
   std::optional<Closure::StopKey> stop_;
-  std::shared_ptr<const std::atomic_bool> lease_;
+  std::shared_ptr<const RetirementClaim> claim_;
   std::shared_ptr<Closure> closure_;
 #ifdef HEALTHY_RETIREMENT_TESTING
   std::shared_ptr<Lifetime> testLifetime_;

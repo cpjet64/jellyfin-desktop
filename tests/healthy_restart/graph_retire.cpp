@@ -1,4 +1,5 @@
 #include "graph_retirement.h"
+#include "graph_access.h"
 #include "closure_native.h"
 #include "module_channel.h"
 #include "owner_qt.h"
@@ -15,6 +16,22 @@ Closure::StopKey closureKey(const HealthyRestart::AsyncStop::Key& key)
           key.request, key.revision, key.attempt, key.entry, key.paused};
 }
 }
+bool FixtureGraph::installRetirementClaim()
+{
+  const auto containment = containment_.lock();
+  if (!dispatcher_ || dispatcher_->thread() != QThread::currentThread() || !containment ||
+      !containment->intact() || !player_ || !owner_ || std::atomic_load(&access_->intentClaim)) return false;
+  try {
+    auto claim = std::make_shared<RetirementClaim>(slot_->generation());
+    std::atomic_store(&access_->intentClaim, claim);
+    if (access_->revoked.load()) claim->revoke();
+    if (!claim->open() || !player_->healthyInstallRetirementClaim(claim, slot_->generation())) {
+      claim->revoke(); owner_->invalidate(); return false;
+    }
+    if (!access_->revoked.load()) return true;
+    claim->revoke(); owner_->invalidate(); return false;
+  } catch (...) { owner_->invalidate(); return false; }
+}
 bool FixtureGraph::requestRetirement()
 {
   const auto containment = containment_.lock();
@@ -29,14 +46,17 @@ bool FixtureGraph::requestRetirement()
     const auto scheduler = scheduler_.get();
     const auto owner = owner_;
     GraphRetirement::Boundaries bounds;
-    const auto access = access_;
-    bounds.capability = [module, access](std::uint64_t generation) {
-      return !access->revoked.load() && module->stillValid(generation);
-    };
+    bounds.capability = GraphAccessOps::capability(access_, [module](std::uint64_t generation) {
+      return module->stillValid(generation);
+    });
     bounds.bindScheduler = [scheduler, owner] { scheduler->bind(owner); };
-    bounds.stopLease = [player] { return player ? player->healthyStopLease() : nullptr; };
-    bounds.bindStopLease = [slot = slot_](std::shared_ptr<const std::atomic_bool> lease) {
-      return slot->bindStopLease(std::move(lease));
+    const auto claimAccess = access_;
+    bounds.stopClaim = [player, claimAccess]() -> std::shared_ptr<const RetirementClaim> {
+      const auto claim = player ? player->healthyStopClaim() : nullptr;
+      return claim && claim == std::atomic_load(&claimAccess->intentClaim) ? claim : nullptr;
+    };
+    bounds.bindStopClaim = [slot = slot_](std::shared_ptr<const RetirementClaim> claim) {
+      return slot->bindStopClaim(std::move(claim));
     };
     bounds.closure.now = [clock = clock_, module, generation = slot_->generation()] {
       return module->stillValid(generation) ? clock() : std::int64_t{-1};
@@ -81,6 +101,7 @@ FixtureGraph::Progress FixtureGraph::pollRetirement()
 void FixtureGraph::invalidate() noexcept
 {
   access_->revoked.store(true);
+  if (const auto claim = std::atomic_load(&access_->intentClaim)) claim->revoke();
   if (retirement_ && retirement_->closure()) retirement_->closure()->invalidate();
   const auto containment = containment_.lock();
   if (containment && containment->intact() && player_) player_->cancelHealthyReplacementStop();

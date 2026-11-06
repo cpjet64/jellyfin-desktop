@@ -7,10 +7,12 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <thread>
 
 class MpvVideoItem;
 class PlayerComponent;
 class QQuickWindow;
+class QThread;
 namespace HealthyModuleIdentity { class VerifiedModule; class ChildEndpoints; }
 
 namespace HealthyRetirement {
@@ -19,17 +21,22 @@ class NativeTeardownState;
 class QtScheduler;
 class FixtureGraph;
 class GraphRetirement;
+class GraphAccessOps;
 struct ClosedAck { const std::uint64_t generation; const std::int64_t completedAt; };
 
 // Only the graph writes this pointer; queued work reads it on the GUI thread.
 // The access record remains alive after the graph itself has been destroyed.
 struct GraphAccess {
   std::atomic<FixtureGraph*> graph{nullptr};
+  std::thread::id guiThread;
+  QThread* guiQtThread = nullptr;
+  std::function<void(FixtureGraph*)> guiInvalidate;
   std::atomic_bool revoked{false};
+  std::shared_ptr<RetirementClaim> intentClaim;
   std::mutex mutex;
   std::optional<ClosedAck> closed;
   std::function<bool(std::uint64_t)> capability;
-  std::shared_ptr<const std::atomic_bool> stopLease;
+  std::shared_ptr<const RetirementClaim> stopClaim;
   Owner::Clock clock;
   std::int64_t deadline = 0;
 };
@@ -67,6 +74,7 @@ public:
   bool approveDestruction() override;
   // Requests presentation; readiness still requires separately observed frames.
   bool present();
+  bool installRetirementClaim();
   bool requestRetirement();
   enum class Progress { Pending, Closed, Failed };
   Progress pollRetirement();
@@ -74,6 +82,7 @@ public:
   FixtureGraph& operator=(const FixtureGraph&) = delete;
 private:
   friend class PreparedGraph;
+  friend class GraphAccessOps;
   FixtureGraph(std::shared_ptr<Slot> slot, std::shared_ptr<GraphAccess> access,
                std::int64_t normalDeadline, std::int64_t overallDeadline, Clock clock);
   bool begin(const std::shared_ptr<Containment>& containment,

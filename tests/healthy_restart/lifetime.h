@@ -5,10 +5,12 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include "retirement_claim.h"
 namespace HealthyModuleIdentity { class VerifiedModule; }
 
 namespace HealthyRetirement {
 class FixtureGraph;
+struct ClaimState { std::shared_ptr<const RetirementClaim> claim; };
 struct Identity {
   std::uintptr_t thread = 0;
   std::uintptr_t context = 0;
@@ -63,12 +65,16 @@ public:
   bool acceptAck(std::uint64_t generation);
   bool mayDestroy(std::uint64_t generation, bool eventWorkerClosed) const;
   Identity originalIdentity() const { return original_; }
+  bool matchesClaim(const std::shared_ptr<const RetirementClaim>& claim) const noexcept;
+#ifdef HEALTHY_RETIREMENT_TESTING
+  bool bindClaimForTest(std::shared_ptr<const RetirementClaim> claim);
+#endif
   Facts facts() const;
 private:
   friend class Slot;
   Lifetime(std::uint64_t generation, Identity original, void* renderContext,
            std::int64_t overallDeadline, Operations operations, std::int64_t minimumTime,
-           std::function<bool()> moduleQualification, std::function<bool()> retirementPermit);
+           std::function<bool()> moduleQualification, std::shared_ptr<ClaimState> claimState);
   bool matches(Identity value) const;
   bool timeValid() const;
   Result retireSteps();
@@ -80,7 +86,7 @@ private:
   const Barrier barrier_;
   Operations ops_;
   std::function<bool()> moduleQualification_;
-  std::function<bool()> retirementPermit_;
+  std::shared_ptr<ClaimState> claimState_;
   mutable std::mutex mutex_;
   mutable Facts facts_;
   bool retiring_ = false, ownerValid_ = true;
@@ -108,13 +114,13 @@ public:
   std::uint64_t generation() const { return generation_; }
 #ifdef HEALTHY_RETIREMENT_TESTING
   bool bindModuleForTest(std::function<bool()> capability, std::shared_ptr<const std::atomic_bool> revoked);
-  bool bindStopLeaseForTest(std::shared_ptr<const std::atomic_bool> lease);
+  bool bindStopClaimForTest(std::shared_ptr<const RetirementClaim> claim);
 #endif
 private:
   friend class FixtureGraph;
   bool bindModule(std::shared_ptr<const HealthyModuleIdentity::VerifiedModule> module,
                   std::shared_ptr<const std::atomic_bool> revoked);
-  bool bindStopLease(std::shared_ptr<const std::atomic_bool> lease);
+  bool bindStopClaim(std::shared_ptr<const RetirementClaim> claim);
   bool bindGuard(std::function<bool()> capability, std::shared_ptr<const std::atomic_bool> revoked);
   const std::uint64_t generation_;
   const std::int64_t deadline_;
@@ -125,7 +131,6 @@ private:
   void* retainedContext_ = nullptr;
   std::shared_ptr<Lifetime> lifetime_;
   std::function<bool()> moduleQualification_;
-  std::function<bool()> retirementPermit_;
-  std::function<bool(std::shared_ptr<const std::atomic_bool>)> bindStop_;
+  std::shared_ptr<ClaimState> claimState_;
 };
 }

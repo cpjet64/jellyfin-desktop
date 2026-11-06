@@ -7,7 +7,7 @@ namespace {
 struct ModuleGuard {
   std::function<bool()> capability;
   std::shared_ptr<const std::atomic_bool> revoked;
-  std::shared_ptr<const std::atomic_bool> stop;
+  std::shared_ptr<ClaimState> claims;
 };
 }
 #ifndef HEALTHY_RETIREMENT_TESTING
@@ -26,22 +26,15 @@ bool Slot::bindGuard(std::function<bool()> capability, std::shared_ptr<const std
 {
   std::lock_guard<std::mutex> lock(mutex_);
   if (closed_ || creating_ || lifetime_ || moduleQualification_ || !capability || !revoked) return false;
-  auto guard = std::make_shared<ModuleGuard>(ModuleGuard{std::move(capability), std::move(revoked), {}});
+  auto claims = std::make_shared<ClaimState>();
+  auto guard = std::make_shared<ModuleGuard>(ModuleGuard{std::move(capability), std::move(revoked), claims});
   auto valid = [guard] {
-    const auto stop = std::atomic_load(&guard->stop);
-    return !guard->revoked->load() && (!stop || stop->load()) && guard->capability();
+    const auto claim = std::atomic_load(&guard->claims->claim);
+    return !guard->revoked->load() && (!claim || claim->eligible()) && guard->capability();
   };
   try { if (!valid()) return false; } catch (...) { return false; }
   moduleQualification_ = std::move(valid);
-  retirementPermit_ = [guard] {
-    const auto stop = std::atomic_load(&guard->stop);
-    return stop && stop->load();
-  };
-  bindStop_ = [guard](std::shared_ptr<const std::atomic_bool> lease) {
-    if (!lease || !lease->load() || std::atomic_load(&guard->stop)) return false;
-    std::atomic_store(&guard->stop, std::move(lease));
-    return true;
-  };
+  claimState_ = std::move(claims);
   return true;
 }
 #ifdef HEALTHY_RETIREMENT_TESTING
@@ -49,14 +42,17 @@ bool Slot::bindModuleForTest(std::function<bool()> capability, std::shared_ptr<c
 {
   return bindGuard(std::move(capability), std::move(revoked));
 }
-bool Slot::bindStopLeaseForTest(std::shared_ptr<const std::atomic_bool> lease)
+bool Slot::bindStopClaimForTest(std::shared_ptr<const RetirementClaim> claim)
 {
-  return bindStopLease(std::move(lease));
+  return bindStopClaim(std::move(claim));
 }
 #endif
-bool Slot::bindStopLease(std::shared_ptr<const std::atomic_bool> lease)
+bool Slot::bindStopClaim(std::shared_ptr<const RetirementClaim> claim)
 {
   std::lock_guard<std::mutex> lock(mutex_);
-  return !closed_ && lifetime_ && bindStop_ && bindStop_(std::move(lease));
+  if (closed_ || !lifetime_ || !claimState_ || !claim || claim->generation() != generation_ ||
+      !claim->open() || std::atomic_load(&claimState_->claim)) return false;
+  std::atomic_store(&claimState_->claim, std::move(claim));
+  return true;
 }
 }
