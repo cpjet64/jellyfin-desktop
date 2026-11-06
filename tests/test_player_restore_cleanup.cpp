@@ -37,6 +37,7 @@ private slots:
   void pendingLoadSettlesBeforeStop();
   void pendingLoadExpiresBeforeStop();
   void containedPendingLoadContinuesOnlyForCurrentOwner();
+  void containedPendingLoadWithoutWakeExpires();
 #endif
 };
 
@@ -460,6 +461,38 @@ void TestPlayerRestoreCleanup::containedPendingLoadContinuesOnlyForCurrentOwner(
     QVERIFY(!player.m_restoreCleanup.position.requested);
     player.m_healthyStopEventWait = {};
   }
+}
+
+void TestPlayerRestoreCleanup::containedPendingLoadWithoutWakeExpires()
+{
+  PlayerComponent player;
+  QVERIFY(arm(player, true));
+  qint64 now = 10;
+  player.m_healthyStopClock = [&] { return now; };
+  int stops = 0;
+  player.m_restoreDispatch = [&](quint64, const char**) { ++stops; return 0; };
+  mpv_event none{}; none.event_id = MPV_EVENT_NONE;
+  int reads = 0;
+  player.m_healthyStopEventWait = [&] { ++reads; return &none; };
+  QVERIFY(beginCleanup(player));
+  QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Pending);
+  QCOMPARE(stops, 0);
+  const auto claim = player.m_healthyStopLease;
+  const auto key = player.m_restoreCleanup.key;
+  QVERIFY(player.m_restoreCleanup.stopAdmitted);
+  claim->contain();
+  const int priorReads = reads;
+  now = 100; // No consumer wake occurs before the original deadline.
+  QVERIFY(reads == priorReads && stops == 0);
+  QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Failed);
+  QCOMPARE(reads, priorReads);
+  QVERIFY(player.m_healthyStopLease == claim && claim->contained());
+  const auto retained = player.m_restoreCleanup.key;
+  QVERIFY(retained.host == key.host && retained.core == key.core &&
+          retained.revision == key.revision && retained.attempt == key.attempt);
+  QCOMPARE(stops, 0);
+  QVERIFY(!player.m_restoreCleanup.idle.requested && !player.m_restoreCleanup.position.requested);
+  player.m_healthyStopEventWait = {};
 }
 #endif
 
