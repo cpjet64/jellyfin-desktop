@@ -25,8 +25,9 @@ seconds, reserving 30 seconds for remaining cleanup within the overall limit.
 Each phase, including cleanup, uses the earlier of its own deadline and the
 original overall deadline; unused time does not reset
 either deadline. Use a generated 30-second clip and capture at 10 seconds,
-allowing position 9–11 seconds at capture. The playing case accepts B's first
-observed position within two seconds of the checkpoint and then requires at
+allowing position 9–11 seconds at capture. Before unpause, B must observe its
+restored position within 100 ms of the checkpoint and then, for a playing case,
+require at
 least one second of advancement within ten seconds. The paused case requires
 position to remain within 250 ms for three seconds before explicit resume.
 For each changing-frame assertion, capture two decoded output frames at least
@@ -48,7 +49,9 @@ existing runner's process containment and lifecycle route, without depending on
 the held C2 fixture or an injected same-core cleanup coordinator. Record the
 executable hash, PID, process creation time and held process handle for A, plus
 the runner's owned-child identity evidence. Require observed operating-system
-exit and settlement of A and all owned children before spawning B. Preserve the
+exit and settlement of A and all owned children before spawning B. Forced
+cleanup is a failed scenario even if it eventually settles the process tree.
+Preserve the
 original failure and any cleanup failure separately. A timeout, uncertain exit
 or incomplete settlement fails the scenario and prevents B from spawning.
 On failure, terminate only descendants in the task-owned job or equivalent
@@ -58,17 +61,25 @@ Launch genuinely new process B under the same bounded containment, with a new
 process identity, profile and evidence namespace; record B's executable hash,
 PID, creation time and held handle. The proposed transfer is a parent-owned
 inherited pipe separate from logs. Its single framed record contains at most
-the codec's 8 KiB checkpoint limit plus an envelope capped at 1024 bytes, at
-most 9216 bytes of framed payload. The envelope has a fresh run and attempt
-nonce, A's process identity and fixture asset hash. The parent verifies
-those bindings and burns the one-use record before dispatching it to B; B
-validates the envelope and codec before consuming it. EOF, extra records,
+the codec's 8 KiB checkpoint limit plus an envelope capped at 1024 bytes: the
+complete record, including framing, is at most 9216 bytes. The envelope has a
+fresh run and attempt nonce, A's process identity and fixture asset hash. The
+parent validates the source and burns the one-use record before launching B or
+transferring it. Authority comes from the owned inherited channel and its
+independently bound endpoints, not from JSON fields; B validates the envelope
+and codec before consuming it. EOF, extra records,
 wrong bindings, partial input and timeout fail closed. B resolves the local
 fixture afresh and records its own observed path and playlist entry. B starts
-paused, loads and seeks while paused, and validates the matching entry, restored
-position and decoded frame before applying the requested playing or paused
-state. Pending Stop or replacement intent burns permission before any play or
-unpause. B must not reuse A's process, player, core,
+paused, loads and seeks while paused, and validates the matching entry, seek
+reply, playback restart event, fresh native position observation within 100 ms,
+and a fresh decoded frame matching the checkpoint within 100 ms before applying
+the requested playing or paused
+state. A snapshot position alone does not establish seek completion. Pending
+Stop or replacement intent burns permission before any play or unpause; its
+acknowledgement must precede release of any blocked continuation. Internal
+cleanup is recorded separately and must not masquerade as user Stop. B must
+create and bind its own host, core, intent and entry identities, not rewrite A's
+identifiers. B must not reuse A's process, player, core,
 render context, or stale callback as evidence of a fresh start. This scenario
 does not require proving retirement of a particular graphics context or core.
 
