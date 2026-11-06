@@ -24,9 +24,9 @@ OUTPUT = REPO / "deps" / "w534-selector-proof"
 PYTHON = Path("C:/Python314/python.exe")
 PINS = {
     PYTHON: "7ca24f26d6e3f463419ee4f537ddd3acd312c38fe45e678cce08572f26a8bd1a",
-    REPO / "dev/ci/macos_sdist_select.py": "9b8364f28d23f67d8ae35793cf50dca02b8b7913b6d6ee0ef818bccd9f1304d9",
-    REPO / "dev/ci/macos_sdist_static.py": "5848f746a9c911841addd21d36a81a5e05ec9143a8de2116e4165b96ae48fcaf",
-    REPO / "dev/ci/macos_sdist_manifest.json": "b613594af22a0c36ca81fb8c2e7f90d4a09ddafd41cb2d8f033e7fd80e8e201c",
+    REPO / "dev/ci/macos_sdist_select.py": "9a08359840b1441c06fa2f1a192abf8f3db0b2114197da3dcb0b25439b0c6e9b",
+    REPO / "dev/ci/macos_sdist_static.py": "95eee9ee01591ede2dbc9ecbedf79ec2d7c9239cc10ee61e5aa7cc5bce59d585",
+    REPO / "dev/ci/macos_sdist_manifest.json": "0912faea678df3b5f6381a05784e1ab82050dc3d65c44c9c4a2f25dc4137a6bd",
 }
 DEADLINE = 180
 STDOUT_LIMIT = 16 * 1024 * 1024

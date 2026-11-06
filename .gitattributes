@@ -1,0 +1,3 @@
+dev/ci/macos_sdist_static.py text eol=lf
+dev/ci/macos_sdist_select.py text eol=lf
+dev/ci/macos_sdist_manifest.json text eol=lf
