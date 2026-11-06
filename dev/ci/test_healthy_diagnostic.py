@@ -8,6 +8,18 @@ from unittest.mock import patch
 import healthy_diagnostic as diagnostic
 import native
 
+PORTABLE_DIAGNOSTICS = (
+    "healthy_async_stop_player", "healthy_unpause_player", "healthy_fixture_adapter_cleanup",
+    "healthy_healthy_restore_cancel", "healthy_async_stop_source", "healthy_player_native_receipts",
+    "healthy_player_restore_cleanup", "healthy_player_restore_observation", "healthy_player_native_restore",
+    "healthy_graph_capture", "healthy_graph_capture_lifetime",
+)
+NONPORTABLE_OR_HELD = {
+    "healthy_graph_arm", "healthy_graph_failure_provenance", "healthy_mpvqt_event_ownership",
+    "healthy_mpvqt_player_binding", "healthy_player_released_state", "test_healthy_restart",
+    "test_renderer_loss_offscreen", "test_mpris_active_stop", "test_c2_retirement_native",
+}
+
 
 class DiagnosticRoutingTest(unittest.TestCase):
     def setUp(self):
@@ -57,6 +69,9 @@ class DiagnosticRoutingTest(unittest.TestCase):
 
     def test_explicit_selection_and_owned_cache(self):
         self.invoke()
+        self.assertEqual(diagnostic.DIAGNOSTIC_TESTS, PORTABLE_DIAGNOSTICS)
+        self.assertEqual(len(PORTABLE_DIAGNOSTICS), 11)
+        self.assertTrue(set(PORTABLE_DIAGNOSTICS).isdisjoint(NONPORTABLE_OR_HELD))
         names = [item[0] for item in self.calls]
         self.assertEqual(names, ["healthy-diagnostic-configure", "healthy-diagnostic-build", "healthy-diagnostic-ctest"])
         configure, build, ctest = [item[1] for item in self.calls]
@@ -64,12 +79,10 @@ class DiagnosticRoutingTest(unittest.TestCase):
         self.assertIn("-DPLAYER_INTENT_DIAGNOSTIC_ONLY=ON", configure)
         self.assertIn("-DUSE_STATIC_MPVQT=ON", configure)
         self.assertIn("-DMPVQT_EXTERNAL_EVENTS=ON", configure)
-        self.assertEqual(build[build.index("--target") + 1:], list(diagnostic.DIAGNOSTIC_TESTS))
-        self.assertEqual(ctest[ctest.index("-R") + 1], "^(" + "|".join(diagnostic.DIAGNOSTIC_TESTS) + ")$")
+        self.assertEqual(build[build.index("--target") + 1:], list(PORTABLE_DIAGNOSTICS))
+        self.assertEqual(ctest[ctest.index("-R") + 1], "^(" + "|".join(PORTABLE_DIAGNOSTICS) + ")$")
         self.assertIn("--no-tests=error", ctest)
-        self.assertIn("healthy_graph_capture_lifetime", diagnostic.DIAGNOSTIC_TESTS)
         self.assertTrue(Path(self.calls[-1][2]["env"]["JELLYFIN_TEST_OWNED_ROOT"]).is_dir())
-        self.assertNotIn("healthy_mpvqt_event_ownership", diagnostic.DIAGNOSTIC_TESTS)
 
     def test_missing_prerequisite_fails_before_configure(self):
         with patch.object(diagnostic.shutil, "which", return_value=None), \
