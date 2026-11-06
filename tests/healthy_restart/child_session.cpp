@@ -5,6 +5,7 @@
 #include "module_gate.h"
 #include "../fixture_restart/RestartWire.h"
 #include <QtEndian>
+#include <QScopedValueRollback>
 
 namespace HealthyRetirement {
 using FixtureRestart::IoProgress;
@@ -85,6 +86,18 @@ bool ChildSession::control(const QByteArray& frame, QByteArray& response)
 #endif
 #ifndef HEALTHY_CHILD_SESSION_HEADLESS
   return graph_->graphOnGuiThread()->restoreControl(frame, response);
+#else
+  return false;
+#endif
+}
+
+bool ChildSession::pollCancellation(QByteArray& response)
+{
+#ifdef HEALTHY_CHILD_SESSION_TESTING
+  if (testing_) return test_.pollCancellation && test_.pollCancellation(response);
+#endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
+  return graph_->graphOnGuiThread()->restorePollCancellation(response);
 #else
   return false;
 #endif
@@ -278,8 +291,9 @@ bool ChildSession::beginRestore(const QString& path)
 {
   if (started_ || !valid() || !initialize(path)) return fail();
   started_ = true;
+  restoreStarted_ = true;
   controlIo_ = beginRead(Role::Control, 4);
-  grantIo_ = beginRead(Role::Grant, 4);
+  if (!beginGrantRead(4)) return fail();
   return pollRestore() != Progress::Failed;
 }
 
@@ -303,37 +317,6 @@ bool ChildSession::pollAck()
   return true;
 }
 
-bool ChildSession::pollGrant()
-{
-  if (grantStage_ == GrantStage::Done) return true;
-  const auto result = advance(Role::Grant, grantIo_);
-  if (result == Io::Pending) return true;
-  if (grantStage_ == GrantStage::Eof) {
-    if (result != Io::Eof) return false;
-    if (!ackFrame_.isEmpty()) return true;
-    QByteArray response;
-    if (!grant(grantFrame_, response) || !queueAck(response, true)) return false;
-    grantStage_ = GrantStage::Done;
-    return true;
-  }
-  if (result != Io::Complete) return false;
-  const auto* bytes = endpoints_->bytes(Role::Grant);
-  if (!bytes) return false;
-  const QByteArray part(reinterpret_cast<const char*>(bytes->data()), qsizetype(bytes->size()));
-  if (grantStage_ == GrantStage::Header) {
-    if (part.size() != 4) return false;
-    const auto size = qFromBigEndian<quint32>(reinterpret_cast<const uchar*>(part.constData()));
-    if (!size || size > 9212) return false;
-    grantFrame_ = part;
-    grantStage_ = GrantStage::Body;
-    grantIo_ = beginRead(Role::Grant, size);
-  } else {
-    grantFrame_.append(part);
-    grantStage_ = GrantStage::Eof;
-    grantIo_ = beginRead(Role::Grant, 1);
-  }
-  return grantIo_ == Io::Pending || grantIo_ == Io::Complete || grantIo_ == Io::Eof;
-}
 
 bool ChildSession::pollControl()
 {
@@ -355,6 +338,8 @@ bool ChildSession::pollControl()
   controlFrame_.append(part);
   QByteArray response;
   if (!control(controlFrame_, response)) return false;
+  if (controlFrame_.left(4) == "JRC1") cancelReceived_ = true;
+  if (!response.isEmpty() && cancelReceived_) cancelTerminal_ = true;
   if (!response.isEmpty() && !queueAck(response, false)) return false;
   controlStage_ = ControlStage::Header;
   controlIo_ = beginRead(Role::Control, 4);
@@ -363,12 +348,25 @@ bool ChildSession::pollControl()
 
 ChildSession::Progress ChildSession::pollRestore()
 {
-  if (!started_ || !valid() || !pollAck() || !valid() || !pollControl() || !valid() ||
-      !pollGrant() || !valid() || !pollAck() || !valid()) {
+  if (restorePolling_) return Progress::Pending;
+  QScopedValueRollback<bool> guard(restorePolling_, true);
+  if (!started_ || !valid() || !pollAck() || !valid() || !pollControl() || !valid()) {
     fail(); return Progress::Failed;
   }
+  if (!pollGrant()) { fail(); return Progress::Failed; }
+  if (cancelReceived_ && !cancelTerminal_ && ackFrame_.isEmpty()) {
+    QByteArray terminal;
+    if (!pollCancellation(terminal)) { fail(); return Progress::Failed; }
+    if (!terminal.isEmpty()) {
+      cancelTerminal_ = true;
+      if (!queueAck(terminal, false)) { fail(); return Progress::Failed; }
+    }
+  }
+  if (!valid() || !pollAck() || !valid()) { fail(); return Progress::Failed; }
+  if (cancelReceived_) return Progress::Pending;
   return grantAck_ ? Progress::Ready : Progress::Pending;
 }
+
 
 ChildSession::Progress ChildSession::pollSource()
 {

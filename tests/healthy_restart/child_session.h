@@ -21,7 +21,9 @@ public:
     std::function<bool()> valid;
     std::function<bool(const QString&)> initialize;
     std::function<bool(const QByteArray&, bool, QByteArray&)> grant;
+    std::function<bool(const QByteArray&)> validateCanceledGrant;
     std::function<bool(const QByteArray&, QByteArray&)> control;
+    std::function<bool(QByteArray&)> pollCancellation;
     std::function<bool()> load, seek, revoke;
     std::function<void()> invalidate;
     std::function<bool(const QString&, bool, std::uint64_t&, std::uint64_t&, std::uint64_t&)> sourceLoad;
@@ -37,11 +39,13 @@ public:
 #endif
   bool beginRestore(const QString& fixturePath);
   Progress pollRestore();
+  Progress settleGrantRead();
   bool beginSource(const QString& fixturePath, bool paused);
   bool freezeSource();
   Progress pollSource();
   bool load();
   bool seek();
+  bool grantReadSettled() const { return grantSettled_; }
   void invalidate();
 private:
   using Io = FixtureRestart::IoProgress;
@@ -53,6 +57,8 @@ private:
   Io beginRead(Role role, unsigned size);
   Io advance(Role role, Io& progress);
   bool pollGrant();
+  bool beginGrantRead(unsigned size);
+  bool validateCanceledGrant() const;
   bool pollControl();
   bool pollAck();
   bool queueAck(const QByteArray& frame, bool grant);
@@ -68,6 +74,7 @@ private:
   bool initialize(const QString& path);
   bool grant(const QByteArray& frame, QByteArray& response);
   bool control(const QByteArray& frame, QByteArray& response);
+  bool pollCancellation(QByteArray& response);
   bool dispatch(bool seeking);
   void revokeGraph();
   PreparedGraph* graph_;
@@ -77,7 +84,14 @@ private:
   ControlStage controlStage_ = ControlStage::Header;
   Io grantIo_ = Io::Failed, controlIo_ = Io::Failed, ackIo_ = Io::Failed;
   QByteArray grantFrame_, controlFrame_, ackFrame_;
+  std::uint64_t grantOperation_ = 0;
+  unsigned grantTarget_ = 4;
+  bool grantCancelStarted_ = false, grantSettled_ = false;
+  bool restoreStarted_ = false;
   bool started_ = false, failed_ = false, grantAck_ = false, ackIsGrant_ = false;
+  // Transport routing only; the child gate remains the playback authority.
+  bool cancelReceived_ = false, cancelTerminal_ = false;
+  bool restorePolling_ = false;
   enum class SourceStage { Idle, Evidence, Control, Stop, StopAck, Retirement, ControlCancel, ClosedAck, Done };
   SourceStage sourceStage_ = SourceStage::Idle;
   Io sourceIo_ = Io::Failed;
