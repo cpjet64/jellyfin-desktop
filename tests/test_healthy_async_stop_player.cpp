@@ -256,7 +256,7 @@ void TestHealthyAsyncStop::queuedEndAndDrainDeadline()
   late.m_healthyStopClock = [&] { return now; };
   late.m_healthyStopDispatch = [&](quint64, const char**, bool query) { if (!query) ++lateCommands; return 0; };
   late.m_healthyStopEventWait = [&]() -> mpv_event* { now = 101; return &benign; };
-  QVERIFY(late.beginHealthyReplacementStop(7, 2, 100));
+  QVERIFY(!late.beginHealthyReplacementStop(7, 2, 100));
   QCOMPARE(lateCommands, 0);
   QCOMPARE(late.pollHealthyReplacementStop(), Stop::Status::Failed);
   QCOMPARE(lateCommands, 0);
