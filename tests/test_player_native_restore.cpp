@@ -2,6 +2,7 @@
 #include "player/PlaybackCheckpoint.h"
 #include "fixture_restart/FixtureRestartAdapter.h"
 #include <QCryptographicHash>
+#include "fixture_restart/OwnedFixtureFile.h"
 #include <QTemporaryFile>
 #include <QtTest/QtTest>
 
@@ -409,7 +410,8 @@ void TestPlayerNativeRestore::reentrantCancellationAndSeekFailure()
 void TestPlayerNativeRestore::fixtureBridgeControl()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
-  QTemporaryFile file;
+  QVERIFY(!ownedFixtureTemplate().isEmpty());
+  QTemporaryFile file(ownedFixtureTemplate());
   QVERIFY(file.open());
   const QByteArray data("fixture");
   QCOMPARE(file.write(data), qint64(data.size()));
@@ -453,7 +455,8 @@ void TestPlayerNativeRestore::fixtureBridgeCapture()
   PlayerComponent player;
   player.m_mpvGeneration = 3;
   player.m_receiptDispatch = [](quint64, const QString&) { return 0; };
-  QTemporaryFile file;
+  QVERIFY(!ownedFixtureTemplate().isEmpty());
+  QTemporaryFile file(ownedFixtureTemplate());
   QVERIFY(file.open());
   const QByteArray data("fixture-a");
   QCOMPARE(file.write(data), qint64(data.size()));
