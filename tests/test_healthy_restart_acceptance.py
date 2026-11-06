@@ -110,6 +110,58 @@ class HealthyRestartAcceptance(unittest.TestCase):
 
 
 class HealthyRestartWrapper(unittest.TestCase):
+    def test_copied_include_interface_propagates_to_consumer(self):
+        base = WORKTREE / 'deps'
+        base.mkdir(exist_ok=True)
+        if base.is_symlink() or base.resolve() != base:
+            raise RuntimeError('test storage must remain inside the worktree')
+        with tempfile.TemporaryDirectory(prefix='healthy-interface-', dir=base) as directory:
+            work = Path(directory)
+            (work / 'src').mkdir()
+            (work / 'src/dummy.cpp').write_text('int dummy;\n', encoding='utf-8')
+            for path in ('player/PlayerComponent.cpp', 'settings/AudioSettingsController.cpp'):
+                copied = work / 'build/copy' / path
+                copied.parent.mkdir(parents=True, exist_ok=True)
+                copied.write_text('int dummy_copy;\n', encoding='utf-8')
+            (work / 'consumer.cpp').write_text('int main() { return 0; }\n', encoding='utf-8')
+            targets = ROOT / 'CMakeModules/HealthyRestartTargets.cmake'
+            project = ('cmake_minimum_required(VERSION 3.20)\nproject(InterfaceProbe CXX)\n'
+                       f'include("{targets.as_posix()}")\n'
+                       'set(_healthy_copy "${CMAKE_BINARY_DIR}/copy")\n'
+                       'set(_healthy_input_pins "src/player/PlayerComponent.cpp|player/PlayerComponent.cpp|pin" '
+                       '"src/settings/AudioSettingsController.cpp|settings/AudioSettingsController.cpp|pin")\n'
+                       'set(ALL_SRCS "${CMAKE_SOURCE_DIR}/src/dummy.cpp" '
+                       '"${CMAKE_SOURCE_DIR}/src/player/PlayerComponent.cpp" '
+                       '"${CMAKE_SOURCE_DIR}/src/settings/AudioSettingsController.cpp")\n'
+                       'add_library(jmp_core INTERFACE)\n'
+                       'set_property(TARGET jmp_core PROPERTY LINK_LIBRARIES MpvQt)\n'
+                       'add_library(HealthyRestartMpvQt INTERFACE)\n'
+                       'function(configure_windows_loader)\nendfunction()\n'
+                       'healthy_restart_core()\n'
+                       'get_source_file_property(player_includes "${_healthy_copy}/player/PlayerComponent.cpp" INCLUDE_DIRECTORIES)\n'
+                       'file(WRITE "${CMAKE_BINARY_DIR}/player-includes.txt" "${player_includes}")\n'
+                       'get_source_file_property(settings_includes "${_healthy_copy}/settings/AudioSettingsController.cpp" INCLUDE_DIRECTORIES)\n'
+                       'file(WRITE "${CMAKE_BINARY_DIR}/settings-includes.txt" "${settings_includes}")\n'
+                       'add_executable(consumer consumer.cpp)\n'
+                       'target_link_libraries(consumer PRIVATE HealthyRestartCore)\n'
+                       'file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/includes.txt" '
+                       'CONTENT "$<TARGET_PROPERTY:consumer,INCLUDE_DIRECTORIES>")\n')
+            (work / 'CMakeLists.txt').write_text(project, encoding='utf-8')
+            result = subprocess.run(['cmake', '-S', str(work), '-B', str(work / 'build')],
+                                    cwd=work, capture_output=True, text=True,
+                                    timeout=60, creationflags=FLAGS)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            includes = (work / 'build/includes.txt').read_text(encoding='utf-8').split(';')
+            copied = (work / 'build/copy/core').as_posix()
+            fallback = (work / 'src').as_posix()
+            self.assertIn(copied, includes)
+            self.assertIn(fallback, includes)
+            self.assertLess(includes.index(copied), includes.index(fallback))
+            self.assertNotIn((work / 'src/core').as_posix(), includes)
+            self.assertEqual((work / 'build/player-includes.txt').read_text(encoding='utf-8'), 'NOTFOUND')
+            local = (work / 'build/settings-includes.txt').read_text(encoding='utf-8').split(';')
+            self.assertLess(local.index(copied), local.index((work / 'src/settings').as_posix()))
+
     def test_all_pinned_player_and_platform_sources_map_to_their_copies(self):
         base = WORKTREE / 'deps'
         base.mkdir(exist_ok=True)
