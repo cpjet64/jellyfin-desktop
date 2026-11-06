@@ -46,6 +46,7 @@ public:
   // VerifiedModule::stillValid with the owning generation at each boundary.
   std::shared_ptr<const VerifiedModule> capability() const noexcept;
 #ifdef _WIN32
+  void beginContainment() noexcept;
   FixtureRestart::IoProgress begin(EndpointRole role, bool read, const void* data, DWORD size);
   FixtureRestart::IoProgress beginTrackedGrantRead(DWORD size);
   std::uint64_t grantReadOperation() const noexcept;

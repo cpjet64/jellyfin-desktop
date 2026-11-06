@@ -156,6 +156,11 @@ std::shared_ptr<const VerifiedModule> ChildEndpoints::capability() const noexcep
   return state_ ? state_->module : nullptr;
 }
 #ifdef _WIN32
+void ChildEndpoints::beginContainment() noexcept
+{
+  if (!state_) return;
+  for (auto& entry : state_->entries) entry.containment = true;
+}
 FixtureRestart::IoProgress ChildEndpoints::begin(EndpointRole role, bool read, const void* data, DWORD size)
 {
   auto* entry = state_ ? state_->find(role) : nullptr;
