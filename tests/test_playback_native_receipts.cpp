@@ -80,7 +80,7 @@ static void invalidationAndOldAttempt()
   prepare(old);
   old.invalidate();
   old.reply(5, true, 19);
-  CHECK(old.snapshot().invalid && !old.snapshot().replyOk);
+  CHECK(old.snapshot().invalid && old.snapshot().replyOk && !old.snapshot().settled);
   Ledger next;
   CHECK((next.begin(Key{8, 4, 6, 7})));
   CHECK((next.consume(Key{8, 4, 6, 7})));
@@ -90,6 +90,54 @@ static void invalidationAndOldAttempt()
   next.reply(7, true, 21);
   next.start(19);
   CHECK(next.snapshot().invalid && !next.snapshot().started && next.snapshot().entry == 21);
+}
+
+static void invalidatedAttemptsStillSettle()
+{
+  Ledger late;
+  prepare(late);
+  late.invalidate();
+  late.reply(5, true, 19);
+  late.start(19);
+  late.end(20, false);
+  CHECK(late.snapshot().invalid && !late.snapshot().started && !late.snapshot().settled);
+  late.end(19, false);
+  CHECK(late.snapshot().invalid && late.snapshot().ended && late.snapshot().settled);
+
+  Ledger endFirst;
+  prepare(endFirst);
+  endFirst.invalidate();
+  endFirst.end(19, false);
+  CHECK(!endFirst.snapshot().settled);
+  endFirst.reply(5, true, 19);
+  CHECK(endFirst.snapshot().invalid && endFirst.snapshot().settled);
+
+  Ledger failure;
+  prepare(failure);
+  failure.invalidate();
+  failure.reply(5, false, 0);
+  CHECK(failure.snapshot().invalid && failure.snapshot().reply && failure.snapshot().settled);
+}
+
+static void reentrantSubmissionAndConflictSettlement()
+{
+  for (int result : {0, -1}) {
+    Ledger ledger;
+    CHECK(ledger.begin(current));
+    CHECK(ledger.consume(current));
+    ledger.invalidate();
+    ledger.submitted(result);
+    CHECK(ledger.snapshot().invalid && ledger.snapshot().submissionObserved);
+    CHECK(ledger.snapshot().submitted == (result == 0));
+    CHECK(ledger.snapshot().settled == (result < 0));
+  }
+  Ledger conflict;
+  prepare(conflict);
+  conflict.start(20);
+  conflict.end(19, false);
+  conflict.invalidate();
+  conflict.reply(5, true, 19);
+  CHECK(conflict.snapshot().invalid && conflict.snapshot().ended && conflict.snapshot().settled);
 }
 
 static void malformedDuplicatesAndRedirect()
@@ -140,6 +188,8 @@ int main()
   failedSubmissionAndReply();
   oneUseAndIdentity();
   invalidationAndOldAttempt();
+  invalidatedAttemptsStillSettle();
+  reentrantSubmissionAndConflictSettlement();
   malformedDuplicatesAndRedirect();
   boundAndEnd();
 }
