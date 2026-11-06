@@ -1,6 +1,7 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
+#include <memory>
 
 class PlayerComponent;
 class TestRetirementClaim;
@@ -12,17 +13,29 @@ class GraphAccessOps;
 class RetirementClaim final {
 public:
   enum class Admission { New, Existing, Rejected };
-  explicit RetirementClaim(std::uint64_t generation) : generation_(generation) {}
+  struct ArmIdentity {
+    std::uint64_t host = 0, core = 0, revision = 0, attempt = 0;
+    bool operator==(const ArmIdentity& other) const noexcept
+    { return host == other.host && core == other.core && revision == other.revision && attempt == other.attempt; }
+  };
+  explicit RetirementClaim(std::uint64_t generation) : generation_(generation), state_(RetirementEligible) {}
   std::uint64_t generation() const noexcept { return generation_; }
-  bool eligible() const noexcept { return generation_ && !(state_.load() & Revoked); }
+  bool eligible() const noexcept
+  {
+    const auto state = state_.load();
+    return generation_ && (state & RetirementEligible) && !(state & (Revoked | RetirementDenied));
+  }
   bool committed() const noexcept
   {
     const auto state = state_.load();
-    return generation_ && (state & RenderClaimed) && !(state & Revoked);
+    return generation_ && (state & RetirementEligible) && (state & RenderClaimed) &&
+           !(state & (Revoked | RetirementDenied));
   }
   bool open() const noexcept
   {
-    return generation_ && !(state_.load() & (CleanupOnly | RenderClaimed | Revoked));
+    const auto state = state_.load();
+    return generation_ && (state & RetirementEligible) &&
+           !(state & (CleanupOnly | RenderClaimed | Revoked | RetirementDenied));
   }
   void revoke() noexcept { state_.fetch_or(Revoked); }
   void contain() noexcept { state_.fetch_or(Revoked | Contained); }
@@ -37,8 +50,65 @@ private:
 #endif
   enum Bits : std::uint32_t {
     CleanupOnly = 1, StopAdmitted = 2, StopSubmitted = 4, StopCompleted = 8,
-    RenderClaimed = 16, RenderRetired = 32, Revoked = 64, Contained = 128, StopQualified = 256
+    RenderClaimed = 16, RenderRetired = 32, Revoked = 64, Contained = 128, StopQualified = 256,
+    Reservation = 512, ArmPending = 1024, Binding = 2048, StopOnlyBound = 4096,
+    RetirementEligible = 8192, RetirementDenied = 16384
   };
+  struct ReservationTag {};
+  RetirementClaim(std::uint64_t generation, ReservationTag) : generation_(generation), state_(Reservation) {}
+  static std::shared_ptr<RetirementClaim> makeArmReservation(std::uint64_t generation)
+  { return generation ? std::shared_ptr<RetirementClaim>(new RetirementClaim(generation, ReservationTag{})) : nullptr; }
+  bool reserveArm(std::uint64_t generation) const noexcept
+  {
+    if (!generation || generation != generation_) return false;
+    auto expected = static_cast<std::uint32_t>(Reservation);
+    return state_.compare_exchange_strong(expected, expected | ArmPending);
+  }
+  bool bindArm(std::uint64_t generation, ArmIdentity identity) noexcept
+  {
+    if (!generation || generation != generation_ || !identity.host || !identity.core ||
+        !identity.revision || !identity.attempt) return false;
+    auto current = state_.load();
+    for (;;) {
+      if (!(current & Reservation) || !(current & ArmPending) || (current & (Binding | StopOnlyBound))) return false;
+      if (state_.compare_exchange_weak(current, current | Binding)) break;
+    }
+    armIdentity_ = identity;
+    state_.fetch_or(StopOnlyBound);
+    state_.fetch_and(~static_cast<std::uint32_t>(Binding));
+    return true;
+  }
+  bool matchesArm(std::uint64_t generation, ArmIdentity identity) const noexcept
+  {
+    const auto state = state_.load();
+    return generation && generation == generation_ && (state & StopOnlyBound) && !(state & Binding) &&
+           armIdentity_ == identity;
+  }
+  bool installable(std::uint64_t generation, ArmIdentity identity) const noexcept
+  {
+    const auto state = state_.load();
+    return (state & Reservation) && !(state & (CleanupOnly | Revoked | RetirementDenied | RetirementEligible)) &&
+           matchesArm(generation, identity);
+  }
+  bool qualifyRetirement(std::uint64_t generation, ArmIdentity identity) const noexcept
+  {
+    if (!matchesArm(generation, identity)) return false;
+    auto current = state_.load();
+    for (;;) {
+      if (!(current & Reservation) || (current & (CleanupOnly | Revoked | RetirementDenied | RetirementEligible)))
+        return false;
+      if (state_.compare_exchange_weak(current, current | RetirementEligible)) return true;
+    }
+  }
+  bool denyRetirement(std::uint64_t generation, ArmIdentity identity) const noexcept
+  {
+    if (!matchesArm(generation, identity)) return false;
+    auto current = state_.load();
+    for (;;) {
+      if (!(current & Reservation) || (current & RetirementEligible)) return false;
+      if (state_.compare_exchange_weak(current, current | CleanupOnly | RetirementDenied)) return true;
+    }
+  }
   bool enterCleanup(std::uint64_t generation) const noexcept
   {
     if (!generation || generation != generation_) return false;
@@ -46,7 +116,8 @@ private:
     for (;;) {
       if (current & Revoked) return false;
       if (current & CleanupOnly) return true;
-      if (state_.compare_exchange_weak(current, current | CleanupOnly)) return true;
+      const auto denied = (current & Reservation) && !(current & RetirementEligible) ? RetirementDenied : 0;
+      if (state_.compare_exchange_weak(current, current | CleanupOnly | denied)) return true;
     }
   }
   // Recognition permits joining an existing ledger; it grants no new admission.
@@ -57,6 +128,16 @@ private:
     return (state & CleanupOnly) && !(state & Contained);
   }
   Admission admitCleanupStop(std::uint64_t generation) const noexcept
+  {
+    if (state_.load() & Reservation) return Admission::Rejected;
+    return admitStop(generation);
+  }
+  Admission admitCleanupStop(std::uint64_t generation, ArmIdentity identity) const noexcept
+  {
+    if (!matchesArm(generation, identity)) return Admission::Rejected;
+    return admitStop(generation);
+  }
+  Admission admitStop(std::uint64_t generation) const noexcept
   {
     if (!generation || generation != generation_) return Admission::Rejected;
     auto current = state_.load();
@@ -73,6 +154,16 @@ private:
   { return record(generation, StopAdmitted, StopCompleted); }
   bool qualifyCleanup(std::uint64_t generation) const noexcept
   {
+    if (state_.load() & Reservation) return false;
+    return qualifyStop(generation);
+  }
+  bool qualifyCleanup(std::uint64_t generation, ArmIdentity identity) const noexcept
+  {
+    if (!matchesArm(generation, identity)) return false;
+    return qualifyStop(generation);
+  }
+  bool qualifyStop(std::uint64_t generation) const noexcept
+  {
     if (!generation || generation != generation_) return false;
     auto current = state_.load();
     for (;;) {
@@ -88,7 +179,7 @@ private:
     if (!generation || generation != generation_) return false;
     auto current = state_.load();
     for (;;) {
-      if (current & (Revoked | RenderClaimed)) return false;
+      if (!(current & RetirementEligible) || (current & (Revoked | RenderClaimed | RetirementDenied))) return false;
       if ((current & CleanupOnly) && !(current & StopQualified)) return false;
       if ((current & StopAdmitted) &&
           ((current & (StopSubmitted | StopCompleted)) != (StopSubmitted | StopCompleted))) return false;
@@ -107,6 +198,7 @@ private:
     }
   }
   const std::uint64_t generation_;
-  mutable std::atomic<std::uint32_t> state_{0};
+  ArmIdentity armIdentity_{};
+  mutable std::atomic<std::uint32_t> state_;
 };
 }
