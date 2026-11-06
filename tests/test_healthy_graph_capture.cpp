@@ -2,7 +2,7 @@
 #include "graph_session.h"
 #include "graph_access.h"
 #include "capture_capability.h"
-#include "fixture_restart/RestartWire.h"
+#include "RestartWire.h"
 #include "frame_capture.h"
 #include "player/PlayerComponent.h"
 #include "player_test_cache.h"
@@ -159,14 +159,14 @@ class TestHealthyGraphCapture {
     graph_->player_ = std::make_unique<PlayerComponent>();
     auto& player = *graph_->player_;
     graph_->session_ = std::make_unique<FixtureGraph::Session>();
-    auto gate = std::make_shared<ChildGate>(&context_, 100);
+    auto gate = std::make_shared<ChildGate>(&context_, graph_->deadline_);
     Grant grant{1, 3, 4, QByteArray(64, 'a'), 3000, false};
     const auto encoded = encodeGrant(grant);
     const auto digest = QCryptographicHash::hash(encoded, QCryptographicHash::Sha256);
-    CHECK(gate->accept(&context_, encoded, grant, digest, 1, true));
+    CHECK(gate->accept(&context_, encoded, grant, digest, now(), true));
     const RestorePermit permit{1, 5, 3, 4, 1, digest};
-    CHECK(gate->installPermit(encodeRestorePermit(permit), permit, 1));
-    CHECK(player.healthyBindRestoreCleanupGate(gate));
+    CHECK(gate->installPermit(encodeRestorePermit(permit), permit, now()));
+    CHECK(player.healthyBindRestoreCleanupGate(gate, graph_->deadline_));
     CHECK(player.bindNativeReceiptHost(7)); player.m_mpvGeneration = 8;
     claim_ = TestRetirementClaim::reserve(9);
     const PlayerComponent::RestoreGrant restore{3, 4, 0, 3000, false};
@@ -184,7 +184,7 @@ class TestHealthyGraphCapture {
     player.m_observationDispatch = [](quint64, const char**) { return 0; };
     CHECK(player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
     player.m_nativeReceipts.reply(2, true, 42); player.m_nativeReceipts.start(42);
-    CHECK(player.healthyBindRestoreGate(gate, 1, 5, 3, 4, digest, [] { return qint64{1}; }));
+    CHECK(player.healthyBindRestoreGate(gate, 1, 5, 3, 4, digest, now));
     auto& session = *graph_->session_;
     session.gate = gate; session.host = key.host; session.core = key.core;
     session.intentRevision = key.revision; session.attempt = key.attempt;
