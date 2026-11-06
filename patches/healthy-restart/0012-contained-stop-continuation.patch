@@ -1,0 +1,9 @@
+diff --git a/player/PlayerIntentCommands.cpp b/player/PlayerIntentCommands.cpp
+index 6bd10a24..92d93398 100644
+--- a/player/PlayerIntentCommands.cpp
++++ b/player/PlayerIntentCommands.cpp
+@@ -5,0 +6 @@
++#include "retirement_claim.h"
+@@ -273,0 +275,2 @@ void PlayerComponent::handleMpvEvents()
++  if (m_healthyStopQueueEmpty && m_restoreCleanup.stopAdmitted && !m_restoreCleanup.stopIssued &&
++      m_healthyStopLease && m_healthyStopLease->contained()) submitRestoreCleanupStop();
