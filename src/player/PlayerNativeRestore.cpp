@@ -9,6 +9,32 @@ bool sameKey(PlaybackNativeReceipts::Key a, PlaybackNativeReceipts::Key b)
 }
 }
 
+bool PlayerComponent::restoreOwnsCurrent() const
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  const auto key = m_nativeRestore.key;
+  const auto receipt = m_nativeReceipts.snapshot();
+  return key.host && key.host == m_receiptHost && key.core == m_mpvGeneration &&
+         key.revision == m_playbackIntent.snapshot().revision &&
+         (!receipt.key.attempt || sameKey(key, receipt.key));
+#else
+  return false;
+#endif
+}
+
+bool PlayerComponent::restorePostSeekReady() const
+{
+  return m_nativeRestore.armed && m_nativeRestore.seekAttempted && !m_nativeRestore.failed &&
+         !m_nativeRestore.cancelled && m_nativeRestore.seekReply && m_nativeRestore.seekOk &&
+         m_nativeRestore.restarted && restoreOwnsCurrent();
+}
+
+bool PlayerComponent::restoreObservationAllowed() const
+{
+  if (!m_nativeRestore.armed || !restoreOwnsCurrent() || !m_nativeRestore.seekAttempted) return true;
+  return restorePostSeekReady();
+}
+
 bool PlayerComponent::armNativeRestore(const RestoreGrant& grant, quint64 host, quint64 attempt)
 {
 #ifndef MPVQT_EXTERNAL_EVENTS
@@ -35,7 +61,7 @@ bool PlayerComponent::dispatchNativeRestoreLoad(const QString& fixturePath)
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   const auto key = m_nativeRestore.key;
-  if (!intentControlThread() || !m_nativeRestore.armed || m_nativeRestore.cancelled ||
+  if (!intentControlThread() || !m_nativeRestore.armed || m_nativeRestore.cancelled || m_nativeRestore.failed ||
       m_nativeRestore.loadAttempted || key.host != m_receiptHost || key.core != m_mpvGeneration ||
       key.revision != m_playbackIntent.snapshot().revision) return false;
   m_nativeRestore.loadAttempted = true;
@@ -50,13 +76,15 @@ bool PlayerComponent::dispatchNativeRestoreSeek()
 #ifdef MPVQT_EXTERNAL_EVENTS
   const auto receipt = m_nativeReceipts.snapshot();
   const auto key = m_nativeRestore.key;
-  if (!intentControlThread() || !m_nativeRestore.armed || m_nativeRestore.cancelled ||
+  if (!intentControlThread() || !m_nativeRestore.armed || m_nativeRestore.cancelled || m_nativeRestore.failed ||
       m_nativeRestore.seekPending || m_nativeRestore.seekReply || !sameKey(key, receipt.key) ||
       receipt.invalid || !receipt.replyOk || !receipt.started || receipt.ended ||
       !nativeObservationCurrent() || !m_nativeObservation.paused || key.host != m_receiptHost ||
       key.core != m_mpvGeneration || key.revision != m_playbackIntent.snapshot().revision) return false;
   m_nativeRestore.seekPending = true;
+  m_nativeRestore.seekAttempted = true;
   m_nativeObservation.valid = false;
+  m_nativeObservation.pending = false;
   const qint64 ms = m_nativeRestore.grant.positionMs;
   const QByteArray position = QByteArray::number(ms / 1000) + '.' + QByteArray::number(ms % 1000).rightJustified(3, '0');
   const char* args[] = {"seek", position.constData(), "absolute+exact", nullptr};
@@ -64,7 +92,8 @@ bool PlayerComponent::dispatchNativeRestoreSeek()
   if (m_restoreDispatch) result = m_restoreDispatch(seekTag | key.attempt, args);
   else if (m_mpv && m_mpv->mpv()) result = mpv_command_async(m_mpv->mpv(), seekTag | key.attempt, args);
   m_nativeRestore.seekAccepted = result >= 0;
-  if (result < 0) { m_nativeRestore.seekPending = false; m_nativeRestore.cancelled = true; }
+  m_nativeRestore.seekError = result;
+  if (result < 0) { m_nativeRestore.seekPending = false; m_nativeRestore.failed = true; }
   return result >= 0;
 #else
   return false;
@@ -76,9 +105,15 @@ PlayerComponent::NativeStopResult PlayerComponent::cancelNativeRestore()
   if (!intentControlThread() || !m_nativeRestore.armed || m_nativeRestore.cancelled)
     return {NativeStopResult::Status::Unavailable, 0};
   m_nativeRestore.cancelled = true;
+  if (!restoreOwnsCurrent()) return {NativeStopResult::Status::Unavailable, 0};
   invalidateNativeReceipt();
   m_playbackIntent.stop(PlaybackIntent::Reason::NativeStop);
-  return m_nativeRestore.loadAttempted ? stopMpv() : NativeStopResult{NativeStopResult::Status::Unavailable, 0};
+  if (!m_nativeRestore.loadAttempted) return {NativeStopResult::Status::Unavailable, 0};
+  m_nativeRestore.cleanupAttempted = true;
+  const auto result = stopMpv();
+  m_nativeRestore.cleanupResult = result;
+  m_nativeRestore.cleanupObserved = true;
+  return result;
 }
 
 void PlayerComponent::observeNativeRestore(const mpv_event* event)
@@ -92,7 +127,9 @@ void PlayerComponent::observeNativeRestore(const mpv_event* event)
       event->reply_userdata == (seekTag | key.attempt)) {
     m_nativeRestore.seekPending = false;
     m_nativeRestore.seekReply = true;
+    m_nativeRestore.seekReplyError = event->error;
     m_nativeRestore.seekOk = m_nativeRestore.seekAccepted && event->error >= 0;
+    if (!m_nativeRestore.seekOk) m_nativeRestore.failed = true;
   } else if (event->event_id == MPV_EVENT_PLAYBACK_RESTART && m_nativeRestore.seekOk &&
              !m_nativeRestore.cancelled && !receipt.invalid && !receipt.ended && key.host == m_receiptHost &&
              key.revision == m_playbackIntent.snapshot().revision) {
