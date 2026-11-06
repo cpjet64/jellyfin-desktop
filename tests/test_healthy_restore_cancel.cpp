@@ -23,6 +23,8 @@ private slots:
   void noLoadRejectsUnsolicitedEvents();
   void canceledGateCannotBind();
   void submittedWithoutStart();
+  void bufferedStartBeforeReply();
+  void lateEntryDuringTerminalQuery();
   void terminalOrdering();
   void pendingSeekBlocksSettlement();
   void rejectedAndWrongReplies();
@@ -147,10 +149,54 @@ void TestHealthyRestoreCleanup::submittedWithoutStart()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   PlayerComponent player; int stops = 0; auto gate = prepare(player, stops, true); QVERIFY(gate);
-  QVERIFY(cancel(player, gate)); reply(player, quint64{1} << 55);
+  QVERIFY(cancel(player, gate)); QCOMPARE(stops, 0);
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending); QCOMPARE(stops, 1);
+  reply(player, quint64{1} << 55);
   QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending); QCOMPARE(stops, 1);
   loadReply(player, 42);
-  QVERIFY(player.pollNativeRestoreCancellation() != Status::NoLoad);
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
+  int idle = 1; qint64 position = -1;
+  property(player, quint64{1} << 54, "idle-active", MPV_FORMAT_FLAG, &idle);
+  property(player, quint64{1} << 53, "playlist-pos", MPV_FORMAT_INT64, &position);
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::Stopped);
+#endif
+}
+
+void TestHealthyRestoreCleanup::bufferedStartBeforeReply()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent player; int stops = 0; auto gate = prepare(player, stops, true); QVERIFY(gate);
+  mpv_event_start_file data{}; data.playlist_entry_id = 42;
+  mpv_event started{}; started.event_id = MPV_EVENT_START_FILE; started.data = &data;
+  mpv_event none{}; none.event_id = MPV_EVENT_NONE; int reads = 0; bool stopAfterDrain = true;
+  player.m_healthyStopEventWait = [&]() -> mpv_event* {
+    if (reads < 2 && stops != 0) stopAfterDrain = false;
+    return reads++ == 0 ? &started : &none;
+  };
+  QVERIFY(cancel(player, gate)); QCOMPARE(stops, 0);
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending); QCOMPARE(stops, 1); QVERIFY(stopAfterDrain);
+  loadReply(player, 42); reply(player, quint64{1} << 55);
+  end(player, 42, MPV_END_FILE_REASON_STOP);
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
+  int idle = 1; qint64 position = -1;
+  property(player, quint64{1} << 54, "idle-active", MPV_FORMAT_FLAG, &idle);
+  property(player, quint64{1} << 53, "playlist-pos", MPV_FORMAT_INT64, &position);
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::Stopped);
+#endif
+}
+
+void TestHealthyRestoreCleanup::lateEntryDuringTerminalQuery()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  for (bool starting : {false, true}) {
+    PlayerComponent player; int stops = 0; auto gate = prepare(player, stops, true); QVERIFY(gate);
+    loadReply(player, 42); QVERIFY(cancel(player, gate));
+    QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
+    reply(player, quint64{1} << 55);
+    QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
+    if (starting) start(player, 42); else end(player, 42, MPV_END_FILE_REASON_STOP);
+    QCOMPARE(player.pollNativeRestoreCancellation(), Status::Failed);
+  }
 #endif
 }
 
@@ -160,6 +206,7 @@ void TestHealthyRestoreCleanup::terminalOrdering()
   for (bool endFirst : {false, true}) {
     PlayerComponent player; int stops = 0; auto gate = prepare(player, stops, true); QVERIFY(gate);
     loadReply(player, 42); start(player, 42); QVERIFY(cancel(player, gate));
+    QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
     if (endFirst) end(player, 42, MPV_END_FILE_REASON_STOP);
     reply(player, quint64{1} << 55);
     QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
@@ -179,9 +226,10 @@ void TestHealthyRestoreCleanup::rejectedAndWrongReplies()
 #ifdef MPVQT_EXTERNAL_EVENTS
   PlayerComponent rejected; int stops = 0; auto gate = prepare(rejected, stops, true); QVERIFY(gate);
   rejected.m_restoreDispatch = [&](quint64, const char**) { ++stops; return -1; };
-  QVERIFY(!cancel(rejected, gate)); QCOMPARE(rejected.pollNativeRestoreCancellation(), Status::Failed);
+  QVERIFY(cancel(rejected, gate)); QCOMPARE(rejected.pollNativeRestoreCancellation(), Status::Failed);
   PlayerComponent wrong; stops = 0; gate = prepare(wrong, stops, true); QVERIFY(gate);
-  QVERIFY(cancel(wrong, gate)); reply(wrong, quint64{1} << 56);
+  QVERIFY(cancel(wrong, gate)); QCOMPARE(wrong.pollNativeRestoreCancellation(), Status::Pending);
+  reply(wrong, quint64{1} << 56);
   QCOMPARE(wrong.pollNativeRestoreCancellation(), Status::Pending);
   reply(wrong, quint64{1} << 55, -1); QCOMPARE(wrong.pollNativeRestoreCancellation(), Status::Failed);
 #endif
@@ -201,7 +249,8 @@ void TestHealthyRestoreCleanup::pendingSeekBlocksSettlement()
   mpv_event observation{}; observation.event_id = MPV_EVENT_COMMAND_REPLY;
   observation.reply_userdata = (quint64{1} << 62) | 1; observation.data = &command;
   event(player, observation); QVERIFY(player.dispatchNativeRestoreSeek());
-  QVERIFY(cancel(player, gate)); end(player, 42, MPV_END_FILE_REASON_STOP);
+  QVERIFY(cancel(player, gate)); QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
+  end(player, 42, MPV_END_FILE_REASON_STOP);
   reply(player, quint64{1} << 55);
   QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
   reply(player, quint64{1} << 61);
@@ -221,7 +270,9 @@ void TestHealthyRestoreCleanup::duplicateAndReentrant()
   player.m_restoreDispatch = [&](quint64, const char**) {
     ++stops; nestedAccepted = player.beginNativeRestoreCancellation(gate, 11, 100); return 0;
   };
-  QVERIFY(cancel(player, gate)); QCOMPARE(stops, 1); QVERIFY(!nestedAccepted);
+  QVERIFY(cancel(player, gate)); QCOMPARE(stops, 0);
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
+  QCOMPARE(stops, 1); QVERIFY(!nestedAccepted);
   QVERIFY(!player.beginNativeRestoreCancellation(gate, 11, 100));
   reply(player, quint64{1} << 55); reply(player, quint64{1} << 55);
   QCOMPARE(player.pollNativeRestoreCancellation(), Status::Failed); QCOMPARE(stops, 1);
@@ -247,10 +298,12 @@ void TestHealthyRestoreCleanup::missingIdentityAndRedirect()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   PlayerComponent missing; int stops = 0; auto gate = prepare(missing, stops, true); QVERIFY(gate);
-  QVERIFY(cancel(missing, gate)); reply(missing, quint64{1} << 55); end(missing, 0, MPV_END_FILE_REASON_STOP);
+  QVERIFY(cancel(missing, gate)); QCOMPARE(missing.pollNativeRestoreCancellation(), Status::Pending);
+  reply(missing, quint64{1} << 55); end(missing, 0, MPV_END_FILE_REASON_STOP);
   QCOMPARE(missing.pollNativeRestoreCancellation(), Status::Failed);
   PlayerComponent redirected; stops = 0; gate = prepare(redirected, stops, true); QVERIFY(gate);
   loadReply(redirected, 42); start(redirected, 42); QVERIFY(cancel(redirected, gate));
+  QCOMPARE(redirected.pollNativeRestoreCancellation(), Status::Pending);
   end(redirected, 42, MPV_END_FILE_REASON_REDIRECT);
   QCOMPARE(redirected.pollNativeRestoreCancellation(), Status::Failed);
 #endif
