@@ -52,11 +52,7 @@ index 74ec427..ae3d5a6 100644
 +#include <memory>
 +
 +namespace HealthyRetirement { class QtToken; }
-@@ -21,0 +25 @@ class MPVQT_EXPORT MpvAbstractItem : public QQuickFramebufferObject
-+    explicit MpvAbstractItem(MpvController::EventMode mode, QQuickItem *parent = nullptr);
-@@ -25 +28,0 @@ public:
--    explicit MpvAbstractItem(MpvController::EventMode mode, QQuickItem *parent = nullptr);
-@@ -26,0 +30,2 @@ public:
+@@ -26,0 +29,2 @@ public:
 +    bool healthyBindToken(std::shared_ptr<HealthyRetirement::QtToken> token);
 +    bool healthyApproveDestruction(bool eventWorkerClosed);
 diff --git a/mpvqt/mpvabstractitem_p.h b/mpvqt/mpvabstractitem_p.h
