@@ -39,11 +39,13 @@ void TestHealthyUnpausePlayer::prepare(PlayerComponent& player, bool paused)
 void TestHealthyUnpausePlayer::observe(PlayerComponent& player, quint64 id, bool paused)
 {
   const auto key = player.m_nativeReceipts.snapshot().key;
-  QVERIFY(player.requestNativeObservation(key, id, 10000, true));
+  QVERIFY(player.requestNativeObservation(key, id, 10000, paused));
   QByteArray text = paused ? "NR1|1|42|yes|yes|3.000|yes|no|no" : "NR1|1|42|yes|yes|3.000|no|no|no";
   mpv_event_command command{}; command.result.format = MPV_FORMAT_STRING; command.result.u.string = text.data();
   mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 62) | id; event.data = &command;
   player.observeNativeReceipt(&event);
+  QVERIFY(player.m_nativeObservation.valid);
+  QCOMPARE(player.m_nativeObservation.paused, paused);
 }
 
 void TestHealthyUnpausePlayer::image(const fixture_restart::CaptureTicket& ticket, int index)
