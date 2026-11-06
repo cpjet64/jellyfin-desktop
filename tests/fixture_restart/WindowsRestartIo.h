@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <functional>
 #include <vector>
 
 namespace FixtureRestart {
@@ -33,6 +34,8 @@ public:
     std::uint64_t operation = 0;
     Outcome outcome = Outcome::Uncertain;
     DWORD transferred = 0;
+    DWORD requested = 0;
+    bool read = false;
     std::vector<unsigned char> bytes;
   };
   explicit WindowsRestartIo(const WindowsIoApi& api);
@@ -41,12 +44,18 @@ public:
   WindowsRestartIo& operator=(const WindowsRestartIo&) = delete;
   IoProgress begin(HANDLE pipe, bool read, const void* data, DWORD size,
                    ULONGLONG deadline);
+  IoProgress beginGuarded(HANDLE pipe, bool read, const void* data, DWORD size,
+                          ULONGLONG deadline, const std::function<bool()>& authority);
   IoProgress beginTrackedRead(HANDLE pipe, DWORD size, ULONGLONG deadline);
   std::uint64_t operation() const { return operation_; }
   std::shared_ptr<const Settlement> settlement() const { return settlement_; }
   bool consumeSettlement(std::uint64_t operation);
   IoProgress poll();
   IoProgress cancel();
+  IoProgress pollSettlementOnly();
+  IoProgress cancelSettlementOnly();
+  IoProgress pollGuarded(const std::function<bool()>& authority);
+  IoProgress cancelGuarded(const std::function<bool()>& authority);
   bool canBind(HANDLE pipe) const;
   bool bind(HANDLE pipe);
   bool pending() const { return inFlight_; }
@@ -68,6 +77,8 @@ private:
   IoProgress completion(DWORD count);
   IoProgress completedError(DWORD error);
   IoProgress settleTracked(Settlement::Outcome outcome);
+  bool latchSettlementOnly();
+  bool continuationAllowed() const noexcept;
   WindowsIoApi api_;
   OVERLAPPED overlap_{};
   HANDLE pipe_ = INVALID_HANDLE_VALUE;
@@ -79,10 +90,12 @@ private:
   bool owned_ = false, closed_ = false;
   bool identityWriter_ = false;
   bool tracked_ = false, poisoned_ = false, cancelRequested_ = false, submitting_ = false;
+  bool settlementOnly_ = false;
   bool confirmedEmptyCancellation_ = false;
   unsigned activeCalls_ = 0;
   std::uint64_t nextOperation_ = 0, operation_ = 0;
   std::shared_ptr<const Settlement> settlement_;
+  const std::function<bool()>* continuationGuard_ = nullptr;
   IoProgress state_ = IoProgress::Failed;
 };
 }

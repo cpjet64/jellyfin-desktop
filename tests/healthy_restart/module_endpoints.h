@@ -53,6 +53,8 @@ public:
   bool consumeGrantReadSettlement(std::uint64_t operation);
   FixtureRestart::IoProgress poll(EndpointRole role);
   FixtureRestart::IoProgress cancel(EndpointRole role);
+  std::shared_ptr<const FixtureRestart::WindowsRestartIo::Settlement> retainedSettlement(EndpointRole role) const noexcept;
+  bool consumeRetainedSettlement(EndpointRole role, std::uint64_t operation);
   bool closeSettled(EndpointRole role);
   bool canceledWithoutData(EndpointRole role) const;
   const std::vector<unsigned char>* bytes(EndpointRole role) const noexcept;
