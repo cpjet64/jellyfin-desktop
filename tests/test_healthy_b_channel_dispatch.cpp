@@ -24,6 +24,8 @@ class TestHealthyGraphArm {
     qint64 now = 10;
     bool moduleValid = true, revokeInModule = false, revokeInDispatch = false;
     int dispatches = 0;
+    std::vector<std::vector<QByteArray>> commands;
+    std::vector<quint64> commandIds;
   };
   PlayerTestCache cache_;
   BChannelIo pipes_;
@@ -62,8 +64,11 @@ class TestHealthyGraphArm {
     graph_->containment_ = prepared_->containment(); graph_->module_ = endpoints_->capability();
     graph_->endpoints_ = endpoints_; graph_->access_->endpoints = endpoints_;
     graph_->player_ = std::make_unique<PlayerComponent>(); graph_->player_->m_mpvGeneration = 8;
-    graph_->player_->m_restoreDispatch = [state](quint64, const char**) {
+    graph_->player_->m_restoreDispatch = [state](quint64 id, const char** args) {
       ++state->dispatches;
+      state->commandIds.push_back(id);
+      state->commands.emplace_back();
+      for (; *args; ++args) state->commands.back().emplace_back(*args);
       if (state->revokeInDispatch) bChannelScript->endpointValid = false;
       return 0;
     };
@@ -110,9 +115,7 @@ class TestHealthyGraphArm {
       CHECK(session_->pollRestore() != ChildSession::Progress::Failed);
     CHECK(s.gate->allowsRestore(grant_.run, 7, grant_.grant, grant_.revision, digest_, state_->now));
     auto& player = *graph_->player_;
-    CHECK(player.healthyBindRestoreGate(s.gate, grant_.run, 7, grant_.grant, grant_.revision, digest_,
-                                       [state = state_] { return state->now; }));
-    CHECK(graph_->bindRestoreAuthority());
+    CHECK(player.m_restoreGate == s.gate && player.m_healthyRestoreAuthority);
     CHECK(player.healthyRestoreSubmissionAllowed(false));
   }
 
@@ -125,7 +128,13 @@ class TestHealthyGraphArm {
     if (mode == 2) state_->moduleValid = false;
     if (mode == 3) state_->revokeInModule = true;
     const bool result = player.dispatchNativeRestoreLoad(QStringLiteral("fixture"));
-    if (mode == 0) { CHECK(result && state_->dispatches == 1); return; }
+    if (mode == 0) {
+      CHECK(result && state_->dispatches == 1);
+      const auto& command = state_->commands[0];
+      CHECK(command.size() >= 4 && command.front() == "loadfile" && command.back() == "pause=yes");
+      CHECK(state_->commandIds[0] == ((quint64{1} << 63) | key.attempt));
+      return;
+    }
     CHECK(!result && state_->dispatches == 0);
     CHECK(player.m_nativeRestore.key.host == key.host && player.m_nativeRestore.key.core == key.core &&
           player.m_nativeRestore.key.revision == key.revision && player.m_nativeRestore.key.attempt == key.attempt);
@@ -164,7 +173,13 @@ class TestHealthyGraphArm {
     CHECK(player.healthyRestoreSubmissionAllowed(true));
     if (lose) pipes_.endpointValid = false;
     const bool result = player.dispatchNativeRestoreSeek();
-    if (!lose) { CHECK(result && state_->dispatches == 2); return; }
+    if (!lose) {
+      CHECK(result && state_->dispatches == 2);
+      const auto& command = state_->commands[1];
+      CHECK(command.size() == 3 && command[0] == "seek" && command[1] == "3.000" && command[2] == "absolute+exact");
+      CHECK(state_->commandIds[1] == ((quint64{1} << 61) | key.attempt));
+      return;
+    }
     CHECK(!result && state_->dispatches == 1);
     CHECK(player.m_nativeRestore.key.host == key.host && player.m_nativeRestore.key.core == key.core &&
           player.m_nativeRestore.key.revision == key.revision && player.m_nativeRestore.key.attempt == key.attempt);
