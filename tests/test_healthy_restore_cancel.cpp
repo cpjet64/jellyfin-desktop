@@ -352,8 +352,16 @@ void TestHealthyRestoreCleanup::supersededAndEventLoss()
   for (bool core : {false, true}) {
     PlayerComponent player; int stops = 0; auto gate = prepare(player, stops, true); QVERIFY(gate);
     if (core) ++player.m_mpvGeneration; else player.m_playbackIntent.play(false);
+    const auto owner = player.m_playbackIntent.snapshot();
+    const auto generation = player.m_mpvGeneration;
     QVERIFY(!cancel(player, gate)); QCOMPARE(stops, 0);
-    QCOMPARE(player.pollNativeRestoreCancellation(), Status::Failed);
+    QVERIFY(gate->matchesVerifiedCancel(11, 5));
+    QVERIFY(!player.m_restoreCleanup.claimed);
+    QCOMPARE(player.pollNativeRestoreCancellation(), Status::Unstarted);
+    const auto after = player.m_playbackIntent.snapshot();
+    QCOMPARE(after.epoch, owner.epoch); QCOMPARE(after.request, owner.request);
+    QCOMPARE(after.revision, owner.revision); QCOMPARE(after.desired, owner.desired);
+    QCOMPARE(player.m_mpvGeneration, generation); QCOMPARE(stops, 0);
   }
   PlayerComponent player; int stops = 0; auto gate = prepare(player, stops, true); QVERIFY(gate);
   QVERIFY(cancel(player, gate)); mpv_event value{}; value.event_id = MPV_EVENT_QUEUE_OVERFLOW;
