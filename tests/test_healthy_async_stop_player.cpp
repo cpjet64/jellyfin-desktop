@@ -17,6 +17,8 @@ private slots:
   void queuedDisplayAndUnexpectedEvents();
   void completedLeaseRevokedByUserIntent();
   void boundedDrainAndPendingOperations();
+  void reentrantUserIntentDuringPreflight();
+  void queuedEndAndDrainDeadline();
 };
 
 void TestHealthyAsyncStop::prepare(PlayerComponent& player, bool active, bool paused)
@@ -216,6 +218,48 @@ void TestHealthyAsyncStop::boundedDrainAndPendingOperations()
   pending.m_nativeObservation.pending = false;
   pending.m_nativeRestore.seekPending = true;
   QVERIFY(!pending.beginHealthyReplacementStop(7, 2, 100));
+}
+
+void TestHealthyAsyncStop::reentrantUserIntentDuringPreflight()
+{
+  for (bool userPlay : {false, true}) {
+    PlayerComponent player; prepare(player, false, false);
+    int queries = 0, commands = 0, legacyStops = 0;
+    player.m_stopDispatch = [&] { ++legacyStops; return PlayerComponent::NativeStopResult{}; };
+    player.m_healthyStopDispatch = [&](quint64, const char**, bool query) {
+      if (query) { ++queries; if (userPlay) player.play(); else player.stop(); }
+      else ++commands;
+      return 0;
+    };
+    QVERIFY(!player.beginHealthyReplacementStop(7, 2, 100));
+    QCOMPARE(queries, 1); QCOMPARE(commands, 0); QCOMPARE(legacyStops, 0);
+    QCOMPARE(player.pollHealthyReplacementStop(), Stop::Status::Failed);
+  }
+}
+
+void TestHealthyAsyncStop::queuedEndAndDrainDeadline()
+{
+  PlayerComponent player; prepare(player, true, false);
+  mpv_event_end_file endData{}; endData.playlist_entry_id = 42; endData.reason = MPV_END_FILE_REASON_STOP;
+  mpv_event ending{}; ending.event_id = MPV_EVENT_END_FILE; ending.data = &endData;
+  mpv_event none{}; none.event_id = MPV_EVENT_NONE;
+  int reads = 0, commands = 0;
+  player.m_healthyStopDispatch = [&](quint64, const char**, bool query) { if (!query) ++commands; return 0; };
+  player.m_healthyStopEventWait = [&]() -> mpv_event* { return ++reads == 1 ? &ending : &none; };
+  QVERIFY(!player.beginHealthyReplacementStop(7, 2, 100));
+  QCOMPARE(commands, 0);
+  QCOMPARE(player.pollHealthyReplacementStop(), Stop::Status::Failed);
+
+  PlayerComponent late; prepare(late, true, false);
+  qint64 now = 1; int lateCommands = 0;
+  mpv_event benign{}; benign.event_id = MPV_EVENT_IDLE;
+  late.m_healthyStopClock = [&] { return now; };
+  late.m_healthyStopDispatch = [&](quint64, const char**, bool query) { if (!query) ++lateCommands; return 0; };
+  late.m_healthyStopEventWait = [&]() -> mpv_event* { now = 101; return &benign; };
+  QVERIFY(late.beginHealthyReplacementStop(7, 2, 100));
+  QCOMPARE(lateCommands, 0);
+  QCOMPARE(late.pollHealthyReplacementStop(), Stop::Status::Failed);
+  QCOMPARE(lateCommands, 0);
 }
 
 QTEST_GUILESS_MAIN(TestHealthyAsyncStop)
