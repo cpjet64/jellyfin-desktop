@@ -10,6 +10,9 @@
 #include <mutex>
 #include <optional>
 #include <thread>
+#ifdef HEALTHY_RETIREMENT_TESTING
+#include "module_gate.h"
+#endif
 
 class MpvVideoItem;
 class PlayerComponent;
@@ -19,6 +22,7 @@ class QByteArray;
 class QString;
 #ifdef HEALTHY_RETIREMENT_TESTING
 class TestHealthyGraphArm;
+class TestHealthyGraphCapture;
 #endif
 namespace HealthyModuleIdentity { class VerifiedModule; class ChildEndpoints; }
 
@@ -34,6 +38,7 @@ class QtScheduler;
 class FixtureGraph;
 class GraphRetirement;
 class GraphAccessOps;
+class CaptureController;
 class ChildSession;
 enum class AccessPhase { Normal, CleanupOnly, Closed, Contained };
 struct ClosedAck {
@@ -107,6 +112,7 @@ public:
 private:
 #ifdef HEALTHY_RETIREMENT_TESTING
   friend class ::TestHealthyGraphArm;
+  friend class ::TestHealthyGraphCapture;
 #endif
   friend class PreparedGraph;
   friend class GraphAccessOps;
@@ -133,6 +139,14 @@ private:
   bool restorePollCancellation(QByteArray& response);
   bool restoreLoad();
   bool restoreSeek();
+  bool captureBaseline();
+  bool captureSessionReady() const;
+  bool capturePlayerBound() const;
+  bool captureTarget();
+  // Renderer ticket acknowledgement only; target image and Player receipts
+  // must be qualified separately after the future checked seek.
+  bool captureTargetReady();
+  void cancelCapture() noexcept;
   bool restoreRevoke();
   bool beginRestoreFailure(HealthyRestart::FailureCause cause);
   PreparedGraph::FailureProgress pollRestoreFailure();
@@ -155,8 +169,16 @@ private:
   std::shared_ptr<const HealthyModuleIdentity::VerifiedModule> module_;
   std::shared_ptr<HealthyModuleIdentity::ChildEndpoints> endpoints_;
   std::shared_ptr<Owner> owner_;
+  std::unique_ptr<CaptureController> capture_;
   bool retirementRequested_ = false;
   bool presented_ = false;
+  bool captureBaselineRequested_ = false;
+  bool captureTargetRequested_ = false;
+#ifdef HEALTHY_RETIREMENT_TESTING
+  std::function<bool()> captureSessionReadyForTest_;
+  std::optional<HealthyModuleIdentity::LaunchBinding> captureBindingForTest_;
+  std::uint64_t captureLaunchForTest_ = 0;
+#endif
   mutable std::int64_t lastSessionNow_ = 0;
 };
 }

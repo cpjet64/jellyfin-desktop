@@ -78,6 +78,7 @@ bool FixtureGraph::requestRetirement()
   const auto containment = containment_.lock();
   if (!dispatcher_ || dispatcher_->thread() != QThread::currentThread() || !player_ ||
       !containment || !containment->intact() || !owner_ || !module_ || retirementRequested_ || !scheduler_) return false;
+  cancelCapture();
   try {
     const QPointer<PlayerComponent> player = player_.get();
     const QPointer<MpvVideoItem> item = item_;
@@ -141,6 +142,7 @@ FixtureGraph::Progress FixtureGraph::pollRetirement()
 }
 void FixtureGraph::invalidate() noexcept
 {
+  cancelCapture();
   access_->revoked.store(true);
   if (const auto claim = std::atomic_load(&access_->intentClaim)) claim->revoke();
   if (retirement_ && retirement_->closure()) retirement_->closure()->invalidate();

@@ -3,6 +3,7 @@
 #include "graph_retirement.h"
 #include "graph_access.h"
 #include "graph_session.h"
+#include "capture_capability.h"
 #include "owner_qt.h"
 #include "module_endpoints.h"
 #include "player/MpvVideoItem.h"
@@ -41,6 +42,8 @@ std::unique_ptr<PreparedGraph> FixtureGraph::prepare(std::uint64_t generation,
   prepared->access_->guiInvalidate = [](FixtureGraph* graph) { graph->invalidate(); };
   auto concrete = std::unique_ptr<FixtureGraph>(new FixtureGraph(prepared->slot_, prepared->access_, normalDeadline,
                                                                  deadline, std::move(clock)));
+  concrete->capture_ = CaptureController::create(prepared->slot_);
+  if (!concrete->capture_) return {};
   const auto access = prepared->access_;
   concrete->token_ = std::make_shared<QtToken>(prepared->slot_, concrete->dispatcher_.get(), [access] {
     if (auto* graph = access->graph.load()) graph->deliverRedraw();
@@ -79,6 +82,7 @@ bool PreparedGraph::beginRestoreFailure(HealthyRestart::FailureCause cause)
   if (!retained || !slot || cause == HealthyRestart::FailureCause::None) return false;
   auto* graph = GraphAccessOps::beginCleanup(access, slot->generation());
   if (!graph) return false;
+  graph->cancelCapture();
   try {
     if (graph->beginRestoreFailure(cause) && access->phase.load() == AccessPhase::CleanupOnly)
       return true;
@@ -110,6 +114,7 @@ void FixtureGraph::deliverRedraw()
 
 FixtureGraph::~FixtureGraph()
 {
+  cancelCapture();
   access_->graph.store(nullptr);
 }
 }
