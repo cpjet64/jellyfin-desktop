@@ -2,6 +2,7 @@
 #include "graph_session.h"
 #include "module_endpoints.h"
 #include "RestartWire.h"
+#include "FixtureRestartAdapter.h"
 #include "player/PlayerComponent.h"
 #include "player_test_cache.h"
 #include <QCoreApplication>
@@ -13,6 +14,13 @@ using namespace HealthyModuleIdentity;
 using namespace HealthyRetirement;
 using namespace FixtureRestart;
 static void check(bool value) { if (!value) std::abort(); }
+
+class TestRetirementClaim {
+public:
+  static bool matches(const std::shared_ptr<RetirementClaim>& claim, quint64 host, quint64 core,
+                      quint64 revision, quint64 attempt)
+  { return claim && claim->matchesArm(9, {host, core, revision, attempt}); }
+};
 
 namespace {
 HANDLE WINAPI event(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCWSTR) { return reinterpret_cast<HANDLE>(99); }
@@ -121,10 +129,9 @@ class TestHealthyGraphArm {
     const auto& s = *graph_->session_;
     return {grant_.run, 7, grant_.grant, grant_.revision, digest_, s.host, s.core, s.intentRevision, s.attempt};
   }
-  void settleNoLoad(QByteArray& response)
+  void replyNoLoad()
   {
-    if (!state_->idleQuery || !state_->positionQuery) check(graph_->restorePollCancellation(response));
-    check(response.isEmpty() && state_->idleQuery && state_->positionQuery);
+    check(state_->idleQuery && state_->positionQuery);
     int idle = 1; mpv_event_property idleProperty{"idle-active", MPV_FORMAT_FLAG, &idle};
     mpv_event idleReply{MPV_EVENT_GET_PROPERTY_REPLY, 0, state_->idleQuery, &idleProperty};
     graph_->player_->observeNativeRestoreCleanup(&idleReply);
@@ -133,6 +140,12 @@ class TestHealthyGraphArm {
     mpv_event positionReply{MPV_EVENT_GET_PROPERTY_REPLY, 0, state_->positionQuery, &positionProperty};
     graph_->player_->observeNativeRestoreCleanup(&positionReply);
     graph_->player_->observeNativeReceipt(&positionReply);
+  }
+  void settleNoLoad(QByteArray& response)
+  {
+    if (!state_->idleQuery || !state_->positionQuery) check(graph_->restorePollCancellation(response));
+    check(response.isEmpty());
+    replyNoLoad();
     for (int i = 0; i != 8 && response.isEmpty(); ++i) check(graph_->restorePollCancellation(response));
   }
   void deadlineAfterArm()
@@ -145,6 +158,8 @@ class TestHealthyGraphArm {
     const auto key = graph_->player_->m_nativeRestore.key;
     check(accepted.host == key.host && accepted.core == key.core &&
           accepted.intentRevision == key.revision && accepted.attempt == key.attempt);
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    check(claim && claim == graph_->player_->m_healthyStopLease && claim->eligible());
     check(state_->now == normal); response.clear();
     check(graph_->restoreControl(encodeControl({ControlKind::UserStop, 1, 4}), response));
     settleNoLoad(response);
@@ -155,17 +170,126 @@ class TestHealthyGraphArm {
     check(result.outcome == CancelOutcome::NoLoad && !graph_->restoreLoad() && !graph_->restoreSeek());
     check(state_->dispatches == 0);
   }
-  void claimFailureRetainsIdentity()
+  void foreignClaimPreventsArm()
   {
     initialize();
     std::atomic_store(&graph_->access_->intentClaim, std::make_shared<RetirementClaim>(9));
     QByteArray response;
     check(!graph_->restoreGrant(encodeGrant(grant_), true, response));
     const auto& s = *graph_->session_;
-    check(response.isEmpty() && s.host && s.core == 8 && s.intentRevision && s.attempt);
-    const auto key = graph_->player_->m_nativeRestore.key;
-    check(s.host == key.host && s.core == key.core && s.intentRevision == key.revision && s.attempt == key.attempt);
+    check(response.isEmpty() && !s.host && !s.core && !s.intentRevision && !s.attempt);
+    check(!graph_->player_->m_nativeRestore.armed && !prepared_->closedAck());
     check(!graph_->restoreLoad() && !graph_->restoreSeek() && state_->dispatches == 0);
+  }
+  void failureCrossesInstallation()
+  {
+    initialize(); bool hookCalled = false, failureStarted = false;
+    setGraphInstallHookForTest([&] {
+      hookCalled = true;
+      failureStarted = prepared_->beginRestoreFailure(HealthyRestart::FailureCause::ProtocolViolation);
+      return false;
+    });
+    QByteArray response;
+    const bool grantSucceeded = graph_->restoreGrant(encodeGrant(grant_), true, response);
+    setGraphInstallHookForTest({});
+    check(hookCalled && failureStarted && !grantSucceeded && response.isEmpty());
+    const auto key = graph_->player_->m_nativeRestore.key;
+    const auto& s = *graph_->session_;
+    check(key.host && key.core == 8 && key.revision && key.attempt && s.host == key.host &&
+          s.core == key.core && s.intentRevision == key.revision && s.attempt == key.attempt);
+    check(prepared_->pollRestoreFailure() == PreparedGraph::FailureProgress::Pending);
+    replyNoLoad();
+    check(prepared_->pollRestoreFailure() == PreparedGraph::FailureProgress::Qualified);
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    check(claim && !claim->eligible() && !claim->open() && !prepared_->closedAck());
+    check(!graph_->restoreLoad() && !graph_->restoreSeek());
+    check(state_->dispatches == 0);
+  }
+  void installationFailureRetainsCleanupAuthority()
+  {
+    initialize(); bool hookCalled = false;
+    setGraphInstallHookForTest([&] { hookCalled = true; return false; });
+    QByteArray response;
+    const bool grantSucceeded = graph_->restoreGrant(encodeGrant(grant_), true, response);
+    setGraphInstallHookForTest({});
+    check(hookCalled && !grantSucceeded && response.isEmpty());
+    const auto key = graph_->player_->m_nativeRestore.key;
+    const auto& s = *graph_->session_;
+    check(key.host && key.core == 8 && key.revision && key.attempt && s.host == key.host &&
+          s.core == key.core && s.intentRevision == key.revision && s.attempt == key.attempt);
+    check(prepared_->beginRestoreFailure(HealthyRestart::FailureCause::InitializationFailure));
+    check(prepared_->pollRestoreFailure() == PreparedGraph::FailureProgress::Pending);
+    replyNoLoad();
+    check(prepared_->pollRestoreFailure() == PreparedGraph::FailureProgress::Qualified);
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    check(claim && !claim->eligible() && !claim->open() && !prepared_->closedAck());
+    check(!graph_->restoreLoad() && !graph_->restoreSeek());
+    check(state_->dispatches == 0);
+  }
+  void reservationPrecedesPlayerArm()
+  {
+    initialize(); bool hookCalled = false;
+    std::shared_ptr<RetirementClaim> reserved;
+    setGraphPreArmHookForTest([&] {
+      hookCalled = true;
+      reserved = std::atomic_load(&graph_->access_->intentClaim);
+      check(reserved && !reserved->eligible() && !reserved->open());
+      check(!graph_->player_->m_nativeRestore.armed && !graph_->session_->host);
+      check(!prepared_->closedAck() && state_->dispatches == 0);
+    });
+    QByteArray response;
+    const bool grantSucceeded = graph_->restoreGrant(encodeGrant(grant_), true, response);
+    setGraphPreArmHookForTest({});
+    check(hookCalled && grantSucceeded);
+    GrantAccepted accepted;
+    check(decodeGrantAccepted(response, expectedAcceptance(), accepted));
+    const auto key = graph_->player_->m_nativeRestore.key;
+    check(accepted.host == key.host && accepted.core == key.core &&
+          accepted.intentRevision == key.revision && accepted.attempt == key.attempt);
+    check(reserved == std::atomic_load(&graph_->access_->intentClaim) &&
+          reserved == graph_->player_->m_healthyStopLease && reserved->eligible());
+    check(!graph_->restoreLoad() && !graph_->restoreSeek() && state_->dispatches == 0);
+  }
+  void containmentCrossesInstallation()
+  {
+    initialize(); bool hookCalled = false;
+    setGraphInstallHookForTest([&] { hookCalled = true; prepared_->invalidate(); return false; });
+    QByteArray response;
+    const bool grantSucceeded = graph_->restoreGrant(encodeGrant(grant_), true, response);
+    setGraphInstallHookForTest({});
+    check(hookCalled && !grantSucceeded && response.isEmpty());
+    const auto key = graph_->player_->m_nativeRestore.key;
+    const auto& s = *graph_->session_;
+    check(key.host && key.core == 8 && key.revision && key.attempt && s.host == key.host &&
+          s.core == key.core && s.intentRevision == key.revision && s.attempt == key.attempt);
+    check(prepared_->pollRestoreFailure() == PreparedGraph::FailureProgress::Unknown);
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    check(claim && !claim->eligible() && !prepared_->closedAck() && state_->dispatches == 0);
+  }
+  void containmentDuringPlayerArm()
+  {
+    initialize(); bool hookCalled = false;
+    setFixtureArmHookForTest([&] {
+      hookCalled = true;
+      const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+      check(graph_->session_->armInFlight && claim && !claim->eligible() && !claim->open());
+      check(!graph_->session_->host && graph_->player_->m_nativeRestore.armed);
+      check(state_->dispatches == 0 && !prepared_->closedAck());
+      prepared_->invalidate();
+    });
+    QByteArray response;
+    const bool grantSucceeded = graph_->restoreGrant(encodeGrant(grant_), true, response);
+    setFixtureArmHookForTest({});
+    check(hookCalled && !grantSucceeded && response.isEmpty());
+    const auto key = graph_->player_->m_nativeRestore.key;
+    const auto& s = *graph_->session_;
+    check(key.host && key.core == 8 && key.revision && key.attempt && s.host == key.host &&
+          s.core == key.core && s.intentRevision == key.revision && s.attempt == key.attempt);
+    check(prepared_->pollRestoreFailure() == PreparedGraph::FailureProgress::Unknown);
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    check(claim && claim->contained() && !claim->eligible() &&
+          TestRetirementClaim::matches(claim, key.host, key.core, key.revision, key.attempt));
+    check(!prepared_->closedAck() && state_->dispatches == 0);
   }
   void reentrantCancelAfterArm()
   {
@@ -231,17 +355,62 @@ class TestHealthyGraphArm {
     check(state_->dispatches == 0);
     check(!graph_->restoreLoad() && !graph_->restoreSeek() && state_->dispatches == 0);
   }
+  void internalFailureAfterArm()
+  {
+    initialize(); QByteArray response;
+    check(graph_->restoreGrant(encodeGrant(grant_), true, response));
+    GrantAccepted accepted;
+    check(decodeGrantAccepted(response, expectedAcceptance(), accepted));
+    check(prepared_->beginRestoreFailure(HealthyRestart::FailureCause::ProtocolViolation));
+    check(prepared_->pollRestoreFailure() == PreparedGraph::FailureProgress::Pending);
+    replyNoLoad();
+    check(prepared_->pollRestoreFailure() == PreparedGraph::FailureProgress::Qualified);
+    check(!prepared_->closedAck());
+    check(!graph_->restoreLoad() && !graph_->restoreSeek() && state_->dispatches == 0);
+    response.clear();
+    check(!graph_->restoreControl(encodeControl({ControlKind::UserStop, 1, 4}), response));
+    check(response.isEmpty() && state_->dispatches == 0);
+  }
+  void containmentBeforeArm()
+  {
+    initialize(); prepared_->invalidate(); QByteArray response;
+    check(!graph_->restoreGrant(encodeGrant(grant_), true, response));
+    check(response.isEmpty() && !prepared_->closedAck() && state_->dispatches == 0);
+    check(!graph_->restoreLoad() && !graph_->restoreSeek());
+  }
+  void containmentAfterArm()
+  {
+    initialize(); QByteArray response;
+    check(graph_->restoreGrant(encodeGrant(grant_), true, response));
+    const auto key = graph_->player_->m_nativeRestore.key;
+    prepared_->invalidate(); response.clear();
+    check(!prepared_->beginRestoreFailure(HealthyRestart::FailureCause::OwnershipLost));
+    check(prepared_->pollRestoreFailure() == PreparedGraph::FailureProgress::Unknown);
+    check(!graph_->restoreControl(encodeControl({ControlKind::UserStop, 1, 4}), response));
+    const auto retained = graph_->player_->m_nativeRestore.key;
+    check(response.isEmpty() && retained.host == key.host && retained.core == key.core &&
+          retained.revision == key.revision && retained.attempt == key.attempt);
+    check(!prepared_->closedAck() && state_->dispatches == 0);
+  }
 public:
   static void run()
   {
     { TestHealthyGraphArm test; test.cancelBeforeGrant(); }
     { TestHealthyGraphArm test; test.deadlineAfterArm(); }
-    { TestHealthyGraphArm test; test.claimFailureRetainsIdentity(); }
+    { TestHealthyGraphArm test; test.foreignClaimPreventsArm(); }
+    { TestHealthyGraphArm test; test.failureCrossesInstallation(); }
+    { TestHealthyGraphArm test; test.installationFailureRetainsCleanupAuthority(); }
+    { TestHealthyGraphArm test; test.reservationPrecedesPlayerArm(); }
+    { TestHealthyGraphArm test; test.containmentCrossesInstallation(); }
+    { TestHealthyGraphArm test; test.containmentDuringPlayerArm(); }
     { TestHealthyGraphArm test; test.reentrantCancelAfterArm(); }
     { TestHealthyGraphArm test; test.cancelAfterValidationBeforeArm(); }
     { TestHealthyGraphArm test; test.duplicateCancellationRejected(); }
     { TestHealthyGraphArm test; test.changedCoreCannotSettle(); }
     { TestHealthyGraphArm test; test.wrongGateRejected(); }
+    { TestHealthyGraphArm test; test.internalFailureAfterArm(); }
+    { TestHealthyGraphArm test; test.containmentBeforeArm(); }
+    { TestHealthyGraphArm test; test.containmentAfterArm(); }
   }
 };
 
