@@ -3,12 +3,15 @@
 #include "module_endpoints.h"
 #include "RestartWire.h"
 #include "FixtureRestartAdapter.h"
+#include "RestartChildPlayer.h"
 #include "player/PlayerComponent.h"
 #include "player_test_cache.h"
 #include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QTemporaryFile>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
 
 using namespace HealthyModuleIdentity;
 using namespace HealthyRetirement;
@@ -33,10 +36,10 @@ BOOL WINAPI cancelIo(HANDLE, LPOVERLAPPED) { return TRUE; }
 DWORD WINAPI errorIo() { return ERROR_IO_PENDING; }
 bool validModule(void*) noexcept { return true; }
 
-ChildEndpoints::TestOperations endpointOperations()
+ChildEndpoints::TestOperations endpointOperations(std::function<bool()> valid)
 {
   ChildEndpoints::TestOperations ops;
-  ops.valid = [] { return true; };
+  ops.valid = std::move(valid);
   ops.accepts = [](std::uintptr_t value) { return value != 0; };
   ops.compare = [](std::uintptr_t a, std::uintptr_t b) {
     return a == b ? EndpointComparison::Same : EndpointComparison::Different;
@@ -60,6 +63,7 @@ class TestHealthyGraphArm {
     quint64 idleQuery = 0, positionQuery = 0;
     mpv_event noEvent{MPV_EVENT_NONE, 0, 0, nullptr};
     bool cancelOnArm = false, cancelBeforeArm = false, expireOnArm = false;
+    bool endpointLive = true, failCleanupCheck = false;
     bool inClock = false, cancelCalled = false;
     QByteArray cancelResponse;
   };
@@ -70,6 +74,9 @@ class TestHealthyGraphArm {
   FixtureGraph* graph_ = nullptr;
   static qint64 clock(const std::shared_ptr<State>& state)
   {
+    if (state->failCleanupCheck && state->graph && state->graph->session_ && state->graph->session_->host) {
+      state->endpointLive = false; state->failCleanupCheck = false;
+    }
     if (!state->cancelOnArm && !state->cancelBeforeArm && !state->expireOnArm) return state->now;
     const auto* session = state->graph ? state->graph->session_.get() : nullptr;
     const bool before = state->cancelBeforeArm && session && session->gate && session->gate->acceptedGrant() && !session->host;
@@ -83,17 +90,18 @@ class TestHealthyGraphArm {
     return state->now;
   }
 
-  void initialize()
+  void initialize(const QString& path = {})
   {
     LaunchBinding binding;
     binding.role = LaunchRole::Restore; binding.run = grant_.run;
     std::memcpy(binding.expectedGrantDigest.data(), digest_.constData(), size_t(digest_.size()));
     auto module = VerifiedModule::forAccessorTest(9, 7, binding, validModule, nullptr);
     EndpointInput inputs[] = {{EndpointRole::Grant, 1}, {EndpointRole::Control, 2}, {EndpointRole::Ack, 3}};
-    auto endpoints = ChildEndpoints::createForTest(module, 9, overall, EndpointMode::Restore, inputs, endpointOperations());
+    const auto state = state_;
+    auto endpoints = ChildEndpoints::createForTest(module, 9, overall, EndpointMode::Restore, inputs,
+                                                    endpointOperations([state] { return state->endpointLive; }));
     check(endpoints && !module);
     auto shared = std::shared_ptr<ChildEndpoints>(std::move(endpoints));
-    const auto state = state_;
     prepared_ = FixtureGraph::prepare(9, normal, overall, [state] { return clock(state); });
     check(bool(prepared_)); graph_ = prepared_->graphOnGuiThread(); check(graph_);
     state_->graph = graph_;
@@ -113,7 +121,7 @@ class TestHealthyGraphArm {
     };
     graph_->owner_ = std::make_shared<Owner>(prepared_->containment(), overall, [state] { return state->now; },
                                              [](std::shared_ptr<RenderJob>) { return false; });
-    check(graph_->restoreInitialize(QString()));
+    check(graph_->restoreInitialize(path));
   }
 
   void cancelBeforeGrant()
@@ -128,6 +136,68 @@ class TestHealthyGraphArm {
   {
     const auto& s = *graph_->session_;
     return {grant_.run, 7, grant_.grant, grant_.revision, digest_, s.host, s.core, s.intentRevision, s.attempt};
+  }
+  QByteArray permit() const
+  { return encodeRestorePermit({grant_.run, 7, grant_.grant, grant_.revision, 1, digest_}); }
+  bool childPermit(QByteArray& response)
+  {
+    return graph_->session_->child->control(graph_->endpoints_->token(EndpointRole::Control), permit(), response);
+  }
+  bool gateAllowsRestore() const
+  { return graph_->session_->gate->allowsRestore(grant_.run, 7, grant_.grant, grant_.revision, digest_, state_->now); }
+  void initializeWithFile(QTemporaryFile& file)
+  {
+    check(file.open() && file.write("fixture", 7) == 7 && file.flush());
+    file.close();
+    grant_.assetHash = QCryptographicHash::hash(QByteArray("fixture"), QCryptographicHash::Sha256).toHex();
+    digest_ = QCryptographicHash::hash(encodeGrant(grant_), QCryptographicHash::Sha256);
+    initialize(file.fileName());
+  }
+  void normalPermitBaseline()
+  {
+    QTemporaryFile file(QDir(QString::fromLocal8Bit(qgetenv("JELLYFIN_TEST_OWNED_ROOT"))).filePath("arm-fixture-XXXXXX"));
+    initializeWithFile(file); QByteArray response;
+    check(graph_->restoreGrant(encodeGrant(grant_), true, response));
+    response.clear(); check(childPermit(response) && gateAllowsRestore());
+    check(graph_->session_->child->load() && state_->dispatches == 1);
+  }
+  void failedCleanupReadinessRejectsPermit()
+  {
+    QTemporaryFile file(QDir(QString::fromLocal8Bit(qgetenv("JELLYFIN_TEST_OWNED_ROOT"))).filePath("arm-fixture-XXXXXX"));
+    initializeWithFile(file);
+    const void* control = graph_->endpoints_->token(EndpointRole::Control);
+    check(control); state_->failCleanupCheck = true; QByteArray response;
+    check(!graph_->restoreGrant(encodeGrant(grant_), true, response));
+    check(!state_->failCleanupCheck && !state_->endpointLive && response.isEmpty());
+    const auto key = graph_->player_->m_nativeRestore.key;
+    const auto& s = *graph_->session_;
+    check(key.host && key.core && key.revision && key.attempt && s.host == key.host &&
+          s.core == key.core && s.intentRevision == key.revision && s.attempt == key.attempt);
+    check(s.gate->canceled());
+    check(!s.child->control(control, permit(), response) && response.isEmpty() && !gateAllowsRestore());
+    check(!s.child->load() && !s.adapter->load(file.fileName()) && state_->dispatches == 0);
+  }
+  void playerBindingFailureRetainsUnknown()
+  {
+    initialize(); bool hookCalled = false; PlaybackNativeReceipts::Key actual;
+    setGraphBindHookForTest([&] {
+      hookCalled = true; actual = graph_->player_->m_nativeRestore.key;
+      check(actual.host && actual.core && actual.revision && actual.attempt);
+      graph_->player_->revokeNativeReceiptHost();
+    });
+    QByteArray response;
+    const bool granted = graph_->restoreGrant(encodeGrant(grant_), true, response);
+    setGraphBindHookForTest({});
+    check(hookCalled && !granted && response.isEmpty() && !graph_->player_->m_healthyStopLease);
+    const auto& s = *graph_->session_;
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    check(s.host == actual.host && s.core == actual.core && s.intentRevision == actual.revision &&
+          s.attempt == actual.attempt && TestRetirementClaim::matches(claim, actual.host, actual.core,
+                                                                     actual.revision, actual.attempt));
+    check(claim && !claim->eligible() && !prepared_->closedAck() && state_->dispatches == 0);
+    check(!prepared_->beginRestoreFailure(HealthyRestart::FailureCause::OwnershipLost));
+    check(prepared_->pollRestoreFailure() == PreparedGraph::FailureProgress::Unknown);
+    check(state_->dispatches == 0 && !graph_->restoreLoad() && !graph_->restoreSeek());
   }
   void replyNoLoad()
   {
@@ -293,13 +363,17 @@ class TestHealthyGraphArm {
   }
   void reentrantCancelAfterArm()
   {
-    initialize(); state_->cancelOnArm = true; QByteArray response;
+    QTemporaryFile file(QDir(QString::fromLocal8Bit(qgetenv("JELLYFIN_TEST_OWNED_ROOT"))).filePath("arm-fixture-XXXXXX"));
+    initializeWithFile(file); state_->cancelOnArm = true; QByteArray response;
     check(graph_->restoreGrant(encodeGrant(grant_), true, response) && state_->cancelCalled);
     GrantAccepted accepted;
     check(decodeGrantAccepted(response, expectedAcceptance(), accepted));
     const auto key = graph_->player_->m_nativeRestore.key;
     check(accepted.host == key.host && accepted.core == key.core &&
           accepted.intentRevision == key.revision && accepted.attempt == key.attempt);
+    QByteArray permitResponse;
+    check(!childPermit(permitResponse) && permitResponse.isEmpty() && !gateAllowsRestore());
+    check(!graph_->session_->child->load() && !graph_->session_->adapter->load(file.fileName()) && state_->dispatches == 0);
     settleNoLoad(state_->cancelResponse);
     CancelResult result;
     const CancelResult expected{grant_.run, 7, grant_.grant, grant_.revision, 1,
@@ -396,6 +470,9 @@ public:
   static void run()
   {
     { TestHealthyGraphArm test; test.cancelBeforeGrant(); }
+    { TestHealthyGraphArm test; test.normalPermitBaseline(); }
+    { TestHealthyGraphArm test; test.failedCleanupReadinessRejectsPermit(); }
+    { TestHealthyGraphArm test; test.playerBindingFailureRetainsUnknown(); }
     { TestHealthyGraphArm test; test.deadlineAfterArm(); }
     { TestHealthyGraphArm test; test.foreignClaimPreventsArm(); }
     { TestHealthyGraphArm test; test.failureCrossesInstallation(); }
