@@ -42,6 +42,7 @@ public:
   IoProgress begin(HANDLE pipe, bool read, const void* data, DWORD size,
                    ULONGLONG deadline);
   IoProgress beginTrackedRead(HANDLE pipe, DWORD size, ULONGLONG deadline);
+  std::uint64_t operation() const { return operation_; }
   std::shared_ptr<const Settlement> settlement() const { return settlement_; }
   bool consumeSettlement(std::uint64_t operation);
   IoProgress poll();
