@@ -1,8 +1,8 @@
 #include "player/PlayerComponent.h"
 #include "player_test_cache.h"
-#include "fixture_restart/RestartBroker.h"
-#include "fixture_restart/RestartWire.h"
-#include "fixture_restart/frame_capture.h"
+#include "RestartBroker.h"
+#include "RestartWire.h"
+#include "frame_capture.h"
 #include <QCryptographicHash>
 #include <QPainter>
 #include <QThread>
