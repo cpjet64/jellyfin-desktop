@@ -20,17 +20,30 @@ bool FixtureGraph::installRetirementClaim()
 {
   const auto containment = containment_.lock();
   if (!dispatcher_ || dispatcher_->thread() != QThread::currentThread() || !containment ||
-      !containment->intact() || !player_ || !owner_ || std::atomic_load(&access_->intentClaim)) return false;
-  try {
-    auto claim = std::make_shared<RetirementClaim>(slot_->generation());
-    std::atomic_store(&access_->intentClaim, claim);
-    if (access_->revoked.load()) claim->revoke();
-    if (!claim->open() || !player_->healthyInstallRetirementClaim(claim, slot_->generation())) {
-      claim->revoke(); owner_->invalidate(); return false;
+      !containment->intact() || access_->phase.load() != AccessPhase::Normal || access_->revoked.load() ||
+      !player_ || !owner_ || std::atomic_load(&access_->intentClaim)) return false;
+  std::shared_ptr<RetirementClaim> claim;
+  bool installed = false;
+  const auto fail = [&] {
+    if (claim) claim->revoke();
+    if (claim && !installed) {
+      auto expected = claim;
+      std::atomic_compare_exchange_strong(&access_->intentClaim, &expected, std::shared_ptr<RetirementClaim>{});
     }
-    if (!access_->revoked.load()) return true;
-    claim->revoke(); owner_->invalidate(); return false;
-  } catch (...) { owner_->invalidate(); return false; }
+    // An armed, still-owned restore must remain available for checked cleanup.
+    if (!player_->m_nativeRestore.armed || !player_->restoreOwnsCurrent()) owner_->invalidate();
+    return false;
+  };
+  try {
+    claim = std::make_shared<RetirementClaim>(slot_->generation());
+    if (access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) return fail();
+    std::atomic_store(&access_->intentClaim, claim);
+    if (access_->phase.load() != AccessPhase::Normal || access_->revoked.load() || !claim->open()) return fail();
+    installed = player_->healthyInstallRetirementClaim(claim, slot_->generation());
+    if (!installed) return fail();
+    if (access_->phase.load() == AccessPhase::Normal && !access_->revoked.load() && claim->open()) return true;
+    return fail();
+  } catch (...) { return fail(); }
 }
 bool FixtureGraph::requestRetirement()
 {

@@ -19,5 +19,7 @@ public:
   quint64 host = 0, core = 0, intentRevision = 0, attempt = 0;
   quint64 run = 0, launch = 0, cancelSequence = 0, cancelRevision = 0;
   QByteArray digest;
+  HealthyRestart::FailureCause firstFailure = HealthyRestart::FailureCause::None;
+  bool armInFlight = false;
 };
 }

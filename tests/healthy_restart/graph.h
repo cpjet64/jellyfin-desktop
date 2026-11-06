@@ -2,6 +2,8 @@
 #include "async_stop.h"
 #include "lifetime_qt.h"
 #include "owner.h"
+#include "failure_cause.h"
+#include "fixture_restart/RestartChild.h"
 #include <QPointer>
 #include <atomic>
 #include <memory>
@@ -28,6 +30,7 @@ class FixtureGraph;
 class GraphRetirement;
 class GraphAccessOps;
 class ChildSession;
+enum class AccessPhase { Normal, CleanupOnly, Closed, Contained };
 struct ClosedAck {
   const std::uint64_t generation, coreGeneration, closureGeneration, revision, attempt;
   const std::int64_t completedAt;
@@ -36,6 +39,7 @@ struct ClosedAck {
 // Only the graph writes this pointer; queued work reads it on the GUI thread.
 // The access record remains alive after the graph itself has been destroyed.
 struct GraphAccess {
+  std::atomic<AccessPhase> phase{AccessPhase::Normal};
   std::atomic<FixtureGraph*> graph{nullptr};
   std::thread::id guiThread;
   QThread* guiQtThread = nullptr;
@@ -53,6 +57,9 @@ struct GraphAccess {
 
 class PreparedGraph {
 public:
+  enum class FailureProgress { Pending, Qualified, Unknown };
+  bool beginRestoreFailure(HealthyRestart::FailureCause cause);
+  FailureProgress pollRestoreFailure();
   const std::shared_ptr<Containment>& containment() const { return containment_; }
   const std::shared_ptr<Slot>& slot() const { return slot_; }
   FixtureGraph* graphOnGuiThread() const noexcept;
@@ -108,17 +115,21 @@ private:
   void invalidate() noexcept;
   bool sessionReady(bool source) const;
   bool cleanupSessionReady() const;
+  bool failureCleanupReady() const;
   bool sourceLoad(const QString& path, bool paused);
   bool sourceFreeze(QByteArray& frame);
   bool sourceBeginStop(const QByteArray& control);
   HealthyRestart::AsyncStop::Status sourcePollStop(QByteArray& response);
   bool restoreInitialize(const QString& path);
+  FixtureRestart::RestartChild::Actions restoreActions(const QString& path, quint64 launchId, const QByteArray& digest);
   bool restoreGrant(const QByteArray& frame, bool eof, QByteArray& response);
   bool restoreControl(const QByteArray& frame, QByteArray& response);
   bool restorePollCancellation(QByteArray& response);
   bool restoreLoad();
   bool restoreSeek();
   bool restoreRevoke();
+  bool beginRestoreFailure(HealthyRestart::FailureCause cause);
+  PreparedGraph::FailureProgress pollRestoreFailure();
   struct NativeCell { std::shared_ptr<NativeTeardownState> state; };
   std::shared_ptr<Slot> slot_;
   std::shared_ptr<GraphAccess> access_;

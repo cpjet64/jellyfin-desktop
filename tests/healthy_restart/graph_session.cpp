@@ -5,6 +5,7 @@
 #include "module_endpoints.h"
 #include "player/PlayerComponent.h"
 #include <QRandomGenerator>
+#include <QScopedValueRollback>
 #include <QThread>
 
 namespace HealthyRetirement {
@@ -18,6 +19,7 @@ QByteArray digestHex(const HealthyModuleIdentity::Digest& value)
 {
   return QByteArray(reinterpret_cast<const char*>(value.data()), int(value.size())).toHex();
 }
+bool closeFailedGate(void*) { return true; }
 }
 FixtureGraph::Session::Session() = default;
 FixtureGraph::Session::~Session() = default;
@@ -26,13 +28,15 @@ bool FixtureGraph::sessionReady(bool source) const
 {
   const auto containment = containment_.lock();
   if (!dispatcher_ || dispatcher_->thread() != QThread::currentThread() || !containment ||
-      !containment->intact() || !player_ || !module_ || !endpoints_ || retirementRequested_) return false;
+      !containment->intact() || access_->phase.load() != AccessPhase::Normal ||
+      !player_ || !module_ || !endpoints_ || retirementRequested_) return false;
   HealthyModuleIdentity::LaunchBinding binding;
   try {
     const auto now = clock_();
     if (now < lastSessionNow_ || now >= normalDeadline_) return false;
     lastSessionNow_ = now;
-    return module_->stillValid(slot_->generation()) &&
+    return access_->phase.load() == AccessPhase::Normal && containment->intact() &&
+        module_->stillValid(slot_->generation()) &&
         module_->launchBinding(slot_->generation(), binding) &&
         binding.role == (source ? HealthyModuleIdentity::LaunchRole::Source : HealthyModuleIdentity::LaunchRole::Restore) &&
         endpoints_->token(HealthyModuleIdentity::EndpointRole::Control) &&
@@ -44,15 +48,32 @@ bool FixtureGraph::cleanupSessionReady() const
 {
   const auto containment = containment_.lock();
   if (!dispatcher_ || dispatcher_->thread() != QThread::currentThread() || !containment || !containment->intact() ||
+      access_->phase.load() != AccessPhase::Normal || access_->revoked.load() ||
       !module_ || !endpoints_ || retirementRequested_) return false;
   try {
     HealthyModuleIdentity::LaunchBinding binding;
     const auto now = clock_();
-    if (now < lastSessionNow_ || now >= deadline_ || !containment->intact() || !module_->stillValid(slot_->generation()) ||
+    if (now < lastSessionNow_ || now >= deadline_ || !containment->intact() || access_->revoked.load() ||
+        access_->phase.load() != AccessPhase::Normal || !module_->stillValid(slot_->generation()) ||
         !module_->launchBinding(slot_->generation(), binding) ||
         binding.role != HealthyModuleIdentity::LaunchRole::Restore ||
         !endpoints_->token(HealthyModuleIdentity::EndpointRole::Control) ||
         !endpoints_->token(HealthyModuleIdentity::EndpointRole::Ack)) return false;
+    lastSessionNow_ = now;
+    return true;
+  } catch (...) { return false; }
+}
+
+bool FixtureGraph::failureCleanupReady() const
+{
+  const auto containment = containment_.lock();
+  if (!dispatcher_ || dispatcher_->thread() != QThread::currentThread() || !containment || !containment->intact() ||
+      !module_ || !player_ || !session_ || !session_->gate || access_->phase.load() != AccessPhase::CleanupOnly) return false;
+  try {
+    const auto now = clock_();
+    if (now < lastSessionNow_ || now >= deadline_ || !containment->intact() || access_->revoked.load() ||
+        access_->phase.load() != AccessPhase::CleanupOnly ||
+        !module_->stillValid(slot_->generation())) return false;
     lastSessionNow_ = now;
     return true;
   } catch (...) { return false; }
@@ -115,6 +136,78 @@ HealthyRestart::AsyncStop::Status FixtureGraph::sourcePollStop(QByteArray& respo
   response.clear(); invalidate(); return HealthyRestart::AsyncStop::Status::Failed;
 }
 
+FixtureRestart::RestartChild::Actions FixtureGraph::restoreActions(
+    const QString& path, quint64 launchId, const QByteArray& digest)
+{
+  FixtureRestart::RestartChild::Actions actions;
+  actions.now = clock_;
+  actions.armActual = [this] {
+    using Result = FixtureRestart::RestartChild::ArmResult;
+    const auto* grant = session_->gate->acceptedGrant();
+    if (!grant || !sessionReady(false))
+      return session_->gate->canceled() ? session_->adapter->armActual() : Result{};
+    const auto binding = *grant;
+    session_->binding = binding;
+    Result result;
+    {
+      QScopedValueRollback<bool> inFlight(session_->armInFlight, true);
+      result = session_->adapter->armActual();
+    }
+    if (result.status != Result::Status::Armed) return result;
+    session_->host = result.identity.host; session_->core = result.identity.core;
+    session_->intentRevision = result.identity.intentRevision; session_->attempt = result.identity.attempt;
+    if (session_->firstFailure != HealthyRestart::FailureCause::None) {
+      beginRestoreFailure(session_->firstFailure);
+      return Result{};
+    }
+    const bool claimInstalled = installRetirementClaim();
+      if (!claimInstalled && player_->m_healthyStopLease)
+      player_->m_healthyStopLease->revoke();
+    if (!claimInstalled) return Result{}; // Actual identity remains in Session for containment.
+      const bool retained = cleanupSessionReady();
+    if (session_->firstFailure != HealthyRestart::FailureCause::None) {
+      beginRestoreFailure(session_->firstFailure);
+      return Result{};
+    }
+      if (!retained) {
+        if (session_->gate->canceled()) player_->m_healthyStopLease->enterCleanup(slot_->generation());
+        return result; // Preserve actual arm; the caller still checks endpoint validity.
+      }
+      if (session_->gate->canceled()) player_->m_healthyStopLease->enterCleanup(slot_->generation());
+    return result;
+  };
+  actions.beginCleanup = [this](quint64 sequence, quint64 revision) {
+    if (!session_ || !session_->gate || !session_->gate->canceled() || !player_ ||
+        !sequence || revision <= session_->binding.revision || !cleanupSessionReady()) return false;
+    return session_->adapter && session_->adapter->beginCleanup(sequence, revision, deadline_);
+  };
+  actions.pollCleanup = [this] {
+    using Result = FixtureRestart::RestartChild::CleanupResult;
+    Result result;
+    if (!session_ || !player_) { result.reason = FixtureRestart::CancelFailure::CleanupUnconfirmed; return result; }
+    result.identity = {session_->host, session_->core, session_->intentRevision, session_->attempt};
+    if (!cleanupSessionReady()) {
+      result.reason = FixtureRestart::CancelFailure::CleanupUnconfirmed; return result;
+    }
+    if (!session_->adapter) { result.reason = FixtureRestart::CancelFailure::CleanupUnconfirmed; return result; }
+    result = session_->adapter->pollCleanup();
+    if (!cleanupSessionReady()) {
+      result.status = Result::Status::Failed;
+      result.reason = FixtureRestart::CancelFailure::CleanupUnconfirmed;
+      return result;
+    }
+    return result;
+  };
+  actions.load = [this, path, launchId, digest] {
+    const auto& binding = session_->binding;
+    if (!player_->m_restoreGate && !player_->healthyBindRestoreGate(session_->gate, binding.run, launchId,
+        binding.grant, binding.revision, digest, clock_)) return false;
+    return sessionReady(false) && session_->adapter->load(path) && sessionReady(false);
+  };
+  actions.seek = [] { return false; }; // Held for renderer-issued target-arm capability.
+  return actions;
+}
+
 bool FixtureGraph::restoreInitialize(const QString& path)
 {
   using namespace HealthyModuleIdentity;
@@ -133,55 +226,8 @@ bool FixtureGraph::restoreInitialize(const QString& path)
     session_->gate = std::make_shared<FixtureRestart::ChildGate>(grantChannel, normalDeadline_);
     session_->adapter = std::make_unique<FixtureRestartAdapter>(*player_, *session_->gate, freshId(), freshId(),
                                                                 launchId, digest, clock_);
-    if (!session_->adapter->bindCleanupGate(session_->gate)) { invalidate(); return false; }
-    FixtureRestart::RestartChild::Actions actions;
-    actions.now = clock_;
-    actions.armActual = [this] {
-      using Result = FixtureRestart::RestartChild::ArmResult;
-      const auto* grant = session_->gate->acceptedGrant();
-      if (!grant || !sessionReady(false))
-        return session_->gate->canceled() ? session_->adapter->armActual() : Result{};
-      const auto binding = *grant;
-      const auto result = session_->adapter->armActual();
-      if (result.status != Result::Status::Armed) return result;
-      session_->binding = binding;
-      session_->host = result.identity.host; session_->core = result.identity.core;
-      session_->intentRevision = result.identity.intentRevision; session_->attempt = result.identity.attempt;
-      const bool claimInstalled = installRetirementClaim();
-      if ((!claimInstalled || session_->gate->canceled()) && player_->m_healthyStopLease)
-        player_->m_healthyStopLease->revoke();
-      if (!claimInstalled) return Result{}; // Actual identity remains in Session for containment.
-      return result;
-    };
-    actions.beginCleanup = [this](quint64 sequence, quint64 revision) {
-      if (!session_ || !session_->gate || !session_->gate->canceled() || !player_ ||
-          !sequence || revision <= session_->binding.revision || !cleanupSessionReady()) return false;
-      return session_->adapter && session_->adapter->beginCleanup(sequence, revision, deadline_);
-    };
-    actions.pollCleanup = [this] {
-      using Result = FixtureRestart::RestartChild::CleanupResult;
-      Result result;
-      if (!session_ || !player_) { result.reason = FixtureRestart::CancelFailure::CleanupUnconfirmed; return result; }
-      result.identity = {session_->host, session_->core, session_->intentRevision, session_->attempt};
-      if (!cleanupSessionReady()) {
-        result.reason = FixtureRestart::CancelFailure::CleanupUnconfirmed; return result;
-      }
-      if (!session_->adapter) { result.reason = FixtureRestart::CancelFailure::CleanupUnconfirmed; return result; }
-      result = session_->adapter->pollCleanup();
-      if (!cleanupSessionReady()) {
-        result.status = Result::Status::Failed;
-        result.reason = FixtureRestart::CancelFailure::CleanupUnconfirmed;
-        return result;
-      }
-      return result;
-    };
-    actions.load = [this, path, launchId, digest] {
-      const auto& binding = session_->binding;
-      if (!player_->m_restoreGate && !player_->healthyBindRestoreGate(session_->gate, binding.run, launchId,
-          binding.grant, binding.revision, digest, clock_)) return false;
-      return sessionReady(false) && session_->adapter->load(path) && sessionReady(false);
-    };
-    actions.seek = [] { return false; }; // Held for renderer-issued target-arm capability.
+    if (!session_->adapter->bindCleanupGate(session_->gate, deadline_)) { invalidate(); return false; }
+    auto actions = restoreActions(path, launchId, digest);
     session_->child = std::make_unique<FixtureRestart::RestartChildPlayer>(*session_->gate, grantChannel,
         endpoints_->token(EndpointRole::Control), launch.run, launchId, digest, std::move(actions));
     if (sessionReady(false)) return true;
@@ -197,6 +243,7 @@ bool FixtureGraph::restoreGrant(const QByteArray& frame, bool eof, QByteArray& r
   try {
     if (session_->child->grant(endpoints_->token(HealthyModuleIdentity::EndpointRole::Grant),
                                frame, clock_(), eof, response)) {
+      if (session_->firstFailure != HealthyRestart::FailureCause::None) { response.clear(); return false; }
       const auto now = clock_();
       FixtureRestart::GrantAccepted accepted;
       const FixtureRestart::GrantAccepted expected{session_->run, session_->launch, session_->binding.grant,
@@ -213,7 +260,8 @@ bool FixtureGraph::restoreGrant(const QByteArray& frame, bool eof, QByteArray& r
           !player_->m_nativeRestore.loadAttempted && !player_->m_nativeReceipts.snapshot().key.attempt &&
           !player_->m_lastReceiptAttempt &&
           FixtureRestart::decodeCancelNoArm(response, noArm);
-      if ((armed || unarmed) && now >= lastSessionNow_ && now < deadline_ && module_ &&
+      if ((armed || unarmed) && access_->phase.load() == AccessPhase::Normal && !access_->revoked.load() &&
+          now >= lastSessionNow_ && now < deadline_ && module_ &&
           module_->stillValid(slot_->generation()) && endpoints_ &&
           endpoints_->token(HealthyModuleIdentity::EndpointRole::Grant) &&
           endpoints_->token(HealthyModuleIdentity::EndpointRole::Ack)) {
@@ -222,7 +270,7 @@ bool FixtureGraph::restoreGrant(const QByteArray& frame, bool eof, QByteArray& r
       }
     }
   } catch (...) {}
-  response.clear(); invalidate(); return false;
+  response.clear(); return false;
 }
 bool FixtureGraph::restoreControl(const QByteArray& frame, QByteArray& response)
 {
@@ -239,7 +287,7 @@ bool FixtureGraph::restoreControl(const QByteArray& frame, QByteArray& response)
     if (session_->child->control(endpoints_->token(HealthyModuleIdentity::EndpointRole::Control), frame, response) &&
         available()) return true;
   } catch (...) {}
-  response.clear(); invalidate(); return false;
+  response.clear(); return false;
 }
 bool FixtureGraph::restorePollCancellation(QByteArray& response)
 {
@@ -248,7 +296,7 @@ bool FixtureGraph::restorePollCancellation(QByteArray& response)
     if (session_ && session_->child && cleanupSessionReady() && session_->child->pollCancellation(response) &&
         cleanupSessionReady()) return true;
   } catch (...) {}
-  response.clear(); invalidate(); return false;
+  response.clear(); return false;
 }
 bool FixtureGraph::restoreLoad()
 {
@@ -259,6 +307,34 @@ bool FixtureGraph::restoreSeek()
 {
   return false;
 }
+bool FixtureGraph::beginRestoreFailure(HealthyRestart::FailureCause cause)
+{
+  if (cause == HealthyRestart::FailureCause::None || !session_ || !session_->gate || !player_ ||
+      access_->phase.load() != AccessPhase::CleanupOnly) return false;
+  if (session_->firstFailure == HealthyRestart::FailureCause::None) session_->firstFailure = cause;
+  if (!session_->gate->canceled() && !session_->gate->cancel(closeFailedGate, nullptr)) return false;
+  const auto claim = std::atomic_load(&access_->intentClaim);
+  if (claim != player_->m_healthyStopLease) return false;
+  if (!failureCleanupReady()) return false;
+  if (!player_->m_nativeRestore.armed) return session_->armInFlight;
+  return player_->beginNativeRestoreCleanup(session_->gate, std::nullopt, deadline_, session_->firstFailure);
+}
+
+PreparedGraph::FailureProgress FixtureGraph::pollRestoreFailure()
+{
+  using Progress = PreparedGraph::FailureProgress;
+  using Status = PlayerComponent::RestoreCleanupStatus;
+  if (!failureCleanupReady() || session_->firstFailure == HealthyRestart::FailureCause::None) return Progress::Unknown;
+  if (!player_->m_nativeRestore.armed) return session_->armInFlight ? Progress::Pending : Progress::Unknown;
+  if (!player_->m_restoreCleanup.claimed && !beginRestoreFailure(session_->firstFailure)) return Progress::Unknown;
+  const auto status = player_->pollNativeRestoreCancellation();
+  const auto& state = player_->m_restoreCleanup;
+  if (!failureCleanupReady() || state.origin != HealthyRestart::RestoreCleanupState::Origin::InternalFailure ||
+      state.firstFailure != session_->firstFailure || !player_->restoreCleanupOwnsCurrent()) return Progress::Unknown;
+  return status == Status::Pending ? Progress::Pending :
+      status == Status::NoLoad || status == Status::Stopped ? Progress::Qualified : Progress::Unknown;
+}
+
 bool FixtureGraph::restoreRevoke()
 {
   if (!dispatcher_ || dispatcher_->thread() != QThread::currentThread()) return false;
