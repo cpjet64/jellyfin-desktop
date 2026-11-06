@@ -22,6 +22,8 @@ class ChildEndpoints final {
 public:
 #if defined(_WIN32) && defined(HEALTHY_ENDPOINT_TESTING)
   void invalidateAdmissionForTest() noexcept;
+  void revokeAdmissionForTest() noexcept;
+  void setAdmissionBeforeContainFlagHookForTest(void (*hook)(void*) noexcept, void* context) noexcept;
   void setAdmissionBindHookForTest(void (*hook)(void*) noexcept, void* context) noexcept;
   void setAdmissionBeforePublishHookForTest(void (*hook)(void*) noexcept, void* context) noexcept;
   struct TestOperations {

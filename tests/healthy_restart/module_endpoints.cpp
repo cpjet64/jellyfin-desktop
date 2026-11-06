@@ -23,6 +23,8 @@ struct ChildEndpoints::Operations {
   void* testBindContext = nullptr;
   void (*testBeforePublishHook)(void*) noexcept = nullptr;
   void* testBeforePublishContext = nullptr;
+  void (*testBeforeContainFlagHook)(void*) noexcept = nullptr;
+  void* testBeforeContainFlagContext = nullptr;
 #endif
 };
 #endif
@@ -57,7 +59,12 @@ struct ChildEndpoints::State {
       claim = std::atomic_load(&admissionClaim);
     }
     if (claim) { if (contain) claim->contain(); else claim->revoke(); }
+#if defined(_WIN32) && defined(HEALTHY_ENDPOINT_TESTING)
+    if (contain && operations.testOnly && operations.testBeforeContainFlagHook)
+      operations.testBeforeContainFlagHook(operations.testBeforeContainFlagContext);
+#endif
     admissionState.fetch_or(Lost | (contain ? Contained : 0));
+    if (contain) if (const auto published = std::atomic_load(&admissionClaim)) published->contain();
   }
 #ifdef _WIN32
   Operations operations;
@@ -243,6 +250,16 @@ bool ChildEndpoints::admissionSnapshot(std::uint64_t generation, const void* con
 void ChildEndpoints::invalidateAdmissionForTest() noexcept
 {
   if (state_ && state_->operations.testOnly) state_->enterContainment();
+}
+void ChildEndpoints::revokeAdmissionForTest() noexcept
+{
+  if (state_ && state_->operations.testOnly) state_->loseAdmission();
+}
+void ChildEndpoints::setAdmissionBeforeContainFlagHookForTest(void (*hook)(void*) noexcept, void* context) noexcept
+{
+  if (state_ && state_->operations.testOnly) {
+    state_->operations.testBeforeContainFlagHook = hook; state_->operations.testBeforeContainFlagContext = context;
+  }
 }
 void ChildEndpoints::setAdmissionBindHookForTest(void (*hook)(void*) noexcept, void* context) noexcept
 {

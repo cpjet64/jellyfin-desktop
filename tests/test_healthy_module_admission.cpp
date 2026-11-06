@@ -200,6 +200,32 @@ void containmentBeforeClaimPublication()
   CHECK(claim->contained() && !claim->open());
   CHECK(!endpoints->admissionSnapshot(7, control, ack));
 }
+
+struct PublicationRace {
+  ChildEndpoints* endpoints;
+  std::shared_ptr<RetirementClaim> claim;
+  bool rejected = false;
+};
+void publishDuringContainment(void* context) noexcept
+{
+  auto* race = static_cast<PublicationRace*>(context);
+  race->rejected = !race->endpoints->bindAdmissionClaim(race->claim, 7);
+}
+
+void containmentAfterOrdinaryLossRetainsCause()
+{
+  moduleLive = endpointLive = true;
+  auto claim = std::make_shared<RetirementClaim>(7);
+  auto module = VerifiedModule::forAccessorTest(7, 42, validModule, nullptr);
+  const EndpointInput input[] = {{EndpointRole::Grant, 1}, {EndpointRole::Control, 2}, {EndpointRole::Ack, 3}};
+  auto endpoints = ChildEndpoints::createForTest(module, 7, 100, EndpointMode::Restore, input, operations());
+  CHECK(endpoints);
+  endpoints->revokeAdmissionForTest();
+  PublicationRace race{endpoints.get(), claim};
+  endpoints->setAdmissionBeforeContainFlagHookForTest(publishDuringContainment, &race);
+  endpoints->invalidateAdmissionForTest();
+  CHECK(race.rejected && claim->contained() && !claim->open());
+}
 }
 
 int main()
@@ -212,4 +238,5 @@ int main()
   cancellationLossAndEmptyAbort();
   bindingLossDoesNotWaitOrPublish();
   containmentBeforeClaimPublication();
+  containmentAfterOrdinaryLossRetainsCause();
 }
