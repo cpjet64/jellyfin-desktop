@@ -73,7 +73,7 @@ bool FrameAcceptance::baseline(Capture record)
     const auto index = decodeFrame(*record);
     if (!index || *index > 2)
         return false;
-    baseline_ = std::move(record);
+    baseline_ = std::make_shared<const FrameRecord>(*record);
     return true;
 }
 
@@ -97,7 +97,7 @@ void FrameAcceptance::capture(Capture record)
     const auto index = decodeFrame(*record);
     const auto base = decodeFrame(*baseline_);
     if (index && base && *index != *base && std::abs(*index * 1000 - checkpointMs_ * 30) <= 3000)
-        target_ = std::move(record);
+        target_ = std::make_shared<const FrameRecord>(*record);
 }
 
 void FrameAcceptance::acknowledge(const FrameKey &key, bool seek, bool restart, bool snapshot)

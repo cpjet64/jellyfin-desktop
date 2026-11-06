@@ -111,8 +111,26 @@ static void orderingAndIdentity()
     assert(!a.accepted());
 }
 
+static void mutableAliasCannotChangeEvidence()
+{
+    FrameAcceptance a;
+    auto base = frame(0, 1);
+    assert(a.baseline(base));
+    base->rgba = frame(90)->rgba;
+    assert(a.arm(key, 1, 3000));
+    auto target = frame(90);
+    a.capture(target);
+    target->rgba = frame(0)->rgba;
+    target->key.process++;
+    a.acknowledge(key, true, true, true);
+    assert(a.accepted());
+    assert(decodeFrame(*a.target()) == 90);
+    assert(a.target()->key == key);
+}
+
 int main()
 {
     decoderCases();
     orderingAndIdentity();
+    mutableAliasCannotChangeEvidence();
 }
