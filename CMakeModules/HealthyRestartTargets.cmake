@@ -24,7 +24,8 @@ function(healthy_restart_mpvqt)
     "${_mpvqt_src}/mpvabstractitem.cpp" "${_mpvqt_src}/mpvcontroller.cpp"
     "${_mpvqt_src}/mpvrenderer-wrapper.cpp" "${_mpvqt_src}/frame_capture.cpp"
     "${_mpvqt_src}/frame_acceptance.cpp" "${_mpvqt_src}/lifetime.cpp"
-    "${_mpvqt_src}/lifetime_qt.cpp" "${_mpvqt_src}/owner.cpp" "${_mpvqt_src}/owner_qt.cpp")
+    "${_mpvqt_src}/lifetime_qt.cpp" "${_mpvqt_src}/owner.cpp" "${_mpvqt_src}/owner_qt.cpp"
+    "${_mpvqt_src}/closure.cpp" "${_mpvqt_src}/closure_native.cpp")
   target_compile_definitions(HealthyRestartMpvQt PUBLIC MPVQT_EXTERNAL_EVENTS)
   target_include_directories(HealthyRestartMpvQt PUBLIC "${_mpvqt_src}" "${CMAKE_CURRENT_SOURCE_DIR}")
   target_link_libraries(HealthyRestartMpvQt PUBLIC Qt6::Quick Qt6::Core Qt6::Gui Threads::Threads ${MPV_LIBRARY})
@@ -74,6 +75,17 @@ function(healthy_restart_core)
     endif()
   endforeach()
   add_library(HealthyRestartCore STATIC ${copied_sources})
+  target_sources(HealthyRestartCore PRIVATE
+    "${_healthy_copy}/mpvqt/closure_player.cpp" "${_healthy_copy}/mpvqt/closure_wake.cpp"
+    "${_healthy_copy}/mpvqt/closure_wake_native.cpp" "${_healthy_copy}/mpvqt/async_stop.cpp"
+    "${_healthy_copy}/mpvqt/async_stop_player.cpp" "${_healthy_copy}/mpvqt/module_identity.cpp"
+    "${_healthy_copy}/mpvqt/module_identity_win.cpp" "${_healthy_copy}/mpvqt/module_identity_import.cpp"
+    "${_healthy_copy}/mpvqt/module_import_prepare.cpp" "${_healthy_copy}/mpvqt/module_gate.cpp"
+    "${_healthy_copy}/mpvqt/module_channel.cpp")
+  if(WIN32)
+    target_sources(HealthyRestartCore PRIVATE "${_healthy_copy}/fixture_restart/WindowsFrameReader.cpp"
+      "${_healthy_copy}/fixture_restart/WindowsRestartIo.cpp")
+  endif()
   target_compile_definitions(HealthyRestartCore PUBLIC MPVQT_EXTERNAL_EVENTS)
   target_include_directories(HealthyRestartCore BEFORE PUBLIC "${_healthy_copy}"
     "${_healthy_copy}/player" "${_healthy_copy}/core" "${_healthy_copy}/input"
@@ -97,6 +109,19 @@ endfunction()
 function(healthy_restart_tests)
   add_executable(test_healthy_restart EXCLUDE_FROM_ALL healthy_restart_held.cpp)
   target_link_libraries(test_healthy_restart PRIVATE HealthyRestartCore Qt6::Core)
+  add_executable(healthy_async_stop_player test_healthy_async_stop_player.cpp)
+  target_link_libraries(healthy_async_stop_player PRIVATE HealthyRestartCore Qt6::Test)
+  add_test(NAME healthy_async_stop_player COMMAND healthy_async_stop_player)
+  set_tests_properties(healthy_async_stop_player PROPERTIES TIMEOUT 60)
+  add_executable(healthy_async_stop_source "${CMAKE_SOURCE_DIR}/tests/healthy_restart/test_async_stop_source.cpp"
+    "${_healthy_copy}/fixture_restart/RestartSource.cpp" "${_healthy_copy}/fixture_restart/RestartWire.cpp"
+    "${_healthy_copy}/fixture_restart/RestartBroker.cpp" "${_healthy_copy}/fixture_restart/FixtureEvidence.cpp"
+    "${_healthy_copy}/player/PlaybackCheckpoint.cpp" "${_healthy_copy}/player/PlaybackIntent.cpp")
+  target_include_directories(healthy_async_stop_source BEFORE PRIVATE "${_healthy_copy}"
+    "${_healthy_copy}/fixture_restart" "${_healthy_copy}/mpvqt")
+  target_link_libraries(healthy_async_stop_source PRIVATE Qt6::Core)
+  add_test(NAME healthy_async_stop_source COMMAND healthy_async_stop_source)
+  set_tests_properties(healthy_async_stop_source PROPERTIES TIMEOUT 60)
   foreach(name IN ITEMS player_native_receipts player_restore_cleanup player_restore_observation)
     add_executable(healthy_${name} "test_${name}.cpp")
     target_link_libraries(healthy_${name} PRIVATE HealthyRestartCore Qt6::Test)

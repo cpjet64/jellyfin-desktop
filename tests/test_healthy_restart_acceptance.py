@@ -19,7 +19,9 @@ OPTIONS = {'HEALTHY_RESTART_DIAGNOSTIC_ONLY': 'ON', 'PLAYER_INTENT_DIAGNOSTIC_ON
 PATCHES = ('patches/mpvqt/0001-event-ownership.patch',
            'patches/healthy-restart/0001-render-capture.patch',
            'patches/healthy-restart/0002-player-event-order.patch',
-           'patches/healthy-restart/0003-render-retirement.patch')
+           'patches/healthy-restart/0003-render-retirement.patch',
+           'patches/healthy-restart/0004-async-teardown.patch',
+           'patches/healthy-restart/0005-async-stop.patch')
 
 
 class HealthyRestartAcceptance(unittest.TestCase):
@@ -137,7 +139,7 @@ class HealthyRestartWrapper(unittest.TestCase):
             mpvqt.mkdir(parents=True)
             for name in ('mpvabstractitem.cpp', 'mpvcontroller.cpp', 'frame_capture.cpp',
                          'frame_acceptance.cpp', 'lifetime.cpp', 'lifetime_qt.cpp',
-                         'owner.cpp', 'owner_qt.cpp'):
+                         'owner.cpp', 'owner_qt.cpp', 'closure.cpp', 'closure_native.cpp'):
                 (mpvqt / name).write_text('// configure-only source\n', encoding='utf-8')
             targets = ROOT / 'CMakeModules/HealthyRestartTargets.cmake'
             project = ('cmake_minimum_required(VERSION 3.20)\nproject(OwnerProbe CXX)\n'
@@ -175,6 +177,13 @@ class HealthyRestartWrapper(unittest.TestCase):
                 copied = work / 'build/copy' / path
                 copied.parent.mkdir(parents=True, exist_ok=True)
                 copied.write_text('int dummy_copy;\n', encoding='utf-8')
+            for name in ('closure_player.cpp', 'closure_wake.cpp', 'closure_wake_native.cpp', 'async_stop.cpp',
+                         'async_stop_player.cpp', 'module_identity.cpp', 'module_identity_win.cpp',
+                         'module_identity_import.cpp', 'module_import_prepare.cpp', 'module_gate.cpp', 'module_channel.cpp',
+                         '../fixture_restart/WindowsFrameReader.cpp', '../fixture_restart/WindowsRestartIo.cpp'):
+                copied = work / 'build/copy/mpvqt' / name
+                copied.parent.mkdir(parents=True, exist_ok=True)
+                copied.write_text('// configure-only source\n', encoding='utf-8')
             (work / 'consumer.cpp').write_text('int main() { return 0; }\n', encoding='utf-8')
             targets = ROOT / 'CMakeModules/HealthyRestartTargets.cmake'
             project = ('cmake_minimum_required(VERSION 3.20)\nproject(InterfaceProbe CXX)\n'
@@ -190,6 +199,10 @@ class HealthyRestartWrapper(unittest.TestCase):
                        'add_library(HealthyRestartMpvQt INTERFACE)\n'
                        'function(configure_windows_loader)\nendfunction()\n'
                        'healthy_restart_core()\n'
+                       'get_target_property(core_sources HealthyRestartCore SOURCES)\n'
+                       'get_target_property(core_defs HealthyRestartCore COMPILE_DEFINITIONS)\n'
+                       'file(WRITE "${CMAKE_BINARY_DIR}/core-sources.txt" "${core_sources}")\n'
+                       'file(WRITE "${CMAKE_BINARY_DIR}/core-defs.txt" "${core_defs}")\n'
                        'get_source_file_property(player_includes "${_healthy_copy}/player/PlayerComponent.cpp" INCLUDE_DIRECTORIES)\n'
                        'file(WRITE "${CMAKE_BINARY_DIR}/player-includes.txt" "${player_includes}")\n'
                        'get_source_file_property(settings_includes "${_healthy_copy}/settings/AudioSettingsController.cpp" INCLUDE_DIRECTORIES)\n'
@@ -213,6 +226,15 @@ class HealthyRestartWrapper(unittest.TestCase):
             self.assertEqual((work / 'build/player-includes.txt').read_text(encoding='utf-8'), 'NOTFOUND')
             local = (work / 'build/settings-includes.txt').read_text(encoding='utf-8').split(';')
             self.assertLess(local.index(copied), local.index((work / 'src/settings').as_posix()))
+            sources = (work / 'build/core-sources.txt').read_text(encoding='utf-8').split(';')
+            for name in ('closure_player.cpp', 'closure_wake.cpp', 'closure_wake_native.cpp',
+                         'async_stop.cpp', 'async_stop_player.cpp', 'module_identity.cpp',
+                         'module_identity_win.cpp', 'module_identity_import.cpp', 'module_import_prepare.cpp',
+                         'module_gate.cpp', 'module_channel.cpp'):
+                self.assertEqual(sources.count((work / 'build/copy/mpvqt' / name).as_posix()), 1, name)
+            defs = (work / 'build/core-defs.txt').read_text(encoding='utf-8')
+            self.assertNotIn('HEALTHY_RETIREMENT_TESTING', defs)
+            self.assertNotIn('HEALTHY_MODULE_TESTING', defs)
 
     def test_all_pinned_player_and_platform_sources_map_to_their_copies(self):
         base = WORKTREE / 'deps'

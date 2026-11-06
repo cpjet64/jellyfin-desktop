@@ -55,3 +55,63 @@ if(NOT WIN32)
     "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_identity_win.cpp")
   target_compile_features(healthy_module_identity_adapter_compile PRIVATE cxx_std_17)
 endif()
+
+add_executable(test_healthy_closure "${CMAKE_SOURCE_DIR}/tests/test_healthy_closure.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/closure.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp")
+target_include_directories(test_healthy_closure PRIVATE "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
+target_compile_definitions(test_healthy_closure PRIVATE HEALTHY_RETIREMENT_TESTING)
+target_compile_features(test_healthy_closure PRIVATE cxx_std_17)
+target_link_libraries(test_healthy_closure PRIVATE Threads::Threads Qt6::Core)
+add_test(NAME test_healthy_closure COMMAND test_healthy_closure)
+set_tests_properties(test_healthy_closure PROPERTIES TIMEOUT 60)
+
+add_executable(test_healthy_closure_wake "${CMAKE_SOURCE_DIR}/tests/test_healthy_closure_wake.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/closure_wake.cpp")
+target_include_directories(test_healthy_closure_wake PRIVATE "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
+target_compile_definitions(test_healthy_closure_wake PRIVATE HEALTHY_RETIREMENT_TESTING)
+target_compile_features(test_healthy_closure_wake PRIVATE cxx_std_17)
+target_link_libraries(test_healthy_closure_wake PRIVATE Threads::Threads)
+add_test(NAME test_healthy_closure_wake COMMAND test_healthy_closure_wake)
+set_tests_properties(test_healthy_closure_wake PROPERTIES TIMEOUT 60)
+
+add_executable(test_healthy_async_stop "${CMAKE_SOURCE_DIR}/tests/healthy_restart/test_async_stop.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/async_stop.cpp")
+target_compile_features(test_healthy_async_stop PRIVATE cxx_std_17)
+add_test(NAME test_healthy_async_stop COMMAND test_healthy_async_stop)
+set_tests_properties(test_healthy_async_stop PROPERTIES TIMEOUT 60)
+
+add_executable(test_healthy_module_gate_wire "${CMAKE_SOURCE_DIR}/tests/test_healthy_module_gate_wire.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_gate.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_identity.cpp")
+target_include_directories(test_healthy_module_gate_wire PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+target_compile_features(test_healthy_module_gate_wire PRIVATE cxx_std_17)
+add_test(NAME test_healthy_module_gate_wire COMMAND test_healthy_module_gate_wire)
+set_tests_properties(test_healthy_module_gate_wire PROPERTIES TIMEOUT 60)
+
+add_executable(test_healthy_module_gate_import "${CMAKE_SOURCE_DIR}/tests/test_healthy_module_gate_import.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_import_prepare.cpp")
+target_include_directories(test_healthy_module_gate_import PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+target_compile_definitions(test_healthy_module_gate_import PRIVATE HEALTHY_MODULE_TESTING)
+target_compile_features(test_healthy_module_gate_import PRIVATE cxx_std_17)
+if(WIN32)
+  target_link_libraries(test_healthy_module_gate_import PRIVATE delayimp)
+endif()
+add_test(NAME test_healthy_module_gate_import COMMAND test_healthy_module_gate_import)
+set_tests_properties(test_healthy_module_gate_import PROPERTIES TIMEOUT 60)
+
+if(WIN32)
+  add_executable(test_healthy_module_gate_factory
+    "${CMAKE_SOURCE_DIR}/tests/test_healthy_module_gate_factory.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartHealthy.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartProcess.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartChannel.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartIo.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_identity_win.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_identity.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_gate.cpp")
+  target_include_directories(test_healthy_module_gate_factory PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+  target_compile_features(test_healthy_module_gate_factory PRIVATE cxx_std_17)
+  target_compile_definitions(test_healthy_module_gate_factory PRIVATE HEALTHY_MODULE_TESTING)
+  target_link_libraries(test_healthy_module_gate_factory PRIVATE Threads::Threads Qt6::Core advapi32 bcrypt)
+  add_test(NAME test_healthy_module_gate_factory COMMAND test_healthy_module_gate_factory)
+  set_tests_properties(test_healthy_module_gate_factory PROPERTIES TIMEOUT 60)
+endif()

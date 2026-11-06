@@ -69,6 +69,14 @@ function(_healthy_rewrite name input output)
       input/apple/InputAppleMediaKeys.h input/apple/InputAppleMediaKeys.mm
       settings/AudioSettingsController.cpp taskbar/TaskbarComponentWin.cpp)
   set(_data "${input}")
+  if(name STREQUAL "mpvqt/closure_player.cpp" OR name STREQUAL "fixture_restart/FixtureRestartAdapter.cpp")
+    string(REPLACE "\"player/PlayerComponent.h\"" "\"../player/PlayerComponent.h\"" _data "${_data}")
+  elseif(name STREQUAL "mpvqt/async_stop_player.cpp")
+    string(REPLACE "\"PlayerComponent.h\"" "\"../player/PlayerComponent.h\"" _data "${_data}")
+  endif()
+  if(name STREQUAL "fixture_restart/FixtureRestartAdapter.cpp" OR name STREQUAL "fixture_restart/FixtureEvidence.cpp")
+    string(REPLACE "\"player/PlaybackCheckpoint.h\"" "\"../player/PlaybackCheckpoint.h\"" _data "${_data}")
+  endif()
   if(name IN_LIST _rewrite_paths)
     if(name MATCHES "^input/apple/")
       set(_prefix "../../player/")
@@ -94,7 +102,12 @@ function(_healthy_apply relative expected rewrite_mpv)
   endif()
   get_filename_component(_name "${relative}" NAME)
   _healthy_path("${_healthy_copy}" ".patch-${_name}" _copy)
-  file(WRITE "${_copy}" "${_contents}")
+  string(SHA256 _normalized_hash "${_contents}")
+  file(CONFIGURE OUTPUT "${_copy}" CONTENT "${_contents}" @ONLY NEWLINE_STYLE UNIX)
+  file(SHA256 "${_copy}" _written_hash)
+  if(NOT _written_hash STREQUAL _normalized_hash)
+    message(FATAL_ERROR "Healthy copy normalized patch changed: ${_name}")
+  endif()
   execute_process(COMMAND "${CMAKE_COMMAND}" -E env "GIT_CEILING_DIRECTORIES=${CMAKE_BINARY_DIR}"
     "${GIT_EXECUTABLE}" apply --no-index --unidiff-zero --whitespace=nowarn "${_copy}"
     WORKING_DIRECTORY "${_healthy_copy}" RESULT_VARIABLE _result ERROR_VARIABLE _error)
@@ -115,7 +128,9 @@ foreach(_entry IN ITEMS
     "patches/mpvqt/0001-event-ownership.patch|7092502b85f555db6f108bf3ec1a09e47d56680f7f5428cff7fc6fe4dd91b299"
     "patches/healthy-restart/0001-render-capture.patch|cb95ccdcf16a887fa0ad53b340d1be3d0b8b861cf313b65f39d41b30b43ba7da"
     "patches/healthy-restart/0002-player-event-order.patch|3d81103253e2dd26a5dfac22eb348496f685a4673b71622dfa2c8d4c86cb89be"
-    "patches/healthy-restart/0003-render-retirement.patch|69c000e2a5abf8ce2b562336bdfc1b208a8fe4d0c7b99dad2ccc92ca4aa84374")
+    "patches/healthy-restart/0003-render-retirement.patch|69c000e2a5abf8ce2b562336bdfc1b208a8fe4d0c7b99dad2ccc92ca4aa84374"
+    "patches/healthy-restart/0004-async-teardown.patch|46f00c5804c5051d258591fdb9abf3c6ab574bc1492c40df81c159e27af5192b"
+    "patches/healthy-restart/0005-async-stop.patch|b7a3abba479a43986cdcb4652794fe051370ecf5899fc5acc80fe52e713b74e1")
   string(REPLACE "|" ";" _pair "${_entry}")
   list(GET _pair 0 _relative)
   list(GET _pair 1 _hash)
@@ -163,6 +178,8 @@ _healthy_apply("patches/mpvqt/0001-event-ownership.patch" "7092502b85f555db6f108
 _healthy_apply("patches/healthy-restart/0001-render-capture.patch" "cb95ccdcf16a887fa0ad53b340d1be3d0b8b861cf313b65f39d41b30b43ba7da" FALSE)
 _healthy_apply("patches/healthy-restart/0002-player-event-order.patch" "3d81103253e2dd26a5dfac22eb348496f685a4673b71622dfa2c8d4c86cb89be" FALSE)
 _healthy_apply("patches/healthy-restart/0003-render-retirement.patch" "69c000e2a5abf8ce2b562336bdfc1b208a8fe4d0c7b99dad2ccc92ca4aa84374" FALSE)
+_healthy_apply("patches/healthy-restart/0004-async-teardown.patch" "46f00c5804c5051d258591fdb9abf3c6ab574bc1492c40df81c159e27af5192b" FALSE)
+_healthy_apply("patches/healthy-restart/0005-async-stop.patch" "b7a3abba479a43986cdcb4652794fe051370ecf5899fc5acc80fe52e713b74e1" FALSE)
 
 foreach(_entry IN LISTS _healthy_output_pins)
   string(REPLACE "|" ";" _pair "${_entry}")

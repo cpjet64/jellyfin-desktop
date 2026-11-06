@@ -206,6 +206,8 @@ $required += @('test_windows_broker_operations', 'test_restart_source_player')
 $required += @('test_healthy_retirement_lifetime', 'test_healthy_retirement_races', 'test_healthy_retirement_qt')
 $required += @('test_healthy_retirement_owner', 'test_healthy_retirement_owner_context')
 $required += @('test_healthy_module_identity')
+$required += @('test_healthy_closure', 'test_healthy_closure_wake', 'test_healthy_async_stop')
+$required += @('test_healthy_module_gate_wire', 'test_healthy_module_gate_import', 'test_healthy_module_gate_factory')
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs
 Run-Native $venvPython @('dev/ci/evidence.py', 'build_core', 'passed', 'Native build and core tests passed')
