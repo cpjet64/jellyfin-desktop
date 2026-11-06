@@ -1,0 +1,198 @@
+diff --git a/mpvqt/mpvabstractitem.cpp b/mpvqt/mpvabstractitem.cpp
+index ffccf4a..9b1cb02 100644
+--- a/mpvqt/mpvabstractitem.cpp
++++ b/mpvqt/mpvabstractitem.cpp
+@@ -11,0 +12 @@
++#include <utility>
+@@ -53,2 +54,6 @@ MpvAbstractItem::~MpvAbstractItem()
+-    if (d_ptr->m_mpv_gl) {
+-        mpv_render_context_free(d_ptr->m_mpv_gl);
++    const auto token = d_ptr->m_healthyToken;
++    const auto slot = token ? token->slot() : nullptr;
++    const auto lifetime = slot ? slot->current() : nullptr;
++    if (!lifetime || !lifetime->mayDestroy(slot->generation(), d_ptr->m_healthyWorkerClosed) || d_ptr->m_mpv_gl) {
++        if (slot) slot->invalidate(slot->generation());
++        return; // Unexpected destruction: outer containment, never a successful retirement.
+@@ -63,0 +69,21 @@ MpvAbstractItem::~MpvAbstractItem()
++bool MpvAbstractItem::healthyBindToken(std::shared_ptr<HealthyRetirement::QtToken> token)
++{
++    {
++        std::lock_guard<std::mutex> lock(d_ptr->m_healthyBindingMutex);
++        if (!token || !token->valid() || d_ptr->m_healthyToken || d_ptr->m_healthyRendererCreated) return false;
++        d_ptr->m_healthyToken = std::move(token);
++    }
++    update();
++    return true;
++}
++
++bool MpvAbstractItem::healthyApproveDestruction(bool eventWorkerClosed)
++{
++    const auto token = d_ptr->m_healthyToken;
++    const auto slot = token ? token->slot() : nullptr;
++    const auto lifetime = slot ? slot->current() : nullptr;
++    if (!lifetime || !lifetime->mayDestroy(slot->generation(), eventWorkerClosed)) return false;
++    d_ptr->m_healthyWorkerClosed = true;
++    return true;
++}
++
+@@ -66 +92,7 @@ QQuickFramebufferObject::Renderer *MpvAbstractItem::createRenderer() const
+-    return new MpvRenderer(const_cast<MpvAbstractItem *>(this));
++    std::shared_ptr<HealthyRetirement::QtToken> token;
++    {
++        std::lock_guard<std::mutex> lock(d_ptr->m_healthyBindingMutex);
++        d_ptr->m_healthyRendererCreated = true;
++        token = d_ptr->m_healthyToken;
++    }
++    return new MpvRenderer(const_cast<MpvAbstractItem *>(this), std::move(token));
+diff --git a/mpvqt/mpvabstractitem.h b/mpvqt/mpvabstractitem.h
+index 74ec427..ae3d5a6 100644
+--- a/mpvqt/mpvabstractitem.h
++++ b/mpvqt/mpvabstractitem.h
+@@ -15,0 +16,3 @@
++#include <memory>
++
++namespace HealthyRetirement { class QtToken; }
+@@ -21,0 +25 @@ class MPVQT_EXPORT MpvAbstractItem : public QQuickFramebufferObject
++    explicit MpvAbstractItem(MpvController::EventMode mode, QQuickItem *parent = nullptr);
+@@ -25 +28,0 @@ public:
+-    explicit MpvAbstractItem(MpvController::EventMode mode, QQuickItem *parent = nullptr);
+@@ -26,0 +30,2 @@ public:
++    bool healthyBindToken(std::shared_ptr<HealthyRetirement::QtToken> token);
++    bool healthyApproveDestruction(bool eventWorkerClosed);
+diff --git a/mpvqt/mpvabstractitem_p.h b/mpvqt/mpvabstractitem_p.h
+index 5373630..77fa134 100644
+--- a/mpvqt/mpvabstractitem_p.h
++++ b/mpvqt/mpvabstractitem_p.h
+@@ -10,0 +11,2 @@
++#include "lifetime_qt.h"
++#include <mutex>
+@@ -21,0 +24,4 @@ public:
++    std::shared_ptr<HealthyRetirement::QtToken> m_healthyToken;
++    bool m_healthyWorkerClosed{false};
++    bool m_healthyRendererCreated{false};
++    std::mutex m_healthyBindingMutex;
+diff --git a/mpvqt/mpvrenderer.cpp b/mpvqt/mpvrenderer.cpp
+index 220548d..05d7297 100644
+--- a/mpvqt/mpvrenderer.cpp
++++ b/mpvqt/mpvrenderer.cpp
+@@ -15,0 +16 @@
++#include <QPointer>
+@@ -16,0 +18,3 @@
++#include <QThread>
++#include <chrono>
++#include <utility>
+@@ -32 +36 @@ void on_mpv_redraw(void *ctx)
+-    QMetaObject::invokeMethod(static_cast<MpvAbstractItem *>(ctx), &MpvAbstractItem::update, Qt::QueuedConnection);
++    HealthyRetirement::QtToken::redraw(ctx);
+@@ -35,2 +39,2 @@ void on_mpv_redraw(void *ctx)
+-MpvRenderer::MpvRenderer(MpvAbstractItem *new_obj)
+-    : m_mpvAItem{new_obj}
++MpvRenderer::MpvRenderer(MpvAbstractItem *new_obj, std::shared_ptr<HealthyRetirement::QtToken> token)
++    : m_mpvAItem{new_obj}, m_healthyToken{std::move(token)}
+@@ -40,0 +45,8 @@ MpvRenderer::MpvRenderer(MpvAbstractItem *new_obj)
++MpvRenderer::~MpvRenderer()
++{
++    const auto slot = m_healthyToken ? m_healthyToken->slot() : nullptr;
++    const auto state = slot ? slot->current() : nullptr;
++    if (slot && (!state || !state->facts().ackAccepted))
++        slot->invalidate(slot->generation());
++}
++
+@@ -42,0 +55,8 @@ void MpvRenderer::render()
++    const auto slot = m_healthyToken ? m_healthyToken->slot() : nullptr;
++    const auto state = slot ? slot->current() : nullptr;
++    if (state && state->facts().phase == HealthyRetirement::Phase::Closing) {
++        state->retireOnRenderThread(slot->generation());
++        return;
++    }
++    if (!state || !state->enterRender(slot->generation())) return;
++    struct RenderExit { std::shared_ptr<HealthyRetirement::Lifetime> state; ~RenderExit() { state->leaveRender(); } } exit{state};
+@@ -43,0 +64 @@ void MpvRenderer::render()
++    if (!fbo) { slot->invalidate(slot->generation()); return; }
+@@ -77,0 +99,9 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
++    const auto slot = m_healthyToken ? m_healthyToken->slot() : nullptr;
++    if (!slot) return nullptr;
++    const auto existing = slot->current();
++    if (existing) {
++        if (!existing->enterRender(slot->generation())) return nullptr;
++        struct RenderExit { std::shared_ptr<HealthyRetirement::Lifetime> state; ~RenderExit() { state->leaveRender(); } } exit{existing};
++        return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
++    }
++    if (!slot->beginCreation()) return nullptr;
+@@ -79,0 +110,5 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
++        auto *originalContext = QOpenGLContext::currentContext();
++        if (!originalContext || !originalContext->isValid()) {
++            slot->creationFailed();
++            return nullptr;
++        }
+@@ -102,0 +138 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
++        if (!slot->beforeCreate()) { slot->creationFailed(); return nullptr; }
+@@ -105 +141,3 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-            qFatal("failed to initialize mpv GL context");
++            if (m_mpvAItem->d_ptr->m_mpv_gl) slot->recordCreated(m_mpvAItem->d_ptr->m_mpv_gl);
++            slot->creationFailed();
++            return nullptr;
+@@ -107,2 +145,8 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-
+-        mpv_render_context_set_update_callback(m_mpvAItem->d_ptr->m_mpv_gl, on_mpv_redraw, m_mpvAItem);
++        if (!slot->recordCreated(m_mpvAItem->d_ptr->m_mpv_gl)) { slot->creationFailed(); return nullptr; }
++        const auto generation = slot->generation();
++        std::shared_ptr<HealthyRetirement::Lifetime> state;
++        try { state = installHealthyLifetime(originalContext, slot); }
++        catch (...) { slot->creationFailed(); return nullptr; }
++        if (!state || !state->enterRender(generation)) return nullptr;
++        struct RenderExit { std::shared_ptr<HealthyRetirement::Lifetime> state; ~RenderExit() { state->leaveRender(); } } exit{state};
++        mpv_render_context_set_update_callback(m_mpvAItem->d_ptr->m_mpv_gl, on_mpv_redraw, m_healthyToken.get());
+@@ -109,0 +154 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
++        return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
+@@ -110,0 +156,3 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
++    slot->creationFailed();
++    return nullptr;
++}
+@@ -112 +160,28 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-    return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
++std::shared_ptr<HealthyRetirement::Lifetime> MpvRenderer::installHealthyLifetime(
++    QOpenGLContext *context, const std::shared_ptr<HealthyRetirement::Slot> &slot)
++{
++    const auto generation = slot->generation();
++    const QPointer<QOpenGLContext> original{context};
++    const auto identity = HealthyRetirement::Identity{
++        reinterpret_cast<std::uintptr_t>(QThread::currentThreadId()),
++        reinterpret_cast<std::uintptr_t>(context), generation};
++    if (!m_healthyToken->watchContext(context)) { slot->creationFailed(); return {}; }
++    HealthyRetirement::Operations operations;
++    operations.now = [] { return std::chrono::duration_cast<std::chrono::nanoseconds>(
++        std::chrono::steady_clock::now().time_since_epoch()).count(); };
++    operations.currentIdentity = [original, generation] {
++        if (!original || !original->isValid()) return HealthyRetirement::Identity{};
++        return HealthyRetirement::Identity{reinterpret_cast<std::uintptr_t>(QThread::currentThreadId()),
++            reinterpret_cast<std::uintptr_t>(QOpenGLContext::currentContext()), generation};
++    };
++    operations.unregisterCallback = [](void *value) {
++        mpv_render_context_set_update_callback(static_cast<mpv_render_context *>(value), nullptr, nullptr);
++    };
++    operations.invalidateQueued = [](std::uint64_t) { return true; };
++    operations.freeContext = [](void *value) { mpv_render_context_free(static_cast<mpv_render_context *>(value)); };
++    operations.clearPointer = [item = m_mpvAItem](void *value) {
++        if (item->d_ptr->m_mpv_gl != value) return false;
++        item->d_ptr->m_mpv_gl = nullptr;
++        return true;
++    };
++    return slot->install(identity, m_mpvAItem->d_ptr->m_mpv_gl, std::move(operations));
+diff --git a/mpvqt/mpvrenderer.h b/mpvqt/mpvrenderer.h
+index 49b291a..7cdd86a 100644
+--- a/mpvqt/mpvrenderer.h
++++ b/mpvqt/mpvrenderer.h
+@@ -10,0 +11,3 @@
++#include <memory>
++namespace HealthyRetirement { class QtToken; class Slot; class Lifetime; }
++class QOpenGLContext;
+@@ -17,2 +20,2 @@ public:
+-    explicit MpvRenderer(MpvAbstractItem *new_obj);
+-    ~MpvRenderer() = default;
++    MpvRenderer(MpvAbstractItem *new_obj, std::shared_ptr<HealthyRetirement::QtToken> token);
++    ~MpvRenderer() override;
+@@ -20,0 +24,3 @@ public:
++    std::shared_ptr<HealthyRetirement::QtToken> m_healthyToken;
++    std::shared_ptr<HealthyRetirement::Lifetime> installHealthyLifetime(
++        QOpenGLContext *context, const std::shared_ptr<HealthyRetirement::Slot> &slot);
