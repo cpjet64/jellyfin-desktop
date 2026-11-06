@@ -65,7 +65,8 @@ IoProgress WindowsRestartIo::submit()
                           : api_.writeFile(pipe_, bytes_.data() + offset_, remaining,
                                            &count, &overlap_);
     if (!ok) {
-      if (api_.error() != ERROR_IO_PENDING) return state_ = IoProgress::Failed;
+      const DWORD error = api_.error();
+      if (error != ERROR_IO_PENDING) return completedError(error);
       inFlight_ = true;
       return state_ = IoProgress::Pending;
     }
@@ -74,6 +75,14 @@ IoProgress WindowsRestartIo::submit()
     offset_ += count;
   }
   return state_ = IoProgress::Complete;
+}
+
+IoProgress WindowsRestartIo::completedError(DWORD error)
+{
+  if (read_ && !cancelling_ && offset_ == 0 && api_.now() < deadline_ &&
+      (error == ERROR_BROKEN_PIPE || error == ERROR_NO_DATA))
+    return state_ = IoProgress::Eof;
+  return state_ = IoProgress::Failed;
 }
 
 IoProgress WindowsRestartIo::completion(DWORD count)
@@ -100,7 +109,7 @@ IoProgress WindowsRestartIo::poll()
       error != ERROR_NO_DATA && error != ERROR_PIPE_NOT_CONNECTED)
     return IoProgress::Unconfirmed;
   inFlight_ = false;
-  return state_ = IoProgress::Failed;
+  return completedError(error);
 }
 
 IoProgress WindowsRestartIo::cancel()

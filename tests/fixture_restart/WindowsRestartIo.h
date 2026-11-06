@@ -6,7 +6,7 @@
 
 namespace FixtureRestart {
 class WindowsRestartProcess;
-enum class IoProgress { Pending, Complete, Failed, Unconfirmed };
+enum class IoProgress { Pending, Complete, Eof, Failed, Unconfirmed };
 
 // The API is injectable so that completion and cancellation races can be
 // exercised without creating a process or opening a pipe.
@@ -43,6 +43,7 @@ private:
   ~WindowsRestartIo();
   IoProgress submit();
   IoProgress completion(DWORD count);
+  IoProgress completedError(DWORD error);
   WindowsIoApi api_;
   OVERLAPPED overlap_{};
   HANDLE pipe_ = INVALID_HANDLE_VALUE;

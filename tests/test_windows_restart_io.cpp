@@ -9,6 +9,8 @@ DWORD errorCode = ERROR_IO_PENDING;
 ULONGLONG clockValue = 1;
 bool complete = false, cancelCalled = false;
 bool synchronousLate = false;
+int readMode = 0;
+bool resultEof = false;
 DWORD completedBytes = 0;
 HANDLE WINAPI eventCreate(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCWSTR)
 { return reinterpret_cast<HANDLE>(1); }
@@ -20,11 +22,14 @@ BOOL WINAPI writeFake(HANDLE, LPCVOID, DWORD, LPDWORD, LPOVERLAPPED)
 { errorCode = ERROR_IO_PENDING; return FALSE; }
 BOOL WINAPI readFake(HANDLE, LPVOID, DWORD size, LPDWORD count, LPOVERLAPPED)
 {
+  if (readMode == 1) { errorCode = ERROR_BROKEN_PIPE; return FALSE; }
+  if (readMode == 2) { readMode = 1; *count = 1; return TRUE; }
   if (synchronousLate) { clockValue = 5; *count = size; return TRUE; }
   errorCode = ERROR_IO_PENDING; return FALSE;
 }
 BOOL WINAPI resultFake(HANDLE, LPOVERLAPPED, LPDWORD count, BOOL)
 {
+  if (resultEof) { errorCode = ERROR_NO_DATA; return FALSE; }
   if (!complete) { errorCode = ERROR_IO_INCOMPLETE; return FALSE; }
   *count = completedBytes;
   return TRUE;
@@ -82,6 +87,34 @@ void lateCompletionFails()
   CHECK(io->begin(reinterpret_cast<HANDLE>(2), true, nullptr, 4, 5) == IoProgress::Failed);
   CHECK(io->release());
 }
+void eofIsDistinctAndPartialFails()
+{
+  synchronousLate = false; resultEof = false; clockValue = 1; readMode = 1;
+  auto* io = new WindowsRestartIo(fakeApi());
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), true, nullptr, 1, 5) == IoProgress::Eof);
+  CHECK(io->release());
+  readMode = 2; io = new WindowsRestartIo(fakeApi());
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), true, nullptr, 4, 5) == IoProgress::Failed);
+  CHECK(io->release());
+  readMode = 0; complete = false; io = new WindowsRestartIo(fakeApi());
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), true, nullptr, 1, 5) == IoProgress::Pending);
+  resultEof = true;
+  CHECK(io->poll() == IoProgress::Eof && io->release());
+  resultEof = false;
+}
+void extraByteAndCancelledEof()
+{
+  clockValue = 1; complete = false; readMode = 0;
+  auto* io = new WindowsRestartIo(fakeApi());
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), true, nullptr, 1, 5) == IoProgress::Pending);
+  complete = true; completedBytes = 1;
+  CHECK(io->poll() == IoProgress::Complete && io->release());
+  complete = false; io = new WindowsRestartIo(fakeApi());
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), true, nullptr, 1, 5) == IoProgress::Pending);
+  resultEof = true;
+  CHECK(io->cancel() == IoProgress::Failed && io->release());
+  resultEof = false;
+}
 }
 int main()
 {
@@ -89,4 +122,6 @@ int main()
   deadlineCancelsAndRetains();
   completesWithoutCancellation();
   lateCompletionFails();
+  eofIsDistinctAndPartialFails();
+  extraByteAndCancelledEof();
 }
