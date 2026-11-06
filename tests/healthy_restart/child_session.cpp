@@ -38,22 +38,6 @@ bool ChildSession::valid() const
 #endif
 }
 
-bool ChildSession::fail()
-{
-  if (!failed_) {
-    revokeGraph();
-    failed_ = true;
-#ifdef HEALTHY_CHILD_SESSION_TESTING
-    if (testing_) { if (test_.invalidate) test_.invalidate(); return false; }
-#endif
-#ifndef HEALTHY_CHILD_SESSION_HEADLESS
-    if (graph_) graph_->invalidate();
-#endif
-  }
-  return false;
-}
-
-void ChildSession::invalidate() { fail(); }
 
 bool ChildSession::initialize(const QString& path)
 {
@@ -170,7 +154,10 @@ bool ChildSession::sourceControl()
 {
   const auto result = advance(Role::Control, controlIo_);
   if (result == Io::Pending) return true;
-  if (result != Io::Complete) return false;
+  if (result != Io::Complete) {
+    noteFailure(result == Io::Unconfirmed ? HealthyRestart::FailureCause::OwnershipLost :
+                HealthyRestart::FailureCause::EndpointLost); return false;
+  }
   const auto* bytes = endpoints_->bytes(Role::Control);
   if (!bytes || bytes->size() != 24) return false;
   const QByteArray frame(reinterpret_cast<const char*>(bytes->data()), qsizetype(bytes->size()));
@@ -289,17 +276,19 @@ ChildSession::Io ChildSession::advance(Role role, Io& progress)
 
 bool ChildSession::beginRestore(const QString& path)
 {
-  if (started_ || !valid() || !initialize(path)) return fail();
+  if (started_) return fail();
   started_ = true;
   restoreStarted_ = true;
-  controlIo_ = beginRead(Role::Control, 4);
+  if (!valid()) return fail(HealthyRestart::FailureCause::OwnershipLost);
+  if (!initialize(path) || failed_) return fail(HealthyRestart::FailureCause::InitializationFailure);
+  if (!beginControlRead(4)) return fail();
   if (!beginGrantRead(4)) return fail();
   return pollRestore() != Progress::Failed;
 }
 
 bool ChildSession::queueAck(const QByteArray& frame, bool grant)
 {
-  if (frame.isEmpty() || !ackFrame_.isEmpty()) return false;
+  if (failed_ || frame.isEmpty() || !ackFrame_.isEmpty()) return false;
   ackFrame_ = frame;
   ackIsGrant_ = grant;
   ackIo_ = endpoints_->begin(Role::Ack, false, frame.constData(), unsigned(frame.size()));
@@ -311,40 +300,17 @@ bool ChildSession::pollAck()
   if (ackFrame_.isEmpty()) return true;
   const auto result = advance(Role::Ack, ackIo_);
   if (result == Io::Pending) return true;
-  if (result != Io::Complete) return false;
-  if (ackIsGrant_) grantAck_ = true;
+  if (result != Io::Complete) {
+    noteFailure(result == Io::Unconfirmed ? HealthyRestart::FailureCause::OwnershipLost :
+                HealthyRestart::FailureCause::EndpointLost); return false;
+  }
+  if (!endpoints_->consumeCompletedWrite(Role::Ack)) return false;
+  if (ackIsGrant_ && !failed_) grantAck_ = true;
   ackFrame_.clear();
   return true;
 }
 
 
-bool ChildSession::pollControl()
-{
-  if (!ackFrame_.isEmpty()) return true;
-  const auto result = advance(Role::Control, controlIo_);
-  if (result == Io::Pending) return true;
-  if (result != Io::Complete) return false;
-  const auto* bytes = endpoints_->bytes(Role::Control);
-  if (!bytes) return false;
-  const QByteArray part(reinterpret_cast<const char*>(bytes->data()), qsizetype(bytes->size()));
-  if (controlStage_ == ControlStage::Header) {
-    if (part != "JRC1" && part != "JRP1") return false;
-    if (part == "JRP1" && !grantAck_) return false;
-    controlFrame_ = part;
-    controlStage_ = ControlStage::Body;
-    controlIo_ = beginRead(Role::Control, part == "JRP1" ? 76 : 20);
-    return controlIo_ == Io::Pending || controlIo_ == Io::Complete;
-  }
-  controlFrame_.append(part);
-  QByteArray response;
-  if (!control(controlFrame_, response)) return false;
-  if (controlFrame_.left(4) == "JRC1") cancelReceived_ = true;
-  if (!response.isEmpty() && cancelReceived_) cancelTerminal_ = true;
-  if (!response.isEmpty() && !queueAck(response, false)) return false;
-  controlStage_ = ControlStage::Header;
-  controlIo_ = beginRead(Role::Control, 4);
-  return controlIo_ == Io::Pending || controlIo_ == Io::Complete;
-}
 
 ChildSession::Progress ChildSession::pollRestore()
 {
@@ -393,7 +359,8 @@ ChildSession::Progress ChildSession::pollSource()
   if (sourceStage_ == SourceStage::Evidence) {
     const auto result = advance(Role::Evidence, sourceIo_);
     if (result == Io::Pending) return Progress::Pending;
-    if (result != Io::Complete || !endpoints_->closeSettled(Role::Evidence)) { fail(); return Progress::Failed; }
+    if (result != Io::Complete || !endpoints_->consumeCompletedWrite(Role::Evidence) ||
+        !endpoints_->closeSettled(Role::Evidence)) { fail(); return Progress::Failed; }
     controlIo_ = beginRead(Role::Control, 24);
     sourceStage_ = SourceStage::Control;
   }

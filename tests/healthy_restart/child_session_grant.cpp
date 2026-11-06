@@ -9,6 +9,11 @@
 namespace HealthyRetirement {
 bool ChildSession::pollGrant()
 {
+  const auto malformed = [this] { noteFailure(HealthyRestart::FailureCause::ProtocolViolation); return false; };
+  const auto validate = [this, &malformed] {
+    if (validateCanceledGrant()) return true;
+    return valid() ? malformed() : false;
+  };
   if (grantSettled_) return true;
   auto settled = endpoints_->grantReadSettlement();
   if (!settled) {
@@ -21,20 +26,22 @@ bool ChildSession::pollGrant()
     settled = endpoints_->grantReadSettlement();
     if (!settled) return grantIo_ == Io::Pending || grantIo_ == Io::Unconfirmed;
   }
-  if (!grantOperation_ || settled->operation != grantOperation_ ||
+  using Outcome = FixtureRestart::WindowsRestartIo::Settlement::Outcome;
+  if (!grantOperation_ || settled->operation != grantOperation_ || settled->outcome == Outcome::Uncertain ||
       settled->transferred != settled->bytes.size() ||
       !endpoints_->consumeGrantReadSettlement(grantOperation_)) return false;
   grantOperation_ = 0;
-  using Outcome = FixtureRestart::WindowsRestartIo::Settlement::Outcome;
   if (settled->outcome == Outcome::Aborted) {
     grantSettled_ = cancelReceived_;
-    return grantSettled_ && (grantStage_ != GrantStage::Eof || validateCanceledGrant());
+    if (!grantSettled_) return false;
+    return grantStage_ != GrantStage::Eof || validate();
   }
-  if (settled->outcome == Outcome::Uncertain) return false;
   if (settled->outcome == Outcome::Eof) {
-    if (grantStage_ != GrantStage::Eof) return false;
+    if (grantStage_ != GrantStage::Eof) return malformed();
     grantSettled_ = true;
-    if (cancelReceived_) return validateCanceledGrant();
+    if (!validate()) return false;
+    if (cancelReceived_) return true;
+    if (failed_ || !valid()) return false;
     QByteArray response;
     if (!grant(grantFrame_, response)) return false;
     const bool accepted = response.left(4) == "JGA2";
@@ -44,18 +51,18 @@ bool ChildSession::pollGrant()
     grantStage_ = GrantStage::Done;
     return true;
   }
-  if (settled->outcome != Outcome::Completed || settled->bytes.empty() || grantStage_ == GrantStage::Eof)
-    return false;
+  if (settled->outcome != Outcome::Completed || settled->bytes.empty()) return false;
+  if (grantStage_ == GrantStage::Eof) return malformed();
   grantFrame_.append(reinterpret_cast<const char*>(settled->bytes.data()), qsizetype(settled->bytes.size()));
-  if (unsigned(grantFrame_.size()) > grantTarget_) return false;
+  if (unsigned(grantFrame_.size()) > grantTarget_) return malformed();
   if (grantStage_ == GrantStage::Header && grantFrame_.size() == 4) {
     const auto size = qFromBigEndian<quint32>(reinterpret_cast<const uchar*>(grantFrame_.constData()));
-    if (!size || size > 9212) return false;
+    if (!size || size > 9212) return malformed();
     grantTarget_ = 4 + size;
     grantStage_ = GrantStage::Body;
   }
   if (grantStage_ == GrantStage::Body && unsigned(grantFrame_.size()) == grantTarget_) {
-    if (cancelReceived_) { grantSettled_ = true; return validateCanceledGrant(); }
+    if (cancelReceived_) { grantSettled_ = true; return validate(); }
     grantStage_ = GrantStage::Eof;
   }
   if (cancelReceived_) { grantSettled_ = true; return true; }
@@ -90,12 +97,14 @@ bool ChildSession::validateCanceledGrant() const
 
 ChildSession::Progress ChildSession::settleGrantRead()
 {
-  if (restorePolling_) return Progress::Pending;
+  if (restorePolling_ || failurePolling_) return Progress::Pending;
   QScopedValueRollback<bool> guard(restorePolling_, true);
   if (!restoreStarted_) return Progress::Failed;
+  if (grantSettlementFailed_) return Progress::Failed;
   if (grantSettled_) return Progress::Ready;
+  if (!grantOperation_) { grantSettled_ = true; return Progress::Ready; }
   cancelReceived_ = true;
-  if (!pollGrant()) return Progress::Failed;
+  if (!pollGrant()) { grantSettlementFailed_ = true; return Progress::Failed; }
   return grantSettled_ ? Progress::Ready : Progress::Pending;
 }
 }
