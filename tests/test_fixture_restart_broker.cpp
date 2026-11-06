@@ -1,6 +1,7 @@
-#include "fixture_restart/RestartBroker.h"
-#include "player/PlaybackCheckpoint.h"
+#include <fixture_restart/RestartBroker.h>
+#include <player/PlaybackCheckpoint.h>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QtEndian>
 #include <cstdlib>
 #define CHECK(condition) do { if (!(condition)) std::abort(); } while (false)
@@ -10,10 +11,13 @@ using namespace FixtureRestart;
 struct Fake : Operations {
   qint64 clock = 100;
   const void* channel = this;
-  bool held = true, evidenceValid = true, stopped = true, exited = true, forced = false;
+  bool held = true, evidenceValid = true, stopped = true, closed = true, exited = true, forced = false;
+  bool eligible = true, accepted = true, permit = true, monitor = true;
+  bool cancelDuringAccepted = false, cancelDuringPermit = false;
   bool launched = true, transferred = true;
   bool ack = true;
   bool cancelDuringLaunch = false, cancelDuringTransfer = false, lateAck = false;
+  bool cancelDuringClosed = false, cancelDuringWait = false, cancelDuringEligibility = false;
   bool holdTransfer = false, holdAck = false;
   Broker* target = nullptr;
   int stopCalls = 0, waitCalls = 0, launchCalls = 0, transferCalls = 0;
@@ -22,21 +26,31 @@ struct Fake : Operations {
   bool ownsAChannel(const void* candidate) const override { return held && candidate == channel; }
   bool validateEvidence(const Evidence&) const override { return evidenceValid; }
   Progress internalReplacementStop(qint64 deadline) override { ++stopCalls; CHECK(deadline == 150100); return stopped ? Progress::Complete : Progress::Failed; }
+  Progress waitAClosed(qint64 deadline) override { CHECK(deadline == 150100); if (cancelDuringClosed) target->cancel(); return closed ? Progress::Complete : Progress::Failed; }
+  bool eligibleForB(const Grant&) const override { if (cancelDuringEligibility) target->cancel(); return eligible; }
   Progress waitAAndChildren(qint64 deadline, bool& forcedResult) override {
-    ++waitCalls; CHECK(deadline == 150100); forcedResult = forced; return exited ? Progress::Complete : Progress::Failed;
+    ++waitCalls; CHECK(deadline == 150100); if (cancelDuringWait) target->cancel(); forcedResult = forced; return exited ? Progress::Complete : Progress::Failed;
   }
   Progress launchB(qint64 deadline) override { ++launchCalls; CHECK(deadline == 150100);
     if (cancelDuringLaunch) CHECK(target->cancel() == Broker::Cancellation::Pending); return launched ? Progress::Complete : Progress::Failed; }
+  Progress launchB(const Grant& grant, const QByteArray& digest, qint64 deadline) override {
+    CHECK(digest == QCryptographicHash::hash(encodeGrant(grant), QCryptographicHash::Sha256));
+    return launchB(deadline);
+  }
   Progress transferToB(const QByteArray& data, qint64 deadline) override {
     ++transferCalls; CHECK(deadline == 150100); frame = data;
     if (holdTransfer) return Progress::Pending;
     if (cancelDuringTransfer) CHECK(target->cancel() == Broker::Cancellation::Pending); return transferred ? Progress::Complete : Progress::Failed;
   }
   Progress cancelBAndAwaitAck(qint64 deadline) override { CHECK(deadline == 180100); if (holdAck) return Progress::Pending; if (lateAck) clock = deadline; return ack ? Progress::Complete : Progress::Failed; }
+  Progress waitBGrantAccepted(qint64 deadline) override { CHECK(deadline == 150100); if (cancelDuringAccepted) target->cancel(); return accepted ? Progress::Complete : Progress::Failed; }
+  Progress issueRestorePermit(qint64 deadline) override { CHECK(deadline == 150100); if (cancelDuringPermit) target->cancel(); return permit ? Progress::Complete : Progress::Failed; }
+  Progress monitorB(qint64 deadline) override { CHECK(deadline == 150100); return monitor ? Progress::Complete : Progress::Failed; }
   Progress cleanupOwned(qint64 deadline) override { CHECK(deadline == 180100); return Progress::Complete; }
 };
 
-static void drive(Broker& broker) { for (int i = 0; i != 6; ++i) broker.step(); }
+static void drive(Broker& broker) { for (int i = 0; i != 10; ++i) broker.step(); }
+static QByteArray commitment(const QByteArray& frame) { return QCryptographicHash::hash(frame, QCryptographicHash::Sha256); }
 
 static Evidence sample()
 {
@@ -62,7 +76,7 @@ static void framing()
   Grant decoded;
   CHECK(decodeGrant(frame, expected, decoded) && decoded.grant == expected.grant);
   auto trustedBinding = expected; trustedBinding.positionMs = 0; trustedBinding.desiredPaused = false;
-  CHECK(decodeGrant(frame, trustedBinding, decoded) && decoded.positionMs == 5000 && decoded.desiredPaused);
+  CHECK(!decodeGrant(frame, trustedBinding, decoded));
   CHECK(!decodeGrant(frame.left(frame.size() - 1), expected, decoded));
   CHECK(!decodeGrant(frame + 'x', expected, decoded));
   auto wrong = expected; wrong.run++;
@@ -80,16 +94,30 @@ static void framing()
   qToBigEndian<quint32>(quint32(extra.size()), reinterpret_cast<uchar*>(extraFrame.data()));
   CHECK(!decodeGrant(extraFrame + extra, expected, decoded));
   ChildGate child(&expected, 100);
-  CHECK(child.accept(&expected, frame, expected, 10, true));
-  CHECK(!child.accept(&expected, frame, expected, 10, true));
+  CHECK(child.accept(&expected, frame, expected.run, commitment(frame), 10, true));
+  CHECK(!child.accept(&expected, frame, expected.run, commitment(frame), 10, true));
   CHECK(child.allowed(expected.revision));
   ChildGate timeout(&expected, 100);
-  CHECK(!timeout.accept(&expected, frame, expected, 100, true));
+  CHECK(!timeout.accept(&expected, frame, expected.run, commitment(frame), 100, true));
   ChildGate partial(&expected, 100);
-  CHECK(!partial.accept(&expected, frame, expected, 10, false));
+  CHECK(!partial.accept(&expected, frame, expected.run, commitment(frame), 10, false));
   ChildGate other(&expected, 100);
-  CHECK(!other.accept(&decoded, frame, expected, 10, true));
-  CHECK(!other.accept(&expected, frame, expected, 10, true));
+  CHECK(!other.accept(&decoded, frame, expected.run, commitment(frame), 10, true));
+  CHECK(!other.accept(&expected, frame, expected.run, commitment(frame), 10, true));
+  ChildGate mismatch(&expected, 100);
+  CHECK(!mismatch.accept(&expected, frame, expected.run, QByteArray(32, 'x'), 10, true));
+  CHECK(!mismatch.accept(&expected, frame, expected.run, commitment(frame), 10, true));
+  for (int field = 0; field < 6; ++field) {
+    auto altered = expected;
+    if (field == 0) ++altered.run;
+    if (field == 1) ++altered.grant;
+    if (field == 2) ++altered.revision;
+    if (field == 3) altered.assetHash[0] = 'b';
+    if (field == 4) ++altered.positionMs;
+    if (field == 5) altered.desiredPaused = !altered.desiredPaused;
+    ChildGate gate(&expected, 100);
+    CHECK(!gate.accept(&expected, encodeGrant(altered), expected.run, commitment(frame), 10, true));
+  }
 }
 
 static void lifecycle()
@@ -163,6 +191,37 @@ static void failures()
   }
 }
 
+static void closureAndIntentGate()
+{
+  for (int which = 0; which < 4; ++which) {
+    Fake ops; Broker broker(ops, ops.channel, sample().grant);
+    CHECK(broker.capture(ops.channel, sample()) && broker.startReplacement());
+    if (which == 0) ops.closed = false;
+    if (which == 1) ops.eligible = false;
+    if (which == 2) ops.exited = false;
+    if (which == 3) ops.forced = true;
+    drive(broker);
+    CHECK(!broker.completed() && ops.launchCalls == 0);
+  }
+  Fake ops; Broker broker(ops, ops.channel, sample().grant);
+  CHECK(broker.capture(ops.channel, sample()) && broker.startReplacement());
+  ops.accepted = false; drive(broker);
+  CHECK(!broker.completed() && ops.launchCalls == 1 && broker.burned());
+  for (int which = 0; which < 2; ++which) {
+    Fake later; Broker interrupted(later, later.channel, sample().grant); later.target = &interrupted;
+    later.cancelDuringAccepted = which == 0; later.cancelDuringPermit = which == 1;
+    CHECK(interrupted.capture(later.channel, sample()) && interrupted.startReplacement());
+    drive(interrupted); CHECK(!interrupted.completed() && interrupted.burned());
+  }
+  for (int which = 0; which < 3; ++which) {
+    Fake reentrant; Broker interrupted(reentrant, reentrant.channel, sample().grant); reentrant.target = &interrupted;
+    reentrant.cancelDuringClosed = which == 0; reentrant.cancelDuringWait = which == 1;
+    reentrant.cancelDuringEligibility = which == 2;
+    CHECK(interrupted.capture(reentrant.channel, sample()) && interrupted.startReplacement());
+    drive(interrupted); CHECK(!interrupted.completed() && reentrant.launchCalls == 0);
+  }
+}
+
 static bool checkedStop(void* p) { ++*static_cast<int*>(p); return true; }
 static bool failedStop(void* p) { ++*static_cast<int*>(p); return false; }
 
@@ -170,19 +229,19 @@ static void ordering()
 {
   const Grant grant = sample().grant;
   ChildGate child(&grant, 100);
-  CHECK(child.accept(&grant, encodeGrant(grant), grant, 10, true));
+  CHECK(child.accept(&grant, encodeGrant(grant), grant.run, commitment(encodeGrant(grant)), 10, true));
   int stops = 0;
   CHECK(child.allowed(grant.revision)); // load boundary before cancellation
   CHECK(child.cancel(checkedStop, &stops)); // ACK follows local cancellation and checked Stop
   CHECK(stops == 1 && !child.allowed(grant.revision)); // later seek/unpause blocked
   CHECK(!child.cancel(checkedStop, &stops));
   ChildGate failed(&grant, 100);
-  CHECK(failed.accept(&grant, encodeGrant(grant), grant, 10, true));
+  CHECK(failed.accept(&grant, encodeGrant(grant), grant.run, commitment(encodeGrant(grant)), 10, true));
   CHECK(!failed.cancel(failedStop, &stops));
   CHECK(!failed.allowed(grant.revision));
   ChildGate before(&grant, 100);
   CHECK(before.cancel(checkedStop, &stops));
-  CHECK(!before.accept(&grant, encodeGrant(grant), grant, 10, true));
+  CHECK(!before.accept(&grant, encodeGrant(grant), grant.run, commitment(encodeGrant(grant)), 10, true));
   CHECK(!before.allowed(grant.revision));
   Fake ops;
   Broker broker(ops, ops.channel, sample().grant);
@@ -227,6 +286,6 @@ static void ordering()
 int main(int argc, char** argv)
 {
   QCoreApplication app(argc, argv);
-  framing(); lifecycle(); evidenceValidation(); failures(); ordering();
+  framing(); lifecycle(); evidenceValidation(); failures(); closureAndIntentGate(); ordering();
   return 0;
 }
