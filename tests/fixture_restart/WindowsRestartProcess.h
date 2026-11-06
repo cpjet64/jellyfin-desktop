@@ -37,6 +37,9 @@ public:
   static WindowsRestartProcess* createWithChannels(const WindowsProcessApi& api,
       const std::vector<WindowsRestartChannel*>& channels, std::vector<WindowsRestartIo*> io);
   bool release();
+  bool ownsChannel(const WindowsRestartChannel* channel) const;
+  bool launchEstablished() const { return established_ && process_ && assigned_; }
+  bool closeParentChannel(WindowsRestartChannel* channel);
   ProcessProgress launch(const std::wstring& executable,
       const std::wstring& arguments, ULONGLONG deadline);
   ProcessProgress pollLaunch();
@@ -62,7 +65,7 @@ private:
   ULONGLONG launchDeadline_ = 0;
   bool workerCreated_ = false;
   bool assigned_ = false, forced_ = false, terminationRequested_ = false;
-  bool settled_ = true, launched_ = false;
+  bool settled_ = true, launched_ = false, established_ = false;
 };
 }
 #endif

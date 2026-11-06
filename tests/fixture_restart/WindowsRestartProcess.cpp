@@ -32,15 +32,18 @@ WindowsRestartProcess* WindowsRestartProcess::createWithChannels(const WindowsPr
     const std::vector<WindowsRestartChannel*>& channels, std::vector<WindowsRestartIo*> io)
 {
   std::vector<HANDLE> children;
+  std::vector<HANDLE> parents;
   if (channels.size() != io.size()) return nullptr;
   size_t index = 0;
   for (auto* channel : channels) {
     if (!channel || channel->owned_ || !channel->connected_ || channel->pending_ ||
         channel->child_ == INVALID_HANDLE_VALUE || !io[index] ||
         !io[index]->canBind(channel->server_) ||
+        std::find(parents.begin(), parents.end(), channel->server_) != parents.end() ||
         std::find(children.begin(), children.end(), channel->child_) != children.end())
       return nullptr;
     children.push_back(channel->child_);
+    parents.push_back(channel->server_);
     ++index;
   }
   auto* process = create(api, std::move(children), std::move(io));
@@ -75,6 +78,27 @@ bool WindowsRestartProcess::release()
   if (!settled_ || worker_.joinable()) return false;
   for (auto* item : io_) if (item->pending()) return false;
   delete this;
+  return true;
+}
+
+bool WindowsRestartProcess::ownsChannel(const WindowsRestartChannel* channel) const
+{
+  return channel && std::find(channels_.begin(), channels_.end(), channel) != channels_.end();
+}
+
+bool WindowsRestartProcess::closeParentChannel(WindowsRestartChannel* channel)
+{
+  const auto found = std::find(channels_.begin(), channels_.end(), channel);
+  if (!channel || found == channels_.end() || !launchEstablished() || worker_.joinable())
+    return false;
+  const size_t index = static_cast<size_t>(found - channels_.begin());
+  auto* io = io_[index];
+  if (channel->server_ == INVALID_HANDLE_VALUE || io->bound_ != channel->server_ ||
+      io->closed_ || io->inFlight_ || io->read_ || io->state_ != IoProgress::Complete)
+    return false;
+  if (!channel->api_.close(channel->server_)) return false;
+  channel->server_ = INVALID_HANDLE_VALUE;
+  io->closed_ = true;
   return true;
 }
 
@@ -154,6 +178,7 @@ ProcessProgress WindowsRestartProcess::pollLaunch()
     return forceCleanup(launchDeadline_) == ProcessProgress::Complete
         ? ProcessProgress::Failed : ProcessProgress::Unconfirmed;
   }
+  established_ = true;
   return ProcessProgress::Complete;
 }
 

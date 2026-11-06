@@ -52,7 +52,7 @@ private:
   DWORD offset_ = 0;
   ULONGLONG deadline_ = 0;
   bool read_ = false, inFlight_ = false, cancelling_ = false;
-  bool owned_ = false;
+  bool owned_ = false, closed_ = false;
   IoProgress state_ = IoProgress::Failed;
 };
 }

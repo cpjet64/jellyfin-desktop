@@ -1,8 +1,10 @@
 #include "fixture_restart/WindowsRestartChannel.h"
 #include "fixture_restart/WindowsRestartProcess.h"
 #include <cstdlib>
+#include <chrono>
 #include <cstring>
 #include <string>
+#include <thread>
 using namespace FixtureRestart;
 #define CHECK(condition) do { if (!(condition)) std::abort(); } while (false)
 
@@ -10,8 +12,8 @@ namespace {
 HANDLE server = reinterpret_cast<HANDLE>(11), child = reinterpret_cast<HANDLE>(12);
 DWORD lastError, closes;
 ULONGLONG ticks;
-bool connected, cancelled, failOpen, earlyConnection, delayedCancel;
-void reset() { ticks = 1; lastError = closes = 0; connected = cancelled = failOpen = earlyConnection = delayedCancel = false; }
+bool connected, cancelled, failOpen, earlyConnection, delayedCancel, writeAsync, closeFailure;
+void reset() { ticks = 1; lastError = closes = 0; connected = cancelled = failOpen = earlyConnection = delayedCancel = writeAsync = closeFailure = false; }
 HANDLE WINAPI current() { return reinterpret_cast<HANDLE>(2); }
 BOOL WINAPI openToken(HANDLE, DWORD, PHANDLE out) { *out = reinterpret_cast<HANDLE>(3); return TRUE; }
 BOOL WINAPI tokenInfo(HANDLE, TOKEN_INFORMATION_CLASS kind, LPVOID data, DWORD, PDWORD size)
@@ -55,9 +57,47 @@ BOOL WINAPI result(HANDLE, LPOVERLAPPED, LPDWORD bytes, BOOL)
   return FALSE;
 }
 BOOL WINAPI cancel(HANDLE, LPOVERLAPPED) { cancelled = true; return TRUE; }
-BOOL WINAPI close(HANDLE) { ++closes; return TRUE; }
+BOOL WINAPI close(HANDLE h) { ++closes; return !(closeFailure && h == reinterpret_cast<HANDLE>(11)); }
 DWORD WINAPI error() { return lastError; }
 ULONGLONG WINAPI now() { return ticks; }
+BOOL WINAPI resetEvent(HANDLE) { return TRUE; }
+BOOL WINAPI writeIo(HANDLE, LPCVOID, DWORD size, LPDWORD count, LPOVERLAPPED)
+{
+  if (writeAsync) { lastError = ERROR_IO_PENDING; return FALSE; }
+  *count = size; return TRUE;
+}
+HANDLE WINAPI createJob(LPSECURITY_ATTRIBUTES, LPCWSTR) { return reinterpret_cast<HANDLE>(30); }
+BOOL WINAPI setJob(HANDLE, JOBOBJECTINFOCLASS, LPVOID, DWORD) { return TRUE; }
+BOOL WINAPI initAttrs(LPPROC_THREAD_ATTRIBUTE_LIST list, DWORD, DWORD, PSIZE_T size)
+{ *size = 256; return list != nullptr; }
+BOOL WINAPI updateAttrs(LPPROC_THREAD_ATTRIBUTE_LIST, DWORD, DWORD_PTR, PVOID, SIZE_T, PVOID, PSIZE_T)
+{ return TRUE; }
+void WINAPI deleteAttrs(LPPROC_THREAD_ATTRIBUTE_LIST) {}
+BOOL WINAPI createProcess(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
+    BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION info)
+{ info->hProcess = reinterpret_cast<HANDLE>(31); info->hThread = reinterpret_cast<HANDLE>(32); return TRUE; }
+BOOL WINAPI inJob(HANDLE, HANDLE, PBOOL member) { *member = TRUE; return TRUE; }
+DWORD WINAPI resume(HANDLE) { return 1; }
+DWORD WINAPI wait(HANDLE, DWORD) { return WAIT_OBJECT_0; }
+BOOL WINAPI query(HANDLE, JOBOBJECTINFOCLASS, LPVOID value, DWORD, LPDWORD)
+{ static_cast<JOBOBJECT_BASIC_ACCOUNTING_INFORMATION*>(value)->ActiveProcesses = 0; return TRUE; }
+BOOL WINAPI exitCode(HANDLE, LPDWORD value) { *value = 0; return TRUE; }
+WindowsProcessApi processApi()
+{
+  WindowsProcessApi a;
+  a.createJob = createJob; a.setJob = setJob; a.initAttributes = initAttrs;
+  a.updateAttribute = updateAttrs; a.deleteAttributes = deleteAttrs; a.createProcess = createProcess;
+  a.inJob = inJob; a.resume = resume; a.wait = wait; a.queryJob = query; a.exitCode = exitCode;
+  a.close = close; a.now = now;
+  return a;
+}
+WindowsIoApi ioApi()
+{
+  WindowsIoApi a;
+  a.createEvent = event; a.closeHandle = close; a.resetEvent = resetEvent;
+  a.writeFile = writeIo; a.result = result; a.cancel = cancel; a.error = error; a.now = now;
+  return a;
+}
 WindowsChannelApi api()
 {
   WindowsChannelApi a;
@@ -105,9 +145,52 @@ void retainsUnconfirmedConnection()
   delayedCancel = false;
   CHECK(c->poll() == ChannelProgress::Failed && c->release());
 }
+void closeOnlyCompletedGrant()
+{
+  reset(); server = reinterpret_cast<HANDLE>(11); child = reinterpret_cast<HANDLE>(12);
+  auto* grant = WindowsRestartChannel::create(api());
+  CHECK(grant->begin(10) == ChannelProgress::Pending); connected = true;
+  CHECK(grant->poll() == ChannelProgress::Complete);
+  server = reinterpret_cast<HANDLE>(21); child = reinterpret_cast<HANDLE>(22); connected = false;
+  auto* control = WindowsRestartChannel::create(api());
+  CHECK(control->begin(10) == ChannelProgress::Pending); connected = true;
+  CHECK(control->poll() == ChannelProgress::Complete);
+  auto* grantIo = new WindowsRestartIo(ioApi());
+  auto* controlIo = new WindowsRestartIo(ioApi());
+  auto* p = WindowsRestartProcess::createWithChannels(processApi(), {grant, control}, {grantIo, controlIo});
+  CHECK(p && p->ownsChannel(grant) && p->ownsChannel(control) && !p->ownsChannel(nullptr));
+  CHECK(!p->launchEstablished() && !p->closeParentChannel(grant));
+  CHECK(p->launch(L"C:\\fixture.exe", L"", 10) == ProcessProgress::Pending);
+  const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  ProcessProgress state;
+  do { state = p->pollLaunch(); std::this_thread::yield(); }
+  while (state == ProcessProgress::Pending && std::chrono::steady_clock::now() < limit);
+  CHECK(state == ProcessProgress::Complete && p->launchEstablished());
+  CHECK(!p->closeParentChannel(grant));
+  const char value = 'x';
+  writeAsync = true;
+  CHECK(grantIo->begin(grant->parentHandle(), false, &value, 1, 10) == IoProgress::Pending);
+  CHECK(!p->closeParentChannel(grant));
+  connected = false; cancelled = true;
+  CHECK(grantIo->cancel() == IoProgress::Failed);
+  writeAsync = false;
+  CHECK(grantIo->begin(grant->parentHandle(), false, &value, 1, 10) == IoProgress::Complete);
+  CHECK(grantIo->begin(grant->parentHandle(), false, &value, 0, 10) == IoProgress::Failed);
+  CHECK(!p->closeParentChannel(grant));
+  CHECK(grantIo->begin(grant->parentHandle(), false, &value, 1, 10) == IoProgress::Complete);
+  writeAsync = true;
+  CHECK(controlIo->begin(control->parentHandle(), false, &value, 1, 10) == IoProgress::Pending);
+  closeFailure = true; CHECK(!p->closeParentChannel(grant)); closeFailure = false;
+  CHECK(p->closeParentChannel(grant) && grant->parentHandle() == INVALID_HANDLE_VALUE);
+  CHECK(!p->closeParentChannel(grant) && control->parentHandle() == server);
+  CHECK(grantIo->begin(reinterpret_cast<HANDLE>(11), false, &value, 1, 10) == IoProgress::Failed);
+  CHECK(controlIo->cancel() == IoProgress::Failed);
+  CHECK(p->pollHealthy(10) == ProcessProgress::Complete && p->release());
+}
 }
 int main()
 {
   connectedHandoff(); cancellationAndOpenFailure();
   rejectsEarlyAndLateConnection(); retainsUnconfirmedConnection();
+  closeOnlyCompletedGrant();
 }
