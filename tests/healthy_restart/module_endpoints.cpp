@@ -97,6 +97,9 @@ std::unique_ptr<ChildEndpoints> ChildEndpoints::createImpl(std::unique_ptr<Verif
       entry.role = inputs[i].role;
       if (!state->operations.duplicate(inputs[i].inheritedPipe, entry.pipe)) return {};
       if (!state->operations.accepts(reinterpret_cast<std::uintptr_t>(entry.pipe))) return {};
+      for (int j = 0; j < i; ++j)
+        if (state->operations.compare(reinterpret_cast<std::uintptr_t>(entry.pipe),
+            reinterpret_cast<std::uintptr_t>(state->entries[j].pipe)) != Comparison::Different) return {};
       entry.io = new FixtureRestart::WindowsRestartIo(state->operations.io);
       if (!entry.io->bind(entry.pipe)) return {};
     }

@@ -39,6 +39,8 @@ public:
   ChildEndpoints(const ChildEndpoints&) = delete;
   ChildEndpoints& operator=(const ChildEndpoints&) = delete;
   const void* token(EndpointRole role) const noexcept;
+  // The returned ownership does not attest current validity. Recheck
+  // VerifiedModule::stillValid with the owning generation at each boundary.
   std::shared_ptr<const VerifiedModule> capability() const noexcept;
 #ifdef _WIN32
   FixtureRestart::IoProgress begin(EndpointRole role, bool read, const void* data, DWORD size);
