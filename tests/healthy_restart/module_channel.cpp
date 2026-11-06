@@ -1,6 +1,8 @@
 #include "module_channel.h"
 #include "module_gate.h"
 #include "module_import_prepare.h"
+#include "retirement_claim.h"
+#include <atomic>
 #ifdef _WIN32
 #include "../fixture_restart/WindowsFrameReader.h"
 #include <windows.h>
@@ -17,22 +19,79 @@ struct VerifiedModule::State {
   std::uint64_t generation = 0, deadline = 0, launch = 0;
   LaunchBinding binding;
   std::unique_ptr<ImportedModule> module;
+  // 0 unbound, 1 binding, 2 bound, 3 lost, 4 loss during binding.
+  // exposing a snapshot; a concurrent loss prevents that publication.
+  mutable std::atomic_int admissionState{0};
+  std::shared_ptr<HealthyRetirement::RetirementClaim> admissionClaim;
+  void loseAdmission() const noexcept {
+    auto state = admissionState.load();
+    while (state == 0 || state == 1) {
+      if (admissionState.compare_exchange_weak(state, state == 1 ? 4 : 3)) break;
+    }
+    if (state == 1 || state == 4) {
+      std::shared_ptr<HealthyRetirement::RetirementClaim> claim;
+      while (!(claim = std::atomic_load(&admissionClaim))) {}
+      claim->revoke();
+      admissionState.store(3);
+    } else if (state == 2) {
+      if (const auto claim = std::atomic_load(&admissionClaim)) claim->revoke();
+      admissionState.store(3);
+    }
+  }
 #ifdef HEALTHY_MODULE_TESTING
   bool (*testValid)(void*) noexcept = nullptr;
   void* testContext = nullptr;
 #endif
 };
 VerifiedModule::VerifiedModule(std::unique_ptr<State> state) : state_(std::move(state)) {}
-VerifiedModule::~VerifiedModule() = default;
-bool VerifiedModule::stillValid(std::uint64_t generation) const noexcept
+VerifiedModule::~VerifiedModule() { if (state_) state_->loseAdmission(); }
+bool VerifiedModule::bindAdmissionClaim(const std::shared_ptr<HealthyRetirement::RetirementClaim>& claim,
+                                        std::uint64_t generation) const noexcept
 {
+  if (!state_ || !claim || !generation || generation != state_->generation || claim->generation() != generation)
+    return false;
+  int expected = 0;
+  if (!state_->admissionState.compare_exchange_strong(expected, 1)) {
+    const auto existing = std::atomic_load(&state_->admissionClaim);
+    if (expected >= 3 && (!existing || existing == claim)) claim->revoke();
+    return expected == 2 && existing == claim;
+  }
+  std::atomic_store(&state_->admissionClaim, claim);
+  expected = 1;
+  if (state_->admissionState.compare_exchange_strong(expected, 2)) return true;
+  claim->revoke(); state_->admissionState.store(3); return false;
+}
+bool VerifiedModule::admissionSnapshot(std::uint64_t generation) const noexcept
+{
+  if (!state_ || !generation || generation != state_->generation || state_->admissionState.load() != 2) return false;
 #ifdef HEALTHY_MODULE_TESTING
-  if (state_ && state_->testValid) return generation && generation == state_->generation && state_->testValid(state_->testContext);
+  if (state_->testValid) return state_->admissionState.load() == 2;
 #endif
 #if defined(_WIN32) && defined(_M_X64)
-  return state_ && generation && generation == state_->generation && state_->parent &&
+  const bool valid = state_->parent && GetTickCount64() < state_->deadline &&
+      WaitForSingleObject(state_->parent, 0) == WAIT_TIMEOUT && state_->module && state_->module->stillBound();
+  if (!valid) state_->loseAdmission();
+  return valid && state_->admissionState.load() == 2;
+#else
+  return false;
+#endif
+}
+bool VerifiedModule::stillValid(std::uint64_t generation) const noexcept
+{
+  if (!state_ || !generation || generation != state_->generation || state_->admissionState.load() >= 3) return false;
+#ifdef HEALTHY_MODULE_TESTING
+  if (state_->testValid) {
+    const bool valid = state_->testValid(state_->testContext);
+    if (!valid) state_->loseAdmission();
+    return valid && state_->admissionState.load() < 3;
+  }
+#endif
+#if defined(_WIN32) && defined(_M_X64)
+  const bool valid = state_->parent &&
       GetTickCount64() < state_->deadline && WaitForSingleObject(state_->parent, 0) == WAIT_TIMEOUT &&
       state_->module && state_->module->stillBound();
+  if (!valid) state_->loseAdmission();
+  return valid && state_->admissionState.load() < 3;
 #else
   (void)generation;
   return false;
@@ -45,6 +104,10 @@ bool VerifiedModule::launchId(std::uint64_t generation, std::uint64_t& output) c
   return true;
 }
 #ifdef HEALTHY_MODULE_TESTING
+void VerifiedModule::invalidateAdmissionForTest() const noexcept
+{
+  if (state_ && state_->testValid) state_->loseAdmission();
+}
 std::unique_ptr<VerifiedModule> VerifiedModule::forAccessorTest(std::uint64_t generation,
     std::uint64_t launch, bool (*valid)(void*) noexcept, void* context)
 {

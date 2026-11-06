@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <memory>
 #include "module_gate.h"
+namespace HealthyRetirement { class RetirementClaim; }
 
 namespace HealthyModuleIdentity {
 enum class SourceContract { Unqualified, BuilderSourceQualified };
@@ -17,9 +18,14 @@ public:
   VerifiedModule(const VerifiedModule&) = delete;
   VerifiedModule& operator=(const VerifiedModule&) = delete;
   bool stillValid(std::uint64_t generation) const noexcept;
+  bool bindAdmissionClaim(const std::shared_ptr<HealthyRetirement::RetirementClaim>& claim,
+                          std::uint64_t generation) const noexcept;
+  bool admissionSnapshot(std::uint64_t generation) const noexcept;
   bool launchBinding(std::uint64_t generation, LaunchBinding& output) const noexcept;
   bool launchId(std::uint64_t generation, std::uint64_t& output) const noexcept;
 #ifdef HEALTHY_MODULE_TESTING
+  // Injects an observed loss only in the dedicated headless test build.
+  void invalidateAdmissionForTest() const noexcept;
   // Dedicated accessor tests only; never present in the native fixture.
   static std::unique_ptr<VerifiedModule> forAccessorTest(std::uint64_t generation,
       std::uint64_t launch, bool (*valid)(void*) noexcept, void* context);

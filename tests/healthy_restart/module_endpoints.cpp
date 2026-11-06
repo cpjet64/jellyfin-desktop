@@ -1,4 +1,6 @@
 #include "module_endpoints.h"
+#include "retirement_claim.h"
+#include <atomic>
 #include <utility>
 #include <functional>
 #ifdef _WIN32
@@ -15,6 +17,9 @@ struct ChildEndpoints::Operations {
   std::function<bool(std::uintptr_t, HANDLE&)> duplicate;
   std::function<bool(HANDLE)> close;
   FixtureRestart::WindowsIoApi io;
+#ifdef HEALTHY_ENDPOINT_TESTING
+  bool testOnly = false;
+#endif
 };
 #endif
 struct ChildEndpoints::State {
@@ -30,6 +35,26 @@ struct ChildEndpoints::State {
   std::shared_ptr<const VerifiedModule> module;
   std::uint64_t generation = 0, deadline = 0;
   EndpointMode mode = EndpointMode::Source;
+  mutable std::atomic_int admissionState{0}; // unbound, binding, bound, lost, binding-lost
+  mutable std::atomic_bool controlLive{false}, ackLive{false};
+  std::shared_ptr<HealthyRetirement::RetirementClaim> admissionClaim;
+  void loseAdmission(bool contain = false) const noexcept {
+    auto state = admissionState.load();
+    while (state == 0 || state == 1) {
+      if (admissionState.compare_exchange_weak(state, state == 1 ? 4 : 3)) break;
+    }
+    if (state == 1 || state == 4) {
+      std::shared_ptr<HealthyRetirement::RetirementClaim> claim;
+      while (!(claim = std::atomic_load(&admissionClaim))) {}
+      if (contain) claim->contain(); else claim->revoke();
+      admissionState.store(3);
+    } else if (state == 2 || (state == 3 && contain)) {
+      if (const auto claim = std::atomic_load(&admissionClaim)) {
+        if (contain) claim->contain(); else claim->revoke();
+      }
+      admissionState.store(3);
+    }
+  }
 #ifdef _WIN32
   Operations operations;
 #endif
@@ -47,6 +72,7 @@ struct ChildEndpoints::State {
   }
 #ifdef _WIN32
   void enterContainment() noexcept {
+    loseAdmission(true);
     for (auto& entry : entries) {
       if (entry.containment) continue;
       entry.containment = true;
@@ -56,15 +82,23 @@ struct ChildEndpoints::State {
     }
   }
   bool authorityValid() {
-    try { if (operations.valid && operations.valid()) return true; } catch (...) {}
+    if (admissionState.load() >= 3) { enterContainment(); return false; }
+    try { if (operations.valid && operations.valid() && admissionState.load() < 3) return true; } catch (...) {}
     enterContainment();
     return false;
+  }
+  void observeIo(EndpointRole role, FixtureRestart::IoProgress result) noexcept {
+    using FixtureRestart::IoProgress;
+    if (result == IoProgress::Failed || result == IoProgress::Unconfirmed ||
+        (result == IoProgress::Eof && (role == EndpointRole::Control || role == EndpointRole::Ack)))
+      loseAdmission();
   }
 #endif
 };
 ChildEndpoints::ChildEndpoints(std::unique_ptr<State> state) : state_(std::move(state)) {}
 ChildEndpoints::~ChildEndpoints()
 {
+  if (state_) state_->loseAdmission();
 #ifdef _WIN32
   if (state_) for (const auto& entry : state_->entries)
     if (entry.closeFailed || entry.retentionUncertain || (entry.io && !entry.io->canReleaseStorage())) { (void)state_.release(); break; }
@@ -121,6 +155,7 @@ std::unique_ptr<ChildEndpoints> ChildEndpoints::createImpl(std::unique_ptr<Verif
       if (!entry.io->bind(entry.pipe)) return {};
     }
     if (!state->operations.valid()) return {};
+    state->controlLive.store(true); state->ackLive.store(true);
     auto result = std::unique_ptr<ChildEndpoints>(new ChildEndpoints(std::move(state)));
     result->state_->module = std::move(module);
     return result;
@@ -146,6 +181,7 @@ std::unique_ptr<ChildEndpoints> ChildEndpoints::createForTest(std::unique_ptr<Ve
   };
   if (!test.compare) return {};
   ops.duplicate = test.duplicate; ops.close = test.close; ops.io = test.io;
+  ops.testOnly = true;
   return createImpl(module, generation, deadline, mode, inputs, std::move(ops));
 }
 #endif
@@ -154,6 +190,8 @@ const void* ChildEndpoints::token(EndpointRole role) const noexcept
 {
 #ifdef _WIN32
   auto* entry = state_ && state_->authorityValid() ? state_->find(role) : nullptr;
+  if (state_ && (role == EndpointRole::Control || role == EndpointRole::Ack) &&
+      (!entry || !entry->pipe || entry->closeFailed || entry->containment)) state_->loseAdmission();
   return entry && entry->pipe && !entry->closeFailed && !entry->containment ? entry : nullptr;
 #else
   (void)role;
@@ -164,7 +202,41 @@ std::shared_ptr<const VerifiedModule> ChildEndpoints::capability() const noexcep
 {
   return state_ ? state_->module : nullptr;
 }
+bool ChildEndpoints::bindAdmissionClaim(const std::shared_ptr<HealthyRetirement::RetirementClaim>& claim,
+                                        std::uint64_t generation) noexcept
+{
+  if (!state_ || !state_->module || !claim || !generation || generation != state_->generation ||
+      claim->generation() != generation || !state_->module->bindAdmissionClaim(claim, generation)) return false;
+  int expected = 0;
+  if (!state_->admissionState.compare_exchange_strong(expected, 1)) {
+    const auto existing = std::atomic_load(&state_->admissionClaim);
+    if (expected >= 3 && (!existing || existing == claim)) claim->revoke();
+    return expected == 2 && existing == claim;
+  }
+  std::atomic_store(&state_->admissionClaim, claim);
+  expected = 1;
+  if (state_->admissionState.compare_exchange_strong(expected, 2)) return true;
+  claim->revoke(); state_->admissionState.store(3); return false;
+}
+bool ChildEndpoints::admissionSnapshot(std::uint64_t generation, const void* control, const void* ack) const noexcept
+{
+  if (!state_ || !generation || generation != state_->generation || !control || !ack || control == ack ||
+      state_->admissionState.load() != 2 ||
+      !state_->controlLive.load() || !state_->ackLive.load()) return false;
 #ifdef _WIN32
+  return control == state_->find(EndpointRole::Control) && ack == state_->find(EndpointRole::Ack) &&
+      state_->admissionState.load() == 2;
+#else
+  return false;
+#endif
+}
+#ifdef _WIN32
+#ifdef HEALTHY_ENDPOINT_TESTING
+void ChildEndpoints::invalidateAdmissionForTest() noexcept
+{
+  if (state_ && state_->operations.testOnly) state_->enterContainment();
+}
+#endif
 void ChildEndpoints::beginContainment() noexcept
 {
   if (state_) state_->enterContainment();
@@ -180,6 +252,7 @@ FixtureRestart::IoProgress ChildEndpoints::begin(EndpointRole role, bool read, c
   entry->reading = read; entry->readComplete = false; entry->writeComplete = false; entry->writeConsumed = false;
   const auto authority = [state = state_.get(), entry] { return state->authorityValid() && !entry->containment; };
   const auto result = entry->io->beginGuarded(entry->pipe, read, data, size, state_->deadline, authority);
+  state_->observeIo(role, result);
   if (entry->containment) return result == FixtureRestart::IoProgress::Pending ? result : FixtureRestart::IoProgress::Failed;
   entry->readComplete = read && result == FixtureRestart::IoProgress::Complete;
   entry->writeComplete = !read && result == FixtureRestart::IoProgress::Complete;
@@ -201,6 +274,7 @@ FixtureRestart::IoProgress ChildEndpoints::beginTrackedRead(EndpointRole role, D
   entry->reading = true; entry->readComplete = false; entry->writeComplete = false;
   const auto authority = [state = state_.get(), entry] { return state->authorityValid() && !entry->containment; };
   const auto result = entry->io->beginTrackedReadGuarded(entry->pipe, size, state_->deadline, authority);
+  state_->observeIo(role, result);
   if (entry->io->operation() == previous && !entry->io->pending() && !entry->io->settlement())
     entry->trackedRead = false;
   if (entry->containment && result != FixtureRestart::IoProgress::Pending && result != FixtureRestart::IoProgress::Unconfirmed)
@@ -250,6 +324,7 @@ FixtureRestart::IoProgress ChildEndpoints::poll(EndpointRole role)
   const bool tracked = entry->trackedRead;
   const auto authority = [state = state_.get(), entry] { return state->authorityValid() && !entry->containment; };
   const auto result = entry->io->pollGuarded(authority);
+  state_->observeIo(role, result);
   if (entry->containment) return result == FixtureRestart::IoProgress::Pending || result == FixtureRestart::IoProgress::Unconfirmed
       ? result : FixtureRestart::IoProgress::Failed;
   entry->readComplete = !tracked && entry->reading && result == FixtureRestart::IoProgress::Complete;
@@ -295,6 +370,7 @@ bool ChildEndpoints::closeSettled(EndpointRole role)
   if (!entry || !entry->pipe || entry->closeFailed || !state_->authorityValid() || entry->containment ||
       (role != EndpointRole::Evidence && role != EndpointRole::Ack) ||
       !entry->io || !entry->writeComplete || !entry->writeConsumed || !entry->io->canReleaseStorage()) return false;
+  if (role == EndpointRole::Ack) { state_->loseAdmission(); state_->ackLive.store(false); }
   entry->closeFailed = true; // Reentrant use cannot issue another close.
   try { if (!state_->operations.close(entry->pipe)) return false; }
   catch (...) { return false; }

@@ -21,6 +21,7 @@ struct EndpointInput { EndpointRole role; std::uintptr_t inheritedPipe; };
 class ChildEndpoints final {
 public:
 #if defined(_WIN32) && defined(HEALTHY_ENDPOINT_TESTING)
+  void invalidateAdmissionForTest() noexcept;
   struct TestOperations {
     std::function<bool()> valid;
     std::function<bool(std::uintptr_t)> accepts;
@@ -45,6 +46,9 @@ public:
   // The returned ownership does not attest current validity. Recheck
   // VerifiedModule::stillValid with the owning generation at each boundary.
   std::shared_ptr<const VerifiedModule> capability() const noexcept;
+  bool bindAdmissionClaim(const std::shared_ptr<HealthyRetirement::RetirementClaim>& claim,
+                          std::uint64_t generation) noexcept;
+  bool admissionSnapshot(std::uint64_t generation, const void* control, const void* ack) const noexcept;
 #ifdef _WIN32
   void beginContainment() noexcept;
   FixtureRestart::IoProgress begin(EndpointRole role, bool read, const void* data, DWORD size);
