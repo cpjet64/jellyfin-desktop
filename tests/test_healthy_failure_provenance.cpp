@@ -260,6 +260,25 @@ class TestHealthyGraphArm {
     check(!session_->load() && !session_->seek() && !prepared_->closedAck());
     check(pipes_.writes.size() == 1 && state_->stops == 0);
   }
+  void readyThenLossBeforeDirectLoad()
+  {
+    initialize();
+    auto progress = ChildSession::Progress::Pending;
+    for (int i = 0; i < 20 && progress == ChildSession::Progress::Pending; ++i)
+      progress = session_->pollRestore();
+    check(progress == ChildSession::Progress::Ready);
+    check(pipes_.writes.size() == 1 && pipes_.writes[0].left(4) == "JGA2");
+    const auto& binding = *graph_->session_;
+    check(graph_->player_->m_nativeRestore.armed && !graph_->player_->m_nativeRestore.loadAttempted);
+    check(binding.host && binding.core && binding.intentRevision && binding.attempt);
+    check(!binding.gate->allowsRestore(grant_.run, 7, grant_.grant, grant_.revision, digest_, state_->now));
+    pipes_.endpointValid = false;
+    check(!session_->load()); // No separate poll after endpoint loss.
+    check(binding.gate->canceled() && binding.firstFailure != HealthyRestart::FailureCause::None);
+    check(session_->pollRestore() == ChildSession::Progress::Failed);
+    check(!graph_->player_->m_nativeRestore.loadAttempted && !session_->seek());
+    check(pipes_.writes.size() == 1 && !prepared_->closedAck() && state_->stops == 0);
+  }
   void acceptanceWriteAbortsAfterFailure()
   {
     pipes_.holdAck = true;
@@ -280,6 +299,7 @@ class TestHealthyGraphArm {
 public:
   static void run()
   {
+    { TestHealthyGraphArm test; test.readyThenLossBeforeDirectLoad(); }
     { TestHealthyGraphArm test; test.endpointLossAfterArm(); }
     { TestHealthyGraphArm test; test.endpointLossDuringPoll(); }
     { TestHealthyGraphArm test; test.runCase(); }
