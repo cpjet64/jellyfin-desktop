@@ -75,7 +75,8 @@ void TestHealthyUnpausePlayer::prepare(PlayerComponent& player, bool paused,
 {
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
-  QVERIFY(player.healthyBindRestoreCleanupGate(gate));
+  player.m_healthyStopClock = [] { return qint64(1); };
+  QVERIFY(player.healthyBindRestoreCleanupGate(gate, 100000));
   const PlayerComponent::RestoreGrant grant{3, 4, 0, 3000, paused};
   QVERIFY(player.armNativeRestore(grant, 7, 2));
   player.m_restoreDispatch = [](quint64, const char**) { return 0; };
