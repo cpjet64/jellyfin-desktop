@@ -11,7 +11,8 @@ namespace HealthyModuleIdentity {
 struct VerifiedModule::State {
 #ifdef _WIN32
   HANDLE parent = nullptr;
-  ~State() { if (parent) CloseHandle(parent); }
+  HANDLE identityPipe = nullptr;
+  ~State() { if (identityPipe) CloseHandle(identityPipe); if (parent) CloseHandle(parent); }
 #endif
   std::uint64_t generation = 0, deadline = 0;
   std::unique_ptr<ImportedModule> module;
@@ -33,6 +34,23 @@ SourceContract VerifiedModule::renderSourceContract(std::uint64_t generation) co
 { return stillValid(generation) ? SourceContract::BuilderSourceQualified : SourceContract::Unqualified; }
 SourceContract VerifiedModule::wakeSourceContract(std::uint64_t generation) const noexcept
 { return stillValid(generation) ? SourceContract::BuilderSourceQualified : SourceContract::Unqualified; }
+bool VerifiedModule::acceptsEndpoint(std::uintptr_t pipe, std::uint64_t generation, std::uint64_t deadline) const noexcept
+{
+#ifdef _WIN32
+  if (!stillValid(generation) || deadline != state_->deadline || !pipe) return false;
+  HANDLE handle = reinterpret_cast<HANDLE>(pipe);
+  ULONG peer = 0;
+  if (!state_->identityPipe) return false;
+  SetLastError(ERROR_SUCCESS);
+  if (CompareObjectHandles(handle, state_->identityPipe) || GetLastError() != ERROR_NOT_SAME_OBJECT) return false;
+  return
+      GetFileType(handle) == FILE_TYPE_PIPE && GetNamedPipeServerProcessId(handle, &peer) &&
+      peer && peer == GetProcessId(state_->parent);
+#else
+  (void)pipe; (void)generation; (void)deadline;
+  return false;
+#endif
+}
 
 struct ChildModuleGate::State {
 #ifdef _WIN32
@@ -163,6 +181,7 @@ ModuleGateProgress ChildModuleGate::finish()
     auto verified = std::make_unique<VerifiedModule::State>();
     verified->generation = state_->generation; verified->deadline = state_->deadline;
     verified->parent = state_->parent; state_->parent = nullptr;
+    verified->identityPipe = state_->pipe; state_->pipe = nullptr;
     verified->module = std::move(imported);
     state_->verified.reset(new VerifiedModule(std::move(verified)));
     state_->progress = ModuleGateProgress::Ready;

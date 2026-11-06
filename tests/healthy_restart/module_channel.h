@@ -6,6 +6,7 @@ namespace HealthyModuleIdentity {
 enum class SourceContract { Unqualified, BuilderSourceQualified };
 enum class ModuleGateProgress { Pending, Ready, Failed, Unconfirmed };
 class ChildModuleGate;
+class ChildEndpoints;
 
 // This capability records module identity and the accepted builder-source
 // contract only. It does not authorize native free or establish live GL safety.
@@ -19,6 +20,8 @@ public:
   SourceContract wakeSourceContract(std::uint64_t generation) const noexcept;
 private:
   friend class ChildModuleGate;
+  friend class ChildEndpoints;
+  bool acceptsEndpoint(std::uintptr_t pipe, std::uint64_t generation, std::uint64_t deadline) const noexcept;
   struct State;
   explicit VerifiedModule(std::unique_ptr<State> state);
   std::unique_ptr<State> state_;
