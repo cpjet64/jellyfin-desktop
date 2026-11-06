@@ -35,6 +35,7 @@ private slots:
   void queuedStopReplyAfterContainment();
   void pendingLoadSettlesBeforeStop();
   void pendingLoadExpiresBeforeStop();
+  void containedPendingLoadContinuesOnlyForCurrentOwner();
 #endif
 };
 
@@ -398,6 +399,60 @@ void TestPlayerRestoreCleanup::pendingLoadExpiresBeforeStop()
   QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Failed);
   QCOMPARE(stops, 0);
   player.m_healthyStopEventWait = {};
+}
+
+void TestPlayerRestoreCleanup::containedPendingLoadContinuesOnlyForCurrentOwner()
+{
+  for (int scenario = 0; scenario != 3; ++scenario) {
+    PlayerComponent player;
+    QVERIFY(arm(player, true));
+    qint64 now = 10;
+    player.m_healthyStopClock = [&] { return now; };
+    int stops = 0; quint64 stopId = 0;
+    player.m_restoreDispatch = [&](quint64 id, const char**) { ++stops; stopId = id; return 0; };
+    mpv_event none{}; none.event_id = MPV_EVENT_NONE;
+    mpv_node value{}; value.format = MPV_FORMAT_INT64; value.u.int64 = 42;
+    char field[] = "playlist_entry_id"; char* fields[] = {field};
+    mpv_node_list list{}; list.num = 1; list.keys = fields; list.values = &value;
+    mpv_event_command command{}; command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
+    mpv_event load{}; load.event_id = MPV_EVENT_COMMAND_REPLY;
+    load.reply_userdata = (quint64{1} << 63) | 2; load.data = &command;
+    mpv_event stop{}; stop.event_id = MPV_EVENT_COMMAND_REPLY;
+    mpv_event* next = nullptr;
+    player.m_healthyStopEventWait = [&]() -> mpv_event* {
+      if (!next) return &none;
+      auto* event = next; next = nullptr; return event;
+    };
+    QVERIFY(beginCleanup(player));
+    QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Pending);
+    QCOMPARE(stops, 0);
+    player.m_healthyStopLease->contain();
+    if (scenario == 1) now = 100;
+    if (scenario == 2) ++player.m_mpvGeneration;
+    next = &load;
+    QVERIFY(QMetaObject::invokeMethod(&player, "handleMpvEvents", Qt::QueuedConnection));
+    QCoreApplication::processEvents();
+    QVERIFY(!next);
+    if (scenario != 0) {
+      QCOMPARE(stops, 0);
+      QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Failed);
+    } else {
+      QCOMPARE(stops, 1); QVERIFY(stopId);
+      stop.reply_userdata = stopId; next = &stop;
+      QVERIFY(QMetaObject::invokeMethod(&player, "handleMpvEvents", Qt::QueuedConnection));
+      QCoreApplication::processEvents();
+      QVERIFY(!next); QVERIFY(player.m_restoreCleanup.stopReply);
+      QVERIFY(player.m_restoreCleanup.stopOk);
+      QCOMPARE(player.m_restoreCleanup.replyError, 0);
+      QCOMPARE(player.m_restoreCleanup.status, PlayerComponent::RestoreCleanupStatus::Pending);
+      QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Failed);
+      QCOMPARE(stops, 1);
+    }
+    QVERIFY(player.m_healthyStopLease->contained());
+    QVERIFY(!player.m_restoreCleanup.idle.requested);
+    QVERIFY(!player.m_restoreCleanup.position.requested);
+    player.m_healthyStopEventWait = {};
+  }
 }
 #endif
 
