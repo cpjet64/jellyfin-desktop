@@ -44,6 +44,9 @@ public:
 #ifdef HEALTHY_RETIREMENT_TESTING
   Closure(std::shared_ptr<Slot> slot, std::shared_ptr<Lifetime> testLifetime,
           std::uint64_t generation, std::int64_t deadline, StopKey stop, Operations operations);
+  Closure(std::shared_ptr<Slot> slot, std::shared_ptr<Lifetime> testLifetime,
+          std::uint64_t generation, std::int64_t deadline, StopKey stop,
+          std::shared_ptr<const std::atomic_bool> lease, Operations operations);
 #endif
   ~Closure();
   Closure(const Closure&) = delete;

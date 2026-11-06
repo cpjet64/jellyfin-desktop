@@ -22,8 +22,14 @@ Closure::Closure(std::shared_ptr<Slot> slot, std::uint64_t generation,
 #ifdef HEALTHY_RETIREMENT_TESTING
 Closure::Closure(std::shared_ptr<Slot> slot, std::shared_ptr<Lifetime> testLifetime,
                  std::uint64_t generation, std::int64_t deadline, StopKey stop, Operations operations)
-  : Closure(std::move(slot), generation, deadline, stop, std::make_shared<std::atomic_bool>(true),
-            std::move(operations))
+  : Closure(std::move(slot), std::move(testLifetime), generation, deadline, stop,
+            std::make_shared<std::atomic_bool>(true), std::move(operations))
+{
+}
+Closure::Closure(std::shared_ptr<Slot> slot, std::shared_ptr<Lifetime> testLifetime,
+                 std::uint64_t generation, std::int64_t deadline, StopKey stop,
+                 std::shared_ptr<const std::atomic_bool> lease, Operations operations)
+  : Closure(std::move(slot), generation, deadline, stop, std::move(lease), std::move(operations))
 {
   testLifetime_ = std::move(testLifetime);
 }
