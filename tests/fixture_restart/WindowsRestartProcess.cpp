@@ -76,7 +76,7 @@ WindowsRestartProcess::~WindowsRestartProcess()
 bool WindowsRestartProcess::release()
 {
   if (!settled_ || worker_.joinable()) return false;
-  for (auto* item : io_) if (item->pending()) return false;
+  for (auto* item : io_) if (item->retainedWork()) return false;
   delete this;
   return true;
 }
@@ -105,7 +105,7 @@ bool WindowsRestartProcess::closeParentChannel(WindowsRestartChannel* channel)
   const size_t index = static_cast<size_t>(found - channels_.begin());
   auto* io = io_[index];
   if (channel->server_ == INVALID_HANDLE_VALUE || io->bound_ != channel->server_ ||
-      io->closed_ || io->inFlight_ || io->read_ || io->state_ != IoProgress::Complete)
+      io->closed_ || io->retainedWork() || io->read_ || io->state_ != IoProgress::Complete)
     return false;
   if (!channel->api_.close(channel->server_)) return false;
   channel->server_ = INVALID_HANDLE_VALUE;

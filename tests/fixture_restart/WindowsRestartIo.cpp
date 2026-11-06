@@ -19,7 +19,7 @@ WindowsRestartIo::~WindowsRestartIo()
 
 bool WindowsRestartIo::release()
 {
-  if (inFlight_ || submitting_ || activeCalls_ || owned_ || settlement_) return false;
+  if (owned_ || retainedWork()) return false;
   delete this;
   return true;
 }

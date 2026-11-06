@@ -53,6 +53,7 @@ public:
   const std::vector<unsigned char>& bytes() const { return bytes_; }
 private:
   friend class WindowsRestartProcess;
+  bool retainedWork() const { return inFlight_ || submitting_ || activeCalls_ || settlement_; }
   ~WindowsRestartIo();
   bool sealIdentityWriter();
   IoProgress beginIdentity(HANDLE pipe, const void* data, DWORD size, ULONGLONG deadline);
