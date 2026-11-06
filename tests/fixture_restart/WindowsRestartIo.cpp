@@ -111,7 +111,7 @@ IoProgress WindowsRestartIo::submit()
     HANDLE event = overlap_.hEvent;
     overlap_ = {};
     overlap_.hEvent = event;
-    DWORD count = 0;
+    DWORD count = tracked_ ? MAXDWORD : 0;
     const DWORD remaining = static_cast<DWORD>(bytes_.size()) - offset_;
     inFlight_ = true;
     submitting_ = true;
