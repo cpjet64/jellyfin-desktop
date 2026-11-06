@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(WindowsLoaderSelection NONE)
+project(WindowsLoaderSelection LANGUAGES CXX)
 include("${SELECTION_MODULE}")
 set(WIN32 "${CASE_WINDOWS}")
 set(MSVC "${CASE_MSVC}")
