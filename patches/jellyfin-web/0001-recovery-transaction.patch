@@ -1,0 +1,397 @@
+diff --git a/src/components/playback/playbackmanager.js b/src/components/playback/playbackmanager.js
+index a5d76ad..279a096 100644
+--- a/src/components/playback/playbackmanager.js
++++ b/src/components/playback/playbackmanager.js
+@@ -32,8 +32,10 @@ import { MediaError } from 'types/mediaError';
+ import { getMediaError } from 'utils/mediaError';
+ import { toApi } from 'utils/jellyfin-apiclient/compat';
+ import { bindSkipSegment } from './skipsegment.ts';
++import { RecoveryTransaction, RECOVERY_DESCRIPTOR } from './recoveryTransaction.js';
+ 
+ const UNLIMITED_ITEMS = -1;
++const recoveryManagers = new WeakMap();
+ 
+ function enableLocalPlaylistManagement(player) {
+     if (player.getPlaylist) {
+@@ -72,7 +74,8 @@ function triggerPlayerChange(playbackManagerInstance, newPlayer, newTarget, prev
+     Events.trigger(playbackManagerInstance, 'playerchange', [newPlayer, newTarget, previousPlayer]);
+ }
+ 
+-function reportPlayback(playbackManagerInstance, state, player, reportPlaylist, serverId, method, progressEventName) {
++function reportPlayback(playbackManagerInstance, state, player, reportPlaylist, serverId, method, progressEventName, guard = null) {
++    if (guard && !guard()) return;
+     if (!serverId) {
+         // Not a server item
+         // We can expand on this later and possibly report them
+@@ -92,11 +95,13 @@ function reportPlayback(playbackManagerInstance, state, player, reportPlaylist,
+     }
+ 
+     const apiClient = ServerConnections.getApiClient(serverId);
++    if (guard && !guard()) return;
+     const reportPlaybackPromise = apiClient[method](info);
+     // Notify that report has been sent
+     reportPlaybackPromise.then(() => {
++        if (guard && !guard()) return;
+         Events.trigger(playbackManagerInstance, 'reportplayback', [true]);
+-    });
++    }, guard ? () => {} : undefined);
+ }
+ 
+ function getPlaylistSync(playbackManagerInstance, player) {
+@@ -708,8 +713,16 @@ function sortPlayerTargets(a, b) {
+ }
+ 
+ export class PlaybackManager {
+-    constructor() {
++    constructor(recoveryTestBoundary = null) {
+         const self = this;
++        const recovery = new RecoveryTransaction(recoveryTestBoundary);
++        recoveryManagers.set(this, recovery);
++        this.recoveryV1 = Object.freeze({
++            descriptor: RECOVERY_DESCRIPTOR,
++            begin: request => recovery.begin(request, (record, value) => beginRecovery(record, value)),
++            revoke: context => recovery.revoke(context),
++            observe: evidence => recovery.observe(evidence)
++        });
+ 
+         const players = [];
+         let currentTargetInfo;
+@@ -934,7 +947,8 @@ export class PlaybackManager {
+             }
+         }
+ 
+-        function setCurrentPlayerInternal(player, targetInfo) {
++        function setCurrentPlayerInternal(player, targetInfo, transaction = null) {
++            requireRecoveryOwner(transaction);
+             const previousPlayer = self._currentPlayer;
+             const previousTargetInfo = currentTargetInfo;
+ 
+@@ -946,6 +960,8 @@ export class PlaybackManager {
+                 throw new Error('targetInfo cannot be null');
+             }
+ 
++            requireRecoveryOwner(transaction);
++
+             currentPairingId = null;
+             self._currentPlayer = player;
+             currentTargetInfo = targetInfo;
+@@ -958,10 +974,14 @@ export class PlaybackManager {
+                 self.endPlayerUpdates(previousPlayer);
+             }
+ 
++            requireRecoveryOwner(transaction);
++
+             if (player) {
+                 self.beginPlayerUpdates(player);
+             }
+ 
++            requireRecoveryOwner(transaction);
++
+             triggerPlayerChange(self, player, targetInfo, previousPlayer, previousTargetInfo);
+         }
+ 
+@@ -2083,7 +2103,40 @@ export class PlaybackManager {
+         self.translateItemsForPlayback = translateItemsForPlayback;
+         self.getItemsForPlayback = getItemsForPlayback;
+ 
+-        self.play = async function (options) {
++        function requireRecoveryOwner(record) {
++            if (!record) return;
++            if (!recovery.owns(record)) throw new Error('recovery canceled');
++            const client = ServerConnections.getApiClient(record.request.serverId);
++            if (!client || client.serverId() !== record.request.serverId ||
++                client.getCurrentUserId() !== record.request.accountId) throw new Error('recovery context changed');
++        }
++
++        function hasRecoveryOwner(record) {
++            try { requireRecoveryOwner(record); return true; } catch (_) { return false; }
++        }
++
++        function requireRecoveryItems(record, items) {
++            if (!record) return;
++            const item = items?.[0];
++            if (items?.length !== 1 || !item || item.Id !== record.request.itemId ||
++                item.ServerId !== record.request.serverId || item.MediaType !== 'Video' ||
++                item.LocationType === 'Remote' || item.IsPlaceHolder || item.PresetMediaSource ||
++                item.IsFolder || item.PartCount > 1 || !['Movie', 'Video'].includes(item.Type)) {
++                throw new Error('unsupported recovery item');
++            }
++        }
++
++        async function beginRecovery(record, request) {
++            record.request = request;
++            requireRecoveryOwner(record);
++            await self.play({ serverId: request.serverId, ids: [request.itemId],
++                mediaSourceId: request.sourceId, startPositionTicks: request.positionTicks,
++                fullscreen: false, enableRemotePlayers: false }, record);
++        }
++
++        self.play = async function (options, transaction = null) {
++            if (!transaction) recovery.invalidate();
++            requireRecoveryOwner(transaction);
+             normalizePlayOptions(options);
+ 
+             if (self._currentPlayer) {
+@@ -2110,12 +2163,17 @@ export class PlaybackManager {
+                 items = (await getItemsForPlayback(options.serverId, {
+                     Ids: options.ids.join(',')
+                 })).Items;
++                requireRecoveryOwner(transaction);
++                requireRecoveryItems(transaction, items);
+             }
+ 
+             // Prepare the list of items
+             items = await translateItemsForPlayback(items, options);
++            requireRecoveryOwner(transaction);
++            requireRecoveryItems(transaction, items);
+             // Add any additional parts for movies or episodes
+             items = await getAdditionalParts(items);
++            requireRecoveryOwner(transaction);
+             // Adjust the start index for additional parts added to the queue
+             if (options.startIndex) {
+                 let adjustedStartIndex = 0;
+@@ -2127,8 +2185,9 @@ export class PlaybackManager {
+             }
+             // getAdditionalParts returns an array of arrays of items, so flatten it
+             items = items.flat();
++            requireRecoveryItems(transaction, items);
+ 
+-            return playWithIntros(items, options);
++            return playWithIntros(items, options, transaction);
+         };
+ 
+         function getPlayerData(player) {
+@@ -2286,7 +2345,7 @@ export class PlaybackManager {
+             return Promise.all(items.map(getItemAndParts));
+         };
+ 
+-        function playWithIntros(items, options) {
++        function playWithIntros(items, options, transaction = null) {
+             let playStartIndex = options.startIndex || 0;
+             let firstItem = items[playStartIndex];
+ 
+@@ -2309,6 +2368,8 @@ export class PlaybackManager {
+             const apiClient = ServerConnections.getApiClient(firstItem.ServerId);
+ 
+             return getIntros(firstItem, apiClient, options).then(function (introsResult) {
++                requireRecoveryOwner(transaction);
++                if (transaction && introsResult.Items.length) throw new Error('recovery intros unsupported');
+                 const introItems = introsResult.Items;
+                 let introPlayOptions;
+ 
+@@ -2328,12 +2389,17 @@ export class PlaybackManager {
+                 introPlayOptions.items = items;
+                 introPlayOptions.startIndex = playStartIndex;
+ 
+-                return playInternal(items[playStartIndex], introPlayOptions, function () {
++                const started = function () {
++                    requireRecoveryOwner(transaction);
+                     self._playQueueManager.setPlaylist(items);
+ 
++                    requireRecoveryOwner(transaction);
+                     setPlaylistState(items[playStartIndex].PlaylistItemId, playStartIndex);
++                    requireRecoveryOwner(transaction);
+                     loading.hide();
+-                });
++                };
++                if (transaction) return playRecoveryInternal(items[playStartIndex], introPlayOptions, started, transaction);
++                return playInternal(items[playStartIndex], introPlayOptions, started);
+             });
+         }
+ 
+@@ -2344,7 +2410,80 @@ export class PlaybackManager {
+             }
+         }
+ 
++        function recoverySource(record, result) {
++            const request = record.request;
++            const matches = (result?.MediaSources || []).filter(source => source.Id === request.sourceId);
++            if (matches.length !== 1) throw new Error('ambiguous recovery source');
++            const source = matches[0];
++            if (source.IsRemote !== false || source.IsInfiniteStream !== false || source.RequiresOpening !== false ||
++                source.StreamUrl || source.LiveStreamId ||
++                source.SupportsDirectStream !== true || !Number.isSafeInteger(source.RunTimeTicks) ||
++                source.RunTimeTicks <= request.positionTicks || request.positionTicks % 10000 !== 0 ||
++                !Array.isArray(source.MediaStreams)) throw new Error('unsupported recovery timeline');
++            const track = (index, type) => source.MediaStreams.filter(stream => stream.Index === index && stream.Type === type);
++            if (track(request.audioStreamIndex, 'Audio').length !== 1 ||
++                (request.subtitleStreamIndex >= 0 && track(request.subtitleStreamIndex, 'Subtitle').length !== 1)) {
++                throw new Error('ambiguous recovery track');
++            }
++            source.DefaultAudioStreamIndex = request.audioStreamIndex;
++            source.DefaultSubtitleStreamIndex = request.subtitleStreamIndex;
++            source.DefaultSecondarySubtitleStreamIndex = -1;
++            source.enableDirectPlay = false;
++            return source;
++        }
++
++        async function playRecoveryInternal(item, options, started, record) {
++            requireRecoveryOwner(record);
++            await runInterceptors(item, options);
++            requireRecoveryOwner(record);
++            const bitrate = getSavedMaxStreamingBitrate(ServerConnections.getApiClient(item.ServerId), item.MediaType);
++            const player = getPlayer(item, options, true);
++            if (!player || player.isLocalPlayer !== true || !enableLocalPlaylistManagement(player) ||
++                player.recoveryEventCorrelation !== 1) {
++                throw new Error('unsupported recovery player');
++            }
++            const profile = await player.getDeviceProfile(item);
++            requireRecoveryOwner(record);
++            const client = ServerConnections.getApiClient(item.ServerId);
++            const request = record.request;
++            const dto = { UserId: request.accountId, StartTimeTicks: request.positionTicks, IsPlayback: true,
++                AutoOpenLiveStream: false, MediaSourceId: request.sourceId, DeviceProfile: profile,
++                AudioStreamIndex: request.audioStreamIndex, SubtitleStreamIndex: request.subtitleStreamIndex,
++                MaxStreamingBitrate: bitrate, EnableDirectPlay: false, EnableDirectStream: true,
++                EnableTranscoding: false };
++            const response = await getMediaInfoApi(toApi(client)).getPostedPlaybackInfo({ itemId: item.Id, playbackInfoDto: dto });
++            requireRecoveryOwner(record);
++            const source = recoverySource(record, response.data);
++            const active = self._currentPlayer;
++            if (active) {
++                await onPlaybackChanging(active, player, item, record);
++                requireRecoveryOwner(record);
++            }
++            dispatchRecovery(record, player, item, options, source, started, client);
++        }
++
++        function dispatchRecovery(record, player, item, options, source, started, client) {
++            requireRecoveryOwner(record);
++            const streamInfo = createStreamInfo(client, item.MediaType, item, source, record.request.positionTicks, player);
++            if (!streamInfo.url || streamInfo.transcodingOffsetTicks !== 0 ||
++                !['DirectPlay', 'DirectStream'].includes(streamInfo.playMethod)) {
++                throw new Error('unsupported recovery stream');
++            }
++            streamInfo.recovery = { ...record.key, state: record.request.state };
++            requireRecoveryOwner(record);
++            if (!recovery.dispatching(record)) throw new Error('recovery dispatch unavailable');
++            const completion = player.play(streamInfo);
++            requireRecoveryOwner(record);
++            recovery.accept(record);
++            Promise.resolve(completion).then(() => {
++                if (!recovery.owns(record)) return;
++                started();
++                if (recovery.owns(record)) onPlaybackStarted(player, options, streamInfo, source, record);
++            }, () => { /* native outcome is separately correlated */ }).catch(() => {});
++        }
++
+         function playInternal(item, playOptions, onPlaybackStartedFn, prevSource) {
++            recovery.invalidate();
+             if (item.IsPlaceHolder) {
+                 loading.hide();
+                 showPlaybackInfoErrorMessage(self, 'PlaybackErrorPlaceHolder');
+@@ -3258,12 +3397,14 @@ export class PlaybackManager {
+             }
+         }
+ 
+-        function onPlaybackStarted(player, playOptions, streamInfo, mediaSource) {
++        function onPlaybackStarted(player, playOptions, streamInfo, mediaSource, transaction = null) {
+             if (!player) {
+                 throw new Error('player cannot be null');
+             }
+ 
+-            setCurrentPlayerInternal(player);
++            requireRecoveryOwner(transaction);
++            setCurrentPlayerInternal(player, undefined, transaction);
++            requireRecoveryOwner(transaction);
+ 
+             const playerData = getPlayerData(player);
+ 
+@@ -3286,13 +3427,18 @@ export class PlaybackManager {
+             const fullscreen = playOptions.fullscreen;
+ 
+             const state = self.getPlayerState(player, streamInfo.item, streamInfo.mediaSource);
++            requireRecoveryOwner(transaction);
+ 
+-            reportPlayback(self, state, player, true, state.NowPlayingItem.ServerId, 'reportPlaybackStart');
++            reportPlayback(self, state, player, true, state.NowPlayingItem.ServerId, 'reportPlaybackStart', undefined,
++                transaction ? () => hasRecoveryOwner(transaction) : null);
++            requireRecoveryOwner(transaction);
+ 
+             state.IsFirstItem = isFirstItem;
+             state.IsFullscreen = fullscreen;
+             Events.trigger(player, 'playbackstart', [state]);
++            requireRecoveryOwner(transaction);
+             Events.trigger(self, 'playbackstart', [player, state]);
++            requireRecoveryOwner(transaction);
+ 
+             // only used internally as a safeguard to avoid reporting other events to the server before playback start
+             streamInfo.started = true;
+@@ -3394,6 +3540,7 @@ export class PlaybackManager {
+          * @param {MediaError} error.type
+          */
+         function onPlaybackError(e, error) {
++            if (!recovery.allowsEvent(e?.recovery)) return;
+             const player = this;
+             error = error || {};
+ 
+@@ -3432,6 +3579,7 @@ export class PlaybackManager {
+         }
+ 
+         function onPlaybackStopped(e, displayErrorCode) {
++            if (!recovery.allowsEvent(e?.recovery)) return;
+             const player = this;
+ 
+             if (getPlayerData(player).isChangingStream) {
+@@ -3502,10 +3650,13 @@ export class PlaybackManager {
+             }
+         }
+ 
+-        function onPlaybackChanging(activePlayer, newPlayer, newItem) {
++        function onPlaybackChanging(activePlayer, newPlayer, newItem, transaction = null) {
++            requireRecoveryOwner(transaction);
+             const state = self.getPlayerState(activePlayer);
++            requireRecoveryOwner(transaction);
+ 
+             const serverId = self.currentItem(activePlayer).ServerId;
++            requireRecoveryOwner(transaction);
+ 
+             // User started playing something new while existing content is playing
+             let promise;
+@@ -3522,6 +3673,7 @@ export class PlaybackManager {
+             }
+ 
+             return promise.then(function () {
++                requireRecoveryOwner(transaction);
+                 // Clear the data since we were not listening 'stopped'
+                 getPlayerData(activePlayer).streamInfo = null;
+ 
+@@ -3547,22 +3699,26 @@ export class PlaybackManager {
+             }
+         }
+ 
+-        function onPlaybackTimeUpdate() {
++        function onPlaybackTimeUpdate(e) {
++            if (!recovery.allowsEvent(e?.recovery)) return;
+             const player = this;
+             sendProgressUpdate(player, 'timeupdate');
+         }
+ 
+-        function onPlaybackPause() {
++        function onPlaybackPause(e) {
++            if (!recovery.allowsEvent(e?.recovery)) return;
+             const player = this;
+             sendProgressUpdate(player, 'pause');
+         }
+ 
+-        function onPlaybackUnpause() {
++        function onPlaybackUnpause(e) {
++            if (!recovery.allowsEvent(e?.recovery)) return;
+             const player = this;
+             sendProgressUpdate(player, 'unpause');
+         }
+ 
+-        function onPlaybackVolumeChange() {
++        function onPlaybackVolumeChange(e) {
++            if (!recovery.allowsEvent(e?.recovery)) return;
+             const player = this;
+             sendProgressUpdate(player, 'volumechange');
+         }
+@@ -3931,6 +4087,7 @@ export class PlaybackManager {
+     }
+ 
+     stop(player) {
++        recoveryManagers.get(this)?.invalidate();
+         player = player || this._currentPlayer;
+         if (player) {
+             if (enableLocalPlaylistManagement(player)) {

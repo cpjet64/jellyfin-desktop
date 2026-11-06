@@ -4,6 +4,10 @@ Status: design for review only. No Web patch, desktop implementation,
 deployment, authenticated request or live playback is implied. The candidate
 Web baseline is [`ea2abad3e1671473d352b3ccf06f616c61ec9381`](https://github.com/jellyfin/jellyfin-web/tree/ea2abad3e1671473d352b3ccf06f616c61ec9381)
 (10.11.6); the actual user-selected producer and version remain unverified.
+The pristine `playbackmanager.js` is 158,528 bytes, SHA-256
+`43a9837e11041ddd624a6f68ee3fe3ffb7ee48dfa1443b27592a67c0c0895af2`,
+Git blob `a5d76addb70c21fed15cc6c54dd6829d3dbf8304`. Anchors below were
+corrected against those exact bytes; earlier rendered line numbers differed.
 This design is limited to one seekable server video on a local player. Live,
 remote-player, multi-item, queue restoration and unsupported/ambiguous source or
 track identity return unsupported or ineligible. Existing ordinary playback,
@@ -30,26 +34,26 @@ the actual selected document's version, identity, or host binding.
 The pinned [`playbackmanager.js`](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js)
 already provides manager `play(options)` with `serverId` and logical `ids`:
 it resolves items, translates them and obtains additional parts before
-`playWithIntros` ([lines 1922–1963](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L1922)).
+`playWithIntros` ([`self.play`, line 2086](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L2086)).
 The manager owns its existing authenticated client, source negotiation, queue
 and reporting. However, `truncatePlayOptions` keeps a fixed list and drops an
-unknown attempt field ([602–610, 2131](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L602));
+unknown attempt field ([`truncatePlayOptions`, line 650](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L650));
 `createStreamInfo` constructs another object without that field
-([2575–2657](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L2575)).
+([`createStreamInfo`, line 2807](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L2807)).
 Same item or URL does not identify a particular attempt. Preplay interceptors
-run before bitrate and media preparation ([2159–2249](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L2159));
+run before bitrate and media preparation ([`playInternal`, line 2347](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L2347));
 they cannot alone prevent a continuation from dispatching after later Stop.
 
-`PlaybackManager.stop(player)` ([3606–3616](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L3606))
+`PlaybackManager.stop(player)` ([line 3933](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L3933))
 returns a resolved promise if no player exists. A pending recovery must still
 be invalidated synchronously at its entry. Replacement uses
-`onPlaybackChanging` to stop an old player ([3210 onward](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L3210));
+`onPlaybackChanging` to stop an old player ([line 3505](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L3505));
 internal stop, user Stop, replacement, retry and natural end cannot be inferred
 from a generic stopped event. The existing `cancelPlayback` destroys the current
-player ([2195 onward](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L2195)):
+player ([`cancelPlayback`, line 2386](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L2386)):
 a stale transaction must never reach that global cleanup path against a newer
 player. Existing initial-player rejection currently invokes start handling before
-a delayed error handler ([2492–2515](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L2492));
+a delayed error handler ([`player.play`, line 2724](https://github.com/jellyfin/jellyfin-web/blob/ea2abad3e1671473d352b3ccf06f616c61ec9381/src/components/playback/playbackmanager.js#L2724));
 its promise behavior cannot serve as an attempt receipt without explicit handling.
 
 ## Proposed capability and ownership
