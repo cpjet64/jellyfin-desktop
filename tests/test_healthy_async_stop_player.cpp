@@ -14,6 +14,7 @@ private slots:
   void noEntryRequiresFreshPreflight();
   void errorsDuplicatesAndRevocation();
   void reentrantSubmission();
+  void queuedDisplayAndUnexpectedEvents();
 };
 
 void TestHealthyAsyncStop::prepare(PlayerComponent& player, bool active, bool paused)
@@ -148,6 +149,24 @@ void TestHealthyAsyncStop::reentrantSubmission()
   QVERIFY(facts.stopRequested && facts.submissionKnown && !facts.submitted);
   QCOMPARE(facts.submissionError, -9);
   QCOMPARE(player.pollHealthyReplacementStop(), Stop::Status::Failed);
+}
+
+void TestHealthyAsyncStop::queuedDisplayAndUnexpectedEvents()
+{
+  for (const auto kind : {MPV_EVENT_HOOK, MPV_EVENT_CLIENT_MESSAGE}) {
+    PlayerComponent player; prepare(player, true, false);
+    int displays = 0;
+    player.m_restoreDisplayAction = [&] { ++displays; };
+    player.onRestoreDisplay();
+    QCOMPARE(displays, 1);
+    player.m_healthyStopDispatch = [](quint64, const char**, bool) { return 0; };
+    QVERIFY(player.beginHealthyReplacementStop(7, 2, 100));
+    player.onRestoreDisplay();
+    QCOMPARE(displays, 1);
+    mpv_event event{}; event.event_id = kind;
+    player.observeHealthyReplacementStop(&event);
+    QCOMPARE(player.pollHealthyReplacementStop(), Stop::Status::Failed);
+  }
 }
 
 QTEST_GUILESS_MAIN(TestHealthyAsyncStop)
