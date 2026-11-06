@@ -67,6 +67,7 @@ class DiagnosticRoutingTest(unittest.TestCase):
         self.assertEqual(build[build.index("--target") + 1:], list(diagnostic.DIAGNOSTIC_TESTS))
         self.assertEqual(ctest[ctest.index("-R") + 1], "^(" + "|".join(diagnostic.DIAGNOSTIC_TESTS) + ")$")
         self.assertIn("--no-tests=error", ctest)
+        self.assertIn("healthy_graph_capture_lifetime", diagnostic.DIAGNOSTIC_TESTS)
         self.assertTrue(Path(self.calls[-1][2]["env"]["JELLYFIN_TEST_OWNED_ROOT"]).is_dir())
         self.assertNotIn("healthy_mpvqt_event_ownership", diagnostic.DIAGNOSTIC_TESTS)
 

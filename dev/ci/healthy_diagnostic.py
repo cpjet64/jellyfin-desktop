@@ -16,7 +16,7 @@ DIAGNOSTIC_TESTS = (
     "healthy_async_stop_player", "healthy_unpause_player", "healthy_fixture_adapter_cleanup",
     "healthy_healthy_restore_cancel", "healthy_async_stop_source", "healthy_player_native_receipts",
     "healthy_player_restore_cleanup", "healthy_player_restore_observation", "healthy_player_native_restore",
-    "healthy_graph_capture",
+    "healthy_graph_capture", "healthy_graph_capture_lifetime",
 )
 
 
