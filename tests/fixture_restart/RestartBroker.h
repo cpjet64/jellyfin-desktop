@@ -3,8 +3,12 @@
 #include <QByteArray>
 #include <QString>
 #include <QtGlobal>
+#include <memory>
+#include <functional>
 
 namespace FixtureRestart {
+
+struct RestorePermit;
 
 struct Grant {
   quint64 run = 0, grant = 0, revision = 0;
@@ -32,15 +36,22 @@ public:
   // Each step must return immediately; repeated calls poll the same operation,
   // never submit it twice. Pending ownership remains with the adapter.
   virtual Progress internalReplacementStop(qint64 deadline) = 0;
+  virtual Progress waitAClosed(qint64) { return Progress::Failed; }
   virtual Progress waitAAndChildren(qint64 deadline, bool& forced) = 0;
   virtual Progress launchB(qint64 deadline) = 0;
+  virtual Progress launchB(const Grant&, const QByteArray&, qint64) { return Progress::Failed; }
   virtual Progress transferToB(const QByteArray& frame, qint64 deadline) = 0;
+  virtual Progress waitBGrantAccepted(qint64) { return Progress::Failed; }
+  virtual Progress issueRestorePermit(qint64, const std::function<bool()>&) { return Progress::Failed; }
+  virtual Progress monitorB(qint64) { return Progress::Failed; }
+  virtual bool eligibleForB(const Grant&) const { return false; }
   virtual Progress cancelBAndAwaitAck(qint64 deadline) = 0;
   virtual Progress cleanupOwned(qint64 deadline) = 0;
 };
 
 QByteArray encodeGrant(const Grant& grant);
 bool decodeGrant(const QByteArray& frame, const Grant& expected, Grant& output);
+bool decodeCommittedGrant(const QByteArray& frame, quint64 expectedRun, const QByteArray& expectedDigest, Grant& output);
 bool validateFixtureEvidence(const Evidence& evidence);
 
 class Broker {
@@ -61,7 +72,7 @@ public:
   qint64 normalDeadline() const { return normal_; }
 private:
   bool withinNormal() const;
-  enum class Phase { Idle, Stop, Wait, Launch, Transfer, Cleanup, Done, Failed, Unconfirmed };
+  enum class Phase { Idle, Stop, Closed, Wait, Launch, Transfer, Accepted, Permit, Monitor, Cleanup, Done, Failed, Unconfirmed };
   void stepCancellation();
   Operations& operations_;
   const void* channel_;
@@ -70,7 +81,9 @@ private:
   Evidence evidence_;
   bool captured_ = false, canceled_ = false, burned_ = false, replacementStarted_ = false;
   bool bLaunchStarted_ = false;
+  bool dispatchActive_ = false;
   QByteArray frame_;
+  QByteArray commitment_;
   Phase phase_ = Phase::Idle;
   Cancellation cancellation_ = Cancellation::Local;
 };
@@ -81,13 +94,23 @@ class ChildGate {
 public:
   ChildGate(const void* channel, qint64 deadline) : channel_(channel), deadline_(deadline) {}
   bool accept(const void* channel, const QByteArray& frame, const Grant& expected, qint64 now, bool eof);
+  bool accept(const void* channel, const QByteArray& frame, const Grant& expected,
+              const QByteArray& expectedDigest, qint64 now, bool eof);
+  bool accept(const void* channel, const QByteArray& frame, quint64 expectedRun,
+              const QByteArray& expectedDigest, qint64 now, bool eof);
   bool cancel(bool (*checkedStop)(void*), void* context);
   bool allowed(quint64 revision) const;
+  bool canceled() const { return canceled_; }
+  bool installPermit(const QByteArray& frame, const RestorePermit& expected, qint64 now);
+  bool allowsRestore(quint64 run, quint64 launch, quint64 grant, quint64 revision,
+                     const QByteArray& digest, qint64 now) const;
   const Grant* acceptedGrant() const { return accepted_ && !canceled_ ? &grant_ : nullptr; }
 private:
   const void* channel_;
   qint64 deadline_;
   Grant grant_;
+  QByteArray acceptedDigest_;
+  std::shared_ptr<const RestorePermit> permit_;
   bool attempted_ = false, accepted_ = false, canceled_ = false;
 };
 }

@@ -84,4 +84,65 @@ bool decodeControl(const QByteArray& bytes, Control& result)
   result = candidate;
   return true;
 }
+
+QByteArray encodeClosed(const Closed& value)
+{
+  const quint64 fields[] = {value.run, value.launch, value.stopSequence, value.revision,
+                            value.core, value.renderer, value.closure};
+  QByteArray bytes(64, '\0');
+  bytes.replace(0, 4, "JCL1");
+  for (int i = 0; i < 7; ++i) {
+    if (!fields[i]) return {};
+    qToBigEndian<quint64>(fields[i], reinterpret_cast<uchar*>(bytes.data() + 8 + 8 * i));
+  }
+  return bytes;
+}
+
+bool decodeClosed(const QByteArray& bytes, const Closed& expected, Closed& result)
+{
+  const QByteArray canonical = encodeClosed(expected);
+  if (canonical.isEmpty() || bytes != canonical) return false;
+  result = expected;
+  return true;
+}
+
+QByteArray encodeGrantAccepted(const GrantAccepted& value)
+{
+  if (!value.run || !value.launch || !value.grant || !value.revision || value.digest.size() != 32) return {};
+  QByteArray bytes(72, '\0');
+  bytes.replace(0, 4, "JGA1");
+  const quint64 fields[] = {value.run, value.launch, value.grant, value.revision};
+  for (int i = 0; i < 4; ++i)
+    qToBigEndian<quint64>(fields[i], reinterpret_cast<uchar*>(bytes.data() + 8 + 8 * i));
+  bytes.replace(40, 32, value.digest);
+  return bytes;
+}
+
+bool decodeGrantAccepted(const QByteArray& bytes, const GrantAccepted& expected, GrantAccepted& result)
+{
+  const QByteArray canonical = encodeGrantAccepted(expected);
+  if (canonical.isEmpty() || bytes != canonical) return false;
+  result = expected;
+  return true;
+}
+
+QByteArray encodeRestorePermit(const RestorePermit& value)
+{
+  if (!value.run || !value.launch || !value.grant || !value.revision || !value.sequence || value.digest.size() != 32) return {};
+  QByteArray bytes(80, '\0');
+  bytes.replace(0, 4, "JRP1");
+  const quint64 fields[] = {value.run, value.launch, value.grant, value.revision, value.sequence};
+  for (int i = 0; i < 5; ++i)
+    qToBigEndian<quint64>(fields[i], reinterpret_cast<uchar*>(bytes.data() + 8 + 8 * i));
+  bytes.replace(48, 32, value.digest);
+  return bytes;
+}
+
+bool decodeRestorePermit(const QByteArray& bytes, const RestorePermit& expected, RestorePermit& result)
+{
+  const QByteArray canonical = encodeRestorePermit(expected);
+  if (canonical.isEmpty() || bytes != canonical) return false;
+  result = expected;
+  return true;
+}
 }

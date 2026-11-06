@@ -1,15 +1,20 @@
 #include "WindowsBrokerOperations.h"
 #ifdef _WIN32
+#include "../healthy_restart/module_gate.h"
+#include <QCryptographicHash>
+#include <QScopedValueRollback>
 #include <limits>
+#include <algorithm>
 #include <utility>
 #include <array>
 
 namespace FixtureRestart {
 WindowsBrokerOperations::WindowsBrokerOperations(WindowsRestartProcess& a, WindowsRestartProcess& b,
     WindowsEndpoint evidence, WindowsEndpoint aControl, WindowsEndpoint aAck, WindowsEndpoint bGrant,
-    WindowsEndpoint bControl, WindowsEndpoint bAck, std::wstring executable, std::wstring arguments, quint64 revision)
+    WindowsEndpoint bControl, WindowsEndpoint bAck, std::wstring executable, std::wstring arguments, quint64 revision,
+    decltype(&PeekNamedPipe) peek)
   : a_(&a), b_(&b), evidence_(evidence), aControl_(aControl), aAck_(aAck), bGrant_(bGrant),
-    bControl_(bControl), bAck_(bAck), executable_(std::move(executable)), arguments_(std::move(arguments)), revision_(revision)
+    bControl_(bControl), bAck_(bAck), executable_(std::move(executable)), arguments_(std::move(arguments)), revision_(revision), peek_(peek)
 {
   const std::array<WindowsEndpoint, 6> endpoints{evidence_, aControl_, aAck_, bGrant_, bControl_, bAck_};
   valid_ = a_ != b_ && revision_ && !executable_.empty();
@@ -79,40 +84,246 @@ Operations::Progress WindowsBrokerOperations::internalReplacementStop(qint64 dea
   return exchange(aStop_, aControl_, aAck_, {ControlKind::InternalStop, 1, revision_}, deadline);
 }
 
+Operations::Progress WindowsBrokerOperations::read(WindowsEndpoint endpoint, DWORD size, int& stage,
+                                                   qint64 deadline, bool expectEof)
+{
+  if (!valid_ || !endpoint.channel || !endpoint.io || stage < 0 || deadline < 0) return Progress::Failed;
+  if (stage == 2) return Progress::Complete;
+  const auto result = stage == 0 ? endpoint.io->begin(endpoint.channel->parentHandle(), true, nullptr, size,
+      ULONGLONG(deadline)) : endpoint.io->poll();
+  if (result == IoProgress::Pending || result == IoProgress::Unconfirmed) { stage = 1; return Progress::Pending; }
+  if ((expectEof && result == IoProgress::Eof) || (!expectEof && result == IoProgress::Complete)) {
+    stage = 2; return Progress::Complete;
+  }
+  stage = -1;
+  return Progress::Failed;
+}
+
+Operations::Progress WindowsBrokerOperations::waitAClosed(qint64 deadline)
+{
+  if (!healthyConfigured_ || aStop_.stage != 4 || !a_->ownsEndpoint(aAck_.channel, aAck_.io)) return Progress::Failed;
+  if (aClosed_) return Progress::Complete;
+  const auto status = read(aAck_, 64, aClosedStage_, deadline, false);
+  if (status != Progress::Complete) return status;
+  const auto& data = aAck_.io->bytes();
+  Closed closed;
+  if (!decodeClosed(QByteArray(reinterpret_cast<const char*>(data.data()), qsizetype(data.size())), expectedClosed_, closed))
+    return Progress::Failed;
+  aClosed_ = true;
+  return Progress::Complete;
+}
+
 Operations::Progress WindowsBrokerOperations::waitAAndChildren(qint64 deadline, bool& forced)
 {
   forced = false;
-  if (!valid_ || !a_) return Progress::Failed;
-  const auto result = a_->pollHealthy(ULONGLONG(deadline));
-  if (result == ProcessProgress::Complete) { aSettled_ = true; return Progress::Complete; }
-  return result == ProcessProgress::Pending || result == ProcessProgress::Unconfirmed ? Progress::Pending : Progress::Failed;
+  if (!valid_ || !a_ || !aClosed_ || !a_->ownsEndpoint(aAck_.channel, aAck_.io)) return Progress::Failed;
+  if (!aProcessSettled_) {
+    const auto result = a_->pollHealthy(ULONGLONG(deadline));
+    if (result == ProcessProgress::Pending || result == ProcessProgress::Unconfirmed) return Progress::Pending;
+    if (result != ProcessProgress::Complete) return Progress::Failed;
+    aProcessSettled_ = true;
+  }
+  const auto eof = read(aAck_, 1, aEofStage_, deadline, true);
+  if (eof == Progress::Complete) aSettled_ = true;
+  return eof;
 }
 
 Operations::Progress WindowsBrokerOperations::launchB(qint64 deadline)
 {
+  Q_UNUSED(deadline);
+  return Progress::Failed;
+}
+
+bool WindowsBrokerOperations::configureHealthyTransfer(const Closed& expected, quint64 bLaunch,
+    WindowsRestartChannel* identity, std::shared_ptr<HealthyModuleIdentity::StageLease>& lease,
+    std::function<bool(const Grant&)> currentIntent)
+{
+  if (!valid_ || healthyConfigured_ || bLaunchStarted_ || !b_ || !identity || !b_->ownsChannel(identity) ||
+      identity == bGrant_.channel || identity == bControl_.channel || identity == bAck_.channel ||
+      identity == evidence_.channel || identity == aControl_.channel || identity == aAck_.channel ||
+      !lease || !currentIntent || !bLaunch || bLaunch == expected.launch || encodeClosed(expected).isEmpty() ||
+      expected.stopSequence != 1 || expected.revision != revision_) return false;
+  expectedClosed_ = expected;
+  bLaunchId_ = bLaunch;
+  bIdentity_ = identity;
+  bLease_ = std::move(lease);
+  currentIntent_ = std::move(currentIntent);
+  healthyConfigured_ = true;
+  return true;
+}
+
+bool WindowsBrokerOperations::eligibleForB(const Grant& grant) const
+{
+  if (!healthyConfigured_ || !currentIntent_) return false;
+  try { return currentIntent_(grant); } catch (...) { return false; }
+}
+
+Operations::Progress WindowsBrokerOperations::launchB(const Grant& grant, const QByteArray& digest, qint64 deadline)
+{
+  const QByteArray frame = encodeGrant(grant);
+  if (!valid_ || !healthyConfigured_ || !aSettled_ || !b_ || grant.run != expectedClosed_.run ||
+      grant.revision != expectedClosed_.revision || frame.isEmpty() || digest.size() != 32 ||
+      QCryptographicHash::hash(frame, QCryptographicHash::Sha256) != digest) return Progress::Failed;
+  if (!bIdentityBound_) {
+    HealthyModuleIdentity::LaunchBinding binding;
+    binding.role = HealthyModuleIdentity::LaunchRole::Restore;
+    binding.run = grant.run;
+    std::copy(digest.cbegin(), digest.cend(), binding.expectedGrantDigest.begin());
+    if (!b_->bindHealthyModuleLease(bLease_, bIdentity_, bLaunchId_, binding)) return Progress::Failed;
+    expectedAcceptance_ = {grant.run, bLaunchId_, grant.grant, grant.revision, digest};
+    bIdentityBound_ = true;
+  } else if (encodeGrantAccepted(expectedAcceptance_) !=
+             encodeGrantAccepted({grant.run, bLaunchId_, grant.grant, grant.revision, digest})) return Progress::Failed;
   if (!valid_ || !aSettled_ || !b_) return Progress::Failed;
-  const auto result = bLaunchStarted_ ? b_->pollLaunch() : b_->launch(executable_, arguments_, ULONGLONG(deadline));
-  bLaunchStarted_ = true;
-  if (result == ProcessProgress::Complete) return Progress::Complete;
-  return result == ProcessProgress::Pending || result == ProcessProgress::Unconfirmed ? Progress::Pending : Progress::Failed;
+  if (!bProcessLaunched_) {
+    const bool started = bLaunchStarted_;
+    bLaunchStarted_ = true;
+    const auto result = started ? b_->pollLaunch() : b_->launch(executable_, arguments_, ULONGLONG(deadline));
+    if (result == ProcessProgress::Pending || result == ProcessProgress::Unconfirmed) return Progress::Pending;
+    if (result != ProcessProgress::Complete) return Progress::Failed;
+    bProcessLaunched_ = true;
+  }
+  const auto identityStatus = b_->sendHealthyModuleFrame(ULONGLONG(deadline));
+  bIdentityFramePending_ = identityStatus == ProcessProgress::Pending || identityStatus == ProcessProgress::Unconfirmed;
+  if (identityStatus == ProcessProgress::Complete) return Progress::Complete;
+  return identityStatus == ProcessProgress::Pending || identityStatus == ProcessProgress::Unconfirmed ? Progress::Pending : Progress::Failed;
 }
 
 Operations::Progress WindowsBrokerOperations::transferToB(const QByteArray& frame, qint64 deadline)
 {
-  if (!valid_ || !aSettled_ || !b_ || !b_->launchEstablished()) return Progress::Failed;
+  if (!valid_ || !aSettled_ || !bIdentityBound_ || !b_ || !b_->launchEstablished() || frame.size() > 9216 ||
+      QCryptographicHash::hash(frame, QCryptographicHash::Sha256) != expectedAcceptance_.digest) return Progress::Failed;
   const auto result = write(bGrant_, frame, grantStage_, deadline);
   if (result != Progress::Complete) return result;
   return b_->closeParentChannel(bGrant_.channel) ? Progress::Complete : Progress::Failed;
 }
 
+Operations::Progress WindowsBrokerOperations::waitBGrantAccepted(qint64 deadline)
+{
+  if (!bIdentityBound_ || !b_ || !b_->ownsEndpoint(bAck_.channel, bAck_.io)) return Progress::Failed;
+  if (bAccepted_) return Progress::Complete;
+  const auto status = trackedBRead(DWORD(72 - bReadBytes_.size()), deadline);
+  if (status == IoProgress::Pending || status == IoProgress::Unconfirmed) return Progress::Pending;
+  if (status != IoProgress::Complete) return Progress::Failed;
+  return bAccepted_ ? Progress::Complete : Progress::Pending;
+}
+
+bool WindowsBrokerOperations::parseBBytes()
+{
+  if (bAccepted_) {
+    if (!bReadBytes_.isEmpty()) { bProtocolFailed_ = true; return false; }
+    return true;
+  }
+  if (bReadBytes_.size() < 72) return true;
+  GrantAccepted accepted;
+  if (!decodeGrantAccepted(bReadBytes_, expectedAcceptance_, accepted)) { bProtocolFailed_ = true; return false; }
+  bReadBytes_.clear();
+  bAccepted_ = true;
+  return true;
+}
+
+IoProgress WindowsBrokerOperations::takeBSettlement()
+{
+  const auto settled = bAck_.io->settlement();
+  if (!settled || !bReadOperation_ || settled->operation != bReadOperation_ ||
+      settled->transferred != settled->bytes.size() || settled->bytes.size() > 72 ||
+      bReadBytes_.size() + qsizetype(settled->bytes.size()) > 72) {
+    cancelReadAmbiguous_ = true;
+    if (!bAck_.io->pending()) bReadPending_ = false;
+    return IoProgress::Failed;
+  }
+  const auto outcome = settled->outcome;
+  if (outcome == WindowsRestartIo::Settlement::Outcome::Completed)
+    bReadBytes_.append(reinterpret_cast<const char*>(settled->bytes.data()), qsizetype(settled->bytes.size()));
+  if (!bAck_.io->consumeSettlement(settled->operation)) { cancelReadAmbiguous_ = true; return IoProgress::Failed; }
+  bReadPending_ = false;
+  bReadOperation_ = 0;
+  if (outcome == WindowsRestartIo::Settlement::Outcome::Completed)
+    return parseBBytes() ? IoProgress::Complete : IoProgress::Failed;
+  if (outcome == WindowsRestartIo::Settlement::Outcome::Eof) return IoProgress::Eof;
+  if (outcome == WindowsRestartIo::Settlement::Outcome::Uncertain) cancelReadAmbiguous_ = true;
+  return IoProgress::Failed;
+}
+
+IoProgress WindowsBrokerOperations::trackedBRead(DWORD size, qint64 deadline)
+{
+  if (!size || deadline < 0 || !bAck_.io || !bAck_.channel) return IoProgress::Failed;
+  IoProgress progress;
+  if (bReadPending_) progress = bAck_.io->poll();
+  else {
+    bReadPending_ = true;
+    progress = bAck_.io->beginTrackedRead(bAck_.channel->parentHandle(), size, ULONGLONG(deadline));
+    bReadOperation_ = bAck_.io->operation();
+  }
+  if (progress == IoProgress::Pending || progress == IoProgress::Unconfirmed) return progress;
+  return takeBSettlement();
+}
+
+Operations::Progress WindowsBrokerOperations::issueRestorePermit(qint64 deadline, const std::function<bool()>& stillCurrent)
+{
+  if (permitCallActive_ || !bAccepted_ || !b_ || !peek_ || !stillCurrent ||
+      !b_->ownsEndpoint(bAck_.channel, bAck_.io)) return Progress::Failed;
+  QScopedValueRollback<bool> guard(permitCallActive_, true);
+  if (permitStage_ != 2) {
+    DWORD available = 0;
+    if (!peek_(bAck_.channel->parentHandle(), nullptr, 0, nullptr, &available, nullptr) || available)
+      return Progress::Failed;
+  }
+  if (permitStage_ == 0) {
+    bool allowed = false;
+    try { allowed = stillCurrent(); } catch (...) { return Progress::Failed; }
+    if (!allowed) return Progress::Failed;
+  }
+  const RestorePermit permit{expectedAcceptance_.run, expectedAcceptance_.launch, expectedAcceptance_.grant,
+                             expectedAcceptance_.revision, 1, expectedAcceptance_.digest};
+  return write(bControl_, encodeRestorePermit(permit), permitStage_, deadline);
+}
+
+Operations::Progress WindowsBrokerOperations::monitorB(qint64 deadline)
+{
+  if (permitStage_ != 2 || !b_ || !b_->ownsEndpoint(bAck_.channel, bAck_.io)) return Progress::Failed;
+  if (!bEof_) {
+    const auto status = trackedBRead(1, deadline);
+    if (status == IoProgress::Complete || status == IoProgress::Failed) return Progress::Failed;
+    bEof_ = status == IoProgress::Eof;
+  }
+  const auto process = b_->pollHealthy(ULONGLONG(deadline));
+  if (process == ProcessProgress::Failed) return Progress::Failed;
+  if (process == ProcessProgress::Complete && bEof_) { bSettled_ = true; return Progress::Complete; }
+  return Progress::Pending;
+}
+
 Operations::Progress WindowsBrokerOperations::cancelBAndAwaitAck(qint64 deadline)
 {
   if (!valid_ || !b_ || revision_ == (std::numeric_limits<quint64>::max)()) return Progress::Failed;
+  if (bProtocolFailed_ || (!bAccepted_ && !bReadBytes_.isEmpty())) cancelReadAmbiguous_ = true;
+  if (bIdentityFramePending_) {
+    const auto status = b_->cancelHealthyModuleFrame();
+    if (status == ProcessProgress::Pending || status == ProcessProgress::Unconfirmed) return Progress::Pending;
+    bIdentityFramePending_ = false;
+  }
   if (!b_->launchEstablished()) {
     const auto result = b_->forceCleanup(ULONGLONG(deadline));
     return result == ProcessProgress::Pending || result == ProcessProgress::Unconfirmed ? Progress::Pending : Progress::Failed;
   }
+  if (bReadPending_) {
+    const auto status = bAck_.io->cancel();
+    if (status == IoProgress::Pending || status == IoProgress::Unconfirmed || bAck_.io->pending()) return Progress::Pending;
+    const auto settled = takeBSettlement();
+    if (settled == IoProgress::Eof || settled == IoProgress::Unconfirmed || bProtocolFailed_ ||
+        !bReadBytes_.isEmpty()) cancelReadAmbiguous_ = true;
+  }
+  if (bControl_.io && bControl_.io->pending()) {
+    cancelReadAmbiguous_ = true;
+    bControl_.io->cancel();
+    if (bControl_.io->pending()) return Progress::Pending;
+  }
   if (bGrant_.io && bGrant_.io->pending()) bGrant_.io->cancel();
+  if (cancelReadAmbiguous_) {
+    if (bCancel_.request.isEmpty()) bCancel_.request = encodeControl({ControlKind::UserStop, 2, revision_ + 1});
+    const auto status = write(bControl_, bCancel_.request, bCancel_.stage, deadline);
+    return status == Progress::Pending ? status : Progress::Failed;
+  }
   return exchange(bCancel_, bControl_, bAck_, {ControlKind::UserStop, 2, revision_ + 1}, deadline);
 }
 
