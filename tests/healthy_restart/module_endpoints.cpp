@@ -194,9 +194,10 @@ FixtureRestart::IoProgress ChildEndpoints::poll(EndpointRole role)
   if (!entry || !entry->pipe || entry->closeFailed ||
       (!state_->operations.valid() && !(entry->trackedGrant && entry->io->pending())))
     return FixtureRestart::IoProgress::Failed;
+  const bool tracked = entry->trackedGrant;
   const auto result = entry->io->poll();
-  entry->readComplete = !entry->trackedGrant && entry->reading && result == FixtureRestart::IoProgress::Complete;
-  entry->writeComplete = !entry->trackedGrant && !entry->reading && result == FixtureRestart::IoProgress::Complete;
+  entry->readComplete = !tracked && entry->reading && result == FixtureRestart::IoProgress::Complete;
+  entry->writeComplete = !tracked && !entry->reading && result == FixtureRestart::IoProgress::Complete;
   return result;
 }
 FixtureRestart::IoProgress ChildEndpoints::cancel(EndpointRole role)
