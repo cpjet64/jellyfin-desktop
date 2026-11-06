@@ -255,6 +255,7 @@ private:
   friend class TestPlayerRestoreCleanup;
   friend class TestPlayerRestoreObservation;
   friend class FixtureRestartAdapter;
+  friend class TestRestartChildPlayer;
   // Private host-only seam. The future host must resolve TestClip and establish
   // seekability; no WebChannel method or production host invokes this seam.
   enum class FixtureAsset { TestClip };
