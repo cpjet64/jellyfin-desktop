@@ -189,7 +189,7 @@ class TestHealthyGraphArm {
     CHECK(pipes_.writes.size() == 1 && !prepared_->closedAck());
   }
 
-  void admittedBeforeLoss()
+  void admittedBeforeLoss(bool successfulReply)
   {
     initialize(); consumePermit();
     auto& player = *graph_->player_;
@@ -202,20 +202,27 @@ class TestHealthyGraphArm {
     CHECK(!player.dispatchNativeRestoreLoad(QStringLiteral("fixture")) && state_->dispatches == 1);
     CHECK(session_->pollRestore() == ChildSession::Progress::Failed);
     CHECK(graph_->session_->gate->canceled());
-    mpv_event reply{}; reply.event_id = MPV_EVENT_COMMAND_REPLY; reply.error = -1;
+    char entryName[] = "playlist_entry_id";
+    char* names[] = {entryName};
+    mpv_node entry{}; entry.format = MPV_FORMAT_INT64; entry.u.int64 = 42;
+    mpv_node_list list{}; list.num = 1; list.keys = names; list.values = &entry;
+    mpv_event_command command{}; command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
+    mpv_event reply{}; reply.event_id = MPV_EVENT_COMMAND_REPLY; reply.error = successfulReply ? 0 : -1;
+    if (successfulReply) reply.data = &command;
     reply.reply_userdata = (quint64{1} << 63) | key.attempt;
     player.observeNativeReceipt(&reply);
     const auto settled = player.m_nativeReceipts.snapshot();
     CHECK(settled.key.host == key.host && settled.key.core == key.core &&
           settled.key.revision == key.revision && settled.key.attempt == key.attempt);
-    CHECK(settled.submissionObserved && settled.submitted && settled.reply && !settled.replyOk);
+    CHECK(settled.submissionObserved && settled.submitted && settled.reply && settled.replyOk == successfulReply);
+    CHECK(!player.healthyRestoreSubmissionAllowed(false));
     CHECK(!player.dispatchNativeRestoreLoad(QStringLiteral("fixture")) && state_->dispatches == 1);
     CHECK(pipes_.writes.size() == 1 && !prepared_->closedAck());
   }
 public:
   static void run(int mode) { TestHealthyGraphArm test; test.loadCase(mode); }
   static void runSeek(bool lose) { TestHealthyGraphArm test; test.seekCase(lose); }
-  static void runAdmitted() { TestHealthyGraphArm test; test.admittedBeforeLoss(); }
+  static void runAdmitted(bool success) { TestHealthyGraphArm test; test.admittedBeforeLoss(success); }
 };
 
 int main(int argc, char** argv)
@@ -224,6 +231,7 @@ int main(int argc, char** argv)
   for (int mode = 0; mode < 4; ++mode) TestHealthyGraphArm::run(mode);
   TestHealthyGraphArm::runSeek(false);
   TestHealthyGraphArm::runSeek(true);
-  TestHealthyGraphArm::runAdmitted();
+  TestHealthyGraphArm::runAdmitted(false);
+  TestHealthyGraphArm::runAdmitted(true);
   return 0;
 }
