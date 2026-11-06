@@ -20,6 +20,8 @@ class TestHealthyRestoreCleanup : public QObject
   static bool cancel(PlayerComponent& player, const std::shared_ptr<Gate>& gate);
 private slots:
   void beforeLoad();
+  void noLoadRejectsUnsolicitedEvents();
+  void canceledGateCannotBind();
   void submittedWithoutStart();
   void terminalOrdering();
   void pendingSeekBlocksSettlement();
@@ -108,8 +110,36 @@ void TestHealthyRestoreCleanup::beforeLoad()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   PlayerComponent player; int stops = 0; auto gate = prepare(player, stops, false); QVERIFY(gate);
-  QVERIFY(cancel(player, gate)); QCOMPARE(player.pollNativeRestoreCancellation(), Status::NoLoad);
+  QVERIFY(cancel(player, gate)); QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
+  int idle = 1; qint64 position = -1;
+  property(player, quint64{1} << 54, "idle-active", MPV_FORMAT_FLAG, &idle);
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
+  property(player, quint64{1} << 53, "playlist-pos", MPV_FORMAT_INT64, &position);
+  QCOMPARE(player.pollNativeRestoreCancellation(), Status::NoLoad);
   QCOMPARE(stops, 0); QVERIFY(!player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
+#endif
+}
+
+void TestHealthyRestoreCleanup::noLoadRejectsUnsolicitedEvents()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  for (int kind = 0; kind != 3; ++kind) {
+    PlayerComponent player; int stops = 0; auto gate = prepare(player, stops, false); QVERIFY(gate);
+    QVERIFY(cancel(player, gate)); QCOMPARE(player.pollNativeRestoreCancellation(), Status::Pending);
+    if (kind == 0) start(player, 42);
+    else if (kind == 1) end(player, 42, MPV_END_FILE_REASON_STOP);
+    else reply(player, quint64{1} << 55);
+    QCOMPARE(player.pollNativeRestoreCancellation(), Status::Failed); QCOMPARE(stops, 0);
+  }
+#endif
+}
+
+void TestHealthyRestoreCleanup::canceledGateCannotBind()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent player; auto gate = std::make_shared<Gate>(&player, 100);
+  QVERIFY(gate->cancel(checked, nullptr));
+  QVERIFY(!player.healthyBindRestoreCleanupGate(gate));
 #endif
 }
 
