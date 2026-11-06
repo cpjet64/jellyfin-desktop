@@ -110,6 +110,42 @@ class HealthyRestartAcceptance(unittest.TestCase):
 
 
 class HealthyRestartWrapper(unittest.TestCase):
+    def test_all_pinned_player_and_platform_sources_map_to_their_copies(self):
+        base = WORKTREE / 'deps'
+        base.mkdir(exist_ok=True)
+        if base.is_symlink() or base.resolve() != base:
+            raise RuntimeError('test storage must remain inside the worktree')
+        with tempfile.TemporaryDirectory(prefix='healthy-mapping-', dir=base) as directory:
+            work = Path(directory)
+            entries = re.findall(r'"(src/[^"|]+)\|([^"|]+)\|[0-9a-f]{64}"',
+                                 PINS.read_text(encoding='utf-8'))
+            paths = [target for source, target in entries if source == 'src/' + target]
+            self.assertGreater(len(paths), 50)
+            for path in paths:
+                output = work / 'copy' / path
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.touch()
+            script = work / 'mapping.cmake'
+            sources = ';'.join((work / 'src' / path).as_posix() for path in paths)
+            other = (work / 'src/other.cpp').as_posix()
+            script.write_text('cmake_minimum_required(VERSION 3.20)\n'
+                              f'include("{PINS.as_posix()}")\n'
+                              f'include("{(ROOT / "CMakeModules/HealthyRestartTargets.cmake").as_posix()}")\n'
+                              'set(_healthy_copy "${CMAKE_SOURCE_DIR}/copy")\n'
+                              f'set(ALL_SRCS "{sources};{other}")\n'
+                              'healthy_restart_source_mapping(result)\n'
+                              'file(WRITE "${CMAKE_SOURCE_DIR}/result" "${result}")\n', encoding='utf-8')
+            args = ['cmake', '-P', str(script)]
+            result = subprocess.run(args, cwd=work, capture_output=True, text=True,
+                                    timeout=30, creationflags=FLAGS)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            mapped = (work / 'result').read_text(encoding='utf-8').split(';')
+            self.assertEqual(mapped, [(work / 'copy' / path).as_posix() for path in paths] + [other])
+            (work / 'copy/core/ComponentManager.h').unlink()
+            result = subprocess.run(args, cwd=work, capture_output=True, text=True,
+                                    timeout=30, creationflags=FLAGS)
+            self.assertNotEqual(result.returncode, 0)
+
     def test_generated_wrapper_line_endings_and_content(self):
         base = WORKTREE / 'deps'
         base.mkdir(exist_ok=True)
