@@ -4,6 +4,28 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+add_executable(test_fixture_frame_acceptance fixture_restart/frame_acceptance_test.cpp fixture_restart/frame_acceptance.cpp)
+target_compile_features(test_fixture_frame_acceptance PRIVATE cxx_std_17)
+add_test(NAME test_fixture_frame_acceptance COMMAND test_fixture_frame_acceptance)
+set_tests_properties(test_fixture_frame_acceptance PROPERTIES TIMEOUT 60)
+
+add_executable(test_fixture_frame_capture fixture_restart/test_frame_capture.cpp fixture_restart/frame_capture.cpp fixture_restart/frame_acceptance.cpp)
+target_link_libraries(test_fixture_frame_capture PRIVATE Qt6::Core Qt6::Gui)
+target_compile_features(test_fixture_frame_capture PRIVATE cxx_std_17)
+add_test(NAME test_fixture_frame_capture COMMAND test_fixture_frame_capture)
+set_tests_properties(test_fixture_frame_capture PROPERTIES TIMEOUT 60)
+
+if(WIN32)
+  add_executable(test_windows_restart_io test_windows_restart_io.cpp fixture_restart/WindowsRestartIo.cpp)
+  target_compile_features(test_windows_restart_io PRIVATE cxx_std_17)
+  add_test(NAME test_windows_restart_io COMMAND test_windows_restart_io)
+  set_tests_properties(test_windows_restart_io PROPERTIES TIMEOUT 60)
+  add_executable(test_windows_restart_process test_windows_restart_process.cpp fixture_restart/WindowsRestartProcess.cpp fixture_restart/WindowsRestartIo.cpp)
+  target_compile_features(test_windows_restart_process PRIVATE cxx_std_17)
+  add_test(NAME test_windows_restart_process COMMAND test_windows_restart_process)
+  set_tests_properties(test_windows_restart_process PROPERTIES TIMEOUT 60)
+endif()
+
 add_executable(test_fixture_restart_broker test_fixture_restart_broker.cpp fixture_restart/RestartBroker.cpp
   fixture_restart/FixtureEvidence.cpp ${CMAKE_SOURCE_DIR}/src/player/PlaybackCheckpoint.cpp)
 target_include_directories(test_fixture_restart_broker PRIVATE ${CMAKE_SOURCE_DIR}/src)
