@@ -2,12 +2,13 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
 #include <deque>
 #include <map>
 using namespace HealthyRetirement;
 using namespace HealthyModuleIdentity;
 using namespace FixtureRestart;
-#define CHECK(x) do { if (!(x)) std::abort(); } while (false)
+#define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #x); std::abort(); } } while (false)
 
 // The injected endpoint factory never creates a capability.
 namespace HealthyModuleIdentity {
@@ -171,4 +172,5 @@ int main()
   cancellationBeforeGrant();
   pendingAckAndCapabilityLoss();
   controlAckSerializesFurtherDispatch();
+  return 0;
 }
