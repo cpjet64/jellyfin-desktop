@@ -22,9 +22,27 @@ bool decodeClosed(const QByteArray& bytes, const Closed& expected, Closed& resul
 struct GrantAccepted {
   quint64 run = 0, launch = 0, grant = 0, revision = 0;
   QByteArray digest;
+  quint64 host = 0, core = 0, intentRevision = 0, attempt = 0;
 };
 QByteArray encodeGrantAccepted(const GrantAccepted& value);
 bool decodeGrantAccepted(const QByteArray& bytes, const GrantAccepted& expected, GrantAccepted& result);
+
+struct CancelNoArm {
+  quint64 run = 0, launch = 0, revision = 0, sequence = 0;
+  QByteArray digest;
+};
+enum class CancelOutcome : quint8 { NoLoad = 1, Stopped = 2, Failed = 3 };
+enum class CancelFailure : quint8 { None = 0, CleanupUnconfirmed = 1 };
+struct CancelResult {
+  quint64 run = 0, launch = 0, grant = 0, revision = 0, sequence = 0;
+  quint64 host = 0, core = 0, intentRevision = 0, attempt = 0;
+  CancelOutcome outcome = CancelOutcome::Failed;
+  CancelFailure reason = CancelFailure::None;
+};
+QByteArray encodeCancelNoArm(const CancelNoArm& value);
+bool decodeCancelNoArm(const QByteArray& bytes, const CancelNoArm& expected);
+QByteArray encodeCancelResult(const CancelResult& value);
+bool decodeCancelResult(const QByteArray& bytes, const CancelResult& expected, CancelResult& result);
 
 struct RestorePermit {
   quint64 run = 0, launch = 0, grant = 0, revision = 0, sequence = 0;

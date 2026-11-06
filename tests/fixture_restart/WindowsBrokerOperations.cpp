@@ -172,8 +172,9 @@ Operations::Progress WindowsBrokerOperations::launchB(const Grant& grant, const 
     if (!b_->bindHealthyModuleLease(bLease_, bIdentity_, bLaunchId_, binding)) return Progress::Failed;
     expectedAcceptance_ = {grant.run, bLaunchId_, grant.grant, grant.revision, digest};
     bIdentityBound_ = true;
-  } else if (encodeGrantAccepted(expectedAcceptance_) !=
-             encodeGrantAccepted({grant.run, bLaunchId_, grant.grant, grant.revision, digest})) return Progress::Failed;
+  } else if (expectedAcceptance_.run != grant.run || expectedAcceptance_.launch != bLaunchId_ ||
+             expectedAcceptance_.grant != grant.grant || expectedAcceptance_.revision != grant.revision ||
+             expectedAcceptance_.digest != digest) return Progress::Failed;
   if (!valid_ || !aSettled_ || !b_) return Progress::Failed;
   if (!bProcessLaunched_) {
     const bool started = bLaunchStarted_;
@@ -202,7 +203,7 @@ Operations::Progress WindowsBrokerOperations::waitBGrantAccepted(qint64 deadline
 {
   if (!bIdentityBound_ || !b_ || !b_->ownsEndpoint(bAck_.channel, bAck_.io)) return Progress::Failed;
   if (bAccepted_) return Progress::Complete;
-  const auto status = trackedBRead(DWORD(72 - bReadBytes_.size()), deadline);
+  const auto status = trackedBRead(nextBReadSize(), deadline);
   if (status == IoProgress::Pending || status == IoProgress::Unconfirmed) return Progress::Pending;
   if (status != IoProgress::Complete) return Progress::Failed;
   return bAccepted_ ? Progress::Complete : Progress::Pending;
@@ -210,24 +211,50 @@ Operations::Progress WindowsBrokerOperations::waitBGrantAccepted(qint64 deadline
 
 bool WindowsBrokerOperations::parseBBytes()
 {
-  if (bAccepted_) {
-    if (!bReadBytes_.isEmpty()) { bProtocolFailed_ = true; return false; }
-    return true;
+  if (bReadBytes_.size() < 4) return true;
+  const QByteArray magic = bReadBytes_.left(4);
+  const int size = magic == "JGA2" ? 104 : magic == "JRC1" ? 24 : magic == "JCN1" ? 72 : magic == "JCS1" ? 80 : 0;
+  if (!size || bReadBytes_.size() > size) { bProtocolFailed_ = true; return false; }
+  if (bReadBytes_.size() < size) return true;
+  bool valid = false;
+  if (magic == "JGA2" && !bAccepted_ && !cancelTerminal_) {
+    GrantAccepted accepted;
+    valid = decodeGrantAccepted(bReadBytes_, expectedAcceptance_, accepted);
+    if (valid) { expectedAcceptance_ = accepted; bAccepted_ = true; }
+  } else if (cancelStarted_ && magic == "JRC1" && !cancelAck_) {
+    Control ack;
+    valid = decodeControl(bReadBytes_, ack) && ack.kind == ControlKind::Ack && ack.sequence == 2 && ack.revision == revision_ + 1;
+    if (valid) cancelAck_ = true;
+  } else if (cancelStarted_ && cancelAck_ && !cancelTerminal_ && magic == "JCN1" && !bAccepted_) {
+    valid = decodeCancelNoArm(bReadBytes_, {expectedAcceptance_.run, bLaunchId_, revision_ + 1, 2, expectedAcceptance_.digest});
+    if (valid) cancelTerminal_ = true;
+  } else if (cancelStarted_ && cancelAck_ && !cancelTerminal_ && magic == "JCS1" && bAccepted_) {
+    CancelResult result;
+    const CancelResult expected{expectedAcceptance_.run, bLaunchId_, expectedAcceptance_.grant, revision_, 2,
+      expectedAcceptance_.host, expectedAcceptance_.core, expectedAcceptance_.intentRevision, expectedAcceptance_.attempt};
+    valid = decodeCancelResult(bReadBytes_, expected, result);
+    if (valid && result.outcome != CancelOutcome::Failed) cancelTerminal_ = true;
+    else valid = false;
   }
-  if (bReadBytes_.size() < 72) return true;
-  GrantAccepted accepted;
-  if (!decodeGrantAccepted(bReadBytes_, expectedAcceptance_, accepted)) { bProtocolFailed_ = true; return false; }
+  if (!valid) { bProtocolFailed_ = true; return false; }
   bReadBytes_.clear();
-  bAccepted_ = true;
   return true;
+}
+
+DWORD WindowsBrokerOperations::nextBReadSize() const
+{
+  if (bReadBytes_.size() < 4) return DWORD(4 - bReadBytes_.size());
+  const QByteArray magic = bReadBytes_.left(4);
+  const int size = magic == "JGA2" ? 104 : magic == "JRC1" ? 24 : magic == "JCN1" ? 72 : magic == "JCS1" ? 80 : 0;
+  return size > bReadBytes_.size() ? DWORD(size - bReadBytes_.size()) : 0;
 }
 
 IoProgress WindowsBrokerOperations::takeBSettlement()
 {
   const auto settled = bAck_.io->settlement();
   if (!settled || !bReadOperation_ || settled->operation != bReadOperation_ ||
-      settled->transferred != settled->bytes.size() || settled->bytes.size() > 72 ||
-      bReadBytes_.size() + qsizetype(settled->bytes.size()) > 72) {
+      settled->transferred != settled->bytes.size() || settled->bytes.size() > 104 ||
+      bReadBytes_.size() + qsizetype(settled->bytes.size()) > 104) {
     cancelReadAmbiguous_ = true;
     if (!bAck_.io->pending()) bReadPending_ = false;
     return IoProgress::Failed;
@@ -296,7 +323,8 @@ Operations::Progress WindowsBrokerOperations::monitorB(qint64 deadline)
 Operations::Progress WindowsBrokerOperations::cancelBAndAwaitAck(qint64 deadline)
 {
   if (!valid_ || !b_ || revision_ == (std::numeric_limits<quint64>::max)()) return Progress::Failed;
-  if (bProtocolFailed_ || (!bAccepted_ && !bReadBytes_.isEmpty())) cancelReadAmbiguous_ = true;
+  cancelStarted_ = true;
+  if (bProtocolFailed_) cancelReadAmbiguous_ = true;
   if (bIdentityFramePending_) {
     const auto status = b_->cancelHealthyModuleFrame();
     if (status == ProcessProgress::Pending || status == ProcessProgress::Unconfirmed) return Progress::Pending;
@@ -306,13 +334,13 @@ Operations::Progress WindowsBrokerOperations::cancelBAndAwaitAck(qint64 deadline
     const auto result = b_->forceCleanup(ULONGLONG(deadline));
     return result == ProcessProgress::Pending || result == ProcessProgress::Unconfirmed ? Progress::Pending : Progress::Failed;
   }
-  if (bReadPending_) {
+  if (!cancelInitialReadHandled_ && bReadPending_) {
     const auto status = bAck_.io->cancel();
     if (status == IoProgress::Pending || status == IoProgress::Unconfirmed || bAck_.io->pending()) return Progress::Pending;
     const auto settled = takeBSettlement();
-    if (settled == IoProgress::Eof || settled == IoProgress::Unconfirmed || bProtocolFailed_ ||
-        !bReadBytes_.isEmpty()) cancelReadAmbiguous_ = true;
+    if (settled == IoProgress::Eof || settled == IoProgress::Unconfirmed || bProtocolFailed_) cancelReadAmbiguous_ = true;
   }
+  cancelInitialReadHandled_ = true;
   if (bControl_.io && bControl_.io->pending()) {
     cancelReadAmbiguous_ = true;
     bControl_.io->cancel();
@@ -324,7 +352,18 @@ Operations::Progress WindowsBrokerOperations::cancelBAndAwaitAck(qint64 deadline
     const auto status = write(bControl_, bCancel_.request, bCancel_.stage, deadline);
     return status == Progress::Pending ? status : Progress::Failed;
   }
-  return exchange(bCancel_, bControl_, bAck_, {ControlKind::UserStop, 2, revision_ + 1}, deadline);
+  if (bCancel_.request.isEmpty()) bCancel_.request = encodeControl({ControlKind::UserStop, 2, revision_ + 1});
+  const auto sent = write(bControl_, bCancel_.request, bCancel_.stage, deadline);
+  if (sent != Progress::Complete) return sent;
+  if (cancelTerminal_) {
+    const auto trailing = trackedBRead(1, deadline);
+    if (trailing == IoProgress::Pending || trailing == IoProgress::Unconfirmed) return Progress::Pending;
+    return trailing == IoProgress::Eof && bReadBytes_.isEmpty() ? Progress::Complete : Progress::Failed;
+  }
+  const auto status = trackedBRead(nextBReadSize(), deadline);
+  if (status == IoProgress::Pending || status == IoProgress::Unconfirmed) return Progress::Pending;
+  if (status != IoProgress::Complete) return Progress::Failed;
+  return Progress::Pending;
 }
 
 Operations::Progress WindowsBrokerOperations::cleanupOwned(qint64 deadline)

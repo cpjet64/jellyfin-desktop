@@ -108,21 +108,75 @@ bool decodeClosed(const QByteArray& bytes, const Closed& expected, Closed& resul
 
 QByteArray encodeGrantAccepted(const GrantAccepted& value)
 {
-  if (!value.run || !value.launch || !value.grant || !value.revision || value.digest.size() != 32) return {};
-  QByteArray bytes(72, '\0');
-  bytes.replace(0, 4, "JGA1");
-  const quint64 fields[] = {value.run, value.launch, value.grant, value.revision};
-  for (int i = 0; i < 4; ++i)
+  const quint64 fields[] = {value.run, value.launch, value.grant, value.revision,
+                            value.host, value.core, value.intentRevision, value.attempt};
+  if (value.digest.size() != 32) return {};
+  QByteArray bytes(104, '\0');
+  bytes.replace(0, 4, "JGA2");
+  for (int i = 0; i < 8; ++i) {
+    if (!fields[i]) return {};
     qToBigEndian<quint64>(fields[i], reinterpret_cast<uchar*>(bytes.data() + 8 + 8 * i));
-  bytes.replace(40, 32, value.digest);
+  }
+  bytes.replace(72, 32, value.digest);
   return bytes;
 }
 
 bool decodeGrantAccepted(const QByteArray& bytes, const GrantAccepted& expected, GrantAccepted& result)
 {
-  const QByteArray canonical = encodeGrantAccepted(expected);
-  if (canonical.isEmpty() || bytes != canonical) return false;
-  result = expected;
+  if (bytes.size() != 104 || bytes.left(4) != "JGA2" || bytes.mid(4, 4) != QByteArray(4, '\0')) return false;
+  quint64 fields[8];
+  for (int i = 0; i < 8; ++i) fields[i] = qFromBigEndian<quint64>(reinterpret_cast<const uchar*>(bytes.constData() + 8 + 8 * i));
+  GrantAccepted candidate{fields[0], fields[1], fields[2], fields[3], bytes.mid(72, 32), fields[4], fields[5], fields[6], fields[7]};
+  if (encodeGrantAccepted(candidate) != bytes || candidate.run != expected.run || candidate.launch != expected.launch ||
+      candidate.grant != expected.grant || candidate.revision != expected.revision || candidate.digest != expected.digest) return false;
+  result = candidate;
+  return true;
+}
+
+QByteArray encodeCancelNoArm(const CancelNoArm& value)
+{
+  const quint64 fields[] = {value.run, value.launch, value.revision, value.sequence};
+  if (value.digest.size() != 32) return {};
+  QByteArray bytes(72, '\0');
+  bytes.replace(0, 4, "JCN1");
+  for (int i = 0; i < 4; ++i) {
+    if (!fields[i]) return {};
+    qToBigEndian<quint64>(fields[i], reinterpret_cast<uchar*>(bytes.data() + 8 + 8 * i));
+  }
+  bytes.replace(40, 32, value.digest);
+  return bytes;
+}
+
+bool decodeCancelNoArm(const QByteArray& bytes, const CancelNoArm& expected)
+{
+  const QByteArray canonical = encodeCancelNoArm(expected);
+  return !canonical.isEmpty() && bytes == canonical;
+}
+
+QByteArray encodeCancelResult(const CancelResult& value)
+{
+  const quint64 fields[] = {value.run, value.launch, value.grant, value.revision, value.sequence,
+                            value.host, value.core, value.intentRevision, value.attempt};
+  const quint8 outcome = quint8(value.outcome);
+  if (outcome < 1 || outcome > 3 || (outcome == 3 ? value.reason != CancelFailure::CleanupUnconfirmed : value.reason != CancelFailure::None)) return {};
+  QByteArray bytes(80, '\0');
+  bytes.replace(0, 4, "JCS1");
+  bytes[4] = char(outcome); bytes[5] = char(quint8(value.reason));
+  for (int i = 0; i < 9; ++i) {
+    if (!fields[i]) return {};
+    qToBigEndian<quint64>(fields[i], reinterpret_cast<uchar*>(bytes.data() + 8 + 8 * i));
+  }
+  return bytes;
+}
+
+bool decodeCancelResult(const QByteArray& bytes, const CancelResult& expected, CancelResult& result)
+{
+  if (bytes.size() != 80) return false;
+  CancelResult candidate = expected;
+  candidate.outcome = CancelOutcome(quint8(bytes[4]));
+  candidate.reason = CancelFailure(quint8(bytes[5]));
+  if (encodeCancelResult(candidate) != bytes) return false;
+  result = candidate;
   return true;
 }
 

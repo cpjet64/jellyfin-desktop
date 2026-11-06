@@ -48,6 +48,7 @@ private:
   IoProgress trackedBRead(DWORD size, qint64 deadline);
   IoProgress takeBSettlement();
   bool parseBBytes();
+  DWORD nextBReadSize() const;
   WindowsRestartProcess* a_;
   WindowsRestartProcess* b_;
   WindowsEndpoint evidence_, aControl_, aAck_, bGrant_, bControl_, bAck_;
@@ -69,6 +70,7 @@ private:
   bool permitCallActive_ = false;
   bool bReadPending_ = false;
   bool bProtocolFailed_ = false;
+  bool cancelStarted_ = false, cancelAck_ = false, cancelTerminal_ = false, cancelInitialReadHandled_ = false;
   std::uint64_t bReadOperation_ = 0;
   QByteArray bReadBytes_;
   int aClosedStage_ = 0, aEofStage_ = 0, bAcceptStage_ = 0, permitStage_ = 0, bMonitorStage_ = 0;
