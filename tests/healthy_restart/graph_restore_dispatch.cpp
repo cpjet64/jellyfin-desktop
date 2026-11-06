@@ -68,12 +68,13 @@ bool FixtureGraph::installRestoreBootstrapForTest(HealthyModuleIdentity::LaunchB
     if (now < 0 || now >= normalDeadline_ || test->storage.expired() || !test->moduleLive() ||
         !test->endpointsLive() || test->storage.expired()) return false;
     const auto after = clock_();
-    const auto moduleState = test->moduleState.lock();
-    const auto endpointState = test->endpointState.lock();
-    const auto clockState = test->clockState.lock();
+    const auto retainedModuleState = test->moduleState.lock();
+    const auto retainedEndpointState = test->endpointState.lock();
+    const auto retainedClockState = test->clockState.lock();
     if (after < now || after >= normalDeadline_ || test->storage.expired() ||
-        !moduleState || !endpointState || !clockState || !moduleState->load() || !endpointState->load() ||
-        clockState->load() < after || clockState->load() >= normalDeadline_ ||
+        !retainedModuleState || !retainedEndpointState || !retainedClockState || !retainedModuleState->load() ||
+        !retainedEndpointState->load() || retainedClockState->load() < after ||
+        retainedClockState->load() >= normalDeadline_ ||
         access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) return false;
     test->accepted = true;
     return true;
