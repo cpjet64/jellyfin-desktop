@@ -10,6 +10,8 @@ class PlayerComponent;
 class TestPausedHold;
 
 namespace HealthyRestart {
+class ResumeProgress;
+class ResumeProgressProof;
 struct PausedHoldBinding {
   fixture_restart::FrameKey frame;
   std::uint64_t host = 0, revision = 0, attempt = 0, grant = 0;
@@ -20,6 +22,8 @@ struct PausedHoldBinding {
 // An immutable result; only the validator can construct one.
 class PausedHoldProof final {
   friend class PausedHold;
+  friend class ResumeProgress;
+  friend class ResumeProgressProof;
   friend class ::PlayerComponent;
 #ifdef HEALTHY_RETIREMENT_TESTING
   friend class ::TestPausedHold;
