@@ -113,7 +113,7 @@ public:
   Result request(std::uint64_t generation);
   std::shared_ptr<Lifetime> current() const;
   std::shared_ptr<CaptureBridge> captureBridge() const;
-  bool captureAdmission(const std::shared_ptr<Lifetime>& lifetime) const;
+  bool captureAdmission(const std::shared_ptr<Lifetime>& lifetime);
   void invalidate(std::uint64_t generation);
   std::uint64_t generation() const { return generation_; }
 #ifdef HEALTHY_RETIREMENT_TESTING

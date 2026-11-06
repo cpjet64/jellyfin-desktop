@@ -375,16 +375,23 @@ std::shared_ptr<CaptureBridge> Slot::captureBridge() const
   return captureBridge_.lock();
 }
 
-bool Slot::captureAdmission(const std::shared_ptr<Lifetime>& lifetime) const
+bool Slot::captureAdmission(const std::shared_ptr<Lifetime>& lifetime)
 {
-  std::lock_guard<std::mutex> lock(mutex_);
-  if (closed_ || !lifetime || lifetime != lifetime_) return false;
-  try {
-    const auto now = clock_();
-    if (now < 0 || now >= deadline_) return false;
-  } catch (...) { return false; }
-  const auto facts = lifetime->facts();
-  return facts.phase == Phase::Active && !facts.admissionClosed;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (closed_ || !lifetime || lifetime != lifetime_) return false;
+    try {
+      const auto now = clock_();
+      if (now >= 0 && now >= lastTime_ && now < deadline_) {
+        lastTime_ = now;
+        const auto facts = lifetime->facts();
+        return facts.phase == Phase::Active && !facts.admissionClosed;
+      }
+    } catch (...) {}
+    closed_ = true;
+  }
+  lifetime->invalidate(generation_);
+  return false;
 }
 
 void Slot::invalidate(std::uint64_t generation)
