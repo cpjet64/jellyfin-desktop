@@ -1,4 +1,5 @@
 #include "graph.h"
+#include "failure_cause.h"
 #include "graph_retirement.h"
 #include "graph_access.h"
 #include "graph_session.h"
@@ -68,6 +69,37 @@ bool PreparedGraph::ownsEndpoints(const std::shared_ptr<HealthyModuleIdentity::C
 void PreparedGraph::invalidate() noexcept
 {
   GraphAccessOps::invalidate(access_);
+}
+
+bool PreparedGraph::beginRestoreFailure(HealthyRestart::FailureCause cause)
+{
+  const auto access = access_;
+  const auto retained = containment_;
+  if (!retained || cause == HealthyRestart::FailureCause::None) return false;
+  auto* graph = GraphAccessOps::beginCleanup(access);
+  if (!graph) return false;
+  try {
+    if (graph->beginRestoreFailure(cause) && access->phase.load() == AccessPhase::CleanupOnly)
+      return true;
+  } catch (...) {}
+  GraphAccessOps::containCleanup(access);
+  return false;
+}
+
+PreparedGraph::FailureProgress PreparedGraph::pollRestoreFailure()
+{
+  const auto access = access_;
+  const auto retained = containment_;
+  if (!retained) return FailureProgress::Unknown;
+  auto* graph = GraphAccessOps::cleanupGraph(access);
+  if (!graph) return FailureProgress::Unknown;
+  try {
+    const auto result = graph->pollRestoreFailure();
+    if (access->phase.load() != AccessPhase::CleanupOnly) return FailureProgress::Unknown;
+    if (result == FailureProgress::Pending || result == FailureProgress::Qualified) return result;
+  } catch (...) {}
+  GraphAccessOps::containCleanup(access);
+  return FailureProgress::Unknown;
 }
 
 void FixtureGraph::deliverRedraw()
