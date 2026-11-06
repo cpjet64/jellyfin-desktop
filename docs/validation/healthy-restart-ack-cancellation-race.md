@@ -1,0 +1,9 @@
+# Healthy restart ACK read and cancellation race
+
+After `RestorePermit`, the parent must continue monitoring B's ACK stream for unexpected or duplicate bytes. That monitor may have an overlapped one-byte read pending when cancellation arrives. The same owned ACK endpoint and `WindowsRestartIo` object are needed for the later checked-Stop acknowledgement.
+
+The current `WindowsRestartIo::cancelImpl()` sets `cancelling_` before querying completion. Its `completion()` returns `Failed` whenever `cancelling_` is true, including a completion that raced with cancellation. The public interface does not report whether that race transferred a byte. Treating the result as a clean empty stream and proceeding to a positive cancellation acknowledgement could silently discard a protocol violation. An EOF indication must not be inferred from this cancellation result.
+
+The safe interim result is fail-closed: retain ownership, attempt checked cleanup Stop through the existing control path where possible, and use bounded parent containment if the ACK stream cannot be settled with its contents accounted for. Do not claim a matching Stop ACK, clean EOF or successful demonstration when a racing read's byte disposition is uncertain. This does not retroactively undo a load that occurred before cancellation arrived.
+
+A narrow candidate is to extend the existing I/O completion result to distinguish a settled canceled read with zero bytes from a raced read with an explicit immutable byte count and contents, while keeping the buffer and `OVERLAPPED` owned until settlement. The ordered ACK parser would consume any completed bytes before accepting another read. Such a change needs actual I/O race injection tests and review; it must preserve deadlines, exact-handle ownership, cancellation failure and unconfirmed states. This is a proposal, not an implemented or qualified change. No native execution or CI run was performed.
