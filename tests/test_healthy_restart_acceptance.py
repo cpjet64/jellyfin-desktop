@@ -126,6 +126,42 @@ class HealthyRestartAcceptance(unittest.TestCase):
 
 
 class HealthyRestartWrapper(unittest.TestCase):
+    def test_owner_sources_compile_once_without_test_flag(self):
+        base = WORKTREE / 'deps'
+        base.mkdir(exist_ok=True)
+        if base.is_symlink() or base.resolve() != base:
+            raise RuntimeError('test storage must remain inside the worktree')
+        with tempfile.TemporaryDirectory(prefix='healthy-owner-target-', dir=base) as directory:
+            work = Path(directory)
+            mpvqt = work / 'build/copy/mpvqt'
+            mpvqt.mkdir(parents=True)
+            for name in ('mpvabstractitem.cpp', 'mpvcontroller.cpp', 'frame_capture.cpp',
+                         'frame_acceptance.cpp', 'lifetime.cpp', 'lifetime_qt.cpp',
+                         'owner.cpp', 'owner_qt.cpp'):
+                (mpvqt / name).write_text('// configure-only source\n', encoding='utf-8')
+            targets = ROOT / 'CMakeModules/HealthyRestartTargets.cmake'
+            project = ('cmake_minimum_required(VERSION 3.20)\nproject(OwnerProbe CXX)\n'
+                       f'include("{targets.as_posix()}")\n'
+                       'foreach(name IN ITEMS Quick Core Gui)\n'
+                       '  add_library(Qt6::${name} INTERFACE IMPORTED)\nendforeach()\n'
+                       'add_library(Threads::Threads INTERFACE IMPORTED)\n'
+                       'set(_healthy_copy "${CMAKE_BINARY_DIR}/copy")\n'
+                       'healthy_restart_mpvqt()\n'
+                       'get_target_property(defs HealthyRestartMpvQt COMPILE_DEFINITIONS)\n'
+                       'get_target_property(sources HealthyRestartMpvQt SOURCES)\n'
+                       'file(WRITE "${CMAKE_BINARY_DIR}/defs.txt" "${defs}")\n'
+                       'file(WRITE "${CMAKE_BINARY_DIR}/sources.txt" "${sources}")\n')
+            (work / 'CMakeLists.txt').write_text(project, encoding='utf-8')
+            result = subprocess.run(['cmake', '-S', str(work), '-B', str(work / 'build')],
+                                    cwd=work, capture_output=True, text=True,
+                                    timeout=60, creationflags=FLAGS)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            defs = (work / 'build/defs.txt').read_text(encoding='utf-8').split(';')
+            sources = (work / 'build/sources.txt').read_text(encoding='utf-8').split(';')
+            self.assertNotIn('HEALTHY_RETIREMENT_TESTING', defs)
+            for name in ('lifetime.cpp', 'lifetime_qt.cpp', 'owner.cpp', 'owner_qt.cpp'):
+                self.assertEqual(sources.count((mpvqt / name).as_posix()), 1, name)
+
     def test_copied_include_interface_propagates_to_consumer(self):
         base = WORKTREE / 'deps'
         base.mkdir(exist_ok=True)
