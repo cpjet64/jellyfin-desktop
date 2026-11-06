@@ -24,8 +24,10 @@ consumption, and B observation and settlement. These five phases total 150
 seconds, reserving 30 seconds for remaining cleanup within the overall limit.
 Each phase, including cleanup, uses the earlier of its own deadline and the
 original overall deadline; unused time does not reset
-either deadline. Use a generated 30-second clip and capture at 10 seconds,
-allowing position 9–11 seconds at capture. Before unpause, B must observe its
+either deadline. Use the existing generated 10-second clip (300 frames at
+30 fps) and capture A at a validated position between 2.9 and 3.1 seconds.
+Transfer the actual checkpoint position, not a fixed three seconds. Unexpected
+EOF fails the case; do not loop or reload. Before unpause, B must observe its
 restored position within 100 ms of the checkpoint and then, for a playing case,
 require at
 least one second of advancement within ten seconds. The paused case requires
@@ -70,11 +72,16 @@ independently bound endpoints, not from JSON fields; B validates the envelope
 and codec before consuming it. EOF, extra records,
 wrong bindings, partial input and timeout fail closed. B resolves the local
 fixture afresh and records its own observed path and playlist entry. B starts
-paused, loads and seeks while paused, and validates the matching entry, seek
-reply, playback restart event, fresh native position observation within 100 ms,
-and a fresh decoded frame matching the checkpoint within 100 ms before applying
-the requested playing or paused
-state. A snapshot position alone does not establish seek completion. Pending
+paused at the beginning without a checkpoint offset. Capture B's actual output
+with a valid baseline counter index 0–2, then arm the seek and retain bounded
+captures associated with that operation. Validate the matching entry, seek reply,
+subsequent playback restart, a fresh native position observation within 100 ms,
+and a target capture whose decoded counter time is within 100 ms of the actual
+checkpoint and differs from the baseline. The target capture may precede delivery
+of the matching acknowledgements; retain its original operation and timing, and
+correlate it only once all required facts arrive. Never retag an earlier image.
+Only then apply the requested playing or paused state. A snapshot position alone
+does not establish seek completion. Pending
 Stop or replacement intent burns permission before any play or unpause; its
 acknowledgement must precede release of any blocked continuation. Internal
 cleanup is recorded separately and must not masquerade as user Stop. B must
@@ -82,6 +89,21 @@ create and bind its own host, core, intent and entry identities, not rewrite A's
 identifiers. B must not reuse A's process, player, core,
 render context, or stale callback as evidence of a fresh start. This scenario
 does not require proving retirement of a particular graphics context or core.
+
+Render update flags and render serials do not independently prove a new decoded
+frame. In the fixture-only copied renderer, on the owning render thread with
+the original GL context current, record the update and next-frame-info results
+and raw flags, perform the existing render, and read back its target before
+another render overwrites it. Publish an immutable image and record with the
+render-pass serial, expected operation key, thread/context, result and timing.
+The key is the fixture's expected ownership, not an image identity returned by
+mpv. Continue normal rendering even when a pass cannot qualify; callbacks remain
+wakeups and no new event consumer or advanced render control is introduced.
+Bind each captured render target to B's process, expected core/entry and
+armed operation, and validate geometry, orientation, counter blocks and moving
+square; reject ambiguous, blank, flat or stale images. The baseline-to-target
+transition establishes newly presented B output, not the decoder's exact
+production time. Synthetic images test acceptance logic only.
 
 For a playing checkpoint, require B's decoded output to show two distinct
 frames and position to advance from the restored position within a documented
