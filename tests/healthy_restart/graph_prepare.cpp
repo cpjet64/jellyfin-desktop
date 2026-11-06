@@ -75,8 +75,9 @@ bool PreparedGraph::beginRestoreFailure(HealthyRestart::FailureCause cause)
 {
   const auto access = access_;
   const auto retained = containment_;
-  if (!retained || cause == HealthyRestart::FailureCause::None) return false;
-  auto* graph = GraphAccessOps::beginCleanup(access);
+  const auto slot = slot_;
+  if (!retained || !slot || cause == HealthyRestart::FailureCause::None) return false;
+  auto* graph = GraphAccessOps::beginCleanup(access, slot->generation());
   if (!graph) return false;
   try {
     if (graph->beginRestoreFailure(cause) && access->phase.load() == AccessPhase::CleanupOnly)

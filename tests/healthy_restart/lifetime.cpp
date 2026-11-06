@@ -206,7 +206,13 @@ Result Lifetime::retireSteps()
   const bool cleared = ops_.clearPointer(context_);
   std::lock_guard<std::mutex> lock(mutex_);
   facts_.pointerCleared = cleared;
-  if (!cleared || !identityAfter || facts_.phase != Phase::Freeing || !ownerValid_ || !timeValid()) return retain();
+  bool retirementRecorded = !claimState_;
+  if (cleared && claimState_) {
+    const auto claim = std::atomic_load(&claimState_->claim);
+    retirementRecorded = claim && claim->recordRenderRetired(generation_);
+  }
+  if (!cleared || !retirementRecorded || !identityAfter || facts_.phase != Phase::Freeing ||
+      !ownerValid_ || !timeValid()) return retain();
   ack_.emplace(Ack{generation_, original_, lastTime_});
   facts_.ackPublished = true;
   facts_.phase = Phase::Acknowledged;
