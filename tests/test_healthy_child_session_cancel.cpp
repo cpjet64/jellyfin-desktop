@@ -70,13 +70,14 @@ void acceptanceThenCancellation()
 {
   Script s; script = &s; cancelRequested = abortGrant = false; ackFrames.clear();
   auto e = cancellationEndpoints(); CHECK(e); auto ops = operations();
-  ops.control = [](const QByteArray&, QByteArray& ack) { ack = "JCN1-terminal"; return true; };
+  // Script the armed terminal type; wire encoding is tested separately.
+  ops.control = [](const QByteArray&, QByteArray& ack) { ack = "JCS1-no-load"; return true; };
   feed(101, grant()); s.eof[handle(101)] = true;
   ChildSession session(e, 1, ops); CHECK(session.beginRestore(QStringLiteral("fixture")));
   for (int i = 0; i < 8; ++i) session.pollRestore();
   CHECK(session.pollRestore() == ChildSession::Progress::Ready);
   feed(102, cancel()); for (int i = 0; i < 5; ++i) session.pollRestore();
-  CHECK(ackFrames.size() == 2 && ackFrames[0] == "JGA2-ack" && ackFrames[1] == "JCN1-terminal");
+  CHECK(ackFrames.size() == 2 && ackFrames[0] == "JGA2-ack" && ackFrames[1] == "JCS1-no-load");
   CHECK(!session.load() && !session.seek() && s.loads == 0 && s.seeks == 0);
 }
 void reentrantNoArm()
