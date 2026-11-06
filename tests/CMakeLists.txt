@@ -25,6 +25,15 @@ target_compile_features(test_restart_child_player PRIVATE cxx_std_17)
 add_test(NAME test_restart_child_player COMMAND test_restart_child_player)
 set_tests_properties(test_restart_child_player PROPERTIES TIMEOUT 60)
 
+add_executable(test_restart_source_player test_restart_source_player.cpp fixture_restart/RestartSourcePlayer.cpp
+  fixture_restart/RestartSource.cpp fixture_restart/RestartWire.cpp fixture_restart/RestartBroker.cpp
+  fixture_restart/FixtureEvidence.cpp fixture_restart/FixtureRestartAdapter.cpp)
+target_include_directories(test_restart_source_player PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
+target_link_libraries(test_restart_source_player PRIVATE jmp_core Qt6::Test)
+target_compile_features(test_restart_source_player PRIVATE cxx_std_17)
+add_test(NAME test_restart_source_player COMMAND test_restart_source_player)
+set_tests_properties(test_restart_source_player PROPERTIES TIMEOUT 60)
+
 add_executable(test_player_restore_cleanup test_player_restore_cleanup.cpp)
 target_include_directories(test_player_restore_cleanup PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
 target_link_libraries(test_player_restore_cleanup PRIVATE jmp_core Qt6::Test)
@@ -70,6 +79,7 @@ if(WIN32)
   set_tests_properties(test_windows_restart_channel PROPERTIES TIMEOUT 60)
   add_executable(test_windows_broker_operations test_windows_broker_operations.cpp
     fixture_restart/WindowsBrokerOperations.cpp fixture_restart/WindowsRestartProcess.cpp
+    fixture_restart/WindowsRestartParent.cpp fixture_restart/WindowsFrameReader.cpp
     fixture_restart/WindowsRestartIo.cpp fixture_restart/WindowsRestartChannel.cpp
     fixture_restart/RestartWire.cpp fixture_restart/RestartBroker.cpp fixture_restart/FixtureEvidence.cpp
     ${CMAKE_SOURCE_DIR}/src/player/PlaybackCheckpoint.cpp)

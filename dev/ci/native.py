@@ -35,7 +35,8 @@ HEADLESS_TESTS = ("test_systemcomponent", "test_log", "test_settings", "test_dis
                   "test_playback_native_receipts", "test_player_native_receipts", "test_native_observation",
                   "test_player_native_restore", "test_fixture_restart_broker", "test_fixture_frame_acceptance",
                   "test_fixture_frame_capture", "test_player_restore_cleanup", "test_player_restore_observation",
-                  "test_fixture_restart_wire", "test_fixture_restart_child", "test_restart_child_player")
+                  "test_fixture_restart_wire", "test_fixture_restart_child", "test_restart_child_player",
+                  "test_restart_source_player")
 LINUX_DESKTOP_TOOLS = frozenset(("xvfb-run", "xauth", "dbus-run-session", "glxinfo"))
 
 
