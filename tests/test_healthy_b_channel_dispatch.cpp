@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 
 using namespace HealthyModuleIdentity;
 using namespace HealthyRetirement;
@@ -22,7 +23,7 @@ class TestHealthyGraphArm {
   static constexpr qint64 normal = 1000000000LL, overall = 31000000000LL;
   struct State {
     qint64 now = 10;
-    bool moduleValid = true, revokeInModule = false, revokeInDispatch = false;
+    std::function<void()> revokeInModule, revokeInDispatch;
     int dispatches = 0;
     std::vector<std::vector<QByteArray>> commands;
     std::vector<quint64> commandIds;
@@ -43,10 +44,10 @@ class TestHealthyGraphArm {
   {
     auto* state = static_cast<State*>(opaque);
     if (state->revokeInModule) {
-      state->revokeInModule = false;
-      bChannelScript->endpointValid = false;
+      auto revoke = std::move(state->revokeInModule);
+      revoke();
     }
-    return state->moduleValid;
+    return true;
   }
 
   void initialize()
@@ -69,7 +70,10 @@ class TestHealthyGraphArm {
       state->commandIds.push_back(id);
       state->commands.emplace_back();
       for (; *args; ++args) state->commands.back().emplace_back(*args);
-      if (state->revokeInDispatch) bChannelScript->endpointValid = false;
+      if (state->revokeInDispatch) {
+        auto revoke = std::move(state->revokeInDispatch);
+        revoke();
+      }
       return 0;
     };
     graph_->player_->m_observationDispatch = [](quint64, const char**) { return 0; };
@@ -124,9 +128,11 @@ class TestHealthyGraphArm {
     initialize(); consumePermit();
     auto& player = *graph_->player_;
     const auto key = player.m_nativeRestore.key;
-    if (mode == 1) pipes_.endpointValid = false;
-    if (mode == 2) state_->moduleValid = false;
-    if (mode == 3) state_->revokeInModule = true;
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    CHECK(claim && claim->open());
+    if (mode == 1) loseEndpoint();
+    if (mode == 2) endpoints_->capability()->invalidateAdmissionForTest();
+    if (mode == 3) state_->revokeInModule = [this] { loseEndpoint(); };
     const bool result = player.dispatchNativeRestoreLoad(QStringLiteral("fixture"));
     if (mode == 0) {
       CHECK(result && state_->dispatches == 1);
@@ -136,6 +142,7 @@ class TestHealthyGraphArm {
       return;
     }
     CHECK(!result && state_->dispatches == 0);
+    CHECK(!claim->open());
     CHECK(player.m_nativeRestore.key.host == key.host && player.m_nativeRestore.key.core == key.core &&
           player.m_nativeRestore.key.revision == key.revision && player.m_nativeRestore.key.attempt == key.attempt);
     CHECK(!player.dispatchNativeRestoreLoad(QStringLiteral("fixture")) && state_->dispatches == 0);
@@ -171,7 +178,9 @@ class TestHealthyGraphArm {
     CHECK(graph_->captureTarget());
     CHECK(renderer_->issue(false) && graph_->captureTargetReady());
     CHECK(player.healthyRestoreSubmissionAllowed(true));
-    if (lose) pipes_.endpointValid = false;
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    CHECK(claim && claim->open());
+    if (lose) loseEndpoint();
     const bool result = player.dispatchNativeRestoreSeek();
     if (!lose) {
       CHECK(result && state_->dispatches == 2);
@@ -181,6 +190,7 @@ class TestHealthyGraphArm {
       return;
     }
     CHECK(!result && state_->dispatches == 1);
+    CHECK(!claim->open());
     CHECK(player.m_nativeRestore.key.host == key.host && player.m_nativeRestore.key.core == key.core &&
           player.m_nativeRestore.key.revision == key.revision && player.m_nativeRestore.key.attempt == key.attempt);
     CHECK(!player.dispatchNativeRestoreSeek() && state_->dispatches == 1);
@@ -194,9 +204,9 @@ class TestHealthyGraphArm {
     initialize(); consumePermit();
     auto& player = *graph_->player_;
     const auto key = player.m_nativeRestore.key;
-    state_->revokeInDispatch = true;
+    state_->revokeInDispatch = [this] { loseEndpoint(); };
     (void)player.dispatchNativeRestoreLoad(QStringLiteral("fixture"));
-    CHECK(state_->dispatches == 1 && !pipes_.endpointValid);
+    CHECK(state_->dispatches == 1 && !endpoints_->token(EndpointRole::Control));
     const auto receipt = player.m_nativeReceipts.snapshot();
     CHECK(receipt.key.attempt == key.attempt && receipt.submissionObserved && receipt.submitted);
     CHECK(!player.dispatchNativeRestoreLoad(QStringLiteral("fixture")) && state_->dispatches == 1);
@@ -218,6 +228,10 @@ class TestHealthyGraphArm {
     CHECK(!player.healthyRestoreSubmissionAllowed(false));
     CHECK(!player.dispatchNativeRestoreLoad(QStringLiteral("fixture")) && state_->dispatches == 1);
     CHECK(pipes_.writes.size() == 1 && !prepared_->closedAck());
+  }
+  void loseEndpoint()
+  {
+    endpoints_->invalidateAdmissionForTest();
   }
 public:
   static void run(int mode) { TestHealthyGraphArm test; test.loadCase(mode); }
