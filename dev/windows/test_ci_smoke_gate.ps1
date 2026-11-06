@@ -64,7 +64,7 @@ foreach ($test in @('test_linux_sdk_order.py', 'test_linux_sdk_inputs.py', 'test
                     'test_linux_qt_plan.py', 'test_libarchive_reader_contract.py', 'test_linux_sdk_cmake.py',
                     'test_fixture_suspend_adapter.py', 'test_fixture_suspend_linux.py', 'test_linux_containment_capability.py', 'test_linux_capability_preflight.py', 'test_linux_synthetic_service.py', 'test_settlement_candidates.py', 'test_settlement_observation.py',
                     'test_linux_synthetic_service_adapter.py', 'test_linux_synthetic_service_dbus.py',
-                    'test_portable_proof_assembly.py', 'test_portable_proof_protocol.py',
+                    'test_portable_proof_assembly.py', 'test_portable_proof_root_policy.py', 'test_macos_sdist_pins.py', 'test_portable_proof_protocol.py',
                     'test_portable_proof_supervisor.py')) {
     $path = "dev/ci/$test"
     $matches = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and

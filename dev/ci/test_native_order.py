@@ -131,7 +131,7 @@ class NativeOrderTest(unittest.TestCase):
                      "dev/ci/test_linux_synthetic_service_adapter.py", "dev/ci/test_linux_synthetic_service_dbus.py",
                      "dev/ci/provision_dbus_next.py", "dev/ci/test_linux_synthetic_service_real_dbus.py",
                      "dev/ci/test_settlement_failure.py", "dev/ci/test_settlement_candidates.py", "dev/ci/test_settlement_observation.py",
-                     "dev/ci/test_macos_sdist_select.py", "dev/ci/test_portable_proof_assembly.py",
+                     "dev/ci/test_macos_sdist_select.py", "dev/ci/test_portable_proof_assembly.py", "dev/ci/test_portable_proof_root_policy.py", "dev/ci/test_macos_sdist_pins.py",
                      "dev/ci/test_portable_proof_protocol.py", "dev/ci/test_portable_proof_supervisor.py"):
             self.assertEqual(paths.count(path), 1)
         self.assertNotIn("dev/ci/test_linux_sdk_cmake.py", paths)
@@ -151,7 +151,7 @@ class NativeOrderTest(unittest.TestCase):
         self.assertEqual(paths[paths.index("dev/ci/test_settlement_candidates.py") + 1],
                          "dev/ci/test_settlement_observation.py")
         start = paths.index("dev/ci/test_qga_terminal.py")
-        self.assertEqual(paths[start + 1:start + 4], ["dev/ci/test_portable_proof_assembly.py",
+        self.assertEqual(paths[start + 1:start + 5], ["dev/ci/test_portable_proof_assembly.py", "dev/ci/test_portable_proof_root_policy.py",
                          "dev/ci/test_portable_proof_protocol.py", "dev/ci/test_portable_proof_supervisor.py"])
 
     def test_windows_gate_registers_mac_helper_suites_once(self):
@@ -165,11 +165,11 @@ class NativeOrderTest(unittest.TestCase):
                      "dev/ci/test_linux_synthetic_service_adapter.py", "dev/ci/test_linux_synthetic_service_dbus.py",
                      "dev/ci/provision_dbus_next.py", "dev/ci/test_linux_synthetic_service_real_dbus.py",
                      "dev/ci/test_settlement_failure.py", "dev/ci/test_settlement_candidates.py", "dev/ci/test_settlement_observation.py", "dev/ci/test_macos_sdist_select.py",
-                     "dev/ci/test_portable_proof_assembly.py", "dev/ci/test_portable_proof_protocol.py",
+                     "dev/ci/test_portable_proof_assembly.py", "dev/ci/test_portable_proof_root_policy.py", "dev/ci/test_macos_sdist_pins.py", "dev/ci/test_portable_proof_protocol.py",
                      "dev/ci/test_portable_proof_supervisor.py"):
             self.assertEqual(script.count(path), 1)
         order = [script.index("dev/ci/test_" + name + ".py") for name in
-                 ("qga_terminal", "portable_proof_assembly", "portable_proof_protocol", "portable_proof_supervisor")]
+                 ("qga_terminal", "portable_proof_assembly", "portable_proof_root_policy", "portable_proof_protocol", "portable_proof_supervisor")]
         self.assertEqual(order, sorted(order))
         self.assertLess(script.index("dev/ci/test_fixture_suspend_linux.py"),
                         script.index("dev/ci/test_linux_containment_capability.py"))
@@ -196,7 +196,7 @@ class NativeOrderTest(unittest.TestCase):
                        "linux-synthetic-adapter-tests", "linux-synthetic-dbus-tests", "linux-synthetic-wheel-provision",
                        "linux-synthetic-real-dbus-tests",
                        "qga-terminal-tests", "mac-sdist-static-tests",
-                       "mac-sdist-supervisor-tests", "mac-sdist-launcher-tests", "linux-qt-cache-tests", "portable-proof-assembly-tests",
+                       "mac-sdist-supervisor-tests", "mac-sdist-launcher-tests", "mac-sdist-pins-tests", "linux-qt-cache-tests", "portable-proof-assembly-tests", "portable-proof-root-policy-tests",
                        "portable-proof-protocol-tests", "portable-proof-supervisor-tests"):
             calls = []
             def run(name, args, **kwargs):
