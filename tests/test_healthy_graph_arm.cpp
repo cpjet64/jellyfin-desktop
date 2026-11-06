@@ -226,7 +226,8 @@ class TestHealthyGraphArm {
     check(graph_->restoreGrant(encodeGrant(grant_), true, response));
     auto wrong = std::make_shared<ChildGate>(graph_->endpoints_->token(EndpointRole::Grant), normal);
     check(wrong->cancel([](void*) { return true; }, nullptr));
-    check(!graph_->player_->beginNativeRestoreCancellation(wrong, 1, overall));
+    check(!graph_->player_->beginNativeRestoreCleanup(
+        wrong, std::nullopt, overall, HealthyRestart::FailureCause::ProtocolViolation));
     check(state_->dispatches == 0);
     check(!graph_->restoreLoad() && !graph_->restoreSeek() && state_->dispatches == 0);
   }
