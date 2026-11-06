@@ -202,6 +202,14 @@ class TestHealthyGraphArm {
     CHECK(!player.dispatchNativeRestoreLoad(QStringLiteral("fixture")) && state_->dispatches == 1);
     CHECK(session_->pollRestore() == ChildSession::Progress::Failed);
     CHECK(graph_->session_->gate->canceled());
+    mpv_event reply{}; reply.event_id = MPV_EVENT_COMMAND_REPLY; reply.error = -1;
+    reply.reply_userdata = (quint64{1} << 63) | key.attempt;
+    player.observeNativeReceipt(&reply);
+    const auto settled = player.m_nativeReceipts.snapshot();
+    CHECK(settled.key.host == key.host && settled.key.core == key.core &&
+          settled.key.revision == key.revision && settled.key.attempt == key.attempt);
+    CHECK(settled.submissionObserved && settled.submitted && settled.reply && !settled.replyOk);
+    CHECK(!player.dispatchNativeRestoreLoad(QStringLiteral("fixture")) && state_->dispatches == 1);
     CHECK(pipes_.writes.size() == 1 && !prepared_->closedAck());
   }
 public:
