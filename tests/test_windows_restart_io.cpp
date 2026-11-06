@@ -27,16 +27,27 @@ bool nestedBlocked = false;
 bool reentrantProof = false;
 int closeCount = 0;
 int resultCalls = 0;
+int reads = 0, writes = 0;
+bool reenterSettlement = false;
+bool nestedLegacyPoll = false;
+IoProgress nestedSettlement = IoProgress::Failed;
+bool authority = true, flipOnResult = false, flipOnReset = false, flipOnRead = false;
+int resets = 0;
 HANDLE WINAPI eventCreate(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCWSTR)
 { return reinterpret_cast<HANDLE>(1); }
 BOOL WINAPI closeFake(HANDLE) { ++closeCount; return TRUE; }
-BOOL WINAPI resetFake(HANDLE) { return TRUE; }
+BOOL WINAPI resetFake(HANDLE) { if (++resets == 2 && flipOnReset) authority = false; return TRUE; }
 DWORD WINAPI errorFake() { return errorCode; }
 ULONGLONG WINAPI clockFake() { return clockValue; }
-BOOL WINAPI writeFake(HANDLE, LPCVOID, DWORD, LPDWORD, LPOVERLAPPED)
-{ errorCode = ERROR_IO_PENDING; return FALSE; }
+BOOL WINAPI writeFake(HANDLE, LPCVOID buffer, DWORD, LPDWORD, LPOVERLAPPED overlap)
+{
+  ++writes; pendingBuffer = const_cast<LPVOID>(buffer); pendingOverlap = overlap;
+  errorCode = ERROR_IO_PENDING; return FALSE;
+}
 BOOL WINAPI readFake(HANDLE, LPVOID buffer, DWORD size, LPDWORD count, LPOVERLAPPED overlap)
 {
+  ++reads;
+  if (reads == 2 && flipOnRead) authority = false;
   pendingBuffer = buffer; pendingOverlap = overlap;
   if (reenterRead) {
     reenterRead = false;
@@ -47,12 +58,17 @@ BOOL WINAPI readFake(HANDLE, LPVOID buffer, DWORD size, LPDWORD count, LPOVERLAP
   if (readMode == 3) { *count = 1; errorCode = ERROR_BROKEN_PIPE; return FALSE; }
   if (readMode == 4) { *count = 0; errorCode = ERROR_BROKEN_PIPE; return FALSE; }
   if (readMode == 5) { readMode = 0; *count = 1; return TRUE; }
+  if (readMode == 6) { std::memcpy(buffer, "ab", 2); *count = 2; authority = false; return TRUE; }
   if (synchronousLate) { clockValue = 5; *count = size; return TRUE; }
   errorCode = ERROR_IO_PENDING; return FALSE;
 }
 BOOL WINAPI resultFake(HANDLE, LPOVERLAPPED, LPDWORD count, BOOL)
 {
   ++resultCalls;
+  if (reenterSettlement) {
+    reenterSettlement = false;
+    nestedSettlement = nestedLegacyPoll ? reentrantIo->poll() : reentrantIo->pollSettlementOnly();
+  }
   if (reenterResult) {
     reenterResult = false;
     CHECK(reentrantIo->poll() == IoProgress::Complete);
@@ -66,7 +82,7 @@ BOOL WINAPI resultFake(HANDLE, LPOVERLAPPED, LPDWORD count, BOOL)
     if (!leaveErrorCountUntouched) *count = errorBytes;
     errorCode = resultError; return FALSE;
   }
-  *count = completedBytes;
+  *count = completedBytes; if (flipOnResult) authority = false;
   return TRUE;
 }
 BOOL WINAPI cancelFake(HANDLE, LPOVERLAPPED)
@@ -168,6 +184,9 @@ void resetTracked()
   pendingOverlap = nullptr; reenterCancel = false; reentrantIo = nullptr; closeCount = 0;
   resultCalls = 0; reenterRead = false; readRetained = false; leaveErrorCountUntouched = false;
   reenterResult = false; nestedBlocked = false; reentrantProof = false;
+  reads = 0; writes = 0; reenterSettlement = false; nestedSettlement = IoProgress::Failed;
+  nestedLegacyPoll = false;
+  authority = true; flipOnResult = flipOnReset = flipOnRead = false; resets = 0;
 }
 
 WindowsRestartIo* trackedRead()
@@ -354,6 +373,102 @@ void cancellationProofRequiresExplicitEmptyAbort()
   CHECK(io->cancel() == IoProgress::Failed && !reentrantProof && !io->canceledWithoutData());
   CHECK(io->release());
 }
+
+void settlementOnlyPartial(bool read)
+{
+  resetTracked(); auto* io = new WindowsRestartIo(fakeApi());
+  const char ack[] = "ACK12345";
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), read, read ? nullptr : ack, 8, 10) == IoProgress::Pending);
+  CHECK(reads == (read ? 1 : 0) && writes == (read ? 0 : 1));
+  const auto buffer = pendingBuffer; const auto overlap = pendingOverlap;
+  CHECK(io->pollSettlementOnly() == IoProgress::Pending);
+  CHECK(!io->release() && io->pending() && pendingBuffer == buffer && pendingOverlap == overlap);
+  if (read) std::memcpy(buffer, "CTL", 3);
+  complete = true; completedBytes = 3;
+  CHECK((read ? io->poll() : io->pollSettlementOnly()) == IoProgress::Failed);
+  const auto result = io->settlement();
+  CHECK(result && result->operation && result->outcome == WindowsRestartIo::Settlement::Outcome::Completed);
+  CHECK(result->requested == 8 && result->read == read);
+  CHECK(result->transferred == 3 && result->bytes.size() == 3);
+  CHECK(std::memcmp(result->bytes.data(), read ? "CTL" : "ACK", 3) == 0);
+  CHECK(reads == (read ? 1 : 0) && writes == (read ? 0 : 1));
+  CHECK(!io->release() && io->begin(reinterpret_cast<HANDLE>(2), read, ack, 8, 10) == IoProgress::Failed);
+  CHECK(io->pollSettlementOnly() == IoProgress::Failed && io->settlement() == result);
+  CHECK(io->consumeSettlement(result->operation));
+  CHECK(!io->consumeSettlement(result->operation) && io->release());
+  CHECK(result->transferred == 3 && std::memcmp(result->bytes.data(), read ? "CTL" : "ACK", 3) == 0);
+}
+
+void settlementOnlyUnknownAndAbort(bool unknown)
+{
+  resetTracked(); auto* io = new WindowsRestartIo(fakeApi());
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), true, nullptr, 8, 10) == IoProgress::Pending);
+  resultError = ERROR_OPERATION_ABORTED; leaveErrorCountUntouched = unknown;
+  CHECK(io->pollSettlementOnly() == IoProgress::Failed);
+  const auto result = io->settlement(); CHECK(result);
+  CHECK(result->outcome == (unknown ? WindowsRestartIo::Settlement::Outcome::Uncertain
+                                    : WindowsRestartIo::Settlement::Outcome::Aborted));
+  CHECK(result->transferred == 0 && result->bytes.empty() && reads == 1);
+  CHECK(!io->release() && io->consumeSettlement(result->operation) && io->release());
+}
+
+void settlementOnlyReentrant(int mode)
+{
+  resetTracked(); auto* io = new WindowsRestartIo(fakeApi()); reentrantIo = io;
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), true, nullptr, 8, 10) == IoProgress::Pending);
+  std::memcpy(pendingBuffer, "xy", 2); complete = true; completedBytes = 2;
+  reenterSettlement = true; nestedLegacyPoll = mode == 1;
+  CHECK((mode == 2 ? io->poll() : io->pollSettlementOnly()) == IoProgress::Failed);
+  CHECK(nestedSettlement == IoProgress::Failed && reads == 1 && resultCalls == 2);
+  const auto result = io->settlement();
+  CHECK(result && result->transferred == 2 && result->bytes[0] == 'x' && result->bytes[1] == 'y');
+  CHECK(io->consumeSettlement(result->operation) && io->release());
+}
+
+void settlementOnlyCancelRace(bool read)
+{
+  resetTracked(); auto* io = new WindowsRestartIo(fakeApi()); const char ack[] = "ACK12345";
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), read, read ? nullptr : ack, 8, 10) == IoProgress::Pending);
+  CHECK(io->cancelSettlementOnly() == IoProgress::Unconfirmed && cancelCalled);
+  CHECK(!io->release() && !io->settlement());
+  if (read) std::memcpy(pendingBuffer, "CTL", 3);
+  complete = true; completedBytes = 3;
+  CHECK(io->pollSettlementOnly() == IoProgress::Failed);
+  const auto result = io->settlement();
+  CHECK(result && result->outcome == WindowsRestartIo::Settlement::Outcome::Completed);
+  CHECK(result->requested == 8 && result->read == read && result->transferred == 3);
+  CHECK(std::memcmp(result->bytes.data(), read ? "CTL" : "ACK", 3) == 0);
+  CHECK(reads == (read ? 1 : 0) && writes == (read ? 0 : 1));
+  CHECK(io->consumeSettlement(result->operation) && io->release());
+}
+
+void guardedContinuation(int lossPoint)
+{
+  resetTracked(); auto* io = new WindowsRestartIo(fakeApi());
+  CHECK(io->begin(reinterpret_cast<HANDLE>(2), true, nullptr, 8, 10) == IoProgress::Pending);
+  std::memcpy(pendingBuffer, "ab", 2); complete = true; completedBytes = 2;
+  flipOnResult = lossPoint == 0; flipOnReset = lossPoint == 1; flipOnRead = lossPoint == 2;
+  const auto progress = io->pollGuarded([] { return authority; });
+  CHECK(!authority && reads == (lossPoint == 2 ? 2 : 1));
+  if (lossPoint == 2) {
+    CHECK(progress == IoProgress::Pending && io->pending() && !io->release());
+    std::memcpy(pendingBuffer, "cd", 2);
+    CHECK(io->pollGuarded([] { return authority; }) == IoProgress::Failed);
+  } else CHECK(progress == IoProgress::Failed);
+  const auto result = io->settlement(); CHECK(result && result->transferred == (lossPoint == 2 ? 4 : 2));
+  CHECK(std::memcmp(result->bytes.data(), lossPoint == 2 ? "abcd" : "ab", result->transferred) == 0);
+  CHECK(io->consumeSettlement(result->operation) && io->release());
+}
+
+void guardedSynchronousBegin()
+{
+  resetTracked(); readMode = 6; auto* io = new WindowsRestartIo(fakeApi());
+  CHECK(io->beginGuarded(reinterpret_cast<HANDLE>(2), true, nullptr, 8, 10, [] { return authority; }) == IoProgress::Failed);
+  const auto result = io->settlement();
+  CHECK(!authority && reads == 1 && result && result->transferred == 2);
+  CHECK(result->bytes.size() == 2 && std::memcmp(result->bytes.data(), "ab", 2) == 0);
+  CHECK(!io->release() && io->consumeSettlement(result->operation) && io->release());
+}
 }
 int main()
 {
@@ -374,4 +489,10 @@ int main()
   nestedPollCannotReuseActiveOperation();
   missingTransferCountIsUncertain();
   cancellationProofRequiresExplicitEmptyAbort();
+  settlementOnlyPartial(true); settlementOnlyPartial(false);
+  settlementOnlyUnknownAndAbort(false); settlementOnlyUnknownAndAbort(true);
+  settlementOnlyReentrant(0); settlementOnlyReentrant(1); settlementOnlyReentrant(2);
+  settlementOnlyCancelRace(true); settlementOnlyCancelRace(false);
+  guardedContinuation(0); guardedContinuation(1); guardedContinuation(2);
+  guardedSynchronousBegin();
 }
