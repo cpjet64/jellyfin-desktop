@@ -1,4 +1,5 @@
 #include <healthy_restart/child_session.h>
+#include <fixture_restart/RestartWire.h>
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -28,7 +29,7 @@ struct Script {
   std::map<HANDLE, bool> eof;
   DWORD error = ERROR_SUCCESS, chunk = 0;
   bool live = true, holdAck = false, revoked = false;
-  int grants = 0, controls = 0, loads = 0, seeks = 0, invalidations = 0, writes = 0;
+  int grants = 0, controls = 0, loads = 0, seeks = 0, invalidations = 0, writes = 0, failures = 0;
   QByteArray grantFrame;
 };
 Script* script;
@@ -102,6 +103,9 @@ ChildSession::TestOperations operations()
   ChildSession::TestOperations o;
   o.valid = [] { return script->live; };
   o.initialize = [](const QString&) { return true; };
+  o.validateCanceledGrant = [](const QByteArray&) { return true; };
+  o.beginFailure = [](HealthyRestart::FailureCause) { ++script->failures; return true; };
+  o.pollFailure = [] { return ChildSession::Progress::Pending; };
   o.grant = [](const QByteArray& frame, bool eof, QByteArray& ack) {
     ++script->grants; script->grantFrame = frame; ack = "JGA2-ack"; return eof && !script->revoked;
   };
@@ -115,7 +119,7 @@ ChildSession::TestOperations operations()
   return o;
 }
 QByteArray grant() { return QByteArray::fromHex("00000003616263"); }
-QByteArray cancel() { return QByteArray("JRC1") + QByteArray(20, '\0'); }
+QByteArray cancel() { return FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 1, 1}); }
 void poll(ChildSession& session, int count = 8) { while (count--) session.pollRestore(); }
 
 void validGrantAndPartialReads()
@@ -132,7 +136,7 @@ void invalidGrant(const QByteArray& data, bool eof)
   auto e = endpoints(); CHECK(e); ChildSession session(e, 1, operations());
   session.beginRestore(QStringLiteral("fixture")); poll(session);
   CHECK(s.grants == 0 && s.loads == 0 && s.seeks == 0);
-  if (eof) CHECK(s.invalidations == 1);
+  if (eof) CHECK(s.failures == 1 && s.invalidations == 0);
 }
 void cancellationBeforeGrant()
 {
@@ -149,7 +153,7 @@ void pendingAckAndCapabilityLoss()
   CHECK(session.beginRestore(QStringLiteral("fixture"))); poll(session);
   CHECK(s.grants == 1 && s.writes == 1 && !session.load() && !session.seek());
   s.live = false; CHECK(session.pollRestore() == ChildSession::Progress::Failed);
-  CHECK(s.invalidations == 1 && s.loads == 0 && s.seeks == 0);
+  CHECK(s.failures == 1 && s.invalidations == 0 && s.loads == 0 && s.seeks == 0);
 }
 void controlAckSerializesFurtherDispatch()
 {
