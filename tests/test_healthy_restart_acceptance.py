@@ -109,5 +109,32 @@ class HealthyRestartAcceptance(unittest.TestCase):
             self.assertTrue((copied / path).is_file(), path)
 
 
+class HealthyRestartWrapper(unittest.TestCase):
+    def test_generated_wrapper_line_endings_and_content(self):
+        base = WORKTREE / 'deps'
+        base.mkdir(exist_ok=True)
+        if base.is_symlink() or base.resolve() != base:
+            raise RuntimeError('test storage must remain inside the worktree')
+        with tempfile.TemporaryDirectory(prefix='healthy-wrapper-', dir=base) as directory:
+            work = Path(directory)
+            verifier = ROOT / 'CMakeModules/HealthyRestartTargets.cmake'
+            script = work / 'verify.cmake'
+            script.write_text(f'include("{verifier.as_posix()}")\n'
+                              'healthy_restart_verify_wrapper("${WRAPPER}")\n', encoding='utf-8')
+            wrapper = work / 'wrapper.cpp'
+            expected = b'#include "qt-wayland-compat.h"\n#include "mpvrenderer.cpp"\n'
+            for label, content, valid in (
+                ('lf', expected, True),
+                ('crlf', expected.replace(b'\n', b'\r\n'), True),
+                ('altered', expected.replace(b'mpvrenderer.cpp', b'other.cpp'), False),
+            ):
+                with self.subTest(label=label):
+                    wrapper.write_bytes(content)
+                    result = subprocess.run(['cmake', f'-DWRAPPER={wrapper.as_posix()}', '-P', str(script)],
+                                            cwd=work, capture_output=True, text=True,
+                                            timeout=30, creationflags=FLAGS)
+                    self.assertEqual(result.returncode == 0, valid, result.stdout + result.stderr)
+
+
 if __name__ == '__main__':
     unittest.main()

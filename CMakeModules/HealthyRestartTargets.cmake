@@ -1,4 +1,13 @@
 # Isolated external-events core. It shares dependencies, never the ordinary core.
+function(healthy_restart_verify_wrapper path)
+  file(READ "${path}" contents)
+  string(REPLACE "\r\n" "\n" contents "${contents}")
+  string(SHA256 wrapper_hash "${contents}")
+  if(NOT wrapper_hash STREQUAL "802ab8e8c4322e046765b62e6c5772166d5218fa583361c09363d18f8520c14c")
+    message(FATAL_ERROR "Healthy restart generated renderer wrapper mismatch")
+  endif()
+endfunction()
+
 function(healthy_restart_mpvqt)
   set(_mpvqt_src "${_healthy_copy}/mpvqt")
   foreach(output IN ITEMS mpvrenderer-wrapper.cpp MpvController MpvAbstractItem)
@@ -8,10 +17,7 @@ function(healthy_restart_mpvqt)
   endforeach()
   file(WRITE "${_mpvqt_src}/mpvrenderer-wrapper.cpp"
     "#include \"qt-wayland-compat.h\"\n#include \"mpvrenderer.cpp\"\n")
-  file(SHA256 "${_mpvqt_src}/mpvrenderer-wrapper.cpp" wrapper_hash)
-  if(NOT wrapper_hash STREQUAL "802ab8e8c4322e046765b62e6c5772166d5218fa583361c09363d18f8520c14c")
-    message(FATAL_ERROR "Healthy restart generated renderer wrapper mismatch")
-  endif()
+  healthy_restart_verify_wrapper("${_mpvqt_src}/mpvrenderer-wrapper.cpp")
   file(WRITE "${_mpvqt_src}/MpvController" "#include \"mpvcontroller.h\"\n")
   file(WRITE "${_mpvqt_src}/MpvAbstractItem" "#include \"mpvabstractitem.h\"\n")
   add_library(HealthyRestartMpvQt STATIC
