@@ -5,14 +5,15 @@
 #define CHECK(x) do { if (!(x)) { std::cerr << __LINE__ << ": " << #x << '\n'; std::exit(1); } } while (false)
 using Ledger = PlaybackNativeReceipts;
 using Key = Ledger::Key;
-constexpr Key current{3, 4, 5};
+constexpr Key current{2, 3, 4, 5};
 
 static void prepare(Ledger& ledger)
 {
   CHECK(ledger.begin(current));
   CHECK(ledger.consume(current));
   ledger.submitted(0);
-  CHECK(ledger.snapshot().submitted);
+  CHECK(ledger.snapshot().submissionObserved && ledger.snapshot().submitted);
+  CHECK(!ledger.snapshot().reply && !ledger.snapshot().started && !ledger.snapshot().settled);
 }
 
 static void bothEventOrders()
@@ -20,7 +21,7 @@ static void bothEventOrders()
   Ledger first;
   prepare(first);
   first.reply(5, true, 19);
-  CHECK(first.snapshot().replyOk && !first.snapshot().started);
+  CHECK(first.snapshot().replyOk && !first.snapshot().started && !first.snapshot().settled);
   first.start(19);
   CHECK(first.snapshot().started && !first.snapshot().invalid);
   Ledger second;
@@ -37,27 +38,31 @@ static void failedSubmissionAndReply()
   CHECK(immediate.begin(current));
   CHECK(immediate.consume(current));
   immediate.submitted(-1);
-  CHECK(immediate.snapshot().invalid && !immediate.snapshot().submitted);
+  CHECK(immediate.snapshot().submissionObserved && immediate.snapshot().invalid &&
+        immediate.snapshot().settled && !immediate.snapshot().submitted);
   immediate.reply(5, true, 19);
   CHECK(!immediate.snapshot().replyOk);
   Ledger asynchronous;
   prepare(asynchronous);
   asynchronous.reply(5, false, 0);
-  CHECK(asynchronous.snapshot().invalid && !asynchronous.snapshot().replyOk);
+  CHECK(asynchronous.snapshot().reply && asynchronous.snapshot().invalid &&
+        asynchronous.snapshot().settled && !asynchronous.snapshot().replyOk);
 }
 
 static void oneUseAndIdentity()
 {
   Ledger invalid;
-  CHECK((!invalid.begin(Key{0, 4, 5})));
-  CHECK((!invalid.begin(Key{3, 0, 5})));
-  CHECK((!invalid.begin(Key{3, 4, 0})));
+  CHECK((!invalid.begin(Key{0, 3, 4, 5})));
+  CHECK((!invalid.begin(Key{2, 0, 4, 5})));
+  CHECK((!invalid.begin(Key{2, 3, 0, 5})));
+  CHECK((!invalid.begin(Key{2, 3, 4, 0})));
   Ledger ledger;
   CHECK(ledger.begin(current));
   CHECK(!ledger.begin(current));
-  CHECK((!ledger.consume(Key{3, 4, 6})));
-  CHECK((!ledger.consume(Key{3, 5, 5})));
-  CHECK((!ledger.consume(Key{4, 4, 5})));
+  CHECK((!ledger.consume(Key{1, 3, 4, 5})));
+  CHECK((!ledger.consume(Key{2, 3, 4, 6})));
+  CHECK((!ledger.consume(Key{2, 3, 5, 5})));
+  CHECK((!ledger.consume(Key{2, 4, 4, 5})));
   CHECK(ledger.consume(current));
   CHECK(!ledger.consume(current));
   ledger.submitted(0);
@@ -77,14 +82,14 @@ static void invalidationAndOldAttempt()
   old.reply(5, true, 19);
   CHECK(old.snapshot().invalid && !old.snapshot().replyOk);
   Ledger next;
-  CHECK((next.begin(Key{4, 6, 7})));
-  CHECK((next.consume(Key{4, 6, 7})));
+  CHECK((next.begin(Key{8, 4, 6, 7})));
+  CHECK((next.consume(Key{8, 4, 6, 7})));
   next.submitted(0);
   next.reply(5, true, 19);
   CHECK(!next.snapshot().reply && next.snapshot().key.attempt == 7);
   next.reply(7, true, 21);
   next.start(19);
-  CHECK(!next.snapshot().started && next.snapshot().entry == 21);
+  CHECK(next.snapshot().invalid && !next.snapshot().started && next.snapshot().entry == 21);
 }
 
 static void malformedDuplicatesAndRedirect()
@@ -107,6 +112,11 @@ static void malformedDuplicatesAndRedirect()
   redirected.end(19, true);
   redirected.reply(5, true, 19);
   CHECK(redirected.snapshot().invalid);
+  Ledger conflict;
+  prepare(conflict);
+  conflict.start(20);
+  conflict.reply(5, true, 19);
+  CHECK(conflict.snapshot().invalid && !conflict.snapshot().started);
 }
 
 static void boundAndEnd()
@@ -121,7 +131,7 @@ static void boundAndEnd()
   prepare(ended);
   ended.end(19, false);
   ended.reply(5, true, 19);
-  CHECK(ended.snapshot().ended && !ended.snapshot().started);
+  CHECK(ended.snapshot().ended && ended.snapshot().settled && !ended.snapshot().started);
 }
 
 int main()
