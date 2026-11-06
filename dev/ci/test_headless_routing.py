@@ -149,7 +149,7 @@ class TestHeadlessRouting(unittest.TestCase):
                      'test_fixture_frame_capture', 'test_windows_restart_io', 'test_windows_restart_process',
                      'test_windows_restart_channel', 'test_player_restore_cleanup', 'test_player_restore_observation',
                      'test_fixture_restart_wire', 'test_fixture_restart_child', 'test_restart_child_player',
-                     'test_windows_frame_reader'):
+                     'test_windows_frame_reader', 'test_windows_broker_operations'):
             self.assertEqual(script.count("'" + name + "'"), 1)
         self.assertEqual(script.count("'tests/test_windows_loader_driver.py'"), 1)
         self.assertEqual(script.count("tests/test_windows_mpv_runtime_configure.py"), 1)

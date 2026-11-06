@@ -181,6 +181,7 @@ if ($mode -eq 'static') { $required += @('test_mpvqt_event_ownership', 'test_mpv
 $required += @('test_fixture_frame_acceptance', 'test_fixture_frame_capture', 'test_windows_restart_io', 'test_windows_restart_process', 'test_windows_restart_channel')
 $required += @('test_player_restore_cleanup', 'test_player_restore_observation')
 $required += @('test_fixture_restart_wire', 'test_fixture_restart_child', 'test_restart_child_player', 'test_windows_frame_reader')
+$required += @('test_windows_broker_operations')
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs
 Run-Native $venvPython @('dev/ci/evidence.py', 'build_core', 'passed', 'Native build and core tests passed')

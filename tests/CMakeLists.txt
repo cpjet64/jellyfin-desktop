@@ -68,6 +68,16 @@ if(WIN32)
   target_link_libraries(test_windows_restart_channel PRIVATE advapi32 bcrypt)
   add_test(NAME test_windows_restart_channel COMMAND test_windows_restart_channel)
   set_tests_properties(test_windows_restart_channel PROPERTIES TIMEOUT 60)
+  add_executable(test_windows_broker_operations test_windows_broker_operations.cpp
+    fixture_restart/WindowsBrokerOperations.cpp fixture_restart/WindowsRestartProcess.cpp
+    fixture_restart/WindowsRestartIo.cpp fixture_restart/WindowsRestartChannel.cpp
+    fixture_restart/RestartWire.cpp fixture_restart/RestartBroker.cpp fixture_restart/FixtureEvidence.cpp
+    ${CMAKE_SOURCE_DIR}/src/player/PlaybackCheckpoint.cpp)
+  target_include_directories(test_windows_broker_operations PRIVATE ${CMAKE_SOURCE_DIR}/src)
+  target_link_libraries(test_windows_broker_operations PRIVATE Qt6::Core advapi32 bcrypt)
+  target_compile_features(test_windows_broker_operations PRIVATE cxx_std_17)
+  add_test(NAME test_windows_broker_operations COMMAND test_windows_broker_operations)
+  set_tests_properties(test_windows_broker_operations PROPERTIES TIMEOUT 60)
 endif()
 
 add_executable(test_fixture_restart_broker test_fixture_restart_broker.cpp fixture_restart/RestartBroker.cpp
