@@ -81,7 +81,11 @@ function(healthy_restart_core)
     "${_healthy_copy}/mpvqt/async_stop_player.cpp" "${_healthy_copy}/mpvqt/module_identity.cpp"
     "${_healthy_copy}/mpvqt/module_identity_win.cpp" "${_healthy_copy}/mpvqt/module_identity_import.cpp"
     "${_healthy_copy}/mpvqt/module_import_prepare.cpp" "${_healthy_copy}/mpvqt/module_gate.cpp"
-    "${_healthy_copy}/mpvqt/module_channel.cpp")
+    "${_healthy_copy}/mpvqt/module_channel.cpp" "${_healthy_copy}/mpvqt/module_endpoints.cpp"
+    "${_healthy_copy}/mpvqt/lifetime_module.cpp" "${_healthy_copy}/mpvqt/graph_access.cpp"
+    "${_healthy_copy}/mpvqt/graph_close.cpp" "${_healthy_copy}/mpvqt/graph_prepare.cpp"
+    "${_healthy_copy}/mpvqt/graph_retire.cpp" "${_healthy_copy}/mpvqt/graph_retirement.cpp"
+    "${_healthy_copy}/mpvqt/graph_start.cpp")
   if(WIN32)
     target_sources(HealthyRestartCore PRIVATE "${_healthy_copy}/fixture_restart/WindowsFrameReader.cpp"
       "${_healthy_copy}/fixture_restart/WindowsRestartIo.cpp")
@@ -97,6 +101,9 @@ function(healthy_restart_core)
     message(FATAL_ERROR "Healthy restart requires the bundled MpvQt dependency")
   endif()
   list(REMOVE_ITEM core_links MpvQt)
+  if(WIN32)
+    list(APPEND core_links onecore)
+  endif()
   foreach(link IN LISTS core_links)
     if(link MATCHES "MpvQt|jmp_core|FixtureCore")
       message(FATAL_ERROR "Healthy restart cannot link a different core: ${link}")

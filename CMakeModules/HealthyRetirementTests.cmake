@@ -56,6 +56,53 @@ if(NOT WIN32)
   target_compile_features(healthy_module_identity_adapter_compile PRIVATE cxx_std_17)
 endif()
 
+add_executable(test_healthy_graph_retirement "${CMAKE_SOURCE_DIR}/tests/test_healthy_graph_retirement.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/graph_retirement.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/owner.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime_module.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/closure.cpp")
+target_include_directories(test_healthy_graph_retirement PRIVATE "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
+target_compile_features(test_healthy_graph_retirement PRIVATE cxx_std_17)
+target_compile_definitions(test_healthy_graph_retirement PRIVATE HEALTHY_RETIREMENT_TESTING)
+target_link_libraries(test_healthy_graph_retirement PRIVATE Threads::Threads Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml)
+add_test(NAME test_healthy_graph_retirement COMMAND test_healthy_graph_retirement)
+set_tests_properties(test_healthy_graph_retirement PROPERTIES TIMEOUT 60)
+
+add_executable(test_healthy_graph_retirement_guard "${CMAKE_SOURCE_DIR}/tests/test_healthy_graph_retirement_guard.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime_module.cpp")
+target_include_directories(test_healthy_graph_retirement_guard PRIVATE "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
+target_compile_features(test_healthy_graph_retirement_guard PRIVATE cxx_std_17)
+target_compile_definitions(test_healthy_graph_retirement_guard PRIVATE HEALTHY_RETIREMENT_TESTING)
+target_link_libraries(test_healthy_graph_retirement_guard PRIVATE Threads::Threads)
+add_test(NAME test_healthy_graph_retirement_guard COMMAND test_healthy_graph_retirement_guard)
+set_tests_properties(test_healthy_graph_retirement_guard PROPERTIES TIMEOUT 60)
+
+add_executable(test_healthy_graph_retirement_access "${CMAKE_SOURCE_DIR}/tests/test_healthy_graph_retirement_access.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/graph_access.cpp")
+target_include_directories(test_healthy_graph_retirement_access PRIVATE "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
+target_compile_features(test_healthy_graph_retirement_access PRIVATE cxx_std_17)
+target_compile_definitions(test_healthy_graph_retirement_access PRIVATE HEALTHY_RETIREMENT_TESTING)
+target_link_libraries(test_healthy_graph_retirement_access PRIVATE Threads::Threads Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml)
+add_test(NAME test_healthy_graph_retirement_access COMMAND test_healthy_graph_retirement_access)
+set_tests_properties(test_healthy_graph_retirement_access PROPERTIES TIMEOUT 60)
+
+add_executable(test_healthy_identity_commitment "${CMAKE_SOURCE_DIR}/tests/test_healthy_identity_commitment.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_gate.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_identity.cpp")
+target_include_directories(test_healthy_identity_commitment PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+target_compile_features(test_healthy_identity_commitment PRIVATE cxx_std_17)
+add_test(NAME test_healthy_identity_commitment COMMAND test_healthy_identity_commitment)
+set_tests_properties(test_healthy_identity_commitment PROPERTIES TIMEOUT 60)
+
+if(WIN32)
+  add_executable(test_healthy_module_gate_endpoints "${CMAKE_SOURCE_DIR}/tests/test_healthy_module_gate_endpoints.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_endpoints.cpp" "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartIo.cpp")
+  target_include_directories(test_healthy_module_gate_endpoints PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+  target_compile_features(test_healthy_module_gate_endpoints PRIVATE cxx_std_17)
+  target_compile_definitions(test_healthy_module_gate_endpoints PRIVATE HEALTHY_ENDPOINT_TESTING)
+  target_link_libraries(test_healthy_module_gate_endpoints PRIVATE onecore)
+  add_test(NAME test_healthy_module_gate_endpoints COMMAND test_healthy_module_gate_endpoints)
+  set_tests_properties(test_healthy_module_gate_endpoints PROPERTIES TIMEOUT 60)
+endif()
+
 add_executable(test_healthy_closure "${CMAKE_SOURCE_DIR}/tests/test_healthy_closure.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/closure.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp")
 target_include_directories(test_healthy_closure PRIVATE "${CMAKE_SOURCE_DIR}/tests/healthy_restart")

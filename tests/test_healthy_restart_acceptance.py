@@ -124,7 +124,7 @@ class HealthyRestartAcceptance(unittest.TestCase):
         lifetime = (copied / 'lifetime.cpp').read_text(encoding='utf-8')
         install = lifetime.split('Slot::install(', 1)[1].split('Slot::request(', 1)[0]
         self.assertIn('Barrier::Unqualified', install)
-        self.assertIn('if (barrier_ == Barrier::Unqualified)', lifetime)
+        self.assertIn('if (barrier_ == Barrier::Unqualified && !moduleQualification_)', lifetime)
 
 
 class HealthyRestartWrapper(unittest.TestCase):
@@ -180,6 +180,8 @@ class HealthyRestartWrapper(unittest.TestCase):
             for name in ('closure_player.cpp', 'closure_wake.cpp', 'closure_wake_native.cpp', 'async_stop.cpp',
                          'async_stop_player.cpp', 'module_identity.cpp', 'module_identity_win.cpp',
                          'module_identity_import.cpp', 'module_import_prepare.cpp', 'module_gate.cpp', 'module_channel.cpp',
+                         'module_endpoints.cpp', 'lifetime_module.cpp', 'graph_access.cpp', 'graph_close.cpp',
+                         'graph_prepare.cpp', 'graph_retire.cpp', 'graph_retirement.cpp', 'graph_start.cpp',
                          '../fixture_restart/WindowsFrameReader.cpp', '../fixture_restart/WindowsRestartIo.cpp'):
                 copied = work / 'build/copy/mpvqt' / name
                 copied.parent.mkdir(parents=True, exist_ok=True)
@@ -230,7 +232,9 @@ class HealthyRestartWrapper(unittest.TestCase):
             for name in ('closure_player.cpp', 'closure_wake.cpp', 'closure_wake_native.cpp',
                          'async_stop.cpp', 'async_stop_player.cpp', 'module_identity.cpp',
                          'module_identity_win.cpp', 'module_identity_import.cpp', 'module_import_prepare.cpp',
-                         'module_gate.cpp', 'module_channel.cpp'):
+                         'module_gate.cpp', 'module_channel.cpp', 'module_endpoints.cpp', 'lifetime_module.cpp',
+                         'graph_access.cpp', 'graph_close.cpp', 'graph_prepare.cpp', 'graph_retire.cpp',
+                         'graph_retirement.cpp', 'graph_start.cpp'):
                 self.assertEqual(sources.count((work / 'build/copy/mpvqt' / name).as_posix()), 1, name)
             defs = (work / 'build/core-defs.txt').read_text(encoding='utf-8')
             self.assertNotIn('HEALTHY_RETIREMENT_TESTING', defs)

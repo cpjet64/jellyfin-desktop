@@ -69,8 +69,9 @@ function(_healthy_rewrite name input output)
       input/apple/InputAppleMediaKeys.h input/apple/InputAppleMediaKeys.mm
       settings/AudioSettingsController.cpp taskbar/TaskbarComponentWin.cpp)
   set(_data "${input}")
-  if(name STREQUAL "mpvqt/closure_player.cpp" OR name STREQUAL "fixture_restart/FixtureRestartAdapter.cpp")
+  if(name STREQUAL "mpvqt/closure_player.cpp" OR name STREQUAL "fixture_restart/FixtureRestartAdapter.cpp" OR name MATCHES "^mpvqt/graph_")
     string(REPLACE "\"player/PlayerComponent.h\"" "\"../player/PlayerComponent.h\"" _data "${_data}")
+    string(REPLACE "\"player/MpvVideoItem.h\"" "\"../player/MpvVideoItem.h\"" _data "${_data}")
   elseif(name STREQUAL "mpvqt/async_stop_player.cpp")
     string(REPLACE "\"PlayerComponent.h\"" "\"../player/PlayerComponent.h\"" _data "${_data}")
   endif()
@@ -130,7 +131,7 @@ foreach(_entry IN ITEMS
     "patches/healthy-restart/0002-player-event-order.patch|3d81103253e2dd26a5dfac22eb348496f685a4673b71622dfa2c8d4c86cb89be"
     "patches/healthy-restart/0003-render-retirement.patch|69c000e2a5abf8ce2b562336bdfc1b208a8fe4d0c7b99dad2ccc92ca4aa84374"
     "patches/healthy-restart/0004-async-teardown.patch|46f00c5804c5051d258591fdb9abf3c6ab574bc1492c40df81c159e27af5192b"
-    "patches/healthy-restart/0005-async-stop.patch|b7a3abba479a43986cdcb4652794fe051370ecf5899fc5acc80fe52e713b74e1")
+    "patches/healthy-restart/0005-async-stop.patch|e003c9c91febdf85e889be25a487c94cda7953a73333a2ebf57200064a1b646f")
   string(REPLACE "|" ";" _pair "${_entry}")
   list(GET _pair 0 _relative)
   list(GET _pair 1 _hash)
@@ -179,7 +180,7 @@ _healthy_apply("patches/healthy-restart/0001-render-capture.patch" "cb95ccdcf16a
 _healthy_apply("patches/healthy-restart/0002-player-event-order.patch" "3d81103253e2dd26a5dfac22eb348496f685a4673b71622dfa2c8d4c86cb89be" FALSE)
 _healthy_apply("patches/healthy-restart/0003-render-retirement.patch" "69c000e2a5abf8ce2b562336bdfc1b208a8fe4d0c7b99dad2ccc92ca4aa84374" FALSE)
 _healthy_apply("patches/healthy-restart/0004-async-teardown.patch" "46f00c5804c5051d258591fdb9abf3c6ab574bc1492c40df81c159e27af5192b" FALSE)
-_healthy_apply("patches/healthy-restart/0005-async-stop.patch" "b7a3abba479a43986cdcb4652794fe051370ecf5899fc5acc80fe52e713b74e1" FALSE)
+_healthy_apply("patches/healthy-restart/0005-async-stop.patch" "e003c9c91febdf85e889be25a487c94cda7953a73333a2ebf57200064a1b646f" FALSE)
 
 foreach(_entry IN LISTS _healthy_output_pins)
   string(REPLACE "|" ";" _pair "${_entry}")
