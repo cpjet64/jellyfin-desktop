@@ -1,4 +1,5 @@
 #include "fixture_restart/WindowsBrokerOperations.h"
+#include "fixture_restart/WindowsRestartParent.h"
 #include "player/PlaybackCheckpoint.h"
 #ifdef _WIN32
 #include <QCoreApplication>
@@ -18,7 +19,13 @@ DWORD errorCode = 0;
 QByteArray lastWrite;
 HANDLE heldGrant = INVALID_HANDLE_VALUE;
 bool holdGrant = false, cancelGrant = false, delayGrantCancel = false;
+HANDLE evidencePipe = INVALID_HANDLE_VALUE;
+QByteArray evidenceBytes;
+qsizetype evidenceOffset = 0;
 bool badAck = false;
+bool aExited = false, waitUnknown = false;
+int afterEvidence = 0;
+HANDLE aProcess = INVALID_HANDLE_VALUE;
 std::atomic<bool> holdCreate{false}, enteredCreate{false};
 std::atomic<int> resumeCount{0};
 HANDLE handle(int n) { return reinterpret_cast<HANDLE>(base + quintptr(n)); }
@@ -49,11 +56,22 @@ BOOL WINAPI resetEvent(HANDLE) { return TRUE; }
 BOOL WINAPI writeFile(HANDLE h, LPCVOID data, DWORD size, LPDWORD count, LPOVERLAPPED)
 { if (h == heldGrant && holdGrant) { errorCode = ERROR_IO_PENDING; return FALSE; }
   lastWrite = QByteArray(static_cast<const char*>(data), size); *count = size; return TRUE; }
-BOOL WINAPI readFile(HANDLE, LPVOID data, DWORD size, LPDWORD count, LPOVERLAPPED)
+BOOL WINAPI readFile(HANDLE h, LPVOID data, DWORD size, LPDWORD count, LPOVERLAPPED)
 {
+  if (h == evidencePipe) {
+    if (evidenceOffset == evidenceBytes.size()) {
+      if (afterEvidence == 1) aExited = true;
+      if (afterEvidence == 2) waitUnknown = true;
+      errorCode = ERROR_BROKEN_PIPE; return FALSE;
+    }
+    const auto length = std::min<qsizetype>(size, evidenceBytes.size() - evidenceOffset);
+    std::memcpy(data, evidenceBytes.constData() + evidenceOffset, size_t(length));
+    evidenceOffset += length; *count = DWORD(length); return TRUE;
+  }
   CHECK(size == 24);
   Control request;
   CHECK(decodeControl(lastWrite, request));
+  if (request.kind == ControlKind::InternalStop && activeA == 0) aExited = true;
   const QByteArray ack = encodeControl({ControlKind::Ack, request.sequence, request.revision + (badAck ? 1 : 0)});
   std::memcpy(data, ack.constData(), size); *count = size; return TRUE;
 }
@@ -73,8 +91,11 @@ BOOL WINAPI createProcess(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATT
 }
 BOOL WINAPI inJob(HANDLE, HANDLE, PBOOL result) { *result = TRUE; return TRUE; }
 DWORD WINAPI resume(HANDLE) { ++resumeCount; return 1; }
-BOOL WINAPI terminate(HANDLE, UINT) { activeA = 0; return TRUE; }
-DWORD WINAPI wait(HANDLE, DWORD) { return WAIT_OBJECT_0; }
+BOOL WINAPI terminate(HANDLE, UINT) { activeA = 0; aExited = true; return TRUE; }
+DWORD WINAPI wait(HANDLE h, DWORD) {
+  if (h == aProcess && waitUnknown) return WAIT_FAILED;
+  return h == aProcess && !aExited ? WAIT_TIMEOUT : WAIT_OBJECT_0;
+}
 BOOL WINAPI query(HANDLE, JOBOBJECTINFOCLASS, LPVOID out, DWORD, LPDWORD)
 { static_cast<JOBOBJECT_BASIC_ACCOUNTING_INFORMATION*>(out)->ActiveProcesses = DWORD(activeA); return TRUE; }
 BOOL WINAPI exitCode(HANDLE, LPDWORD out) { *out = 0; return TRUE; }
@@ -117,11 +138,12 @@ WindowsRestartProcess* process(const std::vector<WindowsEndpoint>& endpoints)
 }
 void launch(WindowsRestartProcess* process)
 {
+  aExited = false; waitUnknown = false;
   CHECK(process->launch(L"C:\\fixture.exe", L"", now() + 10000) == ProcessProgress::Pending);
   const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
   while (std::chrono::steady_clock::now() < end) {
     const auto result = process->pollLaunch();
-    if (result == ProcessProgress::Complete) return;
+    if (result == ProcessProgress::Complete) { aProcess = handle(70 + created); return; }
     CHECK(result == ProcessProgress::Pending); std::this_thread::yield();
   }
   std::abort();
@@ -143,7 +165,7 @@ void ownedOperations()
   CHECK(decodeControl(lastWrite, sent) && sent.kind == ControlKind::InternalStop);
   bool forced = true;
   CHECK(operations.waitAAndChildren(deadline, forced) == Operations::Progress::Pending && !forced);
-  activeA = 0;
+  activeA = 0; aExited = true;
   CHECK(operations.waitAAndChildren(deadline, forced) == Operations::Progress::Complete && !forced);
   const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
   auto progress = operations.launchB(deadline);
@@ -318,12 +340,95 @@ void rejectsMismatchedEndpoint()
   CHECK(operations.cleanupOwned(operations.nowMs() + 10000) == Operations::Progress::Failed);
   CHECK(a->release() && b->release());
 }
+
+void actualParentPath(bool corrupt)
+{
+  activeA = 0;
+  auto evidence = endpoint(), aControl = endpoint(), aAck = endpoint();
+  auto bGrant = endpoint(), bControl = endpoint(), bAck = endpoint();
+  evidencePipe = evidence.channel->parentHandle();
+  const Evidence source = sampleEvidence();
+  evidenceBytes = encodeEvidence(source);
+  CHECK(!evidenceBytes.isEmpty());
+  if (corrupt) evidenceBytes.append('x');
+  evidenceOffset = 0;
+  auto* a = process({evidence, aControl, aAck});
+  auto* b = process({bGrant, bControl, bAck});
+  launch(a);
+  const int before = created;
+  WindowsBrokerOperations operations(*a, *b, evidence, aControl, aAck, bGrant, bControl, bAck,
+                                     L"C:\\fixture.exe", L"", 3);
+  WindowsRestartParent parent(operations, evidence, source.grant);
+  const bool started = parent.begin();
+  CHECK(started != corrupt);
+  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (parent.state() != WindowsRestartParent::State::Transferred &&
+         parent.state() != WindowsRestartParent::State::Failed && std::chrono::steady_clock::now() < end) {
+    parent.step(); std::this_thread::yield();
+  }
+  if (corrupt) {
+    CHECK(parent.state() == WindowsRestartParent::State::Failed && created == before);
+  } else {
+    CHECK(parent.state() == WindowsRestartParent::State::Transferred && created == before + 1);
+    CHECK(parent.frozenEvidence().receipt == source.receipt);
+    CHECK(parent.cancel() == Broker::Cancellation::Pending);
+    parent.step(); parent.step();
+    CHECK(parent.state() == WindowsRestartParent::State::Failed);
+  }
+  evidencePipe = INVALID_HANDLE_VALUE;
+}
+
+void parentRejectsDeadOrUnknownA(bool unknown)
+{
+  activeA = 0;
+  auto evidence = endpoint(), aControl = endpoint(), aAck = endpoint();
+  auto bGrant = endpoint(), bControl = endpoint(), bAck = endpoint();
+  auto* a = process({evidence, aControl, aAck});
+  auto* b = process({bGrant, bControl, bAck});
+  launch(a);
+  const int before = created;
+  WindowsBrokerOperations operations(*a, *b, evidence, aControl, aAck, bGrant, bControl, bAck,
+                                     L"C:\\fixture.exe", L"", 3);
+  const Evidence source = sampleEvidence();
+  WindowsRestartParent parent(operations, evidence, source.grant);
+  aExited = !unknown; waitUnknown = unknown;
+  CHECK(!parent.begin() && parent.failure() == WindowsRestartParent::Failure::Channel);
+  waitUnknown = false; aExited = true;
+  parent.step();
+  CHECK(parent.state() == WindowsRestartParent::State::Failed && created == before);
+}
+
+void parentRejectsLostAAfterRead(bool unknown)
+{
+  activeA = 0;
+  auto evidence = endpoint(), aControl = endpoint(), aAck = endpoint();
+  auto bGrant = endpoint(), bControl = endpoint(), bAck = endpoint();
+  evidencePipe = evidence.channel->parentHandle();
+  const Evidence source = sampleEvidence();
+  evidenceBytes = encodeEvidence(source); evidenceOffset = 0;
+  auto* a = process({evidence, aControl, aAck});
+  auto* b = process({bGrant, bControl, bAck});
+  launch(a);
+  const int before = created;
+  WindowsBrokerOperations operations(*a, *b, evidence, aControl, aAck, bGrant, bControl, bAck,
+                                     L"C:\\fixture.exe", L"", 3);
+  WindowsRestartParent parent(operations, evidence, source.grant);
+  afterEvidence = unknown ? 2 : 1;
+  CHECK(!parent.begin() && parent.failure() == WindowsRestartParent::Failure::Evidence);
+  afterEvidence = 0; waitUnknown = false; aExited = true;
+  parent.step();
+  CHECK(parent.state() == WindowsRestartParent::State::Failed && created == before);
+  evidencePipe = INVALID_HANDLE_VALUE;
+}
 }
 int main(int argc, char** argv) {
   QCoreApplication app(argc, argv);
   ownedOperations(); actualBrokerPath(); cancelBeforeASettled(); cancelDuringPendingGrant();
   wrongAcknowledgement(); cancelDuringLaunch();
   rejectsMismatchedEndpoint();
+  actualParentPath(false); actualParentPath(true);
+  parentRejectsDeadOrUnknownA(false); parentRejectsDeadOrUnknownA(true);
+  parentRejectsLostAAfterRead(false); parentRejectsLostAAfterRead(true);
   return 0;
 }
 #else

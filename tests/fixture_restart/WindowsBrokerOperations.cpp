@@ -26,7 +26,8 @@ qint64 WindowsBrokerOperations::nowMs() const { return qint64(GetTickCount64());
 
 bool WindowsBrokerOperations::ownsAChannel(const void* channel) const
 {
-  return valid_ && a_ && evidence_.channel && channel == evidence_.channel && a_->launchEstablished() && a_->ownsEndpoint(evidence_.channel, evidence_.io);
+  return valid_ && a_ && evidence_.channel && channel == evidence_.channel && a_->launchEstablished() &&
+      a_->ownsEndpoint(evidence_.channel, evidence_.io) && a_->pollRunning() == ProcessProgress::Complete;
 }
 
 bool WindowsBrokerOperations::validateEvidence(const Evidence& evidence) const

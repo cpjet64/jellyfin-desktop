@@ -58,6 +58,7 @@ public:
   bool burned() const { return burned_; }
   const Evidence& frozenEvidence() const { return evidence_; }
   qint64 overallDeadline() const { return overall_; }
+  qint64 normalDeadline() const { return normal_; }
 private:
   bool withinNormal() const;
   enum class Phase { Idle, Stop, Wait, Launch, Transfer, Cleanup, Done, Failed, Unconfirmed };
