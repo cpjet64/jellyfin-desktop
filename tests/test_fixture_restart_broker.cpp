@@ -14,6 +14,9 @@ struct Fake : Operations {
   bool held = true, evidenceValid = true, stopped = true, closed = true, exited = true, forced = false;
   bool eligible = true, accepted = true, permit = true, monitor = true;
   bool cancelDuringAccepted = false, cancelDuringPermit = false;
+  bool cancelAfterPermitClaim = false;
+  int permitWrites = 0;
+  bool invalidateDuringMonitor = false;
   bool launched = true, transferred = true;
   bool ack = true;
   bool cancelDuringLaunch = false, cancelDuringTransfer = false, lateAck = false;
@@ -46,8 +49,13 @@ struct Fake : Operations {
   }
   Progress cancelBAndAwaitAck(qint64 deadline) override { CHECK(deadline == 180100); if (holdAck) return Progress::Pending; if (lateAck) clock = deadline; return ack ? Progress::Complete : Progress::Failed; }
   Progress waitBGrantAccepted(qint64 deadline) override { CHECK(deadline == 150100); if (cancelDuringAccepted) target->cancel(); return accepted ? Progress::Complete : Progress::Failed; }
-  Progress issueRestorePermit(qint64 deadline, const std::function<bool()>& current) override { CHECK(deadline == 150100); if (cancelDuringPermit) target->cancel(); return current() && permit ? Progress::Complete : Progress::Failed; }
-  Progress monitorB(qint64 deadline) override { CHECK(deadline == 150100); return monitor ? Progress::Complete : Progress::Failed; }
+  Progress issueRestorePermit(qint64 deadline, const std::function<bool()>& current) override {
+    CHECK(deadline == 150100); if (cancelDuringPermit) target->cancel();
+    if (!current() || !permit) return Progress::Failed;
+    if (cancelAfterPermitClaim) { target->cancel(); CHECK(current()); }
+    ++permitWrites; return Progress::Complete;
+  }
+  Progress monitorB(qint64 deadline) override { CHECK(deadline == 150100); if (invalidateDuringMonitor) eligible = false; return monitor ? Progress::Complete : Progress::Failed; }
   Progress cleanupOwned(qint64 deadline) override { CHECK(deadline == 180100); return Progress::Complete; }
 };
 
@@ -213,8 +221,13 @@ static void closureAndIntentGate()
     Fake later; Broker interrupted(later, later.channel, sample().grant); later.target = &interrupted;
     later.cancelDuringAccepted = which == 0; later.cancelDuringPermit = which == 1;
     CHECK(interrupted.capture(later.channel, sample()) && interrupted.startReplacement());
-    drive(interrupted); CHECK(!interrupted.completed() && interrupted.burned());
+    drive(interrupted); CHECK(!interrupted.completed() && interrupted.burned() && later.permitWrites == 0);
   }
+  Fake claimed; Broker afterClaim(claimed, claimed.channel, sample().grant); claimed.target = &afterClaim;
+  claimed.cancelAfterPermitClaim = true;
+  CHECK(afterClaim.capture(claimed.channel, sample()) && afterClaim.startReplacement());
+  drive(afterClaim); CHECK(!afterClaim.completed() && claimed.permitWrites == 1);
+  CHECK(afterClaim.cancellation() == Broker::Cancellation::Acknowledged);
   for (int which = 0; which < 3; ++which) {
     Fake reentrant; Broker interrupted(reentrant, reentrant.channel, sample().grant); reentrant.target = &interrupted;
     reentrant.cancelDuringClosed = which == 0; reentrant.cancelDuringWait = which == 1;
@@ -236,6 +249,27 @@ static void captureReentryAndAliasing()
   Fake canceled; Broker rejected(canceled, canceled.channel, sample().grant); canceled.target = &rejected;
   canceled.cancelDuringOwn = true;
   CHECK(!rejected.capture(canceled.channel, sample()) && canceled.launchCalls == 0);
+}
+
+static void rejectForeignReceiptRevision()
+{
+  auto evidence = sample();
+  evidence.receipt.replace("\"revision\":\"3\"", "\"revision\":\"4\"");
+  PlaybackCheckpoint checkpoint; CHECK(PlaybackCheckpointCodec::decode(evidence.checkpoint, checkpoint));
+  checkpoint.intent.revision = 4;
+  CHECK(PlaybackCheckpointCodec::encode(checkpoint, evidence.checkpoint));
+  CHECK(!validateFixtureEvidence(evidence));
+  Fake ops; Broker broker(ops, ops.channel, sample().grant);
+  CHECK(!broker.capture(ops.channel, evidence));
+  CHECK(!broker.startReplacement() && ops.launchCalls == 0);
+}
+
+static void intentInvalidatedDuringMonitor()
+{
+  Fake ops; Broker broker(ops, ops.channel, sample().grant);
+  ops.invalidateDuringMonitor = true;
+  CHECK(broker.capture(ops.channel, sample()) && broker.startReplacement());
+  drive(broker); CHECK(!broker.completed() && broker.burned());
 }
 
 static bool checkedStop(void* p) { ++*static_cast<int*>(p); return true; }
@@ -302,6 +336,7 @@ static void ordering()
 int main(int argc, char** argv)
 {
   QCoreApplication app(argc, argv);
-  framing(); lifecycle(); evidenceValidation(); failures(); closureAndIntentGate(); captureReentryAndAliasing(); ordering();
+  framing(); lifecycle(); evidenceValidation(); failures(); closureAndIntentGate(); captureReentryAndAliasing();
+  rejectForeignReceiptRevision(); intentInvalidatedDuringMonitor(); ordering();
   return 0;
 }
