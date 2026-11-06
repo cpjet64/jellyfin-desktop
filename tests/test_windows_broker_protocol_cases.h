@@ -38,7 +38,13 @@ DWORD WINAPI fakePid() { return 19; }
 DWORD WINAPI fakeProcessId(HANDLE) { return 19; }
 BOOL WINAPI fakeHandleInfo(HANDLE, LPDWORD flags) { *flags = HANDLE_FLAG_INHERIT; return TRUE; }
 BOOL WINAPI noQueuedBytes(HANDLE, LPVOID, DWORD, LPDWORD, LPDWORD available, LPDWORD)
-{ *available = 0; if (bStream == BStream::CancelPeek) permitCurrent = false; return TRUE; }
+{
+  *available = 0;
+  if (bStream == BStream::CancelPeek) permitCurrent = false;
+  if (callbackBroker && callbackMode == 1) CHECK(callbackBroker->cancel() == Broker::Cancellation::Pending);
+  if (callbackBroker && callbackMode == 2) callbackArmed = true;
+  return TRUE;
+}
 
 WindowsRestartProcess* healthyProcess(const std::vector<WindowsEndpoint>& endpoints)
 {
@@ -229,8 +235,54 @@ void exerciseBrokerCancel(bool duringGrant)
   heldGrant = INVALID_HANDLE_VALUE; holdGrant = false; scriptedPipe = INVALID_HANDLE_VALUE;
 }
 
+void exercisePermitClaim(int mode)
+{
+  activeA = 0; callbackMode = mode; callbackArmed = false; callbackIntent = true;
+  permitWrites = stopWrites = 0;
+  QTemporaryDir stage(QDir::currentPath() + "/w967-claim-XXXXXX");
+  auto lease = stageFixture(stage);
+  auto evidence = endpoint(), control = endpoint(), ack = endpoint();
+  auto grant = endpoint(), bControl = endpoint(), bAck = endpoint(), identity = endpoint();
+  auto* a = process({evidence, control, ack});
+  auto* b = healthyProcess({grant, bControl, bAck, identity});
+  launch(a);
+  WindowsBrokerOperations operations(*a, *b, evidence, control, ack, grant, bControl, bAck,
+                                     L"C:\\fixture.exe", L"", 3, noQueuedBytes);
+  CHECK(operations.configureHealthyTransfer({1, 2, 1, 3, 4, 5, 6}, 7, identity.channel, lease,
+                                             [](const Grant&) { return callbackIntent; }));
+  const Evidence source = sampleEvidence();
+  Broker broker(operations, evidence.channel, source.grant);
+  CHECK(broker.capture(evidence.channel, source) && broker.startReplacement());
+  callbackBroker = &broker; callbackControl = bControl.channel->parentHandle();
+  callbackAck = bAck.channel->parentHandle();
+  scriptedPipe = ack.channel->parentHandle(); scriptedOffset = 0; scriptedChunk = 3;
+  scriptedBytes = encodeControl({ControlKind::Ack, 1, 3}) + encodeClosed({1, 2, 1, 3, 4, 5, 6});
+  scriptedPending = false; aExited = true;
+  bool acceptanceReady = false;
+  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!broker.failed() && !broker.unconfirmed() && !broker.completed() && std::chrono::steady_clock::now() < end) {
+    broker.step();
+    if (!acceptanceReady && grant.channel->parentHandle() == INVALID_HANDLE_VALUE) {
+      acceptanceReady = true; scriptedPipe = callbackAck; scriptedOffset = 0;
+      const auto digest = QCryptographicHash::hash(encodeGrant(source.grant), QCryptographicHash::Sha256);
+      scriptedBytes = encodeGrantAccepted({1, 7, 2, 3, digest});
+    }
+    std::this_thread::yield();
+  }
+  CHECK(acceptanceReady && !broker.completed());
+  CHECK(permitWrites == (mode == 1 ? 0 : 1));
+  CHECK(stopWrites == 1 && broker.cancellation() != Broker::Cancellation::Local);
+  CHECK(broker.failed() || broker.unconfirmed());
+  callbackIntent = true;
+  broker.step();
+  CHECK(!broker.completed() && permitWrites == (mode == 1 ? 0 : 1) && stopWrites == 1);
+  callbackBroker = nullptr; callbackControl = callbackAck = INVALID_HANDLE_VALUE;
+  callbackMode = 0; scriptedPipe = INVALID_HANDLE_VALUE;
+}
+
 void adapterProtocolCases()
 {
+  for (int mode : {1, 2, 3}) exercisePermitClaim(mode);
   retainedSettlementBlocksRelease();
   for (auto test : {AStream::Valid, AStream::Partial, AStream::EarlyEof,
                     AStream::Trailing, AStream::Duplicate, AStream::MissingEof,

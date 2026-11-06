@@ -36,6 +36,10 @@ qsizetype scriptedOffset = 0, scriptedChunk = 4096;
 bool scriptedPending = false;
 bool scriptedRace = false;
 void* scriptedBuffer = nullptr;
+Broker* callbackBroker = nullptr;
+int callbackMode = 0, permitWrites = 0, stopWrites = 0;
+bool callbackArmed = false, callbackIntent = true;
+HANDLE callbackControl = INVALID_HANDLE_VALUE, callbackAck = INVALID_HANDLE_VALUE;
 bool aExited = false, waitUnknown = false;
 void exerciseBrokerCancel(bool duringGrant);
 int afterEvidence = 0;
@@ -69,14 +73,27 @@ BOOL WINAPI cancelIo(HANDLE h, LPOVERLAPPED) { if (h == heldGrant) cancelGrant =
 BOOL WINAPI closeHandle(HANDLE h) { if (h == handle(10)) ++closedGrant; return TRUE; }
 DWORD WINAPI lastError() { return errorCode; }
 ULONGLONG WINAPI now() { return GetTickCount64(); }
-BOOL WINAPI resetEvent(HANDLE) { return TRUE; }
+BOOL WINAPI resetEvent(HANDLE) {
+  if (callbackArmed && callbackMode == 2) {
+    callbackArmed = false; CHECK(callbackBroker->cancel() == Broker::Cancellation::Pending);
+  }
+  return TRUE;
+}
 BOOL WINAPI writeFile(HANDLE h, LPCVOID data, DWORD size, LPDWORD count, LPOVERLAPPED)
 { if (h == heldGrant && holdGrant) { errorCode = ERROR_IO_PENDING; return FALSE; }
-  lastWrite = QByteArray(static_cast<const char*>(data), size); *count = size; return TRUE; }
+  lastWrite = QByteArray(static_cast<const char*>(data), size);
+  if (h == callbackControl) {
+    Control control;
+    if (decodeControl(lastWrite, control) && control.kind == ControlKind::UserStop) {
+      ++stopWrites; scriptedPipe = INVALID_HANDLE_VALUE;
+    } else ++permitWrites;
+  }
+  *count = size; return TRUE; }
 BOOL WINAPI readFile(HANDLE h, LPVOID data, DWORD size, LPDWORD count, LPOVERLAPPED)
 {
   if (h == scriptedPipe) {
     if (scriptedOffset == scriptedBytes.size()) {
+      if (h == callbackAck && callbackMode == 3 && permitWrites) callbackIntent = false;
       scriptedBuffer = data;
       errorCode = scriptedPending ? ERROR_IO_PENDING : ERROR_BROKEN_PIPE;
       return FALSE;
