@@ -24,6 +24,26 @@ function Run-Native {
     if ($LASTEXITCODE -ne 0) { throw "$Program failed with exit code $LASTEXITCODE" }
 }
 
+function Invoke-HealthyCopyPreflight {
+    param([string]$Python, [string]$Root, [string]$Scratch)
+    $keys = @('MPVQT_TEST_SOURCE', 'HEALTHY_TEST_SOURCE', 'CMAKE_GENERATOR', 'CMAKE_GENERATOR_PLATFORM',
+              'CMAKE_GENERATOR_TOOLSET', 'CMAKE_GENERATOR_INSTANCE', 'TEMP', 'TMP', 'TMPDIR')
+    $previous = @{}
+    foreach ($key in $keys) { $previous[$key] = [Environment]::GetEnvironmentVariable($key, 'Process') }
+    try {
+        $env:MPVQT_TEST_SOURCE = Join-Path $Root 'external/mpvqt'
+        $env:HEALTHY_TEST_SOURCE = $Root
+        $env:CMAKE_GENERATOR = 'Ninja'
+        foreach ($key in @('CMAKE_GENERATOR_PLATFORM', 'CMAKE_GENERATOR_TOOLSET', 'CMAKE_GENERATOR_INSTANCE')) {
+            [Environment]::SetEnvironmentVariable($key, $null, 'Process')
+        }
+        $env:TEMP = $Scratch; $env:TMP = $Scratch; $env:TMPDIR = $Scratch
+        Run-Native $Python @('tests/test_healthy_restart_acceptance.py')
+    } finally {
+        foreach ($key in $keys) { [Environment]::SetEnvironmentVariable($key, $previous[$key], 'Process') }
+    }
+}
+
 if ($env:CI_JOB_ID -notmatch '^\d+$') { throw 'This script requires an isolated GitLab job checkout.' }
 $drive = Get-PSDrive -Name ([System.IO.Path]::GetPathRoot($root).Substring(0, 1))
 Write-NativeInventory $root $ci $env:CI_MPVQT_MODE
@@ -82,6 +102,7 @@ foreach ($name in @('PATH', 'INCLUDE', 'LIB', 'LIBPATH')) {
 }
 New-Item -ItemType Directory -Force -Path $ci, $build, $results | Out-Null
 Install-CiTools "$ci/tools" $found
+Invoke-HealthyCopyPreflight $python $root $ci
 $sevenZip = $found.SevenZip
 Install-Mpv 'x86_64-v3' "$build/mpv" $sevenZip $ci $mpvVersion '49533E80D681672E42AB38FCCFDB9DB0CC9FC423F86D34F5F9634EBA71109912'
 Install-Mpv 'x86_64' "$build/mpv-fallback" $sevenZip $ci $mpvVersion 'D7F5621F42B6E161FE032DF914A10BDECE28A89DF3E57C6C3E16A5A250929B5E'

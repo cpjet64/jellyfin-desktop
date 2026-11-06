@@ -82,6 +82,51 @@ if (-not $failed) { throw 'Fixture-copy failure did not propagate' }
 $install = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
     $node.GetCommandName() -eq 'Install-CiTools' }, $true)
 if ($install.Count -ne 1) { throw 'Expected one tool bootstrap' }
+$healthyFunction = $source.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Invoke-HealthyCopyPreflight' }, $true)
+$healthyCall = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
+    $node.GetCommandName() -eq 'Invoke-HealthyCopyPreflight' }, $true)
+$mpvInstall = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
+    $node.GetCommandName() -eq 'Install-Mpv' }, $true)
+$sourceCheck = $source.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] -and
+    $node.GetCommandName() -eq 'git.exe' -and $node.Extent.Text -match 'external/mpvqt.*rev-parse HEAD' }, $true)
+if ($healthyFunction.Count -ne 1 -or $healthyCall.Count -ne 1 -or $mpvInstall.Count -lt 1 -or $sourceCheck.Count -ne 1 -or
+    $healthyCall[0].Extent.StartOffset -le $sourceCheck[0].Extent.StartOffset -or
+    $healthyCall[0].Extent.StartOffset -le $install[0].Extent.StartOffset -or
+    $healthyCall[0].Extent.StartOffset -ge $mpvInstall[0].Extent.StartOffset) {
+    throw 'Healthy copy gate must run once after tools and before mpv installation'
+}
+Invoke-Expression $healthyFunction[0].Extent.Text
+function Invoke-FakeHealthy {
+    $script:seen = @($args)
+    $script:healthyEnvironment = @($env:MPVQT_TEST_SOURCE, $env:HEALTHY_TEST_SOURCE, $env:CMAKE_GENERATOR, $env:TEMP, $env:TMP, $env:TMPDIR,
+        $env:CMAKE_GENERATOR_PLATFORM, $env:CMAKE_GENERATOR_TOOLSET, $env:CMAKE_GENERATOR_INSTANCE)
+    $global:LASTEXITCODE = $script:status
+}
+$keys = @('MPVQT_TEST_SOURCE', 'HEALTHY_TEST_SOURCE', 'CMAKE_GENERATOR', 'CMAKE_GENERATOR_PLATFORM', 'CMAKE_GENERATOR_TOOLSET',
+          'CMAKE_GENERATOR_INSTANCE', 'TEMP', 'TMP', 'TMPDIR')
+$saved = @{}
+foreach ($key in $keys) { $saved[$key] = [Environment]::GetEnvironmentVariable($key, 'Process'); [Environment]::SetEnvironmentVariable($key, 'prior', 'Process') }
+try {
+    $script:status = 0
+    Invoke-HealthyCopyPreflight 'Invoke-FakeHealthy' 'C:/test-root' 'C:/test-scratch'
+    $expectedEnvironment = @((Join-Path 'C:/test-root' 'external/mpvqt'), 'C:/test-root', 'Ninja', 'C:/test-scratch',
+                             'C:/test-scratch', 'C:/test-scratch', $null, $null, $null)
+    if (($script:seen -join '|') -ne 'tests/test_healthy_restart_acceptance.py' -or
+        ($script:healthyEnvironment -join '|') -ne ($expectedEnvironment -join '|')) {
+        throw 'Healthy copy gate arguments or child environment incorrect'
+    }
+    $script:status = 19
+    $failed = $false
+    try { Invoke-HealthyCopyPreflight 'Invoke-FakeHealthy' 'C:/test-root' 'C:/test-scratch' }
+    catch { $failed = $_.Exception.Message -match 'failed with exit code 19' }
+    if (-not $failed) { throw 'Healthy copy gate failure did not propagate' }
+    foreach ($key in $keys) {
+        if ([Environment]::GetEnvironmentVariable($key, 'Process') -ne 'prior') { throw "Healthy copy gate leaked $key" }
+    }
+} finally {
+    foreach ($key in $keys) { [Environment]::SetEnvironmentVariable($key, $saved[$key], 'Process') }
+}
 foreach ($test in @('test_linux_sdk_order.py', 'test_linux_sdk_inputs.py', 'test_qt_sdk_archive.py',
                     'test_linux_qt_plan.py', 'test_libarchive_reader_contract.py', 'test_linux_sdk_cmake.py',
                     'test_fixture_suspend_adapter.py', 'test_fixture_suspend_linux.py', 'test_linux_containment_capability.py', 'test_linux_capability_preflight.py', 'test_linux_synthetic_service.py', 'test_settlement_candidates.py', 'test_settlement_observation.py',
