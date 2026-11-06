@@ -41,6 +41,18 @@ target_link_libraries(test_player_intent_boundary PRIVATE jmp_core Qt6::Test)
 add_test(NAME test_player_intent_boundary COMMAND test_player_intent_boundary)
 set_tests_properties(test_player_intent_boundary PROPERTIES TIMEOUT 60)
 
+add_executable(test_playback_native_receipts test_playback_native_receipts.cpp ${CMAKE_SOURCE_DIR}/src/player/PlaybackNativeReceipts.cpp)
+target_include_directories(test_playback_native_receipts PRIVATE ${CMAKE_SOURCE_DIR}/src/player)
+target_compile_features(test_playback_native_receipts PRIVATE cxx_std_17)
+add_test(NAME test_playback_native_receipts COMMAND test_playback_native_receipts)
+set_tests_properties(test_playback_native_receipts PROPERTIES TIMEOUT 60)
+
+add_executable(test_player_native_receipts test_player_native_receipts.cpp)
+target_include_directories(test_player_native_receipts PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
+target_link_libraries(test_player_native_receipts PRIVATE jmp_core Qt6::Test)
+add_test(NAME test_player_native_receipts COMMAND test_player_native_receipts)
+set_tests_properties(test_player_native_receipts PROPERTIES TIMEOUT 60)
+
 add_executable(test_player_intent_observation test_player_intent_observation.cpp)
 target_include_directories(test_player_intent_observation PRIVATE ${CMAKE_SOURCE_DIR}/src/player)
 target_compile_features(test_player_intent_observation PRIVATE cxx_std_17)

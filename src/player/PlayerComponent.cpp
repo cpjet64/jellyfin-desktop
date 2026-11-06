@@ -80,10 +80,10 @@ PlayerComponent::~PlayerComponent()
 bool PlayerComponent::componentInitialize()
 {
   connect(&WebClientFaultGuard::instance(), &WebClientFaultGuard::rendererLostChanged, this, [this] {
-    if (WebClientFaultGuard::instance().rendererLost()) m_playbackIntent.invalidate(PlaybackIntent::Reason::RendererLost);
+    if (WebClientFaultGuard::instance().rendererLost()) { revokeNativeReceiptHost(); m_playbackIntent.invalidate(PlaybackIntent::Reason::RendererLost); }
   });
-  if (WebClientFaultGuard::instance().rendererLost()) m_playbackIntent.invalidate(PlaybackIntent::Reason::RendererLost);
-  connect(qApp, &QCoreApplication::aboutToQuit, this, [this] { m_playbackIntent.exit(); });
+  if (WebClientFaultGuard::instance().rendererLost()) { revokeNativeReceiptHost(); m_playbackIntent.invalidate(PlaybackIntent::Reason::RendererLost); }
+  connect(qApp, &QCoreApplication::aboutToQuit, this, [this] { revokeNativeReceiptHost(); m_playbackIntent.exit(); });
   // Defer mpv creation until setQtQuickWindow() where we get MpvQt's handle
   // m_mpv will be set via setMpvHandle() called from MpvVideoItem::initMpv()
   return true;

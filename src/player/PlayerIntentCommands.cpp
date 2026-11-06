@@ -17,6 +17,13 @@ PlaybackCheckpoint PlayerComponent::makePlaybackCheckpoint() const
 {
   PlaybackCheckpoint candidate;
   candidate.intent = m_playbackIntent.snapshot();
+  if (fixturePositionCurrent()) {
+    candidate.intent.timelineQualified = true;
+    candidate.positionKnown = true;
+    candidate.positionMs = m_fixturePosition;
+    candidate.item = QStringLiteral("fixture-clip");
+    candidate.source = QStringLiteral("fixture-source");
+  }
   return candidate;
 }
 
@@ -209,6 +216,7 @@ void PlayerComponent::handleMpvEvents()
     mpv_event *event = mpv_wait_event(m_mpv->mpv(), 0);
     if (event->event_id == MPV_EVENT_NONE)
       break;
+    observeNativeReceipt(event);
     if (event->event_id == MPV_EVENT_END_FILE)
       m_playbackIntent.invalidate(PlaybackIntent::Reason::UnattributedEvent);
     handleMpvEvent(event);

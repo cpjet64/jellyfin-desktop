@@ -15,6 +15,7 @@
 #include "ComponentManager.h"
 #include "QtHelper.h"
 #include "PlaybackIntent.h"
+#include "PlaybackNativeReceipts.h"
 
 #include <mpv/client.h>
 
@@ -248,6 +249,26 @@ Q_SIGNALS:
   void bufferedRangesUpdated(const QVariantList& ranges);
 
 private:
+  friend class TestPlayerNativeReceipts;
+  // Private host-only seam. The future host must resolve TestClip and establish
+  // seekability; no WebChannel method or production host invokes this seam.
+  enum class FixtureAsset { TestClip };
+  bool bindNativeReceiptHost(quint64 host);
+  void revokeNativeReceiptHost();
+  bool beginNativeReceipt(FixtureAsset asset, const QString& fixturePath, quint64 host, quint64 attempt);
+  bool consumeFixtureCheckpoint(PlaybackNativeReceipts::Key key, const QByteArray& checkpoint);
+  bool recordFixturePosition(FixtureAsset asset, PlaybackNativeReceipts::Key key, qint64 entry, qint64 positionMs);
+  bool fixturePositionCurrent() const;
+  void observeNativeReceipt(const mpv_event* event);
+  void invalidateNativeReceipt();
+  PlaybackNativeReceipts m_nativeReceipts;
+  quint64 m_receiptHost = 0;
+  bool m_receiptHostRevoked = false;
+  bool m_fixtureCheckpointConsumed = false;
+  quint64 m_lastReceiptAttempt = 0;
+  quint64 m_lastReceiptRevision = 0;
+  qint64 m_fixturePosition = -1;
+  std::function<int(quint64, const QString&)> m_receiptDispatch;
   static quint64 newIntentEpoch();
   bool intentControlThread() const;
   PlaybackCheckpoint makePlaybackCheckpoint() const;
