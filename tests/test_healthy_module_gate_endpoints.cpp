@@ -14,13 +14,14 @@ bool VerifiedModule::acceptsEndpoint(std::uintptr_t, std::uint64_t, std::uint64_
 namespace {
 int duplicated = 0, closed = 0, writes = 0, reads = 0;
 bool live = true; int failDuplicate = 0;
-int readMode = 0; bool canceled = false;
+int readMode = 0; bool canceled = false, pendingWrite = false;
+int closeAttempts[4] = {}; bool failClose = false;
 HANDLE WINAPI event(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCWSTR) { return reinterpret_cast<HANDLE>(99); }
 BOOL WINAPI closeEvent(HANDLE) { return TRUE; }
 BOOL WINAPI resetEvent(HANDLE) { return TRUE; }
 ULONGLONG WINAPI now() { return 1; }
 BOOL WINAPI writeIo(HANDLE, LPCVOID, DWORD size, LPDWORD count, LPOVERLAPPED)
-{ ++writes; *count = size; return TRUE; }
+{ ++writes; if (pendingWrite) return FALSE; *count = size; return TRUE; }
 BOOL WINAPI readIo(HANDLE, LPVOID, DWORD size, LPDWORD count, LPOVERLAPPED)
 { ++reads; if (readMode) return FALSE; *count = size; return TRUE; }
 DWORD WINAPI error() { return canceled ? ERROR_OPERATION_ABORTED : (readMode == 1 ? ERROR_BROKEN_PIPE : ERROR_IO_PENDING); }
@@ -36,7 +37,12 @@ ChildEndpoints::TestOperations operations()
     if (++duplicated == failDuplicate) return false;
     out = reinterpret_cast<HANDLE>(v + 100); return true;
   };
-  o.close = [](HANDLE) { ++closed; };
+  o.close = [](HANDLE h) {
+    const auto n = reinterpret_cast<std::uintptr_t>(h) - 100;
+    if (n >= 1 && n <= 3) ++closeAttempts[n];
+    if (failClose) return false;
+    ++closed; return true;
+  };
   o.io.createEvent = event; o.io.closeHandle = closeEvent; o.io.resetEvent = resetEvent;
   o.io.writeFile = writeIo; o.io.readFile = readIo; o.io.now = now;
   o.io.error = error; o.io.cancel = cancel; o.io.result = result;
@@ -97,4 +103,45 @@ void cases()
   CHECK(p->cancel(EndpointRole::Grant) != IoProgress::Complete && !p->bytes(EndpointRole::Grant));
 }
 }
-int main() { cases(); }
+void closeSettledCases()
+{
+  const EndpointInput source[] = {{EndpointRole::Evidence, 1}, {EndpointRole::Control, 2}, {EndpointRole::Ack, 3}};
+  duplicated = closed = 0; readMode = 0; canceled = false; failClose = false;
+  for (auto& n : closeAttempts) n = 0;
+  auto p = ChildEndpoints::createForTest(100, EndpointMode::Source, source, operations());
+  CHECK(p); char data = 'x';
+  CHECK(p->begin(EndpointRole::Evidence, false, &data, 1) == IoProgress::Complete);
+  CHECK(p->closeSettled(EndpointRole::Evidence));
+  CHECK(!p->token(EndpointRole::Evidence) && p->token(EndpointRole::Ack));
+  CHECK(!p->closeSettled(EndpointRole::Evidence));
+  CHECK(p->begin(EndpointRole::Evidence, false, &data, 1) == IoProgress::Failed);
+  CHECK(closeAttempts[1] == 1 && closeAttempts[2] == 0 && closeAttempts[3] == 0);
+  CHECK(p->begin(EndpointRole::Ack, false, &data, 1) == IoProgress::Complete);
+  CHECK(p->closeSettled(EndpointRole::Ack));
+  CHECK(!p->closeSettled(EndpointRole::Ack) && closeAttempts[3] == 1);
+  p.reset(); CHECK(closeAttempts[1] == 1 && closeAttempts[2] == 1 && closeAttempts[3] == 1);
+  for (auto& n : closeAttempts) n = 0;
+  p = ChildEndpoints::createForTest(100, EndpointMode::Source, source, operations());
+  CHECK(p && p->begin(EndpointRole::Ack, false, &data, 1) == IoProgress::Complete);
+  failClose = true;
+  CHECK(!p->closeSettled(EndpointRole::Ack));
+  CHECK(!p->token(EndpointRole::Ack) && closeAttempts[3] == 1);
+  failClose = false;
+  CHECK(!p->closeSettled(EndpointRole::Ack));
+  p.reset(); CHECK(closeAttempts[1] == 0 && closeAttempts[2] == 0 && closeAttempts[3] == 1);
+}
+void pendingCloseCases()
+{
+  const EndpointInput source[] = {{EndpointRole::Evidence, 1}, {EndpointRole::Control, 2}, {EndpointRole::Ack, 3}};
+  duplicated = closed = 0; readMode = 2; canceled = false; failClose = false; pendingWrite = true;
+  for (auto& n : closeAttempts) n = 0;
+  auto p = ChildEndpoints::createForTest(100, EndpointMode::Source, source, operations());
+  char data = 'x';
+  CHECK(p && p->begin(EndpointRole::Evidence, false, &data, 1) == IoProgress::Pending);
+  CHECK(!p->closeSettled(EndpointRole::Evidence) && p->token(EndpointRole::Evidence));
+  CHECK(closeAttempts[1] == 0 && closeAttempts[2] == 0 && closeAttempts[3] == 0);
+  CHECK(p->cancel(EndpointRole::Evidence) != IoProgress::Complete);
+  CHECK(!p->closeSettled(EndpointRole::Evidence) && closeAttempts[1] == 0);
+  readMode = 0; canceled = false; pendingWrite = false;
+}
+int main() { cases(); closeSettledCases(); pendingCloseCases(); }
