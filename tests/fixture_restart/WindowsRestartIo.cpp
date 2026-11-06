@@ -199,7 +199,7 @@ IoProgress WindowsRestartIo::pollImpl()
 {
   ActiveCall active(activeCalls_);
   if (!inFlight_) return state_;
-  DWORD count = 0;
+  DWORD count = tracked_ ? MAXDWORD : 0;
   const BOOL completed = api_.result(pipe_, &overlap_, &count, FALSE);
   if (!inFlight_) return state_;
   if (completed) return completion(count);
@@ -234,7 +234,7 @@ IoProgress WindowsRestartIo::cancelImpl()
     (void)api_.cancel(pipe_, &overlap_);
     if (!inFlight_) return state_;
   }
-  DWORD count = 0;
+  DWORD count = tracked_ ? MAXDWORD : 0;
   const BOOL completed = api_.result(pipe_, &overlap_, &count, FALSE);
   if (!inFlight_) return state_;
   if (completed) return completion(count);
