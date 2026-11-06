@@ -134,23 +134,23 @@ index ee5e239..1aaa9b8 100644
 +  HealthyRestart::AsyncStop::Status pollControl(const void* channel, QByteArray& response)
 +  { return source_.pollControl(channel, response); }
 diff --git a/player/PlaybackIntent.cpp b/player/PlaybackIntent.cpp
-index 16d6e39..d6270d7 100644
+index 16d6e39..6979a39 100644
 --- a/player/PlaybackIntent.cpp
 +++ b/player/PlaybackIntent.cpp
 @@ -10,0 +11 @@ bool PlaybackIntent::advance(bool newRequest) noexcept
-+  if (const auto lease = retirementLease_.lock()) lease->store(false);
++  if (const auto lease = retirementLease_.lock()) lease->revoke();
 diff --git a/player/PlaybackIntent.h b/player/PlaybackIntent.h
-index a8a590a..1d79778 100644
+index a8a590a..6c79673 100644
 --- a/player/PlaybackIntent.h
 +++ b/player/PlaybackIntent.h
 @@ -3,0 +4,2 @@
-+#include <atomic>
++#include "retirement_claim.h"
 +#include <memory>
 @@ -41,0 +44,2 @@ private:
 +  friend class PlayerComponent;
-+  void watchRetirement(const std::shared_ptr<std::atomic_bool>& lease) noexcept { retirementLease_ = lease; }
++  void watchRetirement(const std::shared_ptr<HealthyRetirement::RetirementClaim>& lease) noexcept { retirementLease_ = lease; }
 @@ -42,0 +47 @@ private:
-+  std::weak_ptr<std::atomic_bool> retirementLease_;
++  std::weak_ptr<HealthyRetirement::RetirementClaim> retirementLease_;
 diff --git a/player/PlayerComponent.cpp b/player/PlayerComponent.cpp
 index a0baeef..8bb9074 100644
 --- a/player/PlayerComponent.cpp
@@ -277,7 +277,7 @@ index a0baeef..8bb9074 100644
 @@ -1328,0 +1286 @@ QString PlayerComponent::videoInformation() const
 +  if (m_healthyStopAdmissionClosed.load()) return {};
 diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
-index f9fdc90..e4e9c3e 100644
+index f9fdc90..3de43d7 100644
 --- a/player/PlayerComponent.h
 +++ b/player/PlayerComponent.h
 @@ -24,0 +25,2 @@ namespace HealthyRetirement { class FixtureGraph; }
@@ -285,11 +285,12 @@ index f9fdc90..e4e9c3e 100644
 +#include <atomic>
 @@ -272,0 +275 @@ private:
 +  friend class TestHealthyAsyncStop;
-@@ -300,0 +304,19 @@ private:
+@@ -300,0 +304,21 @@ private:
++  bool healthyInstallRetirementClaim(std::shared_ptr<HealthyRetirement::RetirementClaim> claim, quint64 generation);
 +  bool beginHealthyReplacementStop(quint64 host, quint64 attempt, qint64 deadlineNs);
 +  HealthyRestart::AsyncStop::Status pollHealthyReplacementStop();
 +  std::optional<HealthyRestart::AsyncStop::Key> healthyCompletedStop();
-+  std::shared_ptr<const std::atomic_bool> healthyStopLease() const { return m_healthyStopLease; }
++  std::shared_ptr<const HealthyRetirement::RetirementClaim> healthyStopClaim() const { return m_healthyStopLease; }
 +  bool observeHealthyReplacementStop(const mpv_event* event);
 +  void cancelHealthyReplacementStop();
 +  void failHealthyReplacementStop();
@@ -301,7 +302,8 @@ index f9fdc90..e4e9c3e 100644
 +  HealthyRestart::AsyncStop m_healthyStop;
 +  std::atomic_bool m_healthyStopAdmissionClosed{false};
 +  bool m_healthyStopDraining = false, m_healthyStopQueueEmpty = false;
-+  std::shared_ptr<std::atomic_bool> m_healthyStopLease;
++  std::shared_ptr<HealthyRetirement::RetirementClaim> m_healthyStopLease;
++  quint64 m_healthyRendererGeneration = 0;
 +  std::function<int(quint64, const char**, bool)> m_healthyStopDispatch;
 +  std::function<qint64()> m_healthyStopClock;
 +  std::function<mpv_event*()> m_healthyStopEventWait;

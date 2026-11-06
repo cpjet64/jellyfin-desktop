@@ -29,15 +29,30 @@ bool PlayerComponent::healthyStopCurrent() const
 {
   const auto key = m_healthyStop.facts().key;
   const auto intent = m_playbackIntent.snapshot();
-  return m_healthyStopLease && m_healthyStopLease->load() &&
+  return m_healthyStopLease && m_healthyStopLease->eligible() &&
       (m_healthyStopDispatch || (m_mpv && m_mpv->mpv())) && key.host == m_receiptHost && key.core == m_mpvGeneration &&
       key.epoch == intent.epoch && key.request == intent.request && key.revision == intent.revision &&
       intent.desired == (key.paused ? PlaybackIntent::Desired::Paused : PlaybackIntent::Desired::Playing);
 }
 
+bool PlayerComponent::healthyInstallRetirementClaim(std::shared_ptr<HealthyRetirement::RetirementClaim> claim, quint64 generation)
+{
+  if (!intentControlThread() || m_healthyStopAdmissionClosed.load() || m_healthyStopLease || !claim ||
+      !generation || claim->generation() != generation || !claim->open()) return false;
+  const auto intent = m_playbackIntent.snapshot();
+  if (!intent.epoch || !intent.request || !intent.revision ||
+      (intent.desired != PlaybackIntent::Desired::Playing && intent.desired != PlaybackIntent::Desired::Paused)) return false;
+  m_healthyRendererGeneration = generation;
+  m_healthyStopLease = std::move(claim);
+  m_playbackIntent.watchRetirement(m_healthyStopLease);
+  return true;
+}
+
 bool PlayerComponent::beginHealthyReplacementStop(quint64 host, quint64 attempt, qint64 deadlineNs)
 {
   if (!intentControlThread() || m_healthyStopAdmissionClosed.load() ||
+      !m_healthyStopLease || !m_healthyStopLease->open() || !m_healthyRendererGeneration ||
+      m_healthyStopLease->generation() != m_healthyRendererGeneration ||
       (!m_healthyStopDispatch && (!m_mpv || !m_mpv->mpv())) || !host || host != m_receiptHost ||
       !m_mpvGeneration || !attempt || attempt > PlaybackIntent::MaxSafeInteger ||
       m_nativeObservation.pending || m_nativeRestore.seekPending) return false;
@@ -56,10 +71,8 @@ bool PlayerComponent::beginHealthyReplacementStop(quint64 host, quint64 attempt,
   const Stop::Key key{host, m_mpvGeneration, intent.epoch, intent.request, intent.revision,
                       attempt, entry, intent.desired == PlaybackIntent::Desired::Paused, Stop::Origin::InternalReplacement};
   const auto clock = m_healthyStopClock ? m_healthyStopClock : std::function<qint64()>{nowNs};
-  m_healthyStopLease = std::make_shared<std::atomic_bool>(true);
-  m_playbackIntent.watchRetirement(m_healthyStopLease);
   m_healthyStopAdmissionClosed.store(true);
-  if (!m_healthyStop.begin(key, deadlineNs, clock)) { m_healthyStopLease->store(false); return false; }
+  if (!m_healthyStop.begin(key, deadlineNs, clock)) { m_healthyStopLease->revoke(); return false; }
   m_restoreDisplayTimer.stop();
   m_reloadAudioTimer.stop();
   invalidateNativeReceipt();
@@ -67,7 +80,7 @@ bool PlayerComponent::beginHealthyReplacementStop(quint64 host, quint64 attempt,
   else m_healthyStopQueueEmpty = true; // Injected dispatch has no native queue.
   if (!m_healthyStopQueueEmpty) return m_healthyStop.status() == Stop::Status::Pending;
   pumpHealthyReplacementStop();
-  if (m_healthyStop.status() == Stop::Status::Failed) { m_healthyStopLease->store(false); return false; }
+  if (m_healthyStop.status() == Stop::Status::Failed) { m_healthyStopLease->revoke(); return false; }
   return true;
 }
 
@@ -84,7 +97,7 @@ void PlayerComponent::submitHealthyStopQuery(Stop::Query query)
     result = mpv_get_property_async(m_mpv->mpv(), id, args[0], position ? MPV_FORMAT_INT64 : MPV_FORMAT_FLAG);
   m_healthyStop.querySubmitted(query, result);
   if (!healthyStopCurrent()) failHealthyReplacementStop();
-  if (m_healthyStop.status() == Stop::Status::Failed) m_healthyStopLease->store(false);
+  if (m_healthyStop.status() == Stop::Status::Failed) m_healthyStopLease->revoke();
 }
 
 void PlayerComponent::submitHealthyStopCommand()
@@ -98,7 +111,7 @@ void PlayerComponent::submitHealthyStopCommand()
   m_healthyStop.stopSubmitted(result);
   reconcileHealthyStopFailure();
   if (!healthyStopCurrent()) failHealthyReplacementStop();
-  if (m_healthyStop.status() == Stop::Status::Failed) m_healthyStopLease->store(false);
+  if (m_healthyStop.status() == Stop::Status::Failed) m_healthyStopLease->revoke();
 }
 
 void PlayerComponent::reconcileHealthyStopFailure()
@@ -142,7 +155,7 @@ Stop::Status PlayerComponent::pollHealthyReplacementStop()
   }
   pumpHealthyReplacementStop();
   const auto status = m_healthyStop.status();
-  if (status == Stop::Status::Failed && m_healthyStopLease) m_healthyStopLease->store(false);
+  if (status == Stop::Status::Failed && m_healthyStopLease) m_healthyStopLease->revoke();
   return status;
 }
 
@@ -150,7 +163,7 @@ std::optional<Stop::Key> PlayerComponent::healthyCompletedStop()
 {
   if (pollHealthyReplacementStop() != Stop::Status::Complete) return std::nullopt;
   const auto facts = m_healthyStop.facts();
-  if (facts.failed || facts.cancelled || !m_healthyStopLease || !m_healthyStopLease->load() || !healthyStopCurrent())
+  if (facts.failed || facts.cancelled || !m_healthyStopLease || !m_healthyStopLease->eligible() || !healthyStopCurrent())
     return std::nullopt;
   return facts.key;
 }
@@ -158,14 +171,14 @@ std::optional<Stop::Key> PlayerComponent::healthyCompletedStop()
 void PlayerComponent::cancelHealthyReplacementStop()
 {
   if (intentControlThread()) {
-    if (m_healthyStopLease) m_healthyStopLease->store(false);
+    if (m_healthyStopLease) m_healthyStopLease->revoke();
     m_healthyStop.cancel();
   }
 }
 
 void PlayerComponent::failHealthyReplacementStop()
 {
-  if (m_healthyStopLease) m_healthyStopLease->store(false);
+  if (m_healthyStopLease) m_healthyStopLease->revoke();
   m_healthyStop.fail();
 }
 
@@ -181,14 +194,14 @@ bool PlayerComponent::observeHealthyReplacementStop(const mpv_event* event)
   const auto attempt = m_healthyStop.facts().key.attempt;
   if (event->event_id == MPV_EVENT_COMMAND_REPLY && event->reply_userdata == (stopTag | attempt)) {
     m_healthyStop.stopReply(event->error); reconcileHealthyStopFailure();
-    if (m_healthyStop.status() == Stop::Status::Failed) m_healthyStopLease->store(false);
+    if (m_healthyStop.status() == Stop::Status::Failed) m_healthyStopLease->revoke();
     return false;
   }
   if (event->event_id == MPV_EVENT_END_FILE) {
     if (!event->data) { failHealthyReplacementStop(); return false; }
     const auto* end = static_cast<const mpv_event_end_file*>(event->data);
     const bool matched = m_healthyStop.endFile(end->playlist_entry_id, end->reason == MPV_END_FILE_REASON_STOP);
-    if (!matched) m_healthyStopLease->store(false);
+    if (!matched) m_healthyStopLease->revoke();
     return matched;
   }
   if (event->event_id != MPV_EVENT_GET_PROPERTY_REPLY) return false;
@@ -205,6 +218,6 @@ bool PlayerComponent::observeHealthyReplacementStop(const mpv_event* event)
   const qint64 value = !valid ? 0 : position ? *static_cast<const int64_t*>(property->data)
                                            : *static_cast<const int*>(property->data);
   m_healthyStop.queryReply(query, event->error, valid, value);
-  if (m_healthyStop.status() == Stop::Status::Failed) m_healthyStopLease->store(false);
+  if (m_healthyStop.status() == Stop::Status::Failed) m_healthyStopLease->revoke();
   return false;
 }
