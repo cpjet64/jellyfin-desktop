@@ -134,6 +134,40 @@ class HealthyRestartAcceptance(unittest.TestCase):
         self.assertIn('Barrier::Unqualified', install)
         self.assertIn('if (barrier_ == Barrier::Unqualified && !moduleQualification_)', lifetime)
 
+    def test_graph_fixture_headers_resolve_to_copy_before_test_tree(self):
+        result = self.run_copy()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        copied = self.root / 'healthy-restart-copy/mpvqt'
+        probe = self.root / 'resolution'
+        local = probe / 'copy/mpvqt'
+        local.mkdir(parents=True)
+        headers = set()
+        directives = []
+        for name in ('graph.h', 'graph_session.h', 'graph_session.cpp'):
+            lines = (copied / name).read_text(encoding='utf-8').splitlines()
+            selected = [line for line in lines if re.match(r'#include "(?:\.\./)?fixture_restart/', line)]
+            self.assertTrue(selected, name)
+            for line in selected:
+                self.assertIn('"../fixture_restart/', line)
+                directives.append(line)
+                headers.add(line.split('/')[-1].rstrip('"'))
+        for folder in (probe / 'copy/fixture_restart', probe / 'shadow/fixture_restart'):
+            folder.mkdir(parents=True)
+            for name in headers:
+                content = '#error original header selected\n' if folder.parent.name == 'shadow' else '#pragma once\n'
+                (folder / name).write_text(content, encoding='utf-8')
+        (local / 'probe.cpp').write_text('\n'.join(directives) + '\nint main() { return 0; }\n', encoding='utf-8')
+        (probe / 'CMakeLists.txt').write_text(
+            'cmake_minimum_required(VERSION 3.20)\nproject(HeaderProbe CXX)\n'
+            'add_executable(header_probe copy/mpvqt/probe.cpp)\n'
+            'target_include_directories(header_probe BEFORE PRIVATE "${CMAKE_SOURCE_DIR}/shadow")\n', encoding='utf-8')
+        configured = subprocess.run(['cmake', '-S', str(probe), '-B', str(probe / 'build')],
+                                    capture_output=True, text=True, timeout=60, creationflags=FLAGS)
+        self.assertEqual(configured.returncode, 0, configured.stdout + configured.stderr)
+        built = subprocess.run(['cmake', '--build', str(probe / 'build'), '--target', 'header_probe'],
+                               capture_output=True, text=True, timeout=60, creationflags=FLAGS)
+        self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
+
 
 class HealthyRestartWrapper(unittest.TestCase):
     def test_owner_sources_compile_once_without_test_flag(self):
