@@ -2,11 +2,11 @@
 #include "player/PlaybackCheckpoint.h"
 #include "player_test_cache.h"
 #include "fixture_restart/FixtureRestartAdapter.h"
+#include "fixture_restart/RestartWire.h"
 #include <QCryptographicHash>
 #include "fixture_restart/OwnedFixtureFile.h"
 #include <QTemporaryFile>
 #include <QtTest/QtTest>
-
 class TestPlayerNativeRestore : public QObject
 {
   Q_OBJECT
@@ -408,7 +408,6 @@ void TestPlayerNativeRestore::reentrantCancellationAndSeekFailure()
   QCOMPARE(stops, 1);
 #endif
 }
-
 void TestPlayerNativeRestore::fixtureBridgeControl()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
@@ -425,9 +424,14 @@ void TestPlayerNativeRestore::fixtureBridgeControl()
   player.m_restoreDispatch = [&](quint64, const char**) { ++loads; return 0; };
   player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
   FixtureRestart::ChildGate gate(&player, 100);
-  FixtureRestartAdapter bridge(player, gate, 7, 2);
-  QVERIFY(gate.accept(&player, FixtureRestart::encodeGrant(grant), grant, 10, true));
+  const auto frame = FixtureRestart::encodeGrant(grant);
+  const auto digest = QCryptographicHash::hash(frame, QCryptographicHash::Sha256);
+  const FixtureRestart::RestorePermit permit{grant.run, 9, grant.grant, grant.revision, 1, digest};
+  FixtureRestartAdapter bridge(player, gate, 7, 2, 9, digest, [] { return 10; });
+  QVERIFY(gate.accept(&player, frame, grant.run, digest, 10, true));
   QVERIFY(bridge.arm());
+  QVERIFY(!bridge.load(file.fileName())); QCOMPARE(loads, 0);
+  QVERIFY(gate.installPermit(FixtureRestart::encodeRestorePermit(permit), permit, 10));
   QVERIFY(bridge.load(file.fileName()));
   QCOMPARE(loads, 1);
   QVERIFY(bridge.cancel());
@@ -439,18 +443,17 @@ void TestPlayerNativeRestore::fixtureBridgeControl()
   FixtureRestart::ChildGate blocked(&other, 100);
   FixtureRestartAdapter cancelled(other, blocked, 8, 3);
   QVERIFY(cancelled.cancel());
-  QVERIFY(!blocked.accept(&other, FixtureRestart::encodeGrant(grant), grant, 10, true));
+  QVERIFY(!blocked.accept(&other, frame, grant.run, digest, 10, true));
   QVERIFY(!cancelled.arm());
   PlayerComponent stale;
   stale.m_mpvGeneration = 10;
   FixtureRestart::ChildGate gate2(&stale, 100);
   FixtureRestartAdapter staleBridge(stale, gate2, 9, 4);
   stale.m_playbackIntent.stop(PlaybackIntent::Reason::NativeStop);
-  QVERIFY(gate2.accept(&stale, FixtureRestart::encodeGrant(grant), grant, 10, true));
+  QVERIFY(gate2.accept(&stale, frame, grant.run, digest, 10, true));
   QVERIFY(!staleBridge.arm());
 #endif
 }
-
 void TestPlayerNativeRestore::fixtureBridgeCapture()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS

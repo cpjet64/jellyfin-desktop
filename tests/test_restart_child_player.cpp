@@ -23,19 +23,23 @@ static FixtureRestart::Grant grantFor(const QByteArray& content)
 {
   return {1, 2, 3, QCryptographicHash::hash(content, QCryptographicHash::Sha256).toHex(), 3000, true};
 }
+static QByteArray grantDigest(const FixtureRestart::Grant& grant)
+{ return QCryptographicHash::hash(FixtureRestart::encodeGrant(grant), QCryptographicHash::Sha256); }
+static QByteArray permitFor(const FixtureRestart::Grant& grant)
+{ return FixtureRestart::encodeRestorePermit({grant.run, 9, grant.grant, grant.revision, 1, grantDigest(grant)}); }
 
 void TestRestartChildPlayer::cancelBeforeGrant()
 {
   PlayerComponent player;
   FixtureRestart::ChildGate gate(&player, 100);
-  FixtureRestartAdapter bridge(player, gate, 7, 2);
   int controlChannel;
   const auto grant = grantFor("fixture");
-  FixtureRestart::RestartChildPlayer child(bridge, gate, &player, &controlChannel, grant, {});
+  FixtureRestartAdapter bridge(player, gate, 7, 2, 9, grantDigest(grant), [] { return 10; });
+  FixtureRestart::RestartChildPlayer child(bridge, gate, &player, &controlChannel, grant.run, 9, grantDigest(grant), {}, [] { return 10; });
   QByteArray ack;
   QVERIFY(child.control(&controlChannel, FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 1, 4}), ack));
   QVERIFY(!ack.isEmpty());
-  QVERIFY(!child.grant(&player, FixtureRestart::encodeGrant(grant), 10, true));
+  QVERIFY(!child.grant(&player, FixtureRestart::encodeGrant(grant), 10, true, ack));
   QVERIFY(!child.load() && !child.seek());
 }
 
@@ -53,14 +57,16 @@ void TestRestartChildPlayer::cancelAfterLoad()
   player.m_restoreDispatch = [&](quint64, const char**) { ++loads; return 0; };
   player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
   FixtureRestart::ChildGate gate(&player, 100);
-  FixtureRestartAdapter bridge(player, gate, 7, 2);
   int controlChannel;
   const auto grant = grantFor("fixture");
-  FixtureRestart::RestartChildPlayer child(bridge, gate, &player, &controlChannel, grant, file.fileName());
-  QVERIFY(child.grant(&player, FixtureRestart::encodeGrant(grant), 10, true));
-  QVERIFY(child.load());
+  FixtureRestartAdapter bridge(player, gate, 7, 2, 9, grantDigest(grant), [] { return 10; });
+  FixtureRestart::RestartChildPlayer child(bridge, gate, &player, &controlChannel, grant.run, 9, grantDigest(grant), file.fileName(), [] { return 10; });
   QByteArray ack;
-  QVERIFY(child.control(&controlChannel, FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 1, 4}), ack));
+  QVERIFY(child.grant(&player, FixtureRestart::encodeGrant(grant), 10, true, ack));
+  QVERIFY(!child.load()); QCOMPARE(loads, 0);
+  QVERIFY(child.control(&controlChannel, permitFor(grant), ack));
+  QVERIFY(child.load());
+  QVERIFY(child.control(&controlChannel, FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 2, 4}), ack));
   QCOMPARE(stops, 1); QCOMPARE(loads, 1);
   QVERIFY(!child.seek() && !child.load());
 #endif
@@ -76,17 +82,18 @@ void TestRestartChildPlayer::reentrantCancel()
   PlayerComponent player;
   player.m_mpvGeneration = 8;
   FixtureRestart::ChildGate gate(&player, 100);
-  FixtureRestartAdapter bridge(player, gate, 7, 2);
   int controlChannel, stops = 0;
   const auto grant = grantFor("fixture");
-  FixtureRestart::RestartChildPlayer child(bridge, gate, &player, &controlChannel, grant, file.fileName());
+  FixtureRestartAdapter bridge(player, gate, 7, 2, 9, grantDigest(grant), [] { return 10; });
+  FixtureRestart::RestartChildPlayer child(bridge, gate, &player, &controlChannel, grant.run, 9, grantDigest(grant), file.fileName(), [] { return 10; });
   QByteArray ack;
   player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
   player.m_restoreDispatch = [&](quint64, const char**) {
-    child.control(&controlChannel, FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 1, 4}), ack);
+    child.control(&controlChannel, FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 2, 4}), ack);
     return 0;
   };
-  QVERIFY(child.grant(&player, FixtureRestart::encodeGrant(grant), 10, true));
+  QVERIFY(child.grant(&player, FixtureRestart::encodeGrant(grant), 10, true, ack));
+  QVERIFY(child.control(&controlChannel, permitFor(grant), ack));
   QVERIFY(!child.load());
   QVERIFY(!ack.isEmpty()); QCOMPARE(stops, 1); QVERIFY(!child.seek());
 #endif
@@ -104,17 +111,19 @@ void TestRestartChildPlayer::staleCancel()
   player.m_restoreDispatch = [](quint64, const char**) { return 0; };
   player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
   FixtureRestart::ChildGate gate(&player, 100);
-  FixtureRestartAdapter bridge(player, gate, 7, 2);
   int controlChannel;
   const auto grant = grantFor("fixture");
-  FixtureRestart::RestartChildPlayer child(bridge, gate, &player, &controlChannel, grant, file.fileName());
-  QVERIFY(child.grant(&player, FixtureRestart::encodeGrant(grant), 10, true));
+  FixtureRestartAdapter bridge(player, gate, 7, 2, 9, grantDigest(grant), [] { return 10; });
+  FixtureRestart::RestartChildPlayer child(bridge, gate, &player, &controlChannel, grant.run, 9, grantDigest(grant), file.fileName(), [] { return 10; });
+  QByteArray ack;
+  QVERIFY(child.grant(&player, FixtureRestart::encodeGrant(grant), 10, true, ack));
+  QVERIFY(child.control(&controlChannel, permitFor(grant), ack));
   QVERIFY(child.load());
   QVERIFY(player.load(QStringLiteral("newer"), {{"autoplay", true}}, {}));
   const auto revision = player.m_playbackIntent.snapshot().revision;
   const int before = stops;
-  QByteArray ack;
-  QVERIFY(!child.control(&controlChannel, FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 1, 4}), ack));
+  ack.clear();
+  QVERIFY(!child.control(&controlChannel, FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 2, 4}), ack));
   QCOMPARE(stops, before); QCOMPARE(player.m_playbackIntent.snapshot().revision, revision);
   QVERIFY(!child.seek() && ack.isEmpty());
 #endif
@@ -125,11 +134,12 @@ void TestRestartChildPlayer::systemUnavailable()
 #ifndef MPVQT_EXTERNAL_EVENTS
   PlayerComponent player;
   FixtureRestart::ChildGate gate(&player, 100);
-  FixtureRestartAdapter bridge(player, gate, 7, 2);
   int controlChannel;
   const auto grant = grantFor("fixture");
-  FixtureRestart::RestartChildPlayer child(bridge, gate, &player, &controlChannel, grant, {});
-  QVERIFY(!child.grant(&player, FixtureRestart::encodeGrant(grant), 10, true));
+  FixtureRestartAdapter bridge(player, gate, 7, 2, 9, grantDigest(grant), [] { return 10; });
+  FixtureRestart::RestartChildPlayer child(bridge, gate, &player, &controlChannel, grant.run, 9, grantDigest(grant), {}, [] { return 10; });
+  QByteArray ack;
+  QVERIFY(!child.grant(&player, FixtureRestart::encodeGrant(grant), 10, true, ack));
   QVERIFY(!child.load() && !child.seek());
 #endif
 }
