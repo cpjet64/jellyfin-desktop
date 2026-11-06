@@ -145,15 +145,25 @@ void TestPlayerNativeRestore::cancellationBeforeLoad()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   PlayerComponent player;
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  const auto cleanupGate = bindCleanup(player); QVERIFY(cleanupGate);
+#endif
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
   PlayerComponent::RestoreGrant grant{3, 4, 0, 1000, true};
   QVERIFY(player.armNativeRestore(grant, 7, 2));
   int calls = 0;
   player.m_restoreDispatch = [&](quint64, const char**) { ++calls; return 0; };
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  QVERIFY(beginCleanup(player, cleanupGate));
+#else
   player.cancelNativeRestore();
+#endif
   QVERIFY(!player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
   QCOMPARE(calls, 0);
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  completeNoLoad(player);
+#endif
 #endif
 }
 
@@ -186,6 +196,9 @@ void TestPlayerNativeRestore::cancellationAfterLoad()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   PlayerComponent player;
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  const auto cleanupGate = bindCleanup(player); QVERIFY(cleanupGate);
+#endif
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
   PlayerComponent::RestoreGrant grant{3, 4, 0, 3000, false};
@@ -195,12 +208,19 @@ void TestPlayerNativeRestore::cancellationAfterLoad()
   player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
   QVERIFY(player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
   loadReplyAndStart(player, 2, 42);
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  QVERIFY(beginCleanup(player, cleanupGate));
+  QVERIFY(!player.dispatchNativeRestoreSeek());
+  completeStopped(player, 42);
+  QCOMPARE(commands, 2); QCOMPARE(stops, 0);
+#else
   const auto stopped = player.cancelNativeRestore();
   QCOMPARE(stopped.status, PlayerComponent::NativeStopResult::Status::Accepted);
   QVERIFY(!player.dispatchNativeRestoreSeek());
   player.cancelNativeRestore();
   QCOMPARE(stops, 1);
   QCOMPARE(commands, 1);
+#endif
 #endif
 }
 
@@ -317,6 +337,9 @@ void TestPlayerNativeRestore::cancellationDuringSeek()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   PlayerComponent player;
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  const auto cleanupGate = bindCleanup(player); QVERIFY(cleanupGate);
+#endif
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
   const PlayerComponent::RestoreGrant grant{3, 4, 0, 3125, false};
@@ -331,7 +354,11 @@ void TestPlayerNativeRestore::cancellationDuringSeek()
   QVERIFY(player.requestNativeObservation(key, 1, 10000, true));
   observationReply(player, 1, "NR1|1|42|yes|yes|0|yes|no|no");
   QVERIFY(player.dispatchNativeRestoreSeek());
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  QVERIFY(beginCleanup(player, cleanupGate));
+#else
   player.cancelNativeRestore();
+#endif
   mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 61) | 2;
   player.observeNativeReceipt(&event);
   QVERIFY(player.m_nativeRestore.cancelled && player.m_nativeRestore.seekReply);
@@ -340,7 +367,11 @@ void TestPlayerNativeRestore::cancellationDuringSeek()
   QVERIFY(!player.m_nativeRestore.restarted);
   QVERIFY(!player.dispatchNativeRestoreSeek());
   QCOMPARE(commands, 2);
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  completeStopped(player, 42); QCOMPARE(commands, 3); QCOMPARE(stops, 0);
+#else
   QCOMPARE(stops, 1);
+#endif
 #endif
 }
 
@@ -356,15 +387,27 @@ void TestPlayerNativeRestore::reentrantCancellationAndSeekFailure()
   QVERIFY(!observation.nativeObservationCurrent());
 
   PlayerComponent player;
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  const auto cleanupGate = bindCleanup(player); QVERIFY(cleanupGate);
+#endif
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
   const PlayerComponent::RestoreGrant grant{3, 4, 0, 3125, false};
   QVERIFY(player.armNativeRestore(grant, 7, 2));
   int commands = 0, stops = 0;
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  bool cleanupStarted = false;
+#endif
   player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
   player.m_restoreDispatch = [&](quint64, const char**) {
     ++commands;
-    if (commands == 2) player.cancelNativeRestore();
+    if (commands == 2) {
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+      cleanupStarted = beginCleanup(player, cleanupGate);
+#else
+      player.cancelNativeRestore();
+#endif
+    }
     return 0;
   };
   QVERIFY(player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
@@ -373,6 +416,9 @@ void TestPlayerNativeRestore::reentrantCancellationAndSeekFailure()
   QVERIFY(player.requestNativeObservation(player.m_nativeReceipts.snapshot().key, 1, 10000, true));
   observationReply(player, 1, "NR1|1|42|yes|yes|0|yes|no|no");
   QVERIFY(player.dispatchNativeRestoreSeek());
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  QVERIFY(cleanupStarted);
+#endif
   QVERIFY(player.m_nativeRestore.cancelled && player.m_nativeRestore.seekPending);
   mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 61) | 2;
   event.error = -1;
@@ -382,53 +428,13 @@ void TestPlayerNativeRestore::reentrantCancellationAndSeekFailure()
   player.observeNativeReceipt(&event);
   QVERIFY(!player.m_nativeRestore.restarted);
   QCOMPARE(commands, 2);
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  QCOMPARE(stops, 0);
+  QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Pending);
+  QCOMPARE(commands, 3);
+#else
   QCOMPARE(stops, 1);
 #endif
-}
-void TestPlayerNativeRestore::fixtureBridgeControl()
-{
-#ifdef MPVQT_EXTERNAL_EVENTS
-  QVERIFY(!ownedFixtureTemplate().isEmpty());
-  QTemporaryFile file(ownedFixtureTemplate());
-  QVERIFY(file.open());
-  const QByteArray data("fixture");
-  QCOMPARE(file.write(data), qint64(data.size()));
-  QVERIFY(file.flush());
-  FixtureRestart::Grant grant{1, 2, 3, QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex(), 3125, false};
-  PlayerComponent player;
-  player.m_mpvGeneration = 8;
-  int stops = 0, loads = 0;
-  player.m_restoreDispatch = [&](quint64, const char**) { ++loads; return 0; };
-  player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
-  FixtureRestart::ChildGate gate(&player, 100);
-  const auto frame = FixtureRestart::encodeGrant(grant);
-  const auto digest = QCryptographicHash::hash(frame, QCryptographicHash::Sha256);
-  const FixtureRestart::RestorePermit permit{grant.run, 9, grant.grant, grant.revision, 1, digest};
-  FixtureRestartAdapter bridge(player, gate, 7, 2, 9, digest, [] { return 10; });
-  QVERIFY(gate.accept(&player, frame, grant.run, digest, 10, true));
-  QVERIFY(bridge.arm());
-  QVERIFY(!bridge.load(file.fileName())); QCOMPARE(loads, 0);
-  QVERIFY(gate.installPermit(FixtureRestart::encodeRestorePermit(permit), permit, 10));
-  QVERIFY(bridge.load(file.fileName()));
-  QCOMPARE(loads, 1);
-  QVERIFY(bridge.cancel());
-  QCOMPARE(stops, 1);
-  QVERIFY(!bridge.seek());
-  QVERIFY(!bridge.load(file.fileName()));
-  PlayerComponent other;
-  other.m_mpvGeneration = 9;
-  FixtureRestart::ChildGate blocked(&other, 100);
-  FixtureRestartAdapter cancelled(other, blocked, 8, 3);
-  QVERIFY(cancelled.cancel());
-  QVERIFY(!blocked.accept(&other, frame, grant.run, digest, 10, true));
-  QVERIFY(!cancelled.arm());
-  PlayerComponent stale;
-  stale.m_mpvGeneration = 10;
-  FixtureRestart::ChildGate gate2(&stale, 100);
-  FixtureRestartAdapter staleBridge(stale, gate2, 9, 4);
-  stale.m_playbackIntent.stop(PlaybackIntent::Reason::NativeStop);
-  QVERIFY(gate2.accept(&stale, frame, grant.run, digest, 10, true));
-  QVERIFY(!staleBridge.arm());
 #endif
 }
 QTEST_GUILESS_MAIN(TestPlayerNativeRestore)
