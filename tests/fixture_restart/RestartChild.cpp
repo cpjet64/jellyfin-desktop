@@ -1,4 +1,5 @@
 #include "RestartChild.h"
+#include <QtEndian>
 #include <utility>
 
 namespace FixtureRestart {
@@ -9,24 +10,59 @@ RestartChild::RestartChild(ChildGate& gate, const void* grantChannel, const void
 {
 }
 
+RestartChild::RestartChild(ChildGate& gate, const void* grantChannel, const void* controlChannel,
+                           Grant binding, quint64 launch, QByteArray expectedDigest, Actions actions)
+  : gate_(gate), grantChannel_(grantChannel), controlChannel_(controlChannel),
+    binding_(std::move(binding)), launch_(launch), expectedDigest_(std::move(expectedDigest)),
+    actions_(std::move(actions)), currentRevision_(binding_.revision)
+{
+}
+
 bool RestartChild::grant(const void* channel, const QByteArray& frame, qint64 now, bool eof)
 {
-  if (canceled_ || granted_ || !grantChannel_ || channel != grantChannel_ || !actions_.arm ||
-      !gate_.accept(channel, frame, binding_, now, eof)) return false;
+  Q_UNUSED(channel); Q_UNUSED(frame); Q_UNUSED(now); Q_UNUSED(eof);
+  return false;
+}
+
+bool RestartChild::grant(const void* channel, const QByteArray& frame, qint64 now, bool eof,
+                         QByteArray& response)
+{
+  if (!grantChannel_ || channel != grantChannel_) return false;
+  if (granted_ || !actions_.arm || !actions_.cancel || !launch_ || expectedDigest_.size() != 32 ||
+      !gate_.accept(channel, frame, binding_, expectedDigest_, now, eof)) {
+    revoke(); return false;
+  }
   granted_ = actions_.arm();
-  return granted_ && !canceled_ && gate_.allowed(binding_.revision);
+  if (!granted_ || !gate_.allowed(binding_.revision)) return false;
+  const auto ack = encodeGrantAccepted({binding_.run, launch_, binding_.grant,
+                                        binding_.revision, expectedDigest_});
+  if (ack.isEmpty() || !gate_.allowed(binding_.revision)) return false;
+  response = ack;
+  return true;
 }
 
 bool RestartChild::control(const void* channel, const QByteArray& request, QByteArray& response)
 {
+  if (!controlChannel_ || channel != controlChannel_) return false;
+  if (request.size() == 80 && request.left(4) == "JRP1") {
+    const auto sequence = qFromBigEndian<quint64>(reinterpret_cast<const uchar*>(request.constData() + 40));
+    RestorePermit permit, expected{binding_.run, launch_, binding_.grant, binding_.revision,
+                                   sequence, expectedDigest_};
+    if (!granted_ || permitted_ || sequence != 1 || sequence <= lastSequence_ || !gate_.allowed(binding_.revision) ||
+        !decodeRestorePermit(request, expected, permit)) { revoke(); return false; }
+    lastSequence_ = sequence;
+    permitted_ = true;
+    return true;
+  }
   Control control;
-  if (!controlChannel_ || channel != controlChannel_ || canceled_ || !decodeControl(request, control) ||
+  if (!decodeControl(request, control) ||
       (control.kind != ControlKind::UserStop && control.kind != ControlKind::NewPlay) ||
-      control.sequence <= lastSequence_ || control.revision <= currentRevision_ || !actions_.cancel) return false;
-  canceled_ = true;
+      control.sequence <= lastSequence_ || control.revision <= currentRevision_ || !actions_.cancel) {
+    revoke(); return false;
+  }
   lastSequence_ = control.sequence;
   currentRevision_ = control.revision;
-  if (!actions_.cancel()) return false;
+  if (!revoke()) return false;
   const QByteArray ack = encodeControl({ControlKind::Ack, control.sequence, control.revision});
   if (ack.isEmpty()) return false;
   response = ack;
@@ -35,7 +71,13 @@ bool RestartChild::control(const void* channel, const QByteArray& request, QByte
 
 bool RestartChild::allowed() const
 {
-  return granted_ && !canceled_ && gate_.allowed(binding_.revision);
+  return granted_ && permitted_ && gate_.allowed(binding_.revision);
+}
+
+bool RestartChild::revoke()
+{
+  permitted_ = false;
+  return actions_.cancel && actions_.cancel();
 }
 
 bool RestartChild::load() { return allowed() && actions_.load && actions_.load() && allowed(); }

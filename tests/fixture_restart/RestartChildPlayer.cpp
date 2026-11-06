@@ -11,10 +11,22 @@ RestartChildPlayer::RestartChildPlayer(FixtureRestartAdapter& player, ChildGate&
        [&player] { return player.seek(); }})
 {
 }
+RestartChildPlayer::RestartChildPlayer(FixtureRestartAdapter& player, ChildGate& gate,
+    const void* grantChannel, const void* controlChannel, Grant trustedBinding, quint64 launch,
+    QByteArray expectedDigest, QString fixturePath)
+  : child_(gate, grantChannel, controlChannel, std::move(trustedBinding), launch, std::move(expectedDigest),
+      {[&player] { return player.arm(); }, [&player] { return player.cancel(); },
+       [&player, path = std::move(fixturePath)] { return player.load(path); },
+       [&player] { return player.seek(); }})
+{
+}
 bool RestartChildPlayer::grant(const void* channel, const QByteArray& frame, qint64 now, bool eof)
 { return child_.grant(channel, frame, now, eof); }
+bool RestartChildPlayer::grant(const void* channel, const QByteArray& frame, qint64 now, bool eof, QByteArray& response)
+{ return child_.grant(channel, frame, now, eof, response); }
 bool RestartChildPlayer::control(const void* channel, const QByteArray& request, QByteArray& response)
 { return child_.control(channel, request, response); }
+bool RestartChildPlayer::revoke() { return child_.revoke(); }
 bool RestartChildPlayer::load() { return child_.load(); }
 bool RestartChildPlayer::seek() { return child_.seek(); }
 }

@@ -9,8 +9,13 @@ class RestartChildPlayer {
 public:
   RestartChildPlayer(FixtureRestartAdapter& player, ChildGate& gate, const void* grantChannel,
                      const void* controlChannel, Grant trustedBinding, QString fixturePath);
+  RestartChildPlayer(FixtureRestartAdapter& player, ChildGate& gate, const void* grantChannel,
+                     const void* controlChannel, Grant trustedBinding, quint64 launch,
+                     QByteArray expectedDigest, QString fixturePath);
   bool grant(const void* channel, const QByteArray& frame, qint64 now, bool eof);
+  bool grant(const void* channel, const QByteArray& frame, qint64 now, bool eof, QByteArray& response);
   bool control(const void* channel, const QByteArray& request, QByteArray& response);
+  bool revoke();
   bool load();
   bool seek();
 private:
