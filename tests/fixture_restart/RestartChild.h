@@ -9,6 +9,7 @@ class RestartChild {
 public:
   struct Actions {
     std::function<bool()> arm, cancel, load, seek;
+    std::function<qint64()> now;
   };
   RestartChild(ChildGate& gate, const void* grantChannel, const void* controlChannel,
                Grant binding, Actions actions);
@@ -33,6 +34,6 @@ private:
   QByteArray expectedDigest_;
   Actions actions_;
   quint64 lastSequence_ = 0, currentRevision_ = 0;
-  bool granted_ = false, permitted_ = false;
+  bool granted_ = false;
 };
 }

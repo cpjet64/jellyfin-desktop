@@ -6,6 +6,7 @@
 #include <QCryptographicHash>
 #include <QFile>
 #include <QFileInfo>
+#include <utility>
 
 namespace {
 bool fixtureHash(const QString& path, const QByteArray& expected, QString& canonical)
@@ -28,6 +29,15 @@ FixtureRestartAdapter::FixtureRestartAdapter(PlayerComponent& player, FixtureRes
 {
 }
 
+FixtureRestartAdapter::FixtureRestartAdapter(PlayerComponent& player, FixtureRestart::ChildGate& gate,
+    quint64 host, quint64 attempt, quint64 launch, QByteArray digest, std::function<qint64()> clock)
+  : FixtureRestartAdapter(player, gate, host, attempt)
+{
+  launch_ = launch;
+  digest_ = std::move(digest);
+  clock_ = std::move(clock);
+}
+
 bool FixtureRestartAdapter::arm()
 {
   const auto* grant = gate_.acceptedGrant();
@@ -42,7 +52,9 @@ bool FixtureRestartAdapter::arm()
 
 bool FixtureRestartAdapter::current() const
 {
-  return armed_ && gate_.allowed(parentRevision_);
+  const auto* grant = gate_.acceptedGrant();
+  return armed_ && grant && clock_ && gate_.allowsRestore(grant->run, launch_, grant->grant,
+      parentRevision_, digest_, clock_());
 }
 
 bool FixtureRestartAdapter::load(const QString& resolvedFixturePath)

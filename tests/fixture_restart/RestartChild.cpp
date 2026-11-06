@@ -61,10 +61,10 @@ bool RestartChild::control(const void* channel, const QByteArray& request, QByte
     const auto sequence = qFromBigEndian<quint64>(reinterpret_cast<const uchar*>(request.constData() + 40));
     RestorePermit permit, expected{binding_.run, launch_, binding_.grant, binding_.revision,
                                    sequence, expectedDigest_};
-    if (!granted_ || permitted_ || sequence != 1 || sequence <= lastSequence_ || !gate_.allowed(binding_.revision) ||
-        !decodeRestorePermit(request, expected, permit)) { revoke(); return false; }
+    if (!granted_ || sequence != 1 || sequence <= lastSequence_ || !actions_.now ||
+        !decodeRestorePermit(request, expected, permit) ||
+        !gate_.installPermit(request, expected, actions_.now())) { revoke(); return false; }
     lastSequence_ = sequence;
-    permitted_ = true;
     return true;
   }
   Control control;
@@ -84,12 +84,12 @@ bool RestartChild::control(const void* channel, const QByteArray& request, QByte
 
 bool RestartChild::allowed() const
 {
-  return granted_ && permitted_ && gate_.allowed(binding_.revision);
+  return granted_ && actions_.now && gate_.allowsRestore(binding_.run, launch_, binding_.grant,
+      binding_.revision, expectedDigest_, actions_.now());
 }
 
 bool RestartChild::revoke()
 {
-  permitted_ = false;
   if (gate_.canceled()) return false;
   return actions_.cancel && actions_.cancel();
 }

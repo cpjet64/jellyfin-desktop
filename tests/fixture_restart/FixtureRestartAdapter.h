@@ -1,6 +1,7 @@
 #pragma once
 #include "RestartBroker.h"
 #include <QString>
+#include <functional>
 
 class PlayerComponent;
 
@@ -9,6 +10,9 @@ class FixtureRestartAdapter {
 public:
   FixtureRestartAdapter(PlayerComponent& player, FixtureRestart::ChildGate& gate,
                         quint64 host, quint64 attempt);
+  FixtureRestartAdapter(PlayerComponent& player, FixtureRestart::ChildGate& gate,
+                        quint64 host, quint64 attempt, quint64 launch,
+                        QByteArray digest, std::function<qint64()> clock);
   bool arm();
   bool load(const QString& resolvedFixturePath);
   bool seek();
@@ -22,6 +26,9 @@ private:
   PlayerComponent& player_;
   FixtureRestart::ChildGate& gate_;
   quint64 host_, attempt_, expectedRevision_, parentRevision_ = 0;
+  quint64 launch_ = 0;
+  QByteArray digest_;
+  std::function<qint64()> clock_;
   bool armed_ = false;
   bool aLoad_ = false;
   QString aPath_;

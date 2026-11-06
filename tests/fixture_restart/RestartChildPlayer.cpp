@@ -13,11 +13,11 @@ RestartChildPlayer::RestartChildPlayer(FixtureRestartAdapter& player, ChildGate&
 }
 RestartChildPlayer::RestartChildPlayer(FixtureRestartAdapter& player, ChildGate& gate,
     const void* grantChannel, const void* controlChannel, quint64 expectedRun, quint64 launch,
-    QByteArray expectedDigest, QString fixturePath)
+    QByteArray expectedDigest, QString fixturePath, std::function<qint64()> clock)
   : child_(gate, grantChannel, controlChannel, expectedRun, launch, std::move(expectedDigest),
       {[&player] { return player.arm(); }, [&player] { return player.cancel(); },
        [&player, path = std::move(fixturePath)] { return player.load(path); },
-       [&player] { return player.seek(); }})
+       [&player] { return player.seek(); }, std::move(clock)})
 {
 }
 RestartChildPlayer::RestartChildPlayer(FixtureRestartAdapter& player, ChildGate& gate,
