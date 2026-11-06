@@ -28,6 +28,8 @@ static void queuedWakeIsRevoked()
   QCoreApplication::sendPostedEvents(&dispatcher, QEvent::MetaCall);
   CHECK(deliveries == 0);
   CHECK(slot->beginCreation());
+  CHECK(slot->beforeCreate());
+  CHECK(slot->recordCreated(&context));
   owner = slot->install(identity, &context, ops);
   CHECK(owner);
   QtToken::redraw(token.get());
@@ -42,6 +44,13 @@ static void queuedWakeIsRevoked()
   CHECK(deliveries == 1);
   CHECK(owner->retireOnRenderThread(7) != Result::Done);
   CHECK(!owner->ack(7) && frees == 0);
+  const auto failed = std::make_shared<Slot>(8, 100, [] { return std::int64_t{1}; });
+  const auto badToken = std::make_shared<QtToken>(failed, &dispatcher, [] {});
+  CHECK(failed->beginCreation() && failed->beforeCreate() && failed->recordCreated(&context));
+  CHECK(!badToken->watchContext(nullptr));
+  failed->creationFailed();
+  CHECK(failed->hasContextRecord() && !failed->current());
+  CHECK(failed->request(8) != Result::Done && frees == 0);
 }
 
 int main(int argc, char** argv)

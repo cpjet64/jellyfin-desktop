@@ -28,6 +28,7 @@ static void defaultBarrierIsUnqualified()
   Slot slot(7, 100, [&] { return f.now.load(); });
   CHECK(slot.beginCreation());
   CHECK(slot.beforeCreate());
+  CHECK(slot.recordCreated(&f.context));
   const auto owner = slot.install(f.identity, &f.context, f.operations());
   CHECK(owner && owner == slot.current());
   CHECK(owner->enterCallback(7));
@@ -51,6 +52,7 @@ static void clockBounds()
   CHECK(backwards.beginCreation());
   f.now = 4;
   CHECK(!backwards.beforeCreate());
+  CHECK(!backwards.recordCreated(&f.context) && backwards.hasContextRecord());
   const auto retained = backwards.install(f.identity, &f.context, f.operations());
   CHECK(retained && !retained->enterRender(7) && !retained->ack(7));
   f.now = 5;
@@ -91,18 +93,37 @@ static void invalidationDuringCreation()
   Fixture f;
   Slot absent(0, 100, [&] { return f.now.load(); });
   CHECK(!absent.beginCreation() && !absent.current());
+  Slot unexpected(7, 100, [&] { return f.now.load(); });
+  CHECK(!unexpected.recordCreated(&f.context) && unexpected.hasContextRecord());
+  CHECK(!unexpected.beginCreation() && !unexpected.current());
   Slot missingContext(7, 100, [&] { return f.now.load(); });
   CHECK(missingContext.beginCreation());
+  CHECK(!missingContext.recordCreated(nullptr));
   const auto missing = missingContext.install(f.identity, nullptr, f.operations());
   if (missing) {
     CHECK(!missing->enterCallback(7) && !missing->enterRender(7));
     CHECK(!missing->ack(7) && !missing->mayDestroy(7, true));
   }
   CHECK(f.frees == 0);
+  Slot setupFailure(7, 100, [&] { return f.now.load(); });
+  CHECK(setupFailure.beginCreation() && setupFailure.beforeCreate());
+  CHECK(setupFailure.recordCreated(&f.context));
+  setupFailure.creationFailed();
+  CHECK(setupFailure.hasContextRecord() && !setupFailure.current());
+  CHECK(setupFailure.request(7) != Result::Done && f.frees == 0);
+  Slot installedFailure(7, 100, [&] { return f.now.load(); });
+  CHECK(installedFailure.beginCreation() && installedFailure.beforeCreate());
+  CHECK(installedFailure.recordCreated(&f.context));
+  const auto installed = installedFailure.install(f.identity, &f.context, f.operations());
+  CHECK(installed);
+  installedFailure.creationFailed();
+  CHECK(installedFailure.hasContextRecord() && !installed->enterCallback(7));
+  CHECK(!installed->ack(7) && !installed->mayDestroy(7, true) && f.frees == 0);
   Slot slot(7, 100, [&] { return f.now.load(); });
   CHECK(!slot.install(f.identity, &f.context, f.operations()));
   CHECK(slot.beginCreation());
   slot.invalidate(7);
+  CHECK(!slot.recordCreated(&f.context) && slot.hasContextRecord());
   const auto owner = slot.install(f.identity, &f.context, f.operations());
   CHECK(owner && owner == slot.current());
   CHECK(!owner->enterRender(7) && !owner->enterCallback(7));
@@ -112,11 +133,14 @@ static void invalidationDuringCreation()
   Slot requested(7, 100, [&] { return f.now.load(); });
   CHECK(requested.beginCreation());
   CHECK(requested.request(7) != Result::Done);
+  CHECK(!requested.recordCreated(&f.context) && requested.hasContextRecord());
   const auto late = requested.install(f.identity, &f.context, f.operations());
   CHECK(late && !late->enterRender(7) && !late->ack(7));
   CHECK(f.frees == 0);
   Slot lateCreation(7, 100, [&] { return f.now.load(); });
   CHECK(lateCreation.beginCreation());
+  CHECK(lateCreation.beforeCreate());
+  CHECK(lateCreation.recordCreated(&f.context));
   f.now = 100;
   const auto afterDeadline = lateCreation.install(f.identity, &f.context, f.operations());
   CHECK(afterDeadline && !afterDeadline->enterRender(7) && !afterDeadline->ack(7));
