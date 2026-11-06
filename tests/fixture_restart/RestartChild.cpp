@@ -18,6 +18,14 @@ RestartChild::RestartChild(ChildGate& gate, const void* grantChannel, const void
 {
 }
 
+RestartChild::RestartChild(ChildGate& gate, const void* grantChannel, const void* controlChannel,
+                           quint64 expectedRun, quint64 launch, QByteArray expectedDigest, Actions actions)
+  : gate_(gate), grantChannel_(grantChannel), controlChannel_(controlChannel),
+    launch_(launch), expectedDigest_(std::move(expectedDigest)), actions_(std::move(actions))
+{
+  binding_.run = expectedRun;
+}
+
 bool RestartChild::grant(const void* channel, const QByteArray& frame, qint64 now, bool eof)
 {
   Q_UNUSED(channel); Q_UNUSED(frame); Q_UNUSED(now); Q_UNUSED(eof);
@@ -29,6 +37,9 @@ bool RestartChild::grant(const void* channel, const QByteArray& frame, qint64 no
 {
   if (!grantChannel_ || channel != grantChannel_) return false;
   if (currentRevision_ != binding_.revision) return false;
+  Grant decoded;
+  if (!decodeCommittedGrant(frame, binding_.run, expectedDigest_, decoded)) { revoke(); return false; }
+  if (!binding_.grant) { binding_ = decoded; currentRevision_ = decoded.revision; }
   if (granted_ || !actions_.arm || !actions_.cancel || !launch_ || expectedDigest_.size() != 32 ||
       frame != encodeGrant(binding_) ||
       !gate_.accept(channel, frame, binding_.run, expectedDigest_, now, eof)) {

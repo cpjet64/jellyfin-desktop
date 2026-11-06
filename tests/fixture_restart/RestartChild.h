@@ -14,6 +14,8 @@ public:
                Grant binding, Actions actions);
   RestartChild(ChildGate& gate, const void* grantChannel, const void* controlChannel,
                Grant binding, quint64 launch, QByteArray expectedDigest, Actions actions);
+  RestartChild(ChildGate& gate, const void* grantChannel, const void* controlChannel,
+               quint64 expectedRun, quint64 launch, QByteArray expectedDigest, Actions actions);
   bool grant(const void* channel, const QByteArray& frame, qint64 now, bool eof);
   bool grant(const void* channel, const QByteArray& frame, qint64 now, bool eof,
              QByteArray& response);
