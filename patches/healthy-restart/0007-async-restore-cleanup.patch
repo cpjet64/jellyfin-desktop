@@ -1,0 +1,67 @@
+diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
+index daa2ff5..fea4195 100644
+--- a/player/PlayerComponent.h
++++ b/player/PlayerComponent.h
+@@ -26,0 +27 @@ namespace HealthyRetirement { class FixtureGraph; }
++#include "native_cleanup_state.h"
+@@ -278,0 +280 @@ private:
++  friend class TestHealthyRestoreCleanup;
+@@ -292,0 +295,11 @@ private:
++  using RestoreCleanupStatus = HealthyRestart::RestoreCleanupState::Status;
++  bool healthyBindRestoreCleanupGate(std::shared_ptr<const FixtureRestart::ChildGate> gate);
++  bool beginNativeRestoreCancellation(std::shared_ptr<const FixtureRestart::ChildGate> gate,
++                                      quint64 cancelSequence, qint64 deadlineNs);
++  RestoreCleanupStatus pollNativeRestoreCancellation();
++  bool observeNativeRestoreCleanup(const mpv_event* event);
++  bool restoreCleanupOwnsCurrent() const;
++  bool restoreCleanupTimeValid();
++  bool restoreCleanupPriorSettled() const;
++  void submitRestoreCleanupStop();
++  void requestRestoreCleanupProperty(bool position);
+@@ -296 +309 @@ private:
+-  bool nativeRestoreUnpauseComplete() const;
++  bool nativeRestoreUnpauseComplete();
+@@ -359 +372 @@ private:
+-    bool seekAccepted = false, seekReply = false, seekOk = false, restarted = false;
++    bool seekSubmissionKnown = false, seekAccepted = false, seekReply = false, seekOk = false, restarted = false;
+@@ -363,0 +377,2 @@ private:
++  HealthyRestart::RestoreCleanupState m_restoreCleanup;
++  std::shared_ptr<const FixtureRestart::ChildGate> m_restoreCleanupGate;
+@@ -370,0 +386,4 @@ private:
++    quint64 dispatchSerial = 0;
++    qint64 dispatchNs = -1;
++    quint64 initialObservationId = 0;
++    qint64 initialPositionMs = -1, initialRequestedNs = -1, initialReceivedNs = -1;
+diff --git a/player/PlayerIntentCommands.cpp b/player/PlayerIntentCommands.cpp
+index 47b365b..65786a2 100644
+--- a/player/PlayerIntentCommands.cpp
++++ b/player/PlayerIntentCommands.cpp
+@@ -265 +265,2 @@ void PlayerComponent::handleMpvEvents()
+-    const bool internalStopEnd = observeHealthyReplacementStop(event);
++    const bool healthyStopEnd = observeHealthyReplacementStop(event);
++    const bool cleanupStopEnd = observeNativeRestoreCleanup(event);
+@@ -267 +268 @@ void PlayerComponent::handleMpvEvents()
+-    if (event->event_id == MPV_EVENT_END_FILE && !internalStopEnd)
++    if (event->event_id == MPV_EVENT_END_FILE && !healthyStopEnd && !cleanupStopEnd)
+diff --git a/player/PlayerNativeRestore.cpp b/player/PlayerNativeRestore.cpp
+index d2eb650..214916a 100644
+--- a/player/PlayerNativeRestore.cpp
++++ b/player/PlayerNativeRestore.cpp
+@@ -96,0 +97 @@ bool PlayerComponent::dispatchNativeRestoreSeek()
++  m_nativeRestore.seekSubmissionKnown = true;
+@@ -108,13 +109,2 @@ PlayerComponent::NativeStopResult PlayerComponent::cancelNativeRestore()
+-  if (!intentControlThread() || !m_nativeRestore.armed || m_nativeRestore.cancelled)
+-    return {NativeStopResult::Status::Unavailable, 0};
+-  m_nativeRestore.cancelled = true;
+-  if (!restoreOwnsCurrent()) return {NativeStopResult::Status::Unavailable, 0};
+-  invalidateNativeReceipt();
+-  m_playbackIntent.stop(PlaybackIntent::Reason::NativeStop);
+-  if (m_healthyStopAdmissionClosed.load()) return {NativeStopResult::Status::Unavailable, 0};
+-  if (!m_nativeRestore.loadAttempted) return {NativeStopResult::Status::Unavailable, 0};
+-  m_nativeRestore.cleanupAttempted = true;
+-  const auto result = stopMpv();
+-  m_nativeRestore.cleanupResult = result;
+-  m_nativeRestore.cleanupObserved = true;
+-  return result;
++  // The diagnostic owner must use the correlated asynchronous cleanup path.
++  return {NativeStopResult::Status::Unavailable, 0};

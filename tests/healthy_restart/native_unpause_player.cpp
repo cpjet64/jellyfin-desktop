@@ -18,7 +18,7 @@ bool PlayerComponent::healthyBindRestoreGate(std::shared_ptr<const FixtureRestar
     quint64 run, quint64 launch, quint64 grant, quint64 revision, QByteArray digest,
     std::function<qint64()> clock)
 {
-  if (!intentControlThread() || m_restoreGate || !gate || !clock || !run || !launch || !grant || !revision ||
+  if (!intentControlThread() || m_restoreGate || !gate || m_restoreCleanupGate != gate || !clock || !run || !launch || !grant || !revision ||
       grant != m_nativeRestore.grant.id || revision != m_nativeRestore.grant.parentRevision ||
       !restoreOwnsCurrent() || !m_healthyStopLease || !m_healthyStopLease->open()) return false;
   try {
@@ -138,11 +138,18 @@ bool PlayerComponent::dispatchNativeRestoreUnpause()
 #ifdef MPVQT_EXTERNAL_EVENTS
   if (!intentControlThread() || m_restoreUnpause.attempted) return false;
   m_restoreUnpause.attempted = true;
-  if (!healthyUnpausePrerequisites()) { m_restoreUnpause.failed = true; return false; }
+  if (!healthyUnpausePrerequisites()) {
+    m_restoreUnpause.submissionKnown = true; m_restoreUnpause.failed = true; return false;
+  }
   const auto key = m_nativeRestore.key;
   m_restoreUnpause.previousObservation = m_nativeObservation.id;
   m_nativeObservation.valid = false;
   const char* args[] = {"set", "pause", "no", nullptr};
+  m_restoreUnpause.dispatchSerial = fixture_restart::currentRenderSerial();
+  m_restoreUnpause.dispatchNs = unpauseNowNs();
+  if (m_restoreUnpause.dispatchNs < 0) {
+    m_restoreUnpause.submissionKnown = true; m_restoreUnpause.failed = true; return false;
+  }
   int result = MPV_ERROR_UNINITIALIZED;
   if (m_restoreDispatch) result = m_restoreDispatch(unpauseTag | key.attempt, args);
   else if (m_mpv && m_mpv->mpv()) result = mpv_command_async(m_mpv->mpv(), unpauseTag | key.attempt, args);
@@ -175,10 +182,12 @@ void PlayerComponent::observeNativeRestoreUnpause(const mpv_event* event)
 #endif
 }
 
-bool PlayerComponent::nativeRestoreUnpauseComplete() const
+bool PlayerComponent::nativeRestoreUnpauseComplete()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
-  return intentControlThread() && healthyUnpauseAuthorized(false) && restorePostSeekReady() &&
+  if (m_restoreUnpause.initialObservationId)
+    return intentControlThread() && healthyUnpauseAuthorized(false) && restorePostSeekReady() && !m_restoreUnpause.failed;
+  const bool complete = intentControlThread() && healthyUnpauseAuthorized(false) && restorePostSeekReady() &&
       !m_restoreUnpause.failed && m_restoreUnpause.attempted && m_restoreUnpause.submissionKnown &&
       m_restoreUnpause.submitted && m_restoreUnpause.replied && m_restoreUnpause.replyOk &&
       m_restoreUnpause.replyNs >= 0 && m_restoreUnpause.submissionNs >= 0 &&
@@ -186,6 +195,12 @@ bool PlayerComponent::nativeRestoreUnpauseComplete() const
       m_nativeObservation.requestedNs >= m_restoreUnpause.replyNs &&
       m_nativeObservation.requestedNs >= m_restoreUnpause.submissionNs && !m_nativeObservation.paused &&
       nativeObservationCurrent();
+  if (!complete) return false;
+  m_restoreUnpause.initialObservationId = m_nativeObservation.id;
+  m_restoreUnpause.initialPositionMs = m_nativeObservation.positionMs;
+  m_restoreUnpause.initialRequestedNs = m_nativeObservation.requestedNs;
+  m_restoreUnpause.initialReceivedNs = m_nativeObservation.receivedNs;
+  return true;
 #else
   return false;
 #endif
