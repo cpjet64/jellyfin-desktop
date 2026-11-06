@@ -44,13 +44,14 @@ $build = $script:calls[1][1]; $test = $script:calls[2][1]; $report = $script:cal
 $expected = @('healthy_async_stop_player', 'healthy_unpause_player', 'healthy_fixture_adapter_cleanup',
     'healthy_healthy_restore_cancel', 'healthy_async_stop_source', 'healthy_player_native_receipts',
     'healthy_player_restore_cleanup', 'healthy_player_restore_observation', 'healthy_player_native_restore',
-    'healthy_graph_capture', 'healthy_graph_capture_lifetime', 'healthy_graph_arm', 'healthy_graph_failure_provenance')
+    'healthy_graph_capture', 'healthy_graph_capture_lifetime', 'healthy_graph_arm', 'healthy_graph_failure_provenance',
+    'healthy_graph_dispatch', 'healthy_b_channel_dispatch')
 $targetStart = [array]::IndexOf($build, '--target') + 1
 $targetEnd = [array]::IndexOf($build, '--parallel') - 1
 if ($targetStart -lt 1 -or $targetEnd -lt $targetStart) { throw 'Invalid build target arguments' }
 $targets = @($build[$targetStart..$targetEnd])
 $expectedTargets = @('windows_mpv_runtime') + $expected
-if ($targets.Count -ne 14 -or (($targets | Sort-Object) -join '|') -cne (($expectedTargets | Sort-Object) -join '|')) {
+if ($targets.Count -ne 16 -or (($targets | Sort-Object) -join '|') -cne (($expectedTargets | Sort-Object) -join '|')) {
     throw 'Diagnostic build targets differ from the approved inventory'
 }
 $regexIndex = [array]::IndexOf($test, '-R')
@@ -60,9 +61,9 @@ $actualRegex = $test[$regexIndex + 1]
 if ($actualRegex -notmatch '^\^\((.*)\)\$$') { throw 'CTest selection is not anchored' }
 $actualNames = @($Matches[1] -split '\|' | Sort-Object)
 $sortedRegex = '^(' + ($actualNames -join '|') + ')$'
-if ($actualNames.Count -ne 13 -or $sortedRegex -cne $expectedRegex) { throw 'CTest selection differs from the approved inventory' }
+if ($actualNames.Count -ne 15 -or $sortedRegex -cne $expectedRegex) { throw 'CTest selection differs from the approved inventory' }
 $reportNames = @($report | Select-Object -Skip 2)
-if ($reportNames.Count -ne 13 -or (($reportNames | Sort-Object) -join '|') -cne (($expected | Sort-Object) -join '|')) {
+if ($reportNames.Count -ne 15 -or (($reportNames | Sort-Object) -join '|') -cne (($expected | Sort-Object) -join '|')) {
     throw 'JUnit requirements differ from the approved inventory'
 }
 if ('--no-tests=error' -notin $test -or '--output-junit' -notin $test -or

@@ -225,6 +225,8 @@ $required += @('test_verified_cancel_gate')
 $required += @('test_windows_restart_io_guard_cancel')
 $required += @('test_healthy_cleanup_claim', 'test_healthy_child_session_failure')
 $required += @('test_healthy_stop_reservation')
+$required += @('test_restore_dispatch_claim')
+$required += @('test_healthy_module_admission')
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs
 Run-Native $venvPython @('dev/ci/evidence.py', 'build_core', 'passed', 'Native build and core tests passed')

@@ -12,6 +12,7 @@ namespace HealthyModuleIdentity {
 struct VerifiedModule::State {};
 VerifiedModule::~VerifiedModule() = default;
 bool VerifiedModule::stillValid(std::uint64_t) const noexcept { return false; }
+bool VerifiedModule::bindAdmissionClaim(const std::shared_ptr<HealthyRetirement::RetirementClaim>&, std::uint64_t) const noexcept { return false; }
 bool VerifiedModule::acceptsEndpoint(std::uintptr_t, std::uint64_t, std::uint64_t) const noexcept { return false; }
 }
 

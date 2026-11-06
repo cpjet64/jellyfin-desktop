@@ -30,7 +30,8 @@ PATCHES = ('patches/mpvqt/0001-event-ownership.patch',
            'patches/healthy-restart/0011-stop-only-reservation.patch',
            'patches/healthy-restart/0012-contained-stop-continuation.patch',
            'patches/healthy-restart/0013-arm-test-hooks.patch',
-           'patches/healthy-restart/0014-graph-capture-test-friend.patch')
+           'patches/healthy-restart/0014-graph-capture-test-friend.patch',
+           'patches/healthy-restart/0015-restore-dispatch-authority.patch')
 
 
 class HealthyRestartAcceptance(unittest.TestCase):
@@ -231,7 +232,7 @@ class HealthyRestartWrapper(unittest.TestCase):
                          'module_identity_import.cpp', 'module_import_prepare.cpp', 'module_gate.cpp', 'module_channel.cpp',
                          'module_endpoints.cpp', 'lifetime_module.cpp', 'graph_access.cpp', 'graph_capture.cpp', 'graph_close.cpp',
                          'graph_prepare.cpp', 'graph_retire.cpp', 'graph_retirement.cpp', 'graph_start.cpp',
-                         'graph_session.cpp', 'child_session.cpp', 'paused_hold.cpp', 'native_unpause_player.cpp',
+                         'graph_session.cpp', 'graph_restore_dispatch.cpp', 'native_restore_authority.cpp', 'child_session.cpp', 'paused_hold.cpp', 'native_unpause_player.cpp',
                          'native_cleanup_player.cpp', 'child_session_grant.cpp', 'child_session_control.cpp',
                          'child_session_failure.cpp', 'resume_progress.cpp',
                          '../fixture_restart/FixtureRestartAdapter.cpp', '../fixture_restart/FixtureEvidence.cpp',
@@ -290,7 +291,7 @@ class HealthyRestartWrapper(unittest.TestCase):
                          'module_identity_win.cpp', 'module_identity_import.cpp', 'module_import_prepare.cpp',
                          'module_gate.cpp', 'module_channel.cpp', 'module_endpoints.cpp', 'lifetime_module.cpp',
                          'graph_access.cpp', 'graph_capture.cpp', 'graph_close.cpp', 'graph_prepare.cpp', 'graph_retire.cpp',
-                         'graph_retirement.cpp', 'graph_start.cpp', 'graph_session.cpp', 'child_session.cpp',
+                         'graph_retirement.cpp', 'graph_start.cpp', 'graph_session.cpp', 'graph_restore_dispatch.cpp', 'native_restore_authority.cpp', 'child_session.cpp',
                          'paused_hold.cpp', 'native_unpause_player.cpp', 'native_cleanup_player.cpp',
                          'child_session_grant.cpp', 'child_session_control.cpp', 'child_session_failure.cpp', 'resume_progress.cpp'):
                 self.assertEqual(sources.count((work / 'build/copy/mpvqt' / name).as_posix()), 1, name)

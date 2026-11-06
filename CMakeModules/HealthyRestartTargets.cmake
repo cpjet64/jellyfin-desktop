@@ -107,6 +107,7 @@ function(healthy_restart_core)
     "${_healthy_copy}/mpvqt/native_unpause_player.cpp" "${_healthy_copy}/mpvqt/native_cleanup_player.cpp"
     "${_healthy_copy}/mpvqt/child_session_grant.cpp" "${_healthy_copy}/mpvqt/child_session_control.cpp"
     "${_healthy_copy}/mpvqt/child_session_failure.cpp" "${_healthy_copy}/mpvqt/resume_progress.cpp"
+    "${_healthy_copy}/mpvqt/graph_restore_dispatch.cpp" "${_healthy_copy}/mpvqt/native_restore_authority.cpp"
     "${_healthy_copy}/fixture_restart/FixtureRestartAdapter.cpp"
     "${_healthy_copy}/fixture_restart/FixtureEvidence.cpp" "${_healthy_copy}/fixture_restart/RestartBroker.cpp"
     "${_healthy_copy}/fixture_restart/RestartWire.cpp" "${_healthy_copy}/fixture_restart/RestartChild.cpp"
@@ -147,6 +148,12 @@ function(healthy_restart_test_overlay)
     HEALTHY_MODULE_TESTING HEALTHY_ENDPOINT_TESTING)
   target_compile_definitions(HealthyGraphTestMpvQt PRIVATE ${_graph_test_definitions})
   target_compile_definitions(HealthyGraphTestCore PRIVATE ${_graph_test_definitions})
+  add_executable(healthy_graph_dispatch test_healthy_graph_dispatch.cpp test_healthy_graph_dispatch_fixture.cpp
+    test_healthy_graph_dispatch_load.cpp test_healthy_graph_dispatch_seek.cpp test_healthy_graph_dispatch_bootstrap.cpp)
+  target_compile_definitions(healthy_graph_dispatch PRIVATE ${_graph_test_definitions})
+  target_link_libraries(healthy_graph_dispatch PRIVATE HealthyGraphTestCore Qt6::Test)
+  add_test(NAME healthy_graph_dispatch COMMAND healthy_graph_dispatch)
+  set_tests_properties(healthy_graph_dispatch PROPERTIES TIMEOUT 60)
   add_executable(healthy_graph_capture test_healthy_graph_capture.cpp)
   target_compile_definitions(healthy_graph_capture PRIVATE ${_graph_test_definitions})
   target_link_libraries(healthy_graph_capture PRIVATE HealthyGraphTestCore Qt6::Test)
@@ -158,6 +165,11 @@ function(healthy_restart_test_overlay)
   add_test(NAME healthy_graph_capture_lifetime COMMAND healthy_graph_capture_lifetime)
   set_tests_properties(healthy_graph_capture_lifetime PROPERTIES TIMEOUT 60)
   if(WIN32)
+    add_executable(healthy_b_channel_dispatch test_healthy_b_channel_dispatch.cpp)
+    target_compile_definitions(healthy_b_channel_dispatch PRIVATE ${_graph_test_definitions})
+    target_link_libraries(healthy_b_channel_dispatch PRIVATE HealthyGraphTestCore Qt6::Test)
+    add_test(NAME healthy_b_channel_dispatch COMMAND healthy_b_channel_dispatch)
+    set_tests_properties(healthy_b_channel_dispatch PROPERTIES TIMEOUT 60)
     add_executable(healthy_graph_arm test_healthy_graph_arm.cpp)
     target_compile_definitions(healthy_graph_arm PRIVATE ${_graph_test_definitions})
     target_link_libraries(healthy_graph_arm PRIVATE HealthyGraphTestCore Qt6::Test)

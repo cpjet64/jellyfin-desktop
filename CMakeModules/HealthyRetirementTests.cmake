@@ -1,5 +1,11 @@
 # Headless tests of the diagnostic retirement protocol and its Qt adapter.
 find_package(Threads REQUIRED)
+add_executable(test_restore_dispatch_claim "${CMAKE_SOURCE_DIR}/tests/test_restore_dispatch_claim.cpp")
+target_include_directories(test_restore_dispatch_claim PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+target_compile_features(test_restore_dispatch_claim PRIVATE cxx_std_17)
+target_link_libraries(test_restore_dispatch_claim PRIVATE Threads::Threads)
+add_test(NAME test_restore_dispatch_claim COMMAND test_restore_dispatch_claim)
+set_tests_properties(test_restore_dispatch_claim PROPERTIES TIMEOUT 60)
 add_executable(test_healthy_stop_reservation "${CMAKE_SOURCE_DIR}/tests/test_healthy_stop_reservation.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/graph_access.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp")
 target_include_directories(test_healthy_stop_reservation PRIVATE "${CMAKE_SOURCE_DIR}/tests" "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
@@ -70,6 +76,20 @@ target_include_directories(test_healthy_module_launch PRIVATE "${CMAKE_SOURCE_DI
 target_compile_features(test_healthy_module_launch PRIVATE cxx_std_17)
 target_compile_definitions(test_healthy_module_launch PRIVATE HEALTHY_MODULE_TESTING)
 if(WIN32)
+  add_executable(test_healthy_module_admission "${CMAKE_SOURCE_DIR}/tests/test_healthy_module_admission.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_channel.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_endpoints.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_gate.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_identity.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_launch_test_stubs.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsFrameReader.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartIo.cpp")
+  target_include_directories(test_healthy_module_admission PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+  target_compile_features(test_healthy_module_admission PRIVATE cxx_std_17)
+  target_compile_definitions(test_healthy_module_admission PRIVATE HEALTHY_MODULE_TESTING HEALTHY_ENDPOINT_TESTING)
+  target_link_libraries(test_healthy_module_admission PRIVATE Qt6::Core onecore)
+  add_test(NAME test_healthy_module_admission COMMAND test_healthy_module_admission)
+  set_tests_properties(test_healthy_module_admission PROPERTIES TIMEOUT 60)
   target_sources(test_healthy_module_launch PRIVATE "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsFrameReader.cpp"
     "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartIo.cpp")
   target_link_libraries(test_healthy_module_launch PRIVATE Qt6::Core onecore)

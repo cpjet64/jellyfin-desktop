@@ -12,7 +12,7 @@ PORTABLE_DIAGNOSTICS = (
     "healthy_async_stop_player", "healthy_unpause_player", "healthy_fixture_adapter_cleanup",
     "healthy_healthy_restore_cancel", "healthy_async_stop_source", "healthy_player_native_receipts",
     "healthy_player_restore_cleanup", "healthy_player_restore_observation", "healthy_player_native_restore",
-    "healthy_graph_capture", "healthy_graph_capture_lifetime",
+    "healthy_graph_capture", "healthy_graph_capture_lifetime", "healthy_graph_dispatch",
 )
 NONPORTABLE_OR_HELD = {
     "healthy_graph_arm", "healthy_graph_failure_provenance", "healthy_mpvqt_event_ownership",
@@ -70,7 +70,7 @@ class DiagnosticRoutingTest(unittest.TestCase):
     def test_explicit_selection_and_owned_cache(self):
         self.invoke()
         self.assertEqual(diagnostic.DIAGNOSTIC_TESTS, PORTABLE_DIAGNOSTICS)
-        self.assertEqual(len(PORTABLE_DIAGNOSTICS), 11)
+        self.assertEqual(len(PORTABLE_DIAGNOSTICS), 12)
         self.assertTrue(set(PORTABLE_DIAGNOSTICS).isdisjoint(NONPORTABLE_OR_HELD))
         names = [item[0] for item in self.calls]
         self.assertEqual(names, ["healthy-diagnostic-configure", "healthy-diagnostic-build", "healthy-diagnostic-ctest"])
