@@ -23,6 +23,39 @@ class NativeOrderTest(unittest.TestCase):
                                                           'tests/test_mpvVideoPlayer_order.js', 'tests/test_synchronous_stop_page.js',
                                                           'tests/test_playback_intent_acceptance.js', 'tests/test_recovery_plugin_acceptance.js']))
 
+    def test_producer_gate_runs_after_player_and_propagates_failure(self):
+        calls = []
+        child_env = []
+        def run(name, args, **kwargs):
+            calls.append((name, args))
+            if name == 'jellyfin-recovery-producer':
+                child_env.append(kwargs['env'])
+                raise RuntimeError('producer test failure')
+        previous = os.environ.get('JELLYFIN_WEB_SOURCE')
+        with patch.object(native, 'command', side_effect=run):
+            with self.assertRaisesRegex(RuntimeError, 'producer test failure'):
+                native.headless_checks()
+        self.assertEqual(calls[-3][0], 'mpv-video-player')
+        self.assertEqual(calls[-2], ('jellyfin-source-provision',
+                                     [native.sys.executable, 'dev/ci/provision_jellyfin_web.py']))
+        self.assertEqual(calls[-1], ('jellyfin-recovery-producer', ['node', '--test',
+                         'tests/test_jellyfin_recovery_transaction.mjs', 'tests/test_jellyfin_recovery_manager.cjs',
+                         'tests/test_jellyfin_recovery_transition.cjs']))
+        self.assertEqual(child_env[0]['JELLYFIN_WEB_SOURCE'], str(native.ROOT / 'deps/ci-jellyfin-web/playbackmanager.js'))
+        self.assertEqual(os.environ.get('JELLYFIN_WEB_SOURCE'), previous)
+
+    def test_failed_provision_stops_before_producer_tests(self):
+        calls = []
+        def run(name, _args, **_kwargs):
+            calls.append(name)
+            if name == 'jellyfin-source-provision':
+                raise RuntimeError('invalid source')
+        with patch.object(native, 'command', side_effect=run):
+            with self.assertRaisesRegex(RuntimeError, 'invalid source'):
+                native.headless_checks()
+        self.assertEqual(calls[-1], 'jellyfin-source-provision')
+        self.assertNotIn('jellyfin-recovery-producer', calls)
+
     def exercise(self, available, blocked=False, system="Linux", mode="static", node_available=True,
                  smoke_failed=False, c2_failed=False, source_failed=False):
         events = []
@@ -130,7 +163,7 @@ class NativeOrderTest(unittest.TestCase):
                      "dev/ci/test_fixture_suspend_linux.py", "dev/ci/test_linux_containment_capability.py", "dev/ci/test_linux_capability_preflight.py", "dev/ci/test_linux_synthetic_service.py",
                      "dev/ci/test_linux_synthetic_service_adapter.py", "dev/ci/test_linux_synthetic_service_dbus.py",
                      "dev/ci/provision_dbus_next.py", "dev/ci/test_linux_synthetic_service_real_dbus.py",
-                     "dev/ci/test_settlement_failure.py", "dev/ci/test_settlement_candidates.py", "dev/ci/test_settlement_observation.py",
+                     "dev/ci/test_settlement_failure.py", "dev/ci/test_settlement_candidates.py", "dev/ci/test_settlement_observation.py", "dev/ci/test_provision_jellyfin_web.py",
                      "dev/ci/test_macos_sdist_select.py", "dev/ci/test_portable_proof_assembly.py", "dev/ci/test_portable_proof_root_policy.py", "dev/ci/test_macos_sdist_pins.py",
                      "dev/ci/test_portable_proof_protocol.py", "dev/ci/test_portable_proof_supervisor.py"):
             self.assertEqual(paths.count(path), 1)
@@ -164,7 +197,7 @@ class NativeOrderTest(unittest.TestCase):
                      "dev/ci/test_linux_containment_capability.py", "dev/ci/test_linux_capability_preflight.py", "dev/ci/test_linux_synthetic_service.py",
                      "dev/ci/test_linux_synthetic_service_adapter.py", "dev/ci/test_linux_synthetic_service_dbus.py",
                      "dev/ci/provision_dbus_next.py", "dev/ci/test_linux_synthetic_service_real_dbus.py",
-                     "dev/ci/test_settlement_failure.py", "dev/ci/test_settlement_candidates.py", "dev/ci/test_settlement_observation.py", "dev/ci/test_macos_sdist_select.py",
+                     "dev/ci/test_settlement_failure.py", "dev/ci/test_settlement_candidates.py", "dev/ci/test_settlement_observation.py", "dev/ci/test_macos_sdist_select.py", "dev/ci/test_provision_jellyfin_web.py",
                      "dev/ci/test_portable_proof_assembly.py", "dev/ci/test_portable_proof_root_policy.py", "dev/ci/test_macos_sdist_pins.py", "dev/ci/test_portable_proof_protocol.py",
                      "dev/ci/test_portable_proof_supervisor.py"):
             self.assertEqual(script.count(path), 1)

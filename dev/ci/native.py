@@ -31,7 +31,8 @@ HEADLESS_TESTS = ("test_systemcomponent", "test_log", "test_settings", "test_dis
                   "test_c2_quiescence_observation", "test_player_intent_observation", "test_synchronous_stop_trace",
                   "test_synchronous_stop_events", "test_healthy_cleanup_coordinator", "test_healthy_wake_binding",
                   "test_playback_intent_acceptance", "test_playback_checkpoint", "test_player_intent_boundary",
-                  "test_recovery_bridge_session", "test_recovery_bridge_host", "test_windows_loader_mode")
+                  "test_recovery_bridge_session", "test_recovery_bridge_host", "test_windows_loader_mode",
+                  "test_playback_native_receipts", "test_player_native_receipts")
 LINUX_DESKTOP_TOOLS = frozenset(("xvfb-run", "xauth", "dbus-run-session", "glxinfo"))
 
 
@@ -200,6 +201,7 @@ def prepare_linux_sdk():
 
 
 def portable_checks():
+    command("jellyfin-source-provision-tests", [sys.executable, "dev/ci/test_provision_jellyfin_web.py"])
     command("windows-loader-driver-tests", [sys.executable, "tests/test_windows_loader_driver.py"])
     command("mac-sdist-select-tests", [sys.executable, "dev/ci/test_macos_sdist_select.py"])
     command("settlement-failure-tests", [sys.executable, "dev/ci/test_settlement_failure.py"])
@@ -304,6 +306,12 @@ def headless_checks():
     command("headless-ctest-report", report)
     command("input-plugin", ["node", "--test", "tests/test_inputPlugin.js"], timeout=120)
     command("mpv-video-player", ["node", "--test", "tests/test_mpvVideoPlayer.js", "tests/test_mpvVideoPlayer_order.js", "tests/test_synchronous_stop_page.js", "tests/test_playback_intent_acceptance.js", "tests/test_recovery_plugin_acceptance.js"], timeout=120)
+    command("jellyfin-source-provision", [sys.executable, "dev/ci/provision_jellyfin_web.py"], timeout=80)
+    producer_env = os.environ.copy()
+    producer_env["JELLYFIN_WEB_SOURCE"] = str(ROOT / "deps/ci-jellyfin-web/playbackmanager.js")
+    command("jellyfin-recovery-producer", ["node", "--test", "tests/test_jellyfin_recovery_transaction.mjs",
+            "tests/test_jellyfin_recovery_manager.cjs", "tests/test_jellyfin_recovery_transition.cjs"],
+            env=producer_env, timeout=120)
     command("bundle-paths", [sys.executable, "tests/test_bundle_paths.py"], timeout=120)
     command("package-freshness", [sys.executable, "tests/test_windows_package_freshness.py"], timeout=300)
     print(f"PASS: {len(HEADLESS_TESTS)} explicitly classified headless CTest cases", flush=True)

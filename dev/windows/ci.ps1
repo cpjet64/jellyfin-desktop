@@ -89,6 +89,7 @@ Run-Native $python @('-m', 'venv', "$ci/venv")
 $venvPython = Join-Path $ci 'venv/Scripts/python.exe'
 Run-Native $venvPython @('tests/test_ci_results.py')
 Run-Native $venvPython @('tests/test_windows_loader_driver.py')
+Run-Native $venvPython @('dev/ci/test_provision_jellyfin_web.py')
 Run-Native $venvPython @('dev/ci/test_evidence.py')
 Run-Native $venvPython @('dev/ci/test_fixture_suspend_policy.py')
 Run-Native $venvPython @('dev/ci/test_fixture_suspend_adapter.py')
@@ -175,7 +176,7 @@ $env:LOCALAPPDATA = "$testHome/local"
 $env:JELLYFIN_TEST_OWNED_ROOT = $build
 Run-Native 'ctest.exe' @('--test-dir', $build, '-LE', 'gui', '--no-tests=error', '--output-on-failure', '--timeout', '60', '--output-junit', "$results/headless-ctest.xml")
 $reportArgs = @('dev/ci/check_results.py', 'junit', "$results/headless-ctest.xml")
-$required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard', 'test_mpv_test_bootstrap', 'test_mpv_test_bootstrap_pure', 'test_smtc_admission_model', 'test_c2a_hold_gate', 'test_c2_error_terminal', 'test_c2_fault_quiescence_policy', 'test_c2_synthetic_service', 'test_c2_fault_restore_permission', 'test_c2_fault_restore_frame', 'test_c2_capture_observation', 'test_c2_quiescence_observation', 'test_player_intent_observation', 'test_synchronous_stop_trace', 'test_synchronous_stop_events', 'test_healthy_cleanup_coordinator', 'test_healthy_wake_binding', 'test_playback_intent_acceptance', 'test_playback_checkpoint', 'test_player_intent_boundary', 'test_recovery_bridge_session', 'test_recovery_bridge_host', 'test_windows_loader_mode')
+$required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard', 'test_mpv_test_bootstrap', 'test_mpv_test_bootstrap_pure', 'test_smtc_admission_model', 'test_c2a_hold_gate', 'test_c2_error_terminal', 'test_c2_fault_quiescence_policy', 'test_c2_synthetic_service', 'test_c2_fault_restore_permission', 'test_c2_fault_restore_frame', 'test_c2_capture_observation', 'test_c2_quiescence_observation', 'test_player_intent_observation', 'test_synchronous_stop_trace', 'test_synchronous_stop_events', 'test_healthy_cleanup_coordinator', 'test_healthy_wake_binding', 'test_playback_intent_acceptance', 'test_playback_checkpoint', 'test_player_intent_boundary', 'test_recovery_bridge_session', 'test_recovery_bridge_host', 'test_windows_loader_mode', 'test_playback_native_receipts', 'test_player_native_receipts')
 if ($mode -eq 'static') { $required += @('test_mpvqt_event_ownership', 'test_mpvqt_player_binding', 'test_player_released_state') }
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs
@@ -200,6 +201,14 @@ try {
 }
 Run-Native $found.Node @('--test', 'tests/test_inputPlugin.js')
 Run-Native $found.Node @('--test', 'tests/test_mpvVideoPlayer.js', 'tests/test_mpvVideoPlayer_order.js', 'tests/test_synchronous_stop_page.js', 'tests/test_playback_intent_acceptance.js', 'tests/test_recovery_plugin_acceptance.js')
+Run-Native $venvPython @('dev/ci/provision_jellyfin_web.py')
+$previousJellyfinWebSource = [Environment]::GetEnvironmentVariable('JELLYFIN_WEB_SOURCE', 'Process')
+try {
+    [Environment]::SetEnvironmentVariable('JELLYFIN_WEB_SOURCE', "$root/deps/ci-jellyfin-web/playbackmanager.js", 'Process')
+    Run-Native $found.Node @('--test', 'tests/test_jellyfin_recovery_transaction.mjs', 'tests/test_jellyfin_recovery_manager.cjs', 'tests/test_jellyfin_recovery_transition.cjs')
+} finally {
+    [Environment]::SetEnvironmentVariable('JELLYFIN_WEB_SOURCE', $previousJellyfinWebSource, 'Process')
+}
 Run-Native $found.Node @('--test', 'tests/test_windows_smoke_result.mjs')
 Run-Native $found.Node @('tests/windows_hidden_desktop_fixture.mjs')
 } finally {
