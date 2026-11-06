@@ -166,11 +166,8 @@ index 3c39505..f9fdc90 100644
 +#include "module_channel.h"
 +
 +namespace HealthyRetirement { class FixtureGraph; }
-@@ -252,0 +258,14 @@ private:
+@@ -252,0 +258,11 @@ private:
 +  friend class HealthyRetirement::FixtureGraph;
-+#ifdef HEALTHY_RETIREMENT_TESTING
-+  friend class TestHealthyGraphCapture;
-+#endif
 +  bool healthyPrepareWake(std::uint64_t generation, const HealthyModuleIdentity::VerifiedModule& module,
 +                          QObject* dispatcher);
 +  HealthyRetirement::Closure::EventResult healthyCloseEvents();
