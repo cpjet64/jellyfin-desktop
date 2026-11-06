@@ -1,0 +1,46 @@
+diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
+index 3de43d7..daa2ff5 100644
+--- a/player/PlayerComponent.h
++++ b/player/PlayerComponent.h
+@@ -25,0 +26 @@ namespace HealthyRetirement { class FixtureGraph; }
++#include "paused_hold.h"
+@@ -32,0 +34 @@ struct PlaybackCheckpoint;
++namespace FixtureRestart { class ChildGate; }
+@@ -275,0 +278 @@ private:
++  friend class TestHealthyUnpausePlayer;
+@@ -289,0 +293,12 @@ private:
++  bool dispatchNativeRestoreUnpause();
++  bool nativeRestoreUnpauseReady() const;
++  bool healthyUnpausePrerequisites() const;
++  bool nativeRestoreUnpauseComplete() const;
++  void observeNativeRestoreUnpause(const mpv_event* event);
++  bool healthyUnpauseAuthorized(bool requireHold) const;
++  bool healthyBindRestoreGate(std::shared_ptr<const FixtureRestart::ChildGate> gate, quint64 run,
++      quint64 launch, quint64 grant, quint64 revision, QByteArray digest, std::function<qint64()> clock);
++  bool healthyBeginPausedHold(HealthyRestart::PausedHoldBinding binding);
++  bool healthyCapturePausedHold();
++  bool healthyObservePausedHold();
++  bool healthyFinishPausedHold();
+@@ -349,0 +365,16 @@ private:
++  struct RestoreUnpauseState {
++    bool attempted = false, submissionKnown = false, submitted = false, replied = false;
++    bool replyOk = false, failed = false;
++    int submissionError = 0, replyError = 0;
++    quint64 previousObservation = 0;
++    qint64 submissionNs = -1, replyNs = -1;
++  } m_restoreUnpause;
++  std::shared_ptr<const FixtureRestart::ChildGate> m_restoreGate;
++  quint64 m_restoreRun = 0, m_restoreLaunch = 0, m_restoreGrant = 0, m_restoreRevision = 0;
++  QByteArray m_restoreDigest;
++  std::function<qint64()> m_restoreGateClock;
++  mutable qint64 m_restoreGateLast = -1;
++  mutable bool m_restoreGateClockFailed = false;
++  std::unique_ptr<HealthyRestart::PausedHold> m_restorePausedHold;
++  std::shared_ptr<const HealthyRestart::PausedHoldProof> m_restorePausedProof;
++  HealthyRestart::PausedHoldBinding m_restoreHoldBinding;
+diff --git a/player/PlayerNativeRestore.cpp b/player/PlayerNativeRestore.cpp
+index 47fa2d5..d2eb650 100644
+--- a/player/PlayerNativeRestore.cpp
++++ b/player/PlayerNativeRestore.cpp
+@@ -125,0 +126 @@ void PlayerComponent::observeNativeRestore(const mpv_event* event)
++  observeNativeRestoreUnpause(event);
