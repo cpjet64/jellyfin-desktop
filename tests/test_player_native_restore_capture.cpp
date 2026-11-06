@@ -23,7 +23,7 @@ void TestPlayerNativeRestore::fixtureBridgeCapture()
   QVERIFY(adapter.loadA(file.fileName(), hash, false));
   loadReplyAndStart(player, 1, 42);
   const auto key = player.m_nativeReceipts.snapshot().key;
-  FixtureRestart::Grant binding{1, 2, 3, hash, 0, false};
+  FixtureRestart::Grant binding{1, 2, key.revision, hash, 3000, false};
   FixtureRestart::Evidence frozen;
   QVERIFY(player.recordFixturePosition(PlayerComponent::FixtureAsset::TestClip, key, 42, 3000));
   QVERIFY(!adapter.captureA(binding, frozen));
