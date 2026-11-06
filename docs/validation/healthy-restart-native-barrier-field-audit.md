@@ -1,0 +1,24 @@
+# Native callback field audit: bounded result
+
+**UNQUALIFIED.** The observed machine-code paths below support a shared exclusive SRW lock, but this audit cannot enumerate all aliases, indirect calls, inlined copies or alternate writers of the callback fields. The number of unresolved relevant paths is **unknown**, not zero. This is not a complete callback-field access inventory or a basis to enable native free or a positive retirement ACK.
+
+## Identity and inspection
+
+The inspected DLL SHA-256 is `5c5c9d094859bdc60b8b27b2d832db8fa8c2e487efbd35f5aea5afe6960dad39`; the preferred PE image base is `0x180000000`. Rizin 0.8.2 executable SHA-256 is `b674a9fb1c1f28fcbd5d191f5ca311de73c62f1bd8560f2c9b88f6ae39147fcf`. Executable `.text` starts at RVA `0x1000`, with exact virtual size `0x5f8f6f6`, raw offset `0x400`, raw size `0x5f8f800` and Rizin's aligned virtual span `0x5f90000`. A second executable section, `.rodata`, begins at RVA `0x81f7000` with exact virtual size `0x1248`, raw offset `0x7568600`, raw size `0x1400` and aligned span `0x2000`. Sections and hashes are retained with the scoped disassembly under `deps/w863-proof` in the integration worktree. That retained packet includes exact Rizin commands in `capture_w869.py`, stdout/stderr for the section map and three named functions, the tool and DLL hashes, and the prior import reader. It does not contain a whole-module control-flow analysis.
+
+## Observed sites, not an exhaustive inventory
+
+RVAs below are relative to the preferred image base. `ctx` is the constructor-returned render context, subject to independently confirming all aliases. Relevant instruction bytes for the setter and update routine appear in the [earlier bounded cross-reference record](healthy-restart-native-barrier-xrefs.md).
+
+| RVA or range | Observed origin and disposition |
+| --- | --- |
+| `0x1060e91–0x1060ea9` | Constructor calls an allocator and sets `rsi = allocation + 0x30`, the candidate context. Allocation failure branches to a failure path. |
+| `0x1060ec5–0x1060ecc` | Initializes an SRW lock at `allocation + 0x80`, equivalent to `ctx + 0x50`. This is separate from the lock initialized at allocation `+0x68`. |
+| `0x1060fdc–0x1060fe7` | Loads routine `0x10612f0` into a separately allocated dispatch object's `+0x50` and stores `ctx` at that object's `+0x58`. This is an indirect registration route, not a direct branch to the routine. The later dispatch dataflow has not been fully closed. |
+| `0x1061530–0x1061573` | Exported setter takes context in `rcx`, callback in `rdx`, callback context in `r8`; acquires exclusive SRW at `ctx+0x50`, writes fields `+0x60` and `+0x68`, calls the supplied non-null callback indirectly while locked, then releases the same lock. On null callback the conditional branch skips the indirect call and reaches the release path. Clearing the context slot requires a null third argument as well. |
+| `0x10612f0–0x106132e` | Another routine takes context in `rcx`, acquires the same exclusive lock, reads the callback at `+0x60`; if non-null, reads callback context at `+0x68` and invokes indirectly before releasing. Both null and non-null paths reach condition-variable wake and the same release. |
+| `0x5f8f1f0`, `0x5f8f2c0` | Import thunks resolve through IAT RVAs `0x72c8160` and `0x72c86f8` to Windows `AcquireSRWLockExclusive` and `ReleaseSRWLockExclusive`, respectively. |
+
+No exception path was demonstrated to bypass release in these observed straight-line/conditional fragments; this does not resolve nonlocal failure, callback behavior, all indirect control flow, or other memory aliases. The observed null setter cannot reinvoke its prior callback within that local CFG, assuming the Windows x64 ABI and the inspected import mapping; an independently established no-re-registration policy remains necessary. A search for direct relative branches to the second routine found none but missed the actual pointer registration above, demonstrating why that search cannot prove closure.
+
+To qualify, an independent analysis must account for every possible read, write, copy and indirect invocation of the callback fields, every applicable acquisition/release or temporarily released wait on the lock, and callback-context escape. Unknown indirect targets and unknown aliases capable of reaching those fields must be reduced to zero; their present count cannot be determined from this packet. The callback's queued Qt work, original GL context epoch/thread, free completion and actual loaded module identity are separate prerequisites even after binary qualification. No library execution, native playback, CI, rebuild, installation or host change was performed.
