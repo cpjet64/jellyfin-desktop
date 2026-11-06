@@ -1,11 +1,14 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
+namespace HealthyModuleIdentity { class VerifiedModule; }
 
 namespace HealthyRetirement {
+class FixtureGraph;
 struct Identity {
   std::uintptr_t thread = 0;
   std::uintptr_t context = 0;
@@ -62,6 +65,10 @@ public:
   Identity originalIdentity() const { return original_; }
   Facts facts() const;
 private:
+  friend class Slot;
+  Lifetime(std::uint64_t generation, Identity original, void* renderContext,
+           std::int64_t overallDeadline, Operations operations, std::int64_t minimumTime,
+           std::function<bool()> moduleQualification, std::function<bool()> retirementPermit);
   bool matches(Identity value) const;
   bool timeValid() const;
   Result retireSteps();
@@ -72,6 +79,8 @@ private:
   const std::int64_t deadline_;
   const Barrier barrier_;
   Operations ops_;
+  std::function<bool()> moduleQualification_;
+  std::function<bool()> retirementPermit_;
   mutable std::mutex mutex_;
   mutable Facts facts_;
   bool retiring_ = false, ownerValid_ = true;
@@ -97,7 +106,16 @@ public:
   std::shared_ptr<Lifetime> current() const;
   void invalidate(std::uint64_t generation);
   std::uint64_t generation() const { return generation_; }
+#ifdef HEALTHY_RETIREMENT_TESTING
+  bool bindModuleForTest(std::function<bool()> capability, std::shared_ptr<const std::atomic_bool> revoked);
+  bool bindStopLeaseForTest(std::shared_ptr<const std::atomic_bool> lease);
+#endif
 private:
+  friend class FixtureGraph;
+  bool bindModule(std::shared_ptr<const HealthyModuleIdentity::VerifiedModule> module,
+                  std::shared_ptr<const std::atomic_bool> revoked);
+  bool bindStopLease(std::shared_ptr<const std::atomic_bool> lease);
+  bool bindGuard(std::function<bool()> capability, std::shared_ptr<const std::atomic_bool> revoked);
   const std::uint64_t generation_;
   const std::int64_t deadline_;
   const std::function<std::int64_t()> clock_;
@@ -106,5 +124,8 @@ private:
   std::int64_t lastTime_ = 0;
   void* retainedContext_ = nullptr;
   std::shared_ptr<Lifetime> lifetime_;
+  std::function<bool()> moduleQualification_;
+  std::function<bool()> retirementPermit_;
+  std::function<bool(std::shared_ptr<const std::atomic_bool>)> bindStop_;
 };
 }

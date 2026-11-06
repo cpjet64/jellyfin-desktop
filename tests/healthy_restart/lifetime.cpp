@@ -19,6 +19,17 @@ Lifetime::Lifetime(std::uint64_t generation, Identity original, void* renderCont
   catch (...) { facts_.phase = Phase::Retained; }
 }
 
+Lifetime::Lifetime(std::uint64_t generation, Identity original, void* renderContext,
+                   std::int64_t deadline, Operations operations, std::int64_t minimumTime,
+                   std::function<bool()> qualification, std::function<bool()> permit)
+  : Lifetime(generation, original, renderContext, deadline, std::move(operations),
+             Barrier::Unqualified, minimumTime)
+{
+  moduleQualification_ = std::move(qualification);
+  retirementPermit_ = std::move(permit);
+  if (!moduleQualification_ || !retirementPermit_ || !timeValid()) facts_.phase = Phase::Retained;
+}
+
 bool Lifetime::matches(Identity value) const
 {
   return value.thread == original_.thread && value.context == original_.context && value.epoch == original_.epoch;
@@ -27,6 +38,7 @@ bool Lifetime::timeValid() const
 {
   if (facts_.phase == Phase::Retained) return false;
   try {
+    if (moduleQualification_ && !moduleQualification_()) { facts_.phase = Phase::Retained; return false; }
     const auto now = ops_.now();
     if (now >= 0 && now >= lastTime_ && now < deadline_) { lastTime_ = now; return true; }
   } catch (...) {}
@@ -93,6 +105,8 @@ Result Lifetime::request(std::uint64_t generation)
 {
   std::lock_guard<std::mutex> lock(mutex_);
   if (generation != generation_ || facts_.phase != Phase::Active || !ownerValid_) return Result::Blocked;
+  try { if (moduleQualification_ && (!retirementPermit_ || !retirementPermit_())) return retain(); }
+  catch (...) { return retain(); }
   try { if (!timeValid()) return retain(); } catch (...) { return retain(); }
   facts_.admissionClosed = true;
   facts_.phase = Phase::Closing;
@@ -135,10 +149,12 @@ Result Lifetime::retireSteps()
     facts_.unregisterReturned = true;
     if (facts_.phase != Phase::Closing || !ownerValid_ || !timeValid()) return retain();
   }
-  if (barrier_ == Barrier::Unqualified) { std::lock_guard<std::mutex> lock(mutex_); return retain(); }
+  if (barrier_ == Barrier::Unqualified && !moduleQualification_) {
+    std::lock_guard<std::mutex> lock(mutex_); return retain();
+  }
   bool qualified = false;
   { std::lock_guard<std::mutex> lock(mutex_); qualified = facts_.barrierQualified; }
-  if (!qualified) {
+  if (!qualified && !moduleQualification_) {
     const auto barrier = ops_.barrier();
     if (barrier == BarrierResult::Waiting) {
       std::lock_guard<std::mutex> lock(mutex_);
@@ -231,6 +247,7 @@ bool Slot::beginCreation()
   std::lock_guard<std::mutex> lock(mutex_);
   if (closed_ || creating_ || lifetime_ || !generation_ || !clock_) return false;
   try {
+    if (moduleQualification_ && !moduleQualification_()) { closed_ = true; return false; }
     const auto now = clock_();
     if (now < lastTime_ || now < 0 || now >= deadline_) { closed_ = true; return false; }
     lastTime_ = now;
@@ -245,6 +262,7 @@ bool Slot::beforeCreate()
   std::lock_guard<std::mutex> lock(mutex_);
   if (!creating_ || closed_ || !clock_) return false;
   try {
+    if (moduleQualification_ && !moduleQualification_()) { closed_ = true; return false; }
     const auto now = clock_();
     if (now >= 0 && now >= lastTime_ && now < deadline_) { lastTime_ = now; return true; }
   } catch (...) {}
@@ -273,8 +291,12 @@ std::shared_ptr<Lifetime> Slot::install(Identity original, void* context, Operat
   if (!creating_ || lifetime_ || !generation_ || !context || context != retainedContext_) return {};
   creating_ = false;
   operations.now = clock_;
-  lifetime_ = std::make_shared<Lifetime>(generation_, original, context, deadline_, std::move(operations),
-                                         Barrier::Unqualified, lastTime_);
+  if (moduleQualification_)
+    lifetime_ = std::shared_ptr<Lifetime>(new Lifetime(generation_, original, context, deadline_,
+                                                       std::move(operations), lastTime_, moduleQualification_, retirementPermit_));
+  else
+    lifetime_ = std::make_shared<Lifetime>(generation_, original, context, deadline_, std::move(operations),
+                                           Barrier::Unqualified, lastTime_);
   if (closed_) lifetime_->invalidate(generation_);
   return lifetime_;
 }
