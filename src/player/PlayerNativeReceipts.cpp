@@ -52,6 +52,7 @@ bool PlayerComponent::beginNativeReceipt(FixtureAsset asset, const QString& fixt
       (intent.desired != PlaybackIntent::Desired::Playing && intent.desired != PlaybackIntent::Desired::Paused)) return false;
   if (intent.revision == m_lastReceiptRevision) return false;
   const auto previous = m_nativeReceipts.snapshot();
+  if (previous.consumed && !previous.submissionObserved) return false;
   if (previous.submitted && !previous.settled) return false;
   if (previous.key.attempt && !previous.invalid) { invalidateNativeReceipt(); return false; }
   const PlaybackNativeReceipts::Key key{host, m_mpvGeneration, intent.revision, attempt};
@@ -128,10 +129,11 @@ void PlayerComponent::observeNativeReceipt(const mpv_event* event)
 #ifdef MPVQT_EXTERNAL_EVENTS
   if (!event || !m_nativeReceipts.snapshot().key.attempt) return;
   const auto receipt = m_nativeReceipts.snapshot();
-  if (receipt.key.core != m_mpvGeneration || receipt.key.revision != m_playbackIntent.snapshot().revision) {
+  if (receipt.key.core != m_mpvGeneration) {
     invalidateNativeReceipt();
     return;
   }
+  if (receipt.key.revision != m_playbackIntent.snapshot().revision) invalidateNativeReceipt();
   switch (event->event_id) {
   case MPV_EVENT_COMMAND_REPLY:
     if (event->reply_userdata == (receiptTag | receipt.key.attempt))

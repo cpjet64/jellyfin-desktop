@@ -8,6 +8,7 @@ class TestPlayerNativeReceipts : public QObject
 private:
   static void reply(PlayerComponent& player, quint64 attempt, qint64 entry, int error = 0);
   static void start(PlayerComponent& player, qint64 entry);
+  static void end(PlayerComponent& player, qint64 entry);
   private slots:
   void supportedBoundary();
   void rejectionAndStaleIntent();
@@ -15,6 +16,8 @@ private:
   void malformedReplyAndStop();
   void redirectAndOverflow();
   void captureInvalidation();
+  void reentrantStopDuringSubmission();
+  void conflictStillSettles();
 };
 
 void TestPlayerNativeReceipts::reply(PlayerComponent& player, quint64 attempt, qint64 entry, int error)
@@ -40,6 +43,16 @@ void TestPlayerNativeReceipts::start(PlayerComponent& player, qint64 entry)
   start.playlist_entry_id = entry;
   mpv_event event{};
   event.event_id = MPV_EVENT_START_FILE; event.data = &start;
+  player.observeNativeReceipt(&event);
+}
+
+void TestPlayerNativeReceipts::end(PlayerComponent& player, qint64 entry)
+{
+  mpv_event_end_file data{};
+  data.playlist_entry_id = entry;
+  data.reason = MPV_END_FILE_REASON_STOP;
+  mpv_event event{};
+  event.event_id = MPV_EVENT_END_FILE; event.data = &data;
   player.observeNativeReceipt(&event);
 }
 
@@ -163,10 +176,74 @@ void TestPlayerNativeReceipts::malformedReplyAndStop()
   QVERIFY(stopped.beginNativeReceipt(PlayerComponent::FixtureAsset::TestClip, QStringLiteral("fixture"), 1, 13));
   stopped.requestNativeStop();
   QVERIFY(stopped.m_nativeReceipts.snapshot().invalid);
+  start(stopped, 99);
+  end(stopped, 99);
+  end(stopped, 55);
   reply(stopped, 13, 55);
+  const auto old = stopped.m_nativeReceipts.snapshot();
+  QVERIFY(old.invalid && old.replyOk && old.ended && old.settled && !old.started);
   QVERIFY(!stopped.makePlaybackCheckpoint().positionKnown);
   stopped.m_playbackIntent.play(false);
-  QVERIFY(!stopped.beginNativeReceipt(PlayerComponent::FixtureAsset::TestClip, QStringLiteral("fixture"), 1, 14));
+  QVERIFY(stopped.beginNativeReceipt(PlayerComponent::FixtureAsset::TestClip, QStringLiteral("fixture"), 1, 14));
+#endif
+}
+
+void TestPlayerNativeReceipts::reentrantStopDuringSubmission()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent player;
+  QVERIFY(player.bindNativeReceiptHost(1));
+  player.m_mpvGeneration = 3;
+  player.m_playbackIntent.play(false);
+  int calls = 0;
+  player.m_receiptDispatch = [&](quint64, const QString&) {
+    ++calls;
+    if (calls != 1) return -1;
+    player.requestNativeStop();
+    player.m_playbackIntent.play(false);
+    if (player.beginNativeReceipt(PlayerComponent::FixtureAsset::TestClip, QStringLiteral("fixture"), 1, 2))
+      return -1;
+    return 0;
+  };
+  QVERIFY(player.beginNativeReceipt(PlayerComponent::FixtureAsset::TestClip, QStringLiteral("fixture"), 1, 1));
+  const auto pending = player.m_nativeReceipts.snapshot();
+  QVERIFY(pending.invalid && pending.submissionObserved && pending.submitted && !pending.settled);
+  player.m_playbackIntent.play(false);
+  QVERIFY(!player.beginNativeReceipt(PlayerComponent::FixtureAsset::TestClip, QStringLiteral("fixture"), 1, 2));
+  QCOMPARE(calls, 1);
+  reply(player, 1, 12, -1);
+  const auto settled = player.m_nativeReceipts.snapshot();
+  QVERIFY(settled.invalid && settled.reply && !settled.replyOk && settled.settled);
+  QVERIFY(!player.makePlaybackCheckpoint().positionKnown);
+
+  PlayerComponent rejected;
+  QVERIFY(rejected.bindNativeReceiptHost(1));
+  rejected.m_mpvGeneration = 4;
+  rejected.m_playbackIntent.play(false);
+  rejected.m_receiptDispatch = [&](quint64, const QString&) { rejected.requestNativeStop(); return -1; };
+  QVERIFY(!rejected.beginNativeReceipt(PlayerComponent::FixtureAsset::TestClip, QStringLiteral("fixture"), 1, 1));
+  const auto failed = rejected.m_nativeReceipts.snapshot();
+  QVERIFY(failed.invalid && failed.submissionObserved && !failed.submitted && failed.settled);
+#endif
+}
+
+void TestPlayerNativeReceipts::conflictStillSettles()
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  PlayerComponent player;
+  QVERIFY(player.bindNativeReceiptHost(1));
+  player.m_mpvGeneration = 3;
+  player.m_playbackIntent.play(false);
+  player.m_receiptDispatch = [](quint64, const QString&) { return 0; };
+  QVERIFY(player.beginNativeReceipt(PlayerComponent::FixtureAsset::TestClip, QStringLiteral("fixture"), 1, 1));
+  start(player, 11);
+  start(player, 12);
+  player.requestNativeStop();
+  end(player, 12);
+  reply(player, 1, 12);
+  const auto receipt = player.m_nativeReceipts.snapshot();
+  QVERIFY(receipt.invalid && receipt.replyOk && receipt.ended && receipt.settled);
+  QVERIFY(!player.makePlaybackCheckpoint().positionKnown);
 #endif
 }
 
