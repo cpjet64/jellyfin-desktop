@@ -9,6 +9,10 @@ function(healthy_restart_verify_wrapper path)
 endfunction()
 
 function(healthy_restart_mpvqt)
+  set(_mpvqt_target HealthyRestartMpvQt)
+  if(ARGC GREATER 0)
+    set(_mpvqt_target "${ARGV0}")
+  endif()
   set(_mpvqt_src "${_healthy_copy}/mpvqt")
   foreach(output IN ITEMS mpvrenderer-wrapper.cpp MpvController MpvAbstractItem)
     if(IS_SYMLINK "${_mpvqt_src}/${output}")
@@ -20,16 +24,16 @@ function(healthy_restart_mpvqt)
   healthy_restart_verify_wrapper("${_mpvqt_src}/mpvrenderer-wrapper.cpp")
   file(WRITE "${_mpvqt_src}/MpvController" "#include \"mpvcontroller.h\"\n")
   file(WRITE "${_mpvqt_src}/MpvAbstractItem" "#include \"mpvabstractitem.h\"\n")
-  add_library(HealthyRestartMpvQt STATIC
+  add_library(${_mpvqt_target} STATIC
     "${_mpvqt_src}/mpvabstractitem.cpp" "${_mpvqt_src}/mpvcontroller.cpp"
     "${_mpvqt_src}/mpvrenderer-wrapper.cpp" "${_mpvqt_src}/frame_capture.cpp"
     "${_mpvqt_src}/frame_acceptance.cpp" "${_mpvqt_src}/lifetime.cpp"
     "${_mpvqt_src}/lifetime_qt.cpp" "${_mpvqt_src}/owner.cpp" "${_mpvqt_src}/owner_qt.cpp"
     "${_mpvqt_src}/closure.cpp" "${_mpvqt_src}/closure_native.cpp" "${_mpvqt_src}/capture_capability.cpp")
-  target_compile_definitions(HealthyRestartMpvQt PUBLIC MPVQT_EXTERNAL_EVENTS)
-  target_include_directories(HealthyRestartMpvQt PUBLIC "${_mpvqt_src}" "${CMAKE_CURRENT_SOURCE_DIR}")
-  target_link_libraries(HealthyRestartMpvQt PUBLIC Qt6::Quick Qt6::Core Qt6::Gui Threads::Threads ${MPV_LIBRARY})
-  set_target_properties(HealthyRestartMpvQt PROPERTIES POSITION_INDEPENDENT_CODE ON AUTOMOC ON)
+  target_compile_definitions(${_mpvqt_target} PUBLIC MPVQT_EXTERNAL_EVENTS)
+  target_include_directories(${_mpvqt_target} PUBLIC "${_mpvqt_src}" "${CMAKE_SOURCE_DIR}/external")
+  target_link_libraries(${_mpvqt_target} PUBLIC Qt6::Quick Qt6::Core Qt6::Gui Threads::Threads ${MPV_LIBRARY})
+  set_target_properties(${_mpvqt_target} PROPERTIES POSITION_INDEPENDENT_CODE ON AUTOMOC ON)
 endfunction()
 
 function(healthy_restart_source_mapping output)
@@ -63,6 +67,18 @@ function(healthy_restart_source_mapping output)
 endfunction()
 
 function(healthy_restart_core)
+  set(_core_target HealthyRestartCore)
+  set(_linked_mpvqt HealthyRestartMpvQt)
+  if(ARGC GREATER 1)
+    set(_core_target "${ARGV0}")
+    set(_linked_mpvqt "${ARGV1}")
+    get_property(ALL_SRCS GLOBAL PROPERTY HEALTHY_RESTART_SOURCE_LIST)
+    if(NOT ALL_SRCS)
+      message(FATAL_ERROR "Healthy restart source list is unavailable for the test overlay")
+    endif()
+  else()
+    set_property(GLOBAL PROPERTY HEALTHY_RESTART_SOURCE_LIST "${ALL_SRCS}")
+  endif()
   healthy_restart_source_mapping(copied_sources)
   foreach(source IN LISTS copied_sources)
     if(source MATCHES "^${_healthy_copy}/")
@@ -74,8 +90,8 @@ function(healthy_restart_core)
       endif()
     endif()
   endforeach()
-  add_library(HealthyRestartCore STATIC ${copied_sources})
-  target_sources(HealthyRestartCore PRIVATE
+  add_library(${_core_target} STATIC ${copied_sources})
+  target_sources(${_core_target} PRIVATE
     "${_healthy_copy}/mpvqt/closure_player.cpp" "${_healthy_copy}/mpvqt/closure_wake.cpp"
     "${_healthy_copy}/mpvqt/closure_wake_native.cpp" "${_healthy_copy}/mpvqt/async_stop.cpp"
     "${_healthy_copy}/mpvqt/async_stop_player.cpp" "${_healthy_copy}/mpvqt/module_identity.cpp"
@@ -88,19 +104,20 @@ function(healthy_restart_core)
     "${_healthy_copy}/mpvqt/graph_start.cpp" "${_healthy_copy}/mpvqt/graph_session.cpp"
     "${_healthy_copy}/mpvqt/child_session.cpp" "${_healthy_copy}/mpvqt/paused_hold.cpp"
     "${_healthy_copy}/mpvqt/native_unpause_player.cpp" "${_healthy_copy}/mpvqt/native_cleanup_player.cpp"
-    "${_healthy_copy}/mpvqt/child_session_grant.cpp" "${_healthy_copy}/mpvqt/resume_progress.cpp"
+    "${_healthy_copy}/mpvqt/child_session_grant.cpp" "${_healthy_copy}/mpvqt/child_session_control.cpp"
+    "${_healthy_copy}/mpvqt/child_session_failure.cpp" "${_healthy_copy}/mpvqt/resume_progress.cpp"
     "${_healthy_copy}/fixture_restart/FixtureRestartAdapter.cpp"
     "${_healthy_copy}/fixture_restart/FixtureEvidence.cpp" "${_healthy_copy}/fixture_restart/RestartBroker.cpp"
     "${_healthy_copy}/fixture_restart/RestartWire.cpp" "${_healthy_copy}/fixture_restart/RestartChild.cpp"
     "${_healthy_copy}/fixture_restart/RestartChildPlayer.cpp" "${_healthy_copy}/fixture_restart/RestartSource.cpp"
     "${_healthy_copy}/fixture_restart/RestartSourcePlayer.cpp")
   if(WIN32)
-    target_sources(HealthyRestartCore PRIVATE "${_healthy_copy}/fixture_restart/WindowsFrameReader.cpp"
+    target_sources(${_core_target} PRIVATE "${_healthy_copy}/fixture_restart/WindowsFrameReader.cpp"
       "${_healthy_copy}/fixture_restart/WindowsRestartIo.cpp")
   endif()
-  target_compile_definitions(HealthyRestartCore PUBLIC MPVQT_EXTERNAL_EVENTS)
-  target_compile_definitions(HealthyRestartCore PRIVATE HEALTHY_RESTART_DIAGNOSTIC)
-  target_include_directories(HealthyRestartCore BEFORE PUBLIC "${_healthy_copy}"
+  target_compile_definitions(${_core_target} PUBLIC MPVQT_EXTERNAL_EVENTS)
+  target_compile_definitions(${_core_target} PRIVATE HEALTHY_RESTART_DIAGNOSTIC)
+  target_include_directories(${_core_target} BEFORE PUBLIC "${_healthy_copy}"
     "${_healthy_copy}/player" "${_healthy_copy}/core" "${_healthy_copy}/input"
     "${_healthy_copy}/ui" "${_healthy_copy}/power" "${_healthy_copy}/mpvqt" "${_healthy_copy}/fixture_restart"
     "${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/src/shared")
@@ -118,11 +135,24 @@ function(healthy_restart_core)
       message(FATAL_ERROR "Healthy restart cannot link a different core: ${link}")
     endif()
   endforeach()
-  target_link_libraries(HealthyRestartCore ${core_links} HealthyRestartMpvQt)
-  configure_windows_loader(HealthyRestartCore "${_healthy_copy}/player/WindowsMpvLoader.cpp")
+  target_link_libraries(${_core_target} ${core_links} ${_linked_mpvqt})
+  configure_windows_loader(${_core_target} "${_healthy_copy}/player/WindowsMpvLoader.cpp")
 endfunction()
 
 function(healthy_restart_tests)
+  if(WIN32)
+    healthy_restart_mpvqt(HealthyGraphTestMpvQt)
+    healthy_restart_core(HealthyGraphTestCore HealthyGraphTestMpvQt)
+    set(_graph_test_definitions HEALTHY_RESTART_DIAGNOSTIC HEALTHY_RETIREMENT_TESTING
+      HEALTHY_MODULE_TESTING HEALTHY_ENDPOINT_TESTING)
+    target_compile_definitions(HealthyGraphTestMpvQt PRIVATE ${_graph_test_definitions})
+    target_compile_definitions(HealthyGraphTestCore PRIVATE ${_graph_test_definitions})
+    add_executable(healthy_graph_arm test_healthy_graph_arm.cpp)
+    target_compile_definitions(healthy_graph_arm PRIVATE ${_graph_test_definitions})
+    target_link_libraries(healthy_graph_arm PRIVATE HealthyGraphTestCore Qt6::Test)
+    add_test(NAME healthy_graph_arm COMMAND healthy_graph_arm)
+    set_tests_properties(healthy_graph_arm PROPERTIES TIMEOUT 60)
+  endif()
   add_executable(test_healthy_restart EXCLUDE_FROM_ALL healthy_restart_held.cpp)
   target_link_libraries(test_healthy_restart PRIVATE HealthyRestartCore Qt6::Core)
   add_executable(healthy_async_stop_player test_healthy_async_stop_player.cpp)

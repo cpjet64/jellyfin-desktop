@@ -25,7 +25,8 @@ PATCHES = ('patches/mpvqt/0001-event-ownership.patch',
            'patches/healthy-restart/0006-checked-unpause.patch',
            'patches/healthy-restart/0007-async-restore-cleanup.patch',
            'patches/healthy-restart/0008-renderer-capture-capability.patch',
-           'patches/healthy-restart/0009-adapter-cleanup.patch')
+           'patches/healthy-restart/0009-adapter-cleanup.patch',
+           'patches/healthy-restart/0010-cleanup-provenance.patch')
 
 
 class HealthyRestartAcceptance(unittest.TestCase):
@@ -187,7 +188,8 @@ class HealthyRestartWrapper(unittest.TestCase):
                          'module_endpoints.cpp', 'lifetime_module.cpp', 'graph_access.cpp', 'graph_close.cpp',
                          'graph_prepare.cpp', 'graph_retire.cpp', 'graph_retirement.cpp', 'graph_start.cpp',
                          'graph_session.cpp', 'child_session.cpp', 'paused_hold.cpp', 'native_unpause_player.cpp',
-                         'native_cleanup_player.cpp', 'child_session_grant.cpp', 'resume_progress.cpp',
+                         'native_cleanup_player.cpp', 'child_session_grant.cpp', 'child_session_control.cpp',
+                         'child_session_failure.cpp', 'resume_progress.cpp',
                          '../fixture_restart/FixtureRestartAdapter.cpp', '../fixture_restart/FixtureEvidence.cpp',
                          '../fixture_restart/RestartBroker.cpp', '../fixture_restart/RestartWire.cpp',
                          '../fixture_restart/RestartChild.cpp', '../fixture_restart/RestartChildPlayer.cpp',
@@ -246,7 +248,7 @@ class HealthyRestartWrapper(unittest.TestCase):
                          'graph_access.cpp', 'graph_close.cpp', 'graph_prepare.cpp', 'graph_retire.cpp',
                          'graph_retirement.cpp', 'graph_start.cpp', 'graph_session.cpp', 'child_session.cpp',
                          'paused_hold.cpp', 'native_unpause_player.cpp', 'native_cleanup_player.cpp',
-                         'child_session_grant.cpp', 'resume_progress.cpp'):
+                         'child_session_grant.cpp', 'child_session_control.cpp', 'child_session_failure.cpp', 'resume_progress.cpp'):
                 self.assertEqual(sources.count((work / 'build/copy/mpvqt' / name).as_posix()), 1, name)
             defs = (work / 'build/core-defs.txt').read_text(encoding='utf-8')
             self.assertNotIn('HEALTHY_RETIREMENT_TESTING', defs)

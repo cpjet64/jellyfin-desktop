@@ -1,5 +1,15 @@
 # Headless tests of the diagnostic retirement protocol and its Qt adapter.
 find_package(Threads REQUIRED)
+add_executable(test_healthy_cleanup_claim "${CMAKE_SOURCE_DIR}/tests/test_healthy_cleanup_claim.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/graph_access.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp")
+target_include_directories(test_healthy_cleanup_claim PRIVATE "${CMAKE_SOURCE_DIR}/tests" "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
+target_compile_features(test_healthy_cleanup_claim PRIVATE cxx_std_17)
+target_compile_definitions(test_healthy_cleanup_claim PRIVATE HEALTHY_RETIREMENT_TESTING)
+target_link_libraries(test_healthy_cleanup_claim PRIVATE Threads::Threads Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml)
+add_test(NAME test_healthy_cleanup_claim COMMAND test_healthy_cleanup_claim)
+set_tests_properties(test_healthy_cleanup_claim PROPERTIES TIMEOUT 60)
+
 add_executable(test_verified_cancel_gate "${CMAKE_SOURCE_DIR}/tests/test_verified_cancel_gate.cpp"
   "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartChild.cpp"
   "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartWire.cpp"
@@ -155,7 +165,7 @@ add_executable(test_healthy_graph_retirement "${CMAKE_SOURCE_DIR}/tests/test_hea
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/graph_retirement.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/owner.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime_module.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/closure.cpp")
-target_include_directories(test_healthy_graph_retirement PRIVATE "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
+target_include_directories(test_healthy_graph_retirement PRIVATE "${CMAKE_SOURCE_DIR}/tests" "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
 target_compile_features(test_healthy_graph_retirement PRIVATE cxx_std_17)
 target_compile_definitions(test_healthy_graph_retirement PRIVATE HEALTHY_RETIREMENT_TESTING)
 target_link_libraries(test_healthy_graph_retirement PRIVATE Threads::Threads Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml)
@@ -173,7 +183,7 @@ set_tests_properties(test_healthy_graph_retirement_guard PROPERTIES TIMEOUT 60)
 
 add_executable(test_healthy_graph_retirement_access "${CMAKE_SOURCE_DIR}/tests/test_healthy_graph_retirement_access.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/graph_access.cpp")
-target_include_directories(test_healthy_graph_retirement_access PRIVATE "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
+target_include_directories(test_healthy_graph_retirement_access PRIVATE "${CMAKE_SOURCE_DIR}/tests" "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
 target_compile_features(test_healthy_graph_retirement_access PRIVATE cxx_std_17)
 target_compile_definitions(test_healthy_graph_retirement_access PRIVATE HEALTHY_RETIREMENT_TESTING)
 target_link_libraries(test_healthy_graph_retirement_access PRIVATE Threads::Threads Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml)
@@ -188,10 +198,12 @@ add_test(NAME test_healthy_identity_commitment COMMAND test_healthy_identity_com
 set_tests_properties(test_healthy_identity_commitment PROPERTIES TIMEOUT 60)
 
 if(WIN32)
-  foreach(name IN ITEMS child_session child_session_source child_session_cancel)
+  foreach(name IN ITEMS child_session child_session_source child_session_cancel child_session_failure)
     add_executable(test_healthy_${name} "${CMAKE_SOURCE_DIR}/tests/test_healthy_${name}.cpp"
       "${CMAKE_SOURCE_DIR}/tests/healthy_restart/child_session.cpp"
       "${CMAKE_SOURCE_DIR}/tests/healthy_restart/child_session_grant.cpp"
+      "${CMAKE_SOURCE_DIR}/tests/healthy_restart/child_session_control.cpp"
+      "${CMAKE_SOURCE_DIR}/tests/healthy_restart/child_session_failure.cpp"
       "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_endpoints.cpp"
       "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartIo.cpp"
       "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartWire.cpp"
