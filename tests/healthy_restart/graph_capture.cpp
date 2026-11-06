@@ -39,9 +39,7 @@ bool FixtureGraph::capturePlayerBound() const
     launch = captureLaunchForTest_;
   } else
 #endif
-  if (!module_ || !module_->stillValid(slot_->generation()) ||
-      !module_->launchBinding(slot_->generation(), binding) ||
-      !module_->launchId(slot_->generation(), launch)) return false;
+  if (!restoreLaunch(binding, launch)) return false;
   const QByteArray digest(reinterpret_cast<const char*>(binding.expectedGrantDigest.data()),
                           int(binding.expectedGrantDigest.size()));
   return binding.role == HealthyModuleIdentity::LaunchRole::Restore && binding.run == session_->run &&
