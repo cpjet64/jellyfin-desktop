@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import stat
@@ -10,6 +11,7 @@ from unittest.mock import patch
 
 import linux_qt_archive as archive
 import linux_qt_cache as cache
+import linux_qt_pc as pc
 
 
 def fixture(root):
@@ -151,7 +153,7 @@ class CacheTest(unittest.TestCase):
             self.assertEqual(downloader.call_count, 10)
             self.assertFalse((workspace / cache.EVIDENCE).exists())
 
-    def test_ready_receipt_binds_all_copied_hashes(self):
+    def check_ready_receipt(self, mode):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             items, mapping = fixture(root)
@@ -162,7 +164,13 @@ class CacheTest(unittest.TestCase):
             prefix = workspace / "qt-candidate/6.9.3/gcc_64"
             prefix.mkdir(parents=True)
             (workspace / "qt-link-modes.json").write_text("[]\n")
-            (workspace / "qt-host-zlib.json").write_text('{"zlib": "same"}\n')
+            evidence = workspace / "qt-host-zlib.json"
+            pc.write_exclusive(evidence, b'{"zlib": "same"}\n')
+            if os.name != "nt":
+                evidence.chmod(mode)
+                info = evidence.stat()
+                self.assertEqual(stat.S_IMODE(info.st_mode), mode)
+                self.assertEqual(info.st_uid, os.getuid())
             candidate = archive.Candidate(workspace, prefix, "a" * 64, binding["evidence_sha256"])
             report = {"qt_prefix": str(prefix), "mpv_include": str(workspace / "include"),
                       "mpv_library": str(workspace / "mpv.so"),
@@ -176,10 +184,24 @@ class CacheTest(unittest.TestCase):
                     patch("linux_qt_pc.verify_normalized", return_value=normalization), \
                     patch("linux_qt_pc.host_zlib", return_value={"zlib": "same"}), \
                     patch.object(archive.os, "link", side_effect=fake_link):
+                if mode != 0o600:
+                    with self.assertRaisesRegex(ValueError, "invalid Qt normalization evidence: qt-host-zlib.json"):
+                        archive.complete_qt(candidate, report)
+                    self.assertFalse((workspace / "qt-sdk-ready.json").exists())
+                    return
                 archive.complete_qt(candidate, report)
             receipt = json.loads((workspace / "qt-sdk-ready.json").read_text())
             self.assertEqual(receipt["archive_input"], binding)
             self.assertEqual(len(receipt["archive_input"]["archives"]), 10)
+
+    def test_ready_receipt_binds_all_copied_hashes(self):
+        self.check_ready_receipt(0o600)
+
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits are not enforced on Windows")
+    def test_writable_zlib_evidence_blocks_ready_receipt(self):
+        for mode in (0o620, 0o602):
+            with self.subTest(mode=oct(mode)):
+                self.check_ready_receipt(mode)
 
     def test_cached_evidence_failure_blocks_ready(self):
         with tempfile.TemporaryDirectory() as temporary:
