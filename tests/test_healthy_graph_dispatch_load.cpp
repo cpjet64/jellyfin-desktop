@@ -113,6 +113,45 @@ void TestHealthyGraphDispatch::lastLivenessCallbackRevokesLoadAuthority()
   victim.checkNoUnpause();
 }
 
+void TestHealthyGraphDispatch::lastLivenessCallbackRevokesClaimBeforeLoad()
+{
+  std::vector<char> callbacks;
+  {
+    Fixture control; control.initialize(); control.acceptGrantAndPermit(); control.live->trace = true;
+    DISPATCH_CHECK(control.graph->player_->dispatchNativeRestoreLoad(control.media->fileName()));
+    callbacks = control.live->callbacksAtSubmission;
+    DISPATCH_CHECK(control.live->loads == 1 && !callbacks.empty());
+  }
+  DISPATCH_CHECK(callbacks.back() == 'M' || callbacks.back() == 'E');
+  Fixture victim; victim.initialize(); victim.acceptGrantAndPermit();
+  auto state = victim.live; state->trace = true; state->triggerAt = callbacks.size();
+  const auto claim = std::atomic_load(&victim.graph->access_->intentClaim);
+  DISPATCH_CHECK(claim && claim->open());
+  state->finalCallbackHook = [claim] { claim->revoke(); };
+  DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreLoad(victim.media->fileName()));
+  DISPATCH_CHECK(state->finalCallbackFired && state->loads == 0 && state->seeks == 0);
+  victim.checkNoUnpause();
+}
+
+void TestHealthyGraphDispatch::lastLivenessCallbackExpiresLoadDeadline()
+{
+  std::vector<char> callbacks;
+  {
+    Fixture control; control.initialize(); control.acceptGrantAndPermit(); control.live->trace = true;
+    DISPATCH_CHECK(control.graph->player_->dispatchNativeRestoreLoad(control.media->fileName()));
+    callbacks = control.live->callbacksAtSubmission;
+    DISPATCH_CHECK(control.live->loads == 1 && !callbacks.empty());
+  }
+  DISPATCH_CHECK(callbacks.back() == 'M' || callbacks.back() == 'E');
+  Fixture victim; victim.initialize(); victim.acceptGrantAndPermit();
+  auto state = victim.live; state->trace = true; state->triggerAt = callbacks.size();
+  const auto deadline = victim.graph->normalDeadline_;
+  state->finalCallbackHook = [state, deadline] { state->clockNs = deadline; };
+  DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreLoad(victim.media->fileName()));
+  DISPATCH_CHECK(state->finalCallbackFired && state->loads == 0 && state->seeks == 0);
+  victim.checkNoUnpause();
+}
+
 void TestHealthyGraphDispatch::admittedLoadCannotRetry()
 {
   Fixture fixture; fixture.initialize(); fixture.acceptGrantAndPermit();
@@ -204,6 +243,8 @@ void TestHealthyGraphDispatch::runLoadCases()
   RUN_DISPATCH_CASE(clockCancellationBeforeLoadAdmission);
   RUN_DISPATCH_CASE(clockRevokesEndpointBeforeLoadAdmission);
   RUN_DISPATCH_CASE(lastLivenessCallbackRevokesLoadAuthority);
+  RUN_DISPATCH_CASE(lastLivenessCallbackRevokesClaimBeforeLoad);
+  RUN_DISPATCH_CASE(lastLivenessCallbackExpiresLoadDeadline);
   RUN_DISPATCH_CASE(admittedLoadCannotRetry);
   RUN_DISPATCH_CASE(cleanupRetainsOriginalOwnerAfterLoad);
   RUN_DISPATCH_CASE(wrongOwnerRejectsDirectLoad);

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <atomic>
 #include <functional>
+#include <limits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -69,6 +70,7 @@ class TestHealthyGraphDispatch {
   struct Liveness {
     std::atomic_bool module{true}, endpoints{true};
     std::atomic<std::int64_t> clockOffset{0};
+    std::atomic<qint64> clockNs{0};
     std::atomic_int loads{0}, seeks{0};
     std::atomic_bool pausedLoad{false};
     std::function<void()> moduleHook, endpointHook, clockHook, submissionHook;
@@ -108,6 +110,8 @@ class TestHealthyGraphDispatch {
   static void clockCancellationBeforeLoadAdmission();
   static void clockRevokesEndpointBeforeLoadAdmission();
   static void lastLivenessCallbackRevokesLoadAuthority();
+  static void lastLivenessCallbackRevokesClaimBeforeLoad();
+  static void lastLivenessCallbackExpiresLoadDeadline();
   static void admittedLoadCannotRetry();
   static void cleanupRetainsOriginalOwnerAfterLoad();
   static void wrongOwnerRejectsDirectLoad();
@@ -117,8 +121,10 @@ class TestHealthyGraphDispatch {
   static void bothGrantsLoadPaused();
   static void permitThenLostEndpointRejectsDirectSeek();
   static void revocationDuringSeekAuthorization();
+  static void sameGenerationDifferentClaimRejectsSeek();
   static void clockInvalidatesTargetBeforeSeekAdmission();
   static void lastLivenessCallbackInvalidatesTarget();
+  static void lastLivenessCallbackClosesSeekAdmission();
   static void targetAckRequiredBeforeSeek();
   static void staleTargetAckRejectsSeek();
   static void otherRendererAckCannotAuthorizeSeek();
@@ -129,6 +135,7 @@ class TestHealthyGraphDispatch {
   static void wrongOwnerRejectsDirectSeek();
   static void admittedSeekCannotRetry();
   static void desiredPausedCompletesHold();
+  static void retainedHoldCannotOutliveTargetQualification();
   static void cancelAfterTargetArmRejectsSeek();
   static void wrongEntryCannotQualifyBaseline();
   static void bootstrapRejectsMalformed();

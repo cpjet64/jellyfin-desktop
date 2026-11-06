@@ -38,11 +38,17 @@ void TestHealthyGraphDispatch::Fixture::initialize(bool desiredPaused)
 {
   fixture_restart::disarmCapture();
   const auto start = now();
+  DISPATCH_CHECK(start >= 0 && start <= std::numeric_limits<std::int64_t>::max() - 40000000000LL);
   auto state = live;
   const auto clock = [state] {
     recordCallback(state, 'C');
     auto hook = std::move(state->clockHook); if (hook) hook();
-    return now() + state->clockOffset.load();
+    const auto current = now(), offset = state->clockOffset.load();
+    DISPATCH_CHECK((offset <= 0 || current <= std::numeric_limits<std::int64_t>::max() - offset) &&
+                   (offset >= 0 || current >= std::numeric_limits<std::int64_t>::min() - offset));
+    const auto sampled = static_cast<qint64>(current + offset);
+    state->clockNs.store(sampled);
+    return sampled;
   };
   prepared = FixtureGraph::prepare(9, start + 10000000000LL, start + 40000000000LL, clock);
   DISPATCH_CHECK(prepared); graph = prepared->graphOnGuiThread(); DISPATCH_CHECK(graph);
@@ -80,8 +86,11 @@ void TestHealthyGraphDispatch::Fixture::initialize(bool desiredPaused)
     auto hook = std::move(state->endpointHook); if (hook) hook();
     return state->endpoints.load();
   };
+  const std::shared_ptr<const std::atomic_bool> moduleState(state, &state->module);
+  const std::shared_ptr<const std::atomic_bool> endpointState(state, &state->endpoints);
+  const std::shared_ptr<const std::atomic<qint64>> clockState(state, &state->clockNs);
   DISPATCH_CHECK(graph->installRestoreBootstrapForTest(binding, 5, &tokens->grant, &tokens->control,
-                                                        &tokens->ack, tokens, module, endpoints));
+      &tokens->ack, tokens, module, endpoints, moduleState, endpointState, clockState));
   installRenderer();
   DISPATCH_CHECK(graph->restoreInitialize(media->fileName()));
 }

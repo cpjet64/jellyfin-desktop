@@ -26,6 +26,21 @@ void TestHealthyGraphDispatch::revocationDuringSeekAuthorization()
   }
 }
 
+void TestHealthyGraphDispatch::sameGenerationDifferentClaimRejectsSeek()
+{
+  Fixture fixture; fixture.initialize(); fixture.acceptGrantAndPermit();
+  DISPATCH_CHECK(fixture.graph->restoreLoad()); fixture.replyLoad(42);
+  fixture.observe(1, 42, "0.000"); fixture.qualifyBaseline(); fixture.armTarget();
+  auto original = std::atomic_load(&fixture.graph->access_->intentClaim);
+  DISPATCH_CHECK(original && original->open());
+  auto other = std::make_shared<RetirementClaim>(original->generation());
+  DISPATCH_CHECK(other != original && other->open());
+  std::atomic_store(&fixture.graph->access_->intentClaim, other);
+  DISPATCH_CHECK(!fixture.graph->player_->dispatchNativeRestoreSeek());
+  DISPATCH_CHECK(fixture.live->loads == 1 && fixture.live->seeks == 0);
+  fixture.checkNoUnpause();
+}
+
 void TestHealthyGraphDispatch::clockInvalidatesTargetBeforeSeekAdmission()
 {
   Fixture fixture; fixture.initialize(); fixture.acceptGrantAndPermit();
@@ -61,6 +76,36 @@ void TestHealthyGraphDispatch::lastLivenessCallbackInvalidatesTarget()
   DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreSeek());
   DISPATCH_CHECK(state->finalCallbackFired && state->loads == 1 && state->seeks == 0);
   victim.checkNoUnpause();
+}
+
+void TestHealthyGraphDispatch::lastLivenessCallbackClosesSeekAdmission()
+{
+  std::vector<char> callbacks;
+  {
+    Fixture control; control.initialize(); control.acceptGrantAndPermit();
+    DISPATCH_CHECK(control.graph->restoreLoad()); control.replyLoad(42);
+    control.observe(1, 42, "0.000"); control.qualifyBaseline(); control.armTarget();
+    control.live->trace = true;
+    DISPATCH_CHECK(control.graph->player_->dispatchNativeRestoreSeek());
+    callbacks = control.live->callbacksAtSubmission;
+    DISPATCH_CHECK(control.live->seeks == 1 && !callbacks.empty());
+  }
+  DISPATCH_CHECK(callbacks.back() == 'M' || callbacks.back() == 'E');
+  for (int mode = 0; mode != 2; ++mode) {
+    Fixture victim; victim.initialize(); victim.acceptGrantAndPermit();
+    DISPATCH_CHECK(victim.graph->restoreLoad()); victim.replyLoad(42);
+    victim.observe(1, 42, "0.000"); victim.qualifyBaseline(); victim.armTarget();
+    auto state = victim.live; state->trace = true; state->triggerAt = callbacks.size();
+    const auto claim = std::atomic_load(&victim.graph->access_->intentClaim);
+    DISPATCH_CHECK(claim && claim->open());
+    const auto deadline = victim.graph->normalDeadline_;
+    state->finalCallbackHook = [state, claim, deadline, mode] {
+      if (mode == 0) claim->revoke(); else state->clockNs = deadline;
+    };
+    DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreSeek());
+    DISPATCH_CHECK(state->finalCallbackFired && state->loads == 1 && state->seeks == 0);
+    victim.checkNoUnpause();
+  }
 }
 
 void TestHealthyGraphDispatch::targetAckRequiredBeforeSeek()
@@ -166,6 +211,22 @@ void TestHealthyGraphDispatch::desiredPausedCompletesHold()
   fixture.checkNoUnpause();
 }
 
+void TestHealthyGraphDispatch::retainedHoldCannotOutliveTargetQualification()
+{
+  using Progress = FixtureGraph::PlaybackProgress;
+  Fixture fixture; fixture.initialize(); fixture.acceptGrantAndPermit();
+  DISPATCH_CHECK(fixture.graph->restoreLoad()); fixture.replyLoad(42);
+  fixture.observe(1, 42, "0.000"); fixture.qualifyBaseline(); fixture.armTarget();
+  DISPATCH_CHECK(fixture.graph->restoreSeek());
+  DISPATCH_CHECK(fixture.renderer->queue()); fixture.renderer->publish(90);
+  fixture.completeSeekReplyAndRestart();
+  DISPATCH_CHECK(fixture.drivePausedHold() && fixture.graph->player_->m_restorePausedProof);
+  fixture.renderer->replaceFramebuffer();
+  DISPATCH_CHECK(fixture.graph->pollRestorePlayback() != Progress::Ready);
+  DISPATCH_CHECK(fixture.live->loads == 1 && fixture.live->seeks == 1);
+  fixture.checkNoUnpause();
+}
+
 void TestHealthyGraphDispatch::wrongEntryCannotQualifyBaseline()
 {
   Fixture fixture; fixture.initialize(); fixture.acceptGrantAndPermit();
@@ -260,8 +321,10 @@ void TestHealthyGraphDispatch::runSeekCases()
 #define RUN_DISPATCH_CASE(name) do { dispatchCase = #name; name(); } while (false)
   RUN_DISPATCH_CASE(permitThenLostEndpointRejectsDirectSeek);
   RUN_DISPATCH_CASE(revocationDuringSeekAuthorization);
+  RUN_DISPATCH_CASE(sameGenerationDifferentClaimRejectsSeek);
   RUN_DISPATCH_CASE(clockInvalidatesTargetBeforeSeekAdmission);
   RUN_DISPATCH_CASE(lastLivenessCallbackInvalidatesTarget);
+  RUN_DISPATCH_CASE(lastLivenessCallbackClosesSeekAdmission);
   RUN_DISPATCH_CASE(targetAckRequiredBeforeSeek);
   RUN_DISPATCH_CASE(staleTargetAckRejectsSeek);
   RUN_DISPATCH_CASE(otherRendererAckCannotAuthorizeSeek);
@@ -274,5 +337,6 @@ void TestHealthyGraphDispatch::runSeekCases()
   RUN_DISPATCH_CASE(restartBeforeSeekReplyCannotQualify);
   RUN_DISPATCH_CASE(earlyObservationCannotQualify);
   RUN_DISPATCH_CASE(desiredPausedCompletesHold);
+  RUN_DISPATCH_CASE(retainedHoldCannotOutliveTargetQualification);
 #undef RUN_DISPATCH_CASE
 }
