@@ -33,6 +33,8 @@ private slots:
 #ifdef HEALTHY_COPIED_SOURCE_TEST
   void bindingMustPrecedeArm();
   void queuedStopReplyAfterContainment();
+  void pendingLoadSettlesBeforeStop();
+  void pendingLoadExpiresBeforeStop();
 #endif
 };
 
@@ -349,6 +351,52 @@ void TestPlayerRestoreCleanup::queuedStopReplyAfterContainment()
   QCOMPARE(dispatches, 1);
   QVERIFY(!player.m_restoreCleanup.idle.requested);
   QVERIFY(!player.m_restoreCleanup.position.requested);
+  player.m_healthyStopEventWait = {};
+}
+
+void TestPlayerRestoreCleanup::pendingLoadSettlesBeforeStop()
+{
+  PlayerComponent player;
+  QVERIFY(arm(player, true));
+  int stops = 0;
+  player.m_restoreDispatch = [&](quint64, const char**) { ++stops; return 0; };
+  mpv_event none{}; none.event_id = MPV_EVENT_NONE;
+  player.m_healthyStopEventWait = [&] { return &none; };
+  QVERIFY(beginCleanup(player));
+  QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Pending);
+  QCOMPARE(stops, 0);
+
+  mpv_node value{}; value.format = MPV_FORMAT_INT64; value.u.int64 = 42;
+  char field[] = "playlist_entry_id"; char* fields[] = {field};
+  mpv_node_list list{}; list.num = 1; list.keys = fields; list.values = &value;
+  mpv_event_command command{}; command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
+  mpv_event reply{}; reply.event_id = MPV_EVENT_COMMAND_REPLY;
+  reply.reply_userdata = (quint64{1} << 63) | 2; reply.data = &command;
+  player.observeNativeReceipt(&reply);
+  QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Pending);
+  QCOMPARE(stops, 1);
+  QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Pending);
+  QCOMPARE(stops, 1);
+  QVERIFY(!player.m_nativeReceipts.snapshot().started);
+  player.m_healthyStopEventWait = {};
+}
+
+void TestPlayerRestoreCleanup::pendingLoadExpiresBeforeStop()
+{
+  PlayerComponent player;
+  QVERIFY(arm(player, true));
+  qint64 now = 10;
+  player.m_healthyStopClock = [&] { return now; };
+  int stops = 0;
+  player.m_restoreDispatch = [&](quint64, const char**) { ++stops; return 0; };
+  mpv_event none{}; none.event_id = MPV_EVENT_NONE;
+  player.m_healthyStopEventWait = [&] { return &none; };
+  QVERIFY(beginCleanup(player));
+  QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Pending);
+  QCOMPARE(stops, 0);
+  now = 100;
+  QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Failed);
+  QCOMPARE(stops, 0);
   player.m_healthyStopEventWait = {};
 }
 #endif
