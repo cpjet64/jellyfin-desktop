@@ -10,34 +10,75 @@
 #include <QThread>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <thread>
 
 using namespace HealthyRetirement;
 #define CHECK(value) do { if (!(value)) { std::fprintf(stderr, "check failed at line %d: %s\n", __LINE__, #value); std::abort(); } } while (false)
 
+class RenderWorker {
+public:
+  RenderWorker() {
+    thread_ = QThread::create([this] { run(); }); thread_->start();
+    std::unique_lock<std::mutex> lock(mutex_);
+    CHECK(cv_.wait_for(lock, std::chrono::seconds(3), [this] { return ready_; }));
+  }
+  ~RenderWorker() {
+    { std::lock_guard<std::mutex> lock(mutex_); stop_ = true; }
+    cv_.notify_all(); CHECK(thread_->wait(3000)); delete thread_;
+  }
+  std::uintptr_t threadId() const { return threadId_; }
+  void invoke(std::function<void()> work) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    CHECK(!pending_ && !stop_);
+    work_ = std::move(work); pending_ = true; complete_ = false; cv_.notify_all();
+    CHECK(cv_.wait_for(lock, std::chrono::seconds(3), [this] { return complete_; }));
+  }
+private:
+  void run() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    threadId_ = reinterpret_cast<std::uintptr_t>(QThread::currentThreadId());
+    ready_ = true; cv_.notify_all();
+    for (;;) {
+      cv_.wait(lock, [this] { return pending_ || stop_; });
+      if (stop_) return;
+      auto work = std::move(work_); pending_ = false;
+      lock.unlock(); work(); lock.lock(); complete_ = true; cv_.notify_all();
+    }
+  }
+  std::mutex mutex_;
+  std::condition_variable cv_;
+  std::function<void()> work_;
+  std::uintptr_t threadId_ = 0;
+  bool ready_ = false, pending_ = false, complete_ = false, stop_ = false;
+  QThread* thread_ = nullptr;
+};
+
 class TestCaptureCapability {
   using Bridge = CaptureBridge;
-  static constexpr Identity identity{11, 12, 13};
+  Identity identity() const { return {reinterpret_cast<std::uintptr_t>(QThread::currentThreadId()), 12, 13}; }
   static FramebufferObservation fbo() { return {7, 160, 90, 0, 0, 0, true, true}; }
   std::shared_ptr<Bridge> bridge_;
   std::optional<Bridge::Ticket> ticket_;
 public:
   explicit TestCaptureCapability(const std::shared_ptr<Slot>& slot) : bridge_(slot->captureBridge()) {}
-  bool initialize() { return bridge_ && bridge_->rendererCreated(identity) && bridge_->framebuffer(identity, fbo()); }
+  bool initialize() { return bridge_ && bridge_->rendererCreated(identity()) && bridge_->framebuffer(identity(), fbo()); }
   bool queue()
   {
-    if (!bridge_->framebufferCurrent(identity, fbo())) return false;
-    ticket_ = bridge_->issue(identity, fixture_restart::nextRenderSerial());
+    if (!bridge_->framebufferCurrent(identity(), fbo())) return false;
+    ticket_ = bridge_->issue(identity(), fixture_restart::nextRenderSerial());
     return ticket_->request != 0;
   }
   void deliver()
   {
     CHECK(ticket_);
     QImage image(160, 90, QImage::Format_RGBA8888); image.fill(Qt::black);
-    bridge_->publish(*ticket_, identity, image, 0, 0, 0, 0);
+    bridge_->publish(*ticket_, identity(), image, 0, 0, 0, 0);
   }
   bool deliverOldTo(TestCaptureCapability& replacement)
   {
@@ -46,17 +87,16 @@ public:
         ticket_->framebuffer != replacement.ticket_->framebuffer) return false;
     auto stale = *ticket_; stale.serial = replacement.ticket_->serial;
     QImage image(160, 90, QImage::Format_RGBA8888); image.fill(Qt::black);
-    replacement.bridge_->publish(stale, identity, image, 0, 0, 0, 0);
+    replacement.bridge_->publish(stale, identity(), image, 0, 0, 0, 0);
     return fixture_restart::takeCaptures().empty();
   }
 };
-constexpr Identity TestCaptureCapability::identity;
-
 class TestHealthyGraphLifetime {
   struct Scenario {
     static constexpr std::int64_t deadline = 31000000100LL;
     std::atomic<std::int64_t> now{10};
     std::atomic<bool> capability{true};
+    std::shared_ptr<RenderWorker> worker = std::make_shared<RenderWorker>();
     std::shared_ptr<std::atomic_bool> revoked = std::make_shared<std::atomic_bool>(false);
     std::shared_ptr<RetirementClaim> claim = std::make_shared<RetirementClaim>(9);
     std::unique_ptr<PreparedGraph> prepared;
@@ -87,20 +127,26 @@ class TestHealthyGraphLifetime {
       CHECK(slot->bindModuleForTest([this] { return capability.load(); }, revoked));
       CHECK(slot->beginCreation() && slot->beforeCreate() && slot->recordCreated(&context));
       Operations ops;
-      ops.currentIdentity = [] { return Identity{11, 12, 13}; };
+      ops.currentIdentity = [] { return Identity{reinterpret_cast<std::uintptr_t>(QThread::currentThreadId()), 12, 13}; };
       ops.unregisterCallback = [](void*) {};
       ops.invalidateQueued = [](std::uint64_t) { return true; };
-      ops.freeContext = [this](void*) { ++frees; };
+      ops.freeContext = [this](void*) {
+        CHECK(reinterpret_cast<std::uintptr_t>(QThread::currentThreadId()) == worker->threadId());
+        ++frees;
+      };
       ops.clearPointer = [](void*) { return true; };
-      lifetime = slot->install({11, 12, 13}, &context, ops); CHECK(lifetime);
-      renderer = std::make_unique<TestCaptureCapability>(slot); CHECK(renderer->initialize());
+      CHECK(worker->threadId() != reinterpret_cast<std::uintptr_t>(QThread::currentThreadId()));
+      lifetime = slot->install({worker->threadId(), 12, 13}, &context, ops); CHECK(lifetime);
+      renderer = std::make_unique<TestCaptureCapability>(slot);
+      worker->invoke([this] { CHECK(renderer->initialize()); });
       CHECK(graph->capture_->request({1, 2, 3, 4, 5, 0}, 6, CaptureBridge::Phase::Baseline, claim));
-      CHECK(renderer->queue());
+      worker->invoke([this] { CHECK(renderer->queue()); });
       owner = std::make_shared<Owner>(prepared->containment(), deadline, [this] { return now.load(); },
         [this](std::shared_ptr<RenderJob> value) { job = std::move(value); return schedulerBound; }, lifetime);
       installRetirement(slot);
       graph->owner_ = owner;
       CHECK(graph->bindTestFinalizer([this] { return finalize(); }, [this] {
+        CHECK(QThread::currentThread() == QCoreApplication::instance()->thread());
         ++destructors; observerSawNull = !access->graph.load(); releaseCallback = true;
       }));
     }
@@ -111,7 +157,8 @@ class TestHealthyGraphLifetime {
       if (reenter) nestedRelease = owner->acceptAndRelease();
       if (race) {
         std::thread callback([this] {
-          renderer->deliver(); raceRejected = fixture_restart::takeCaptures().empty();
+          worker->invoke([this] { renderer->deliver(); });
+          raceRejected = fixture_restart::takeCaptures().empty();
         });
         callback.join();
       }
@@ -139,7 +186,7 @@ class TestHealthyGraphLifetime {
     {
       CHECK(retirement->request() && job);
       CHECK(access->graph.load() == graph && owner->retained());
-      job->run(); job.reset();
+      worker->invoke([this] { job->run(); }); job.reset();
     }
     FixtureGraph::Progress poll()
     {
@@ -160,13 +207,13 @@ class TestHealthyGraphLifetime {
     CHECK(s.finalizers == 1 && s.destructors == 1 && s.observerSawNull && !s.owner->retained());
     CHECK(s.frees == 1 && s.events == 1 && s.joins == 1 && s.destroys == 1);
     CHECK(!s.access->graph.load());
-    s.renderer->deliver(); CHECK(fixture_restart::takeCaptures().empty());
+    s.worker->invoke([&] { s.renderer->deliver(); }); CHECK(fixture_restart::takeCaptures().empty());
     CHECK(!s.owner->acceptAndRelease() && s.finalizers == 1 && s.destructors == 1);
     CHECK(s.frees == 1 && s.events == 1 && s.joins == 1 && s.destroys == 1);
-    Scenario replacement; replacement.initialize();
-    CHECK(s.renderer->deliverOldTo(*replacement.renderer));
+    Scenario replacement; replacement.worker = s.worker; replacement.initialize();
+    replacement.worker->invoke([&] { CHECK(s.renderer->deliverOldTo(*replacement.renderer)); });
     CHECK(replacement.access->graph.load() == replacement.graph && !replacement.graph->captureTargetReady());
-    replacement.renderer->deliver(); CHECK(fixture_restart::takeCaptures().size() == 1);
+    replacement.worker->invoke([&] { replacement.renderer->deliver(); }); CHECK(fixture_restart::takeCaptures().size() == 1);
   }
   static void incompleteClosureRetainsGraph()
   {
@@ -175,7 +222,7 @@ class TestHealthyGraphLifetime {
     CHECK(!s.owner->acceptAndRelease());
     CHECK(s.access->graph.load() == s.graph && s.owner->retained() && !s.finalizers && !s.destructors);
     CHECK(s.frees == 1 && s.events >= 1 && !s.joins && !s.destroys);
-    s.renderer->deliver(); CHECK(fixture_restart::takeCaptures().empty());
+    s.worker->invoke([&] { s.renderer->deliver(); }); CHECK(fixture_restart::takeCaptures().empty());
   }
   static void wrongGenerationRetainsGraph()
   {
@@ -204,12 +251,21 @@ class TestHealthyGraphLifetime {
   static void canceledRetirementRetainsGraph()
   {
     Scenario s; s.initialize(); CHECK(s.retirement->request() && s.job);
-    s.claim->revoke(); s.job->run(); s.job.reset();
+    s.claim->revoke(); s.worker->invoke([&] { s.job->run(); }); s.job.reset();
     CHECK(s.retirement->poll() == FixtureGraph::Progress::Failed);
     CHECK(s.lifetime->facts().phase == Phase::Retained);
     CHECK(s.owner->retained() && s.access->graph.load() == s.graph && !s.finalizers && !s.destructors);
     CHECK(!s.frees && !s.events && !s.joins && !s.destroys);
-    s.renderer->deliver(); CHECK(fixture_restart::takeCaptures().empty());
+    s.worker->invoke([&] { s.renderer->deliver(); }); CHECK(fixture_restart::takeCaptures().empty());
+  }
+  static void wrongThreadRetainsGraph()
+  {
+    Scenario s; s.initialize(); CHECK(s.retirement->request() && s.job);
+    s.job->run(); s.job.reset();
+    CHECK(s.retirement->poll() == FixtureGraph::Progress::Failed);
+    CHECK(s.lifetime->facts().phase == Phase::Retained);
+    CHECK(s.owner->retained() && s.access->graph.load() == s.graph);
+    CHECK(!s.frees && !s.events && !s.joins && !s.destroys && !s.finalizers && !s.destructors);
   }
   static void queuedCallbackOutlivesGraph()
   {
@@ -218,12 +274,13 @@ class TestHealthyGraphLifetime {
     auto* release = &s.releaseCallback;
     auto* finished = &s.callbackFinished;
     auto* rejected = &s.callbackRejected;
-    std::thread callback([renderer, release, finished, rejected] {
+    auto worker = s.worker;
+    std::thread callback([renderer, release, finished, rejected, worker] {
       const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(3);
       while (!release->load() && std::chrono::steady_clock::now() < limit)
         std::this_thread::yield();
       if (release->load()) {
-        renderer->deliver();
+        worker->invoke([renderer] { renderer->deliver(); });
         *rejected = fixture_restart::takeCaptures().empty();
       }
       *finished = true;
@@ -241,9 +298,11 @@ class TestHealthyGraphLifetime {
   {
     Scenario s; s.initialize();
     auto* renderer = s.renderer.get();
+    auto worker = s.worker;
     bool delivered = false, rejected = false;
-    CHECK(QMetaObject::invokeMethod(QCoreApplication::instance(), [renderer, &delivered, &rejected] {
-      renderer->deliver(); rejected = fixture_restart::takeCaptures().empty(); delivered = true;
+    CHECK(QMetaObject::invokeMethod(QCoreApplication::instance(), [renderer, worker, &delivered, &rejected] {
+      worker->invoke([renderer] { renderer->deliver(); });
+      rejected = fixture_restart::takeCaptures().empty(); delivered = true;
     }, Qt::QueuedConnection));
     s.start(); CHECK(s.poll() == FixtureGraph::Progress::Closed);
     CHECK(s.destructors == 1 && s.observerSawNull && !delivered);
@@ -255,6 +314,7 @@ public:
   {
     qualifiedDestruction(); incompleteClosureRetainsGraph(); wrongGenerationRetainsGraph();
     rejectedFinalizerRetainsGraph(); reentrantReleaseAndQueuedDelivery(); canceledRetirementRetainsGraph();
+    wrongThreadRetainsGraph();
     queuedCallbackOutlivesGraph();
     queuedQtDeliveryAfterDestruction();
   }
