@@ -18,7 +18,9 @@ DWORD resultError = ERROR_IO_INCOMPLETE;
 DWORD errorBytes = 0;
 DWORD cancelError = ERROR_SUCCESS;
 bool reenterCancel = false;
+bool reenterRead = false;
 WindowsRestartIo* reentrantIo = nullptr;
+bool readRetained = false;
 int closeCount = 0;
 int resultCalls = 0;
 HANDLE WINAPI eventCreate(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCWSTR)
@@ -32,8 +34,13 @@ BOOL WINAPI writeFake(HANDLE, LPCVOID, DWORD, LPDWORD, LPOVERLAPPED)
 BOOL WINAPI readFake(HANDLE, LPVOID buffer, DWORD size, LPDWORD count, LPOVERLAPPED overlap)
 {
   pendingBuffer = buffer; pendingOverlap = overlap;
+  if (reenterRead) {
+    reenterRead = false;
+    readRetained = !reentrantIo->release() && reentrantIo->pending();
+  }
   if (readMode == 1) { errorCode = ERROR_BROKEN_PIPE; return FALSE; }
   if (readMode == 2) { readMode = 1; *count = 1; return TRUE; }
+  if (readMode == 3) { *count = 1; errorCode = ERROR_BROKEN_PIPE; return FALSE; }
   if (synchronousLate) { clockValue = 5; *count = size; return TRUE; }
   errorCode = ERROR_IO_PENDING; return FALSE;
 }
@@ -138,7 +145,7 @@ void resetTracked()
   resultEof = false; resultError = ERROR_IO_INCOMPLETE; cancelError = ERROR_SUCCESS;
   completedBytes = 0; errorBytes = 0; clockValue = 1; pendingBuffer = nullptr;
   pendingOverlap = nullptr; reenterCancel = false; reentrantIo = nullptr; closeCount = 0;
-  resultCalls = 0;
+  resultCalls = 0; reenterRead = false; readRetained = false;
 }
 
 WindowsRestartIo* trackedRead()
@@ -246,6 +253,24 @@ void trackedTimeoutAndReentrantCompletion()
   CHECK(resultCalls == 1);
   checkCompleted(io, "z", 1);
 }
+
+void trackedSynchronousErrorsAndReentrantSubmission()
+{
+  resetTracked(); readMode = 3;
+  auto* io = new WindowsRestartIo(fakeApi());
+  CHECK(io->beginTrackedRead(reinterpret_cast<HANDLE>(2), 8, 10) == IoProgress::Failed);
+  const auto uncertain = io->settlement();
+  CHECK(uncertain && uncertain->outcome == WindowsRestartIo::Settlement::Outcome::Uncertain);
+  CHECK(io->consumeSettlement(uncertain->operation) && io->release());
+  resetTracked(); io = new WindowsRestartIo(fakeApi()); reentrantIo = io; reenterRead = true;
+  CHECK(io->beginTrackedRead(reinterpret_cast<HANDLE>(2), 8, 10) == IoProgress::Pending);
+  CHECK(readRetained && !io->release());
+  resultError = ERROR_OPERATION_ABORTED;
+  CHECK(io->cancel() == IoProgress::Failed);
+  const auto aborted = io->settlement();
+  CHECK(aborted && aborted->outcome == WindowsRestartIo::Settlement::Outcome::Aborted);
+  CHECK(io->consumeSettlement(aborted->operation) && io->release());
+}
 }
 int main()
 {
@@ -262,4 +287,5 @@ int main()
   trackedAbortAndUnknownExtent();
   trackedPartialReadsRemainDistinct();
   trackedTimeoutAndReentrantCompletion();
+  trackedSynchronousErrorsAndReentrantSubmission();
 }
