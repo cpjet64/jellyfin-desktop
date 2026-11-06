@@ -15,6 +15,10 @@ public:
   RestartChildPlayer(FixtureRestartAdapter& player, ChildGate& gate, const void* grantChannel,
                      const void* controlChannel, quint64 expectedRun, quint64 launch,
                      QByteArray expectedDigest, QString fixturePath, std::function<qint64()> clock);
+  RestartChildPlayer(FixtureRestartAdapter& player, ChildGate& gate, const void* grantChannel,
+                     const void* controlChannel, quint64 expectedRun, quint64 launch,
+                     QByteArray expectedDigest, QString fixturePath, std::function<qint64()> clock,
+                     qint64 originalDeadline);
   RestartChildPlayer(ChildGate& gate, const void* grantChannel, const void* controlChannel,
                      quint64 expectedRun, quint64 launch, QByteArray expectedDigest,
                      RestartChild::Actions actions);

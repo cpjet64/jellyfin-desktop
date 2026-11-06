@@ -34,6 +34,28 @@ bool RestartChildPlayer::grant(const void* channel, const QByteArray& frame, qin
 RestartChildPlayer::RestartChildPlayer(ChildGate& gate, const void* grantChannel, const void* controlChannel,
     quint64 expectedRun, quint64 launch, QByteArray digest, RestartChild::Actions actions)
   : child_(gate, grantChannel, controlChannel, expectedRun, launch, std::move(digest), std::move(actions)) {}
+#ifdef HEALTHY_RESTART_DIAGNOSTIC
+RestartChildPlayer::RestartChildPlayer(FixtureRestartAdapter& player, ChildGate& gate,
+    const void* grantChannel, const void* controlChannel, quint64 expectedRun, quint64 launch,
+    QByteArray digest, QString path, std::function<qint64()> clock, qint64 deadline)
+  : child_(gate, grantChannel, controlChannel, expectedRun, launch, std::move(digest),
+      { {}, {}, [&player, path = std::move(path)] { return player.load(path); },
+        [&player] { return player.seek(); }, std::move(clock),
+        [&player] { return player.armActual(); },
+        [&player, deadline](quint64 sequence, quint64 revision) {
+          return player.beginCleanup(sequence, revision, deadline);
+        }, [&player] { return player.pollCleanup(); } })
+{
+}
+#else
+RestartChildPlayer::RestartChildPlayer(FixtureRestartAdapter& player, ChildGate& gate,
+    const void* grantChannel, const void* controlChannel, quint64 expectedRun, quint64 launch,
+    QByteArray digest, QString path, std::function<qint64()> clock, qint64 deadline)
+  : child_(gate, grantChannel, controlChannel, expectedRun, launch, std::move(digest), {})
+{
+  Q_UNUSED(player); Q_UNUSED(path); Q_UNUSED(clock); Q_UNUSED(deadline);
+}
+#endif
 bool RestartChildPlayer::grant(const void* channel, const QByteArray& frame, qint64 now, bool eof, QByteArray& response)
 { return child_.grant(channel, frame, now, eof, response); }
 bool RestartChildPlayer::control(const void* channel, const QByteArray& request, QByteArray& response)
