@@ -24,7 +24,7 @@ bool PlayerComponent::requestNativeObservation(PlaybackNativeReceipts::Key key, 
   const auto receipt = m_nativeReceipts.snapshot();
   if (!intentControlThread() || m_nativeObservation.pending || id <= m_lastObservationId ||
       id > PlaybackIntent::MaxSafeInteger || durationMs != FixtureDurationMs || !sameKey(key, receipt.key) ||
-      receipt.invalid || !receipt.replyOk || !receipt.started || receipt.ended ||
+      receipt.invalid || !receipt.replyOk || !receipt.started || receipt.ended || !restoreObservationAllowed() ||
       key.host != m_receiptHost || key.core != m_mpvGeneration ||
       key.revision != m_playbackIntent.snapshot().revision) return false;
   m_lastObservationId = id;
@@ -34,6 +34,7 @@ bool PlayerComponent::requestNativeObservation(PlaybackNativeReceipts::Key key, 
   m_nativeObservation.id = id;
   m_nativeObservation.durationMs = durationMs;
   m_nativeObservation.paused = paused;
+  m_nativeObservation.postSeek = restorePostSeekReady();
   m_nativeObservation.pending = true;
   m_nativeObservation.requestedNs = monotonicNs();
   const char* args[] = {"expand-text", NativePlaybackObservation::expression(), nullptr};
@@ -43,6 +44,16 @@ bool PlayerComponent::requestNativeObservation(PlaybackNativeReceipts::Key key, 
   m_nativeObservation.accepted = result >= 0;
   if (result < 0) m_nativeObservation.pending = false;
   return result >= 0;
+#endif
+}
+
+bool PlayerComponent::nativePostSeekObservationCurrent() const
+{
+#ifdef MPVQT_EXTERNAL_EVENTS
+  return m_nativeObservation.postSeek && restorePostSeekReady() && nativeObservationCurrent() &&
+         qAbs(m_nativeObservation.positionMs - m_nativeRestore.grant.positionMs) <= 100;
+#else
+  return false;
 #endif
 }
 
