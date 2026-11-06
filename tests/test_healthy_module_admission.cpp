@@ -185,6 +185,21 @@ void bindingLossDoesNotWaitOrPublish()
     CHECK(!claim->open() && !endpoints->admissionSnapshot(7, control, ack));
   }
 }
+
+void containmentBeforeClaimPublication()
+{
+  moduleLive = endpointLive = true;
+  auto claim = std::make_shared<RetirementClaim>(7);
+  auto module = VerifiedModule::forAccessorTest(7, 42, validModule, nullptr);
+  const EndpointInput input[] = {{EndpointRole::Grant, 1}, {EndpointRole::Control, 2}, {EndpointRole::Ack, 3}};
+  auto endpoints = ChildEndpoints::createForTest(module, 7, 100, EndpointMode::Restore, input, operations());
+  CHECK(endpoints);
+  const auto control = endpoints->token(EndpointRole::Control), ack = endpoints->token(EndpointRole::Ack);
+  endpoints->setAdmissionBeforePublishHookForTest(loseEndpoints, endpoints.get());
+  CHECK(!endpoints->bindAdmissionClaim(claim, 7));
+  CHECK(claim->contained() && !claim->open());
+  CHECK(!endpoints->admissionSnapshot(7, control, ack));
+}
 }
 
 int main()
@@ -196,4 +211,5 @@ int main()
   lastCallbacksCannotHideLoss();
   cancellationLossAndEmptyAbort();
   bindingLossDoesNotWaitOrPublish();
+  containmentBeforeClaimPublication();
 }

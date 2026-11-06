@@ -21,6 +21,8 @@ struct ChildEndpoints::Operations {
   bool testOnly = false;
   void (*testBindHook)(void*) noexcept = nullptr;
   void* testBindContext = nullptr;
+  void (*testBeforePublishHook)(void*) noexcept = nullptr;
+  void* testBeforePublishContext = nullptr;
 #endif
 };
 #endif
@@ -37,14 +39,16 @@ struct ChildEndpoints::State {
   std::shared_ptr<const VerifiedModule> module;
   std::uint64_t generation = 0, deadline = 0;
   EndpointMode mode = EndpointMode::Source;
-  mutable std::atomic_int admissionState{0}; // unbound, bound, lost
+  enum AdmissionBits { Bound = 1, Lost = 2, Contained = 4 };
+  mutable std::atomic_int admissionState{0};
   mutable std::atomic_bool controlLive{false}, ackLive{false};
   std::shared_ptr<HealthyRetirement::RetirementClaim> admissionClaim;
   void loseAdmission(bool contain = false) const noexcept {
     auto claim = std::atomic_load(&admissionClaim);
     if (!claim) {
       int expected = 0;
-      if (admissionState.compare_exchange_strong(expected, 3)) {
+      const int lost = Lost | (contain ? Contained : 0);
+      if (admissionState.compare_exchange_strong(expected, lost)) {
         if (const auto late = std::atomic_load(&admissionClaim)) {
           if (contain) late->contain(); else late->revoke();
         }
@@ -53,7 +57,7 @@ struct ChildEndpoints::State {
       claim = std::atomic_load(&admissionClaim);
     }
     if (claim) { if (contain) claim->contain(); else claim->revoke(); }
-    admissionState.store(3);
+    admissionState.fetch_or(Lost | (contain ? Contained : 0));
   }
 #ifdef _WIN32
   Operations operations;
@@ -82,8 +86,8 @@ struct ChildEndpoints::State {
     }
   }
   bool authorityValid() {
-    if (admissionState.load() >= 3) { enterContainment(); return false; }
-    try { if (operations.valid && operations.valid() && admissionState.load() < 3) return true; } catch (...) {}
+    if (admissionState.load() & Lost) { enterContainment(); return false; }
+    try { if (operations.valid && operations.valid() && !(admissionState.load() & Lost)) return true; } catch (...) {}
     enterContainment();
     return false;
   }
@@ -207,6 +211,10 @@ bool ChildEndpoints::bindAdmissionClaim(const std::shared_ptr<HealthyRetirement:
 {
   if (!state_ || !state_->module || !claim || !generation || generation != state_->generation ||
       claim->generation() != generation || !state_->module->bindAdmissionClaim(claim, generation)) return false;
+#ifdef HEALTHY_ENDPOINT_TESTING
+  if (state_->operations.testOnly && state_->operations.testBeforePublishHook)
+    state_->operations.testBeforePublishHook(state_->operations.testBeforePublishContext);
+#endif
   std::shared_ptr<HealthyRetirement::RetirementClaim> existing;
   if (!std::atomic_compare_exchange_strong(&state_->admissionClaim, &existing, claim) && existing != claim) return false;
 #ifdef HEALTHY_ENDPOINT_TESTING
@@ -214,17 +222,18 @@ bool ChildEndpoints::bindAdmissionClaim(const std::shared_ptr<HealthyRetirement:
     state_->operations.testBindHook(state_->operations.testBindContext);
 #endif
   int expected = 0;
-  if (state_->admissionState.compare_exchange_strong(expected, 2) || expected == 2) return true;
-  claim->revoke(); return false;
+  if (state_->admissionState.compare_exchange_strong(expected, State::Bound) || expected == State::Bound) return true;
+  if (expected & State::Contained) claim->contain(); else claim->revoke();
+  return false;
 }
 bool ChildEndpoints::admissionSnapshot(std::uint64_t generation, const void* control, const void* ack) const noexcept
 {
   if (!state_ || !generation || generation != state_->generation || !control || !ack || control == ack ||
-      state_->admissionState.load() != 2 ||
+      state_->admissionState.load() != State::Bound ||
       !state_->controlLive.load() || !state_->ackLive.load()) return false;
 #ifdef _WIN32
   return control == state_->find(EndpointRole::Control) && ack == state_->find(EndpointRole::Ack) &&
-      state_->admissionState.load() == 2;
+      state_->admissionState.load() == State::Bound;
 #else
   return false;
 #endif
@@ -239,6 +248,12 @@ void ChildEndpoints::setAdmissionBindHookForTest(void (*hook)(void*) noexcept, v
 {
   if (state_ && state_->operations.testOnly && state_->admissionState.load() == 0) {
     state_->operations.testBindHook = hook; state_->operations.testBindContext = context;
+  }
+}
+void ChildEndpoints::setAdmissionBeforePublishHookForTest(void (*hook)(void*) noexcept, void* context) noexcept
+{
+  if (state_ && state_->operations.testOnly && state_->admissionState.load() == 0) {
+    state_->operations.testBeforePublishHook = hook; state_->operations.testBeforePublishContext = context;
   }
 }
 #endif

@@ -23,6 +23,7 @@ public:
 #if defined(_WIN32) && defined(HEALTHY_ENDPOINT_TESTING)
   void invalidateAdmissionForTest() noexcept;
   void setAdmissionBindHookForTest(void (*hook)(void*) noexcept, void* context) noexcept;
+  void setAdmissionBeforePublishHookForTest(void (*hook)(void*) noexcept, void* context) noexcept;
   struct TestOperations {
     std::function<bool()> valid;
     std::function<bool(std::uintptr_t)> accepts;
