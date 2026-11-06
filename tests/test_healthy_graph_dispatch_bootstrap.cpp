@@ -1,4 +1,5 @@
 #include "test_healthy_graph_dispatch_fixture.h"
+#include "module_endpoints.h"
 
 void TestHealthyGraphDispatch::bootstrapRejectsMalformed()
 {

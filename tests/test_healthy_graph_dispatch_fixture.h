@@ -5,7 +5,7 @@
 #include "capture_capability.h"
 #include "RestartWire.h"
 #include "frame_capture.h"
-#include "OwnedFixtureFile.h"
+#include "fixture_restart/OwnedFixtureFile.h"
 #include "player/PlayerComponent.h"
 #include "player_test_cache.h"
 #include <QCoreApplication>
