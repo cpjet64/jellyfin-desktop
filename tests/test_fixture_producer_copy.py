@@ -8,6 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 MPVQT = Path(os.environ.get('MPVQT_TEST_SOURCE', ROOT / 'external/mpvqt'))
+PLAYER = Path(os.environ.get('FIXTURE_PLAYER_SOURCE', ROOT / 'src/player'))
 
 
 class FixtureProducerCopyTest(unittest.TestCase):
@@ -17,7 +18,7 @@ class FixtureProducerCopyTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         shutil.copytree(MPVQT / 'src', self.root / 'external/mpvqt/src')
-        shutil.copytree(ROOT / 'src/player', self.root / 'src/player')
+        shutil.copytree(PLAYER, self.root / 'src/player')
         for group, name in [('core', 'ComponentManager.cpp'), ('ui', 'WindowManager.cpp'),
                             ('input', 'InputComponent.cpp'), ('power', 'PowerComponent.cpp')]:
             (self.root / 'src' / group).mkdir(parents=True)
@@ -135,6 +136,30 @@ class FixtureProducerCopyTest(unittest.TestCase):
         core = (ROOT / 'src/CMakeLists.txt').read_text(encoding='utf-8')
         self.assertIn('core/ComponentManager|ui/WindowManager|input/InputComponent|power/PowerComponent', core)
         self.assertIn('set_source_files_properties("${copied}" PROPERTIES INCLUDE_DIRECTORIES "${original_dir}")', core)
+
+    def test_receipt_sources_are_pinned_and_follow_copied_player_graph(self):
+        names = ('PlaybackNativeReceipts.cpp', 'PlaybackNativeReceipts.h', 'PlayerNativeReceipts.cpp')
+        result = self.configure()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        copied = self.root / 'fixture-producer-copy/player'
+        producer_list = (self.root / 'src/player/CMakeLists.txt').read_text(encoding='utf-8')
+        for name in names:
+            source = self.root / 'src/player' / name
+            self.assertIn(name, producer_list)
+            self.assertEqual((copied / name).read_text(encoding='utf-8'), source.read_text(encoding='utf-8'))
+            original = source.read_bytes()
+            source.write_bytes(original + b'\n// mismatch\n')
+            self.assertNotEqual(self.configure().returncode, 0)
+            source.write_bytes(original)
+        for unit, headers in (('PlaybackNativeReceipts.cpp', ('PlaybackNativeReceipts.h',)),
+                              ('PlayerNativeReceipts.cpp', ('PlayerComponent.h', 'PlaybackCheckpoint.h'))):
+            contents = (copied / unit).read_text(encoding='utf-8')
+            for header in headers:
+                self.assertIn(f'#include "{header}"', contents)
+                self.assertTrue((copied / header).is_file())
+        core = (ROOT / 'src/CMakeLists.txt').read_text(encoding='utf-8')
+        self.assertIn('list(APPEND _fixture_core_sources "${_fixture_copy}/player/${CMAKE_MATCH_1}")', core)
+        self.assertIn('add_library(FixtureCore STATIC ${_fixture_core_sources})', core)
 
     def test_missing_changed_and_incompatible_inputs_fail(self):
         missing = self.root / 'external/mpvqt/src/mpvcontroller.cpp'
