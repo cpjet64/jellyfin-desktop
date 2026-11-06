@@ -24,9 +24,10 @@ static void closedFrames()
 
 static void acceptedFrames()
 {
-  const GrantAccepted expected{1, 2, 3, 4, QByteArray(32, 'a')};
+  const GrantAccepted expected{1, 2, 3, 4, QByteArray(32, 'a'), 5, 6, 7, 8};
   const QByteArray bytes = encodeGrantAccepted(expected); CHECK(!bytes.isEmpty());
   GrantAccepted result; CHECK(decodeGrantAccepted(bytes, expected, result) && result.digest == expected.digest);
+  CHECK(result.host == 5 && result.core == 6 && result.intentRevision == 7 && result.attempt == 8);
   for (qsizetype n = 0; n < bytes.size(); ++n) {
     result.run = 99; CHECK(!decodeGrantAccepted(bytes.left(n), expected, result)); CHECK(result.run == 99);
   }
@@ -38,6 +39,10 @@ static void acceptedFrames()
   wrong = expected; ++wrong.revision; CHECK(!decodeGrantAccepted(bytes, wrong, result));
   wrong = expected; wrong.digest[0] ^= 1; CHECK(!decodeGrantAccepted(bytes, wrong, result));
   wrong = expected; wrong.digest.clear(); CHECK(encodeGrantAccepted(wrong).isEmpty());
+  wrong = expected; wrong.host = 0; CHECK(encodeGrantAccepted(wrong).isEmpty());
+  wrong = expected; wrong.core = 0; CHECK(encodeGrantAccepted(wrong).isEmpty());
+  wrong = expected; wrong.intentRevision = 0; CHECK(encodeGrantAccepted(wrong).isEmpty());
+  wrong = expected; wrong.attempt = 0; CHECK(encodeGrantAccepted(wrong).isEmpty());
 }
 static void permitFrames()
 {
