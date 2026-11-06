@@ -9,6 +9,7 @@
 #include <QCryptographicHash>
 #include <algorithm>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <vector>
@@ -16,15 +17,17 @@
 using namespace HealthyModuleIdentity;
 using namespace HealthyRetirement;
 using namespace FixtureRestart;
-static void check(bool value) { if (!value) std::abort(); }
+#define check(value) do { if (!(value)) { std::fprintf(stderr, "check failed at line %d\n", __LINE__); std::_Exit(3); } } while (false)
 
 namespace {
 struct PipeScript {
   struct Pending { HANDLE pipe = nullptr; void* bytes = nullptr; DWORD size = 0; OVERLAPPED* overlap = nullptr; };
   QByteArray grant, control;
   std::vector<QByteArray> writes;
-  Pending pending[2];
+  Pending pending[3];
   DWORD error = ERROR_SUCCESS;
+  bool endpointValid = true, holdAck = false, releaseAck = false, abortAck = false;
+  bool loseOnControlPoll = false, abortControl = false;
 };
 PipeScript* script = nullptr;
 HANDLE WINAPI makeEvent(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCWSTR) { return reinterpret_cast<HANDLE>(99); }
@@ -56,8 +59,22 @@ BOOL WINAPI ioRead(HANDLE pipe, LPVOID output, DWORD size, LPDWORD count, LPOVER
 }
 BOOL WINAPI ioResult(HANDLE pipe, LPOVERLAPPED overlap, LPDWORD count, BOOL)
 {
+  if (pipe == reinterpret_cast<HANDLE>(103)) {
+    auto& pending = script->pending[2];
+    if (pending.overlap != overlap) { script->error = ERROR_INVALID_HANDLE; return FALSE; }
+    if (script->abortAck) { *count = 0; script->error = ERROR_OPERATION_ABORTED; pending = {}; return FALSE; }
+    if (!script->releaseAck) { script->error = ERROR_IO_INCOMPLETE; return FALSE; }
+    script->writes.emplace_back(static_cast<const char*>(pending.bytes), int(pending.size));
+    *count = pending.size; pending = {}; return TRUE;
+  }
   auto& pending = script->pending[pipe == reinterpret_cast<HANDLE>(101) ? 0 : 1];
   if (pending.overlap != overlap) { script->error = ERROR_INVALID_HANDLE; return FALSE; }
+  if (pipe == reinterpret_cast<HANDLE>(102) && script->abortControl) {
+    *count = 0; script->error = ERROR_OPERATION_ABORTED; pending = {}; return FALSE;
+  }
+  if (pipe == reinterpret_cast<HANDLE>(102) && script->loseOnControlPoll) {
+    script->loseOnControlPoll = false; script->endpointValid = false;
+  }
   if (!deliver(pipe, pending.bytes, pending.size, count)) {
     if (script->error == ERROR_IO_PENDING) script->error = ERROR_IO_INCOMPLETE;
     return FALSE;
@@ -65,8 +82,12 @@ BOOL WINAPI ioResult(HANDLE pipe, LPOVERLAPPED overlap, LPDWORD count, BOOL)
   pending = {};
   return TRUE;
 }
-BOOL WINAPI ioWrite(HANDLE, LPCVOID input, DWORD size, LPDWORD count, LPOVERLAPPED)
+BOOL WINAPI ioWrite(HANDLE pipe, LPCVOID input, DWORD size, LPDWORD count, LPOVERLAPPED overlap)
 {
+  if (script->holdAck && pipe == reinterpret_cast<HANDLE>(103)) {
+    script->pending[2] = {pipe, const_cast<void*>(input), size, overlap};
+    *count = 0; script->error = ERROR_IO_PENDING; return FALSE;
+  }
   script->writes.emplace_back(static_cast<const char*>(input), int(size)); *count = size; return TRUE;
 }
 bool validModule(void*) noexcept { return true; }
@@ -74,7 +95,7 @@ bool validModule(void*) noexcept { return true; }
 ChildEndpoints::TestOperations endpointOperations()
 {
   ChildEndpoints::TestOperations ops;
-  ops.valid = [] { return true; };
+  ops.valid = [] { return script && script->endpointValid; };
   ops.accepts = [](std::uintptr_t value) { return value != 0; };
   ops.compare = [](std::uintptr_t a, std::uintptr_t b) {
     return a == b ? EndpointComparison::Same : EndpointComparison::Different;
@@ -182,8 +203,81 @@ class TestHealthyGraphArm {
     check(pipes_.writes.size() == 1 && !prepared_->closedAck());
     check(!session_->load() && !session_->seek() && state_->stops == 0);
   }
+  void endpointLossAfterArm()
+  {
+    initialize();
+    for (int i = 0; i < 20 && pipes_.writes.empty(); ++i) check(session_->pollRestore() != ChildSession::Progress::Failed);
+    check(pipes_.writes.size() == 1 && pipes_.writes[0].left(4) == "JGA2");
+    check(graph_->player_->m_nativeRestore.armed && !graph_->player_->m_nativeRestore.loadAttempted);
+    pipes_.endpointValid = false;
+    const auto result = session_->pollRestore();
+    if (result != ChildSession::Progress::Failed) std::fprintf(stderr, "endpoint loss result=%d\n", int(result));
+    check(result == ChildSession::Progress::Failed);
+    check(graph_->session_->gate->canceled());
+    check(session_->settleControlRead() == ChildSession::Progress::Pending);
+    pipes_.abortControl = true;
+    check(session_->settleControlRead() == ChildSession::Progress::Ready);
+    check(session_->settleControlRead() == ChildSession::Progress::Ready);
+    check(!session_->load() && !session_->seek() && !prepared_->closedAck());
+    check(pipes_.writes.size() == 1 && state_->stops == 0);
+  }
+  void acceptanceWriteInFlightAtFailure()
+  {
+    pipes_.holdAck = true;
+    initialize();
+    for (int i = 0; i < 20 && !pipes_.pending[2].overlap; ++i)
+      check(session_->pollRestore() != ChildSession::Progress::Failed);
+    check(pipes_.pending[2].overlap && pipes_.writes.empty());
+    check(graph_->player_->m_nativeRestore.armed && !graph_->player_->m_nativeRestore.loadAttempted);
+    session_->invalidate();
+    check(graph_->session_->gate->canceled());
+    check(session_->settleAckWrite() == ChildSession::Progress::Pending);
+    pipes_.releaseAck = true;
+    check(session_->settleAckWrite() == ChildSession::Progress::Ready);
+    check(pipes_.writes.size() == 1 && pipes_.writes[0].left(4) == "JGA2");
+    const auto& binding = *graph_->session_;
+    const GrantAccepted expected{grant_.run, 7, grant_.grant, grant_.revision, digest_,
+        binding.host, binding.core, binding.intentRevision, binding.attempt};
+    GrantAccepted actual;
+    check(decodeGrantAccepted(pipes_.writes[0], expected, actual));
+    check(session_->pollRestore() == ChildSession::Progress::Failed);
+    check(!session_->load() && !session_->seek() && !prepared_->closedAck());
+    check(pipes_.writes.size() == 1 && state_->stops == 0);
+  }
+  void endpointLossDuringPoll()
+  {
+    initialize();
+    for (int i = 0; i < 20 && pipes_.writes.empty(); ++i) check(session_->pollRestore() != ChildSession::Progress::Failed);
+    check(pipes_.writes.size() == 1 && graph_->player_->m_nativeRestore.armed);
+    pipes_.loseOnControlPoll = true;
+    check(session_->pollRestore() == ChildSession::Progress::Failed);
+    check(!pipes_.endpointValid && graph_->session_->gate->canceled());
+    check(!session_->load() && !session_->seek() && !prepared_->closedAck());
+    check(pipes_.writes.size() == 1 && state_->stops == 0);
+  }
+  void acceptanceWriteAbortsAfterFailure()
+  {
+    pipes_.holdAck = true;
+    initialize();
+    for (int i = 0; i < 20 && !pipes_.pending[2].overlap; ++i)
+      check(session_->pollRestore() != ChildSession::Progress::Failed);
+    check(pipes_.pending[2].overlap && graph_->player_->m_nativeRestore.armed);
+    session_->invalidate();
+    check(session_->settleAckWrite() == ChildSession::Progress::Pending);
+    pipes_.abortAck = true;
+    check(session_->settleAckWrite() == ChildSession::Progress::Ready);
+    check(pipes_.writes.empty() && session_->pollRestore() == ChildSession::Progress::Failed);
+    check(!session_->load() && !session_->seek() && !prepared_->closedAck() && state_->stops == 0);
+  }
 public:
-  static void run() { TestHealthyGraphArm test; test.runCase(); }
+  static void run()
+  {
+    { TestHealthyGraphArm test; test.endpointLossAfterArm(); }
+    { TestHealthyGraphArm test; test.endpointLossDuringPoll(); }
+    { TestHealthyGraphArm test; test.runCase(); }
+    { TestHealthyGraphArm test; test.acceptanceWriteInFlightAtFailure(); }
+    { TestHealthyGraphArm test; test.acceptanceWriteAbortsAfterFailure(); }
+  }
 };
 
 int main(int argc, char** argv)

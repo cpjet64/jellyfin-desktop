@@ -26,16 +26,22 @@ ChildSession::ChildSession(std::shared_ptr<HealthyModuleIdentity::ChildEndpoints
 
 bool ChildSession::valid() const
 {
+  bool valid = false;
 #ifdef HEALTHY_CHILD_SESSION_TESTING
-  if (testing_) return !failed_ && endpoints_ && test_.valid && test_.valid();
+  if (testing_) valid = !failed_ && endpoints_ && test_.valid && test_.valid();
+  else
 #endif
 #ifndef HEALTHY_CHILD_SESSION_HEADLESS
-  const auto capability = endpoints_ ? endpoints_->capability() : nullptr;
-  return !failed_ && graph_ && capability && capability->stillValid(generation_) &&
-      graph_->ownsEndpoints(endpoints_) && graph_->graphOnGuiThread();
+  {
+    const auto capability = endpoints_ ? endpoints_->capability() : nullptr;
+    valid = !failed_ && graph_ && capability && capability->stillValid(generation_) &&
+        graph_->ownsEndpoints(endpoints_) && graph_->graphOnGuiThread();
+  }
 #else
-  return false;
+  { valid = false; }
 #endif
+  if (!valid || !restoreStarted_) return valid;
+  return endpoints_->token(Role::Control) && endpoints_->token(Role::Ack);
 }
 
 
