@@ -1,5 +1,6 @@
 #include "frame_acceptance.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace fixture_restart {
@@ -33,6 +34,17 @@ bool usable(const FrameRecord &r)
     return r.serial && r.thread && r.actualContext && r.infoResult == 0 && r.renderResult == 0
         && r.width == 160 && r.height == 90 && r.rgba.size() == 160 * 90 * 4;
 }
+
+bool grayscaleOpaque(const FrameRecord &r)
+{
+    int valid = 0;
+    for (std::size_t p = 0; p < r.rgba.size(); p += 4) {
+        const auto lo = std::min({r.rgba[p], r.rgba[p + 1], r.rgba[p + 2]});
+        const auto hi = std::max({r.rgba[p], r.rgba[p + 1], r.rgba[p + 2]});
+        valid += hi - lo <= 24 && r.rgba[p + 3] >= 250;
+    }
+    return valid * 100 >= 160 * 90 * 98;
+}
 }
 
 bool FrameKey::operator==(const FrameKey &o) const
@@ -42,7 +54,7 @@ bool FrameKey::operator==(const FrameKey &o) const
 
 std::optional<int> decodeFrame(const FrameRecord &r)
 {
-    if (!usable(r) || !region(r, 0, 60, 160, 20, 0, 85))
+    if (!usable(r) || !grayscaleOpaque(r) || !region(r, 0, 60, 160, 20, 0, 85))
         return std::nullopt;
     int index = 0;
     for (int bit = 0; bit < 9; ++bit) {

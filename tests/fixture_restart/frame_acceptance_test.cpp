@@ -1,5 +1,6 @@
 #include "frame_acceptance.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 
@@ -53,6 +54,18 @@ static void decoderCases()
     assert(!decodeFrame(*bad));
     bad = frame(90);
     std::fill(bad->rgba.begin(), bad->rgba.end(), std::uint8_t{0});
+    assert(!decodeFrame(*bad));
+    bad = frame(90);
+    for (std::size_t p = 0; p < bad->rgba.size(); p += 4) {
+        const int v = bad->rgba[p];
+        const int delta = std::min(v, 255 - v);
+        bad->rgba[p] = static_cast<std::uint8_t>(v - delta);
+        bad->rgba[p + 1] = static_cast<std::uint8_t>(v + delta);
+    }
+    assert(!decodeFrame(*bad));
+    bad = frame(90);
+    for (std::size_t p = 3; p < bad->rgba.size(); p += 4)
+        bad->rgba[p] = 0;
     assert(!decodeFrame(*bad));
     bad = frame(90);
     for (int y = 10; y < 18; ++y)

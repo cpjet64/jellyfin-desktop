@@ -15,6 +15,8 @@ struct FrameKey {
 };
 
 // RGBA pixels are tightly packed, top row first, copied on the render thread.
+// Fixture output is grayscale and opaque; acknowledgement inputs must already
+// reflect the broker's checked seek, restart and position-qualified snapshot.
 struct FrameRecord {
     FrameKey key;
     std::uint64_t serial = 0;
