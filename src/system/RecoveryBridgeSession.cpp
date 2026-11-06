@@ -32,8 +32,8 @@ QVariantMap receipt(const QString& status, quint64 id = 0)
 }
 }
 
-RecoveryBridgeEndpoint::RecoveryBridgeEndpoint(QObject* parent)
-  : QObject(parent), m_sessionId(QUuid::createUuid().toString(QUuid::WithoutBraces))
+RecoveryBridgeEndpoint::RecoveryBridgeEndpoint(QObject* parent, QObject* view, QObject* channel)
+  : QObject(parent), m_sessionId(QUuid::createUuid().toString(QUuid::WithoutBraces)), m_view(view), m_channel(channel)
 {
 }
 
@@ -44,9 +44,20 @@ void RecoveryBridgeEndpoint::revoke()
   emit revoked();
 }
 
+void RecoveryBridgeEndpoint::markReady()
+{
+  if (m_revoked || m_ready) return;
+  m_ready = true;
+  emit readyChanged(true);
+}
+
 QVariantMap RecoveryBridgeEndpoint::invoke(const QVariantMap& request)
 {
   if (QThread::currentThread() != thread() || m_revoked) return receipt(QStringLiteral("revoked"));
+  if (!m_view || !m_channel || qvariant_cast<QObject*>(m_view->property("webChannel")) != m_channel.data()) {
+    revoke();
+    return receipt(QStringLiteral("revoked"));
+  }
   quint64 id = 0;
   const auto version = request.value(QStringLiteral("version"));
   const auto session = request.value(QStringLiteral("sessionId"));
@@ -58,18 +69,20 @@ QVariantMap RecoveryBridgeEndpoint::invoke(const QVariantMap& request)
       operation.metaType().id() != QMetaType::QString || operation.toString() != QLatin1String("handshake") ||
       !commandNumber(request.value(QStringLiteral("commandId")), id))
     return receipt(QStringLiteral("rejected"));
+  if (!m_ready) return receipt(QStringLiteral("pending"), id);
   if (id < m_lastCommand) return receipt(QStringLiteral("rejected"), id);
   if (id == m_lastCommand) return receipt(QStringLiteral("duplicate"), id);
   m_lastCommand = id;
   return receipt(QStringLiteral("accepted"), id);
 }
 
-RecoveryBridgeSession::RecoveryBridgeSession(QObject* window, QWebChannel* channel)
-  : QObject(channel), m_endpoint(new RecoveryBridgeEndpoint(this))
+RecoveryBridgeSession::RecoveryBridgeSession(QObject* window, QObject* view, QWebChannel* channel)
+  : QObject(channel), m_endpoint(new RecoveryBridgeEndpoint(this, view, channel)), m_view(view)
 {
-  if (!window || !channel || window->thread() != thread() || channel->thread() != thread() ||
+  if (!window || !view || !channel || window->thread() != thread() || view->thread() != thread() || channel->thread() != thread() ||
       QThread::currentThread() != thread()) { revoke(); return; }
   connect(window, &QObject::destroyed, this, &RecoveryBridgeSession::revoke);
+  connect(view, &QObject::destroyed, this, &RecoveryBridgeSession::revoke);
   if (QCoreApplication::instance())
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, &RecoveryBridgeSession::revoke);
 }
@@ -81,5 +94,33 @@ RecoveryBridgeSession::~RecoveryBridgeSession()
 
 void RecoveryBridgeSession::revoke()
 {
+  m_opening.revoke();
   if (m_endpoint) m_endpoint->revoke();
+}
+
+void RecoveryBridgeSession::synchronize()
+{
+  if (m_opening.state() == RecoveryInitialOpening::State::Revoked) revoke();
+  else if (m_opening.state() == RecoveryInitialOpening::State::ObservationReady && m_endpoint) m_endpoint->markReady();
+}
+
+bool RecoveryBridgeSession::openInitial(const QUrl& url, const std::function<bool()>& dispatch)
+{
+  try {
+    const bool result = m_opening.open(url, dispatch);
+    synchronize();
+    return result;
+  } catch (...) { synchronize(); throw; }
+}
+
+void RecoveryBridgeSession::observeRequest(const QUrl& url, bool mainFrame, bool expectedKind)
+{
+  m_opening.navigation(url, mainFrame, expectedKind);
+  synchronize();
+}
+
+void RecoveryBridgeSession::observeStarted(const QUrl& url)
+{
+  m_opening.loadStarted(url);
+  synchronize();
 }

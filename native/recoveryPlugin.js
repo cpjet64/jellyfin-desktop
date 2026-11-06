@@ -40,7 +40,9 @@
             this.revoked = false;
             this.attachmentStarted = false;
             this.endpoint = null;
+            this.handshakeSent = false;
             this.onRevoked = () => { this.revoked = true; this.bridgeAttached = false; this.finishAttachment(); };
+            this.onEndpointReady = value => this.startHandshake(value === true);
             this.ready = new Promise(resolve => { this.resolveReady = resolve; });
             this.attach(recoveryBridge);
         }
@@ -61,23 +63,33 @@
                 if (this.destroyed || !endpoint || typeof endpoint.invoke !== 'function' ||
                     !endpoint.revoked || typeof endpoint.revoked.connect !== 'function' ||
                     typeof endpoint.revoked.disconnect !== 'function' ||
+                    !endpoint.readyChanged || typeof endpoint.readyChanged.connect !== 'function' ||
+                    typeof endpoint.readyChanged.disconnect !== 'function' ||
                     typeof endpoint.sessionId !== 'string' || !endpoint.sessionId || endpoint.sessionId.length > 128) {
                     this.finishAttachment();
                     return;
                 }
                 this.endpoint = endpoint;
                 endpoint.revoked.connect(this.onRevoked);
+                endpoint.readyChanged.connect(this.onEndpointReady);
                 if (this.destroyed || this.revoked) { this.finishAttachment(); return; }
-                endpoint.invoke({ version: 1, sessionId: endpoint.sessionId, commandId: '1', operation: 'handshake' },
-                    receipt => {
-                        if (!this.resolveReady) return;
-                        if (!this.destroyed && !this.revoked && validReceipt(receipt)) this.bridgeAttached = true;
-                        this.finishAttachment();
-                });
+                this.startHandshake();
             } catch (_) {
                 // Ordinary playback remains available when this optional boundary is absent.
                 this.finishAttachment();
             }
+        }
+
+        startHandshake(announced = false) {
+            if (!this.resolveReady || this.destroyed || this.revoked || this.handshakeSent || (!announced && this.endpoint?.ready !== true)) return;
+            this.handshakeSent = true;
+            try {
+                this.endpoint.invoke({ version: 1, sessionId: this.endpoint.sessionId, commandId: '1', operation: 'handshake' }, receipt => {
+                    if (!this.resolveReady) return;
+                    if (!this.destroyed && !this.revoked && validReceipt(receipt)) this.bridgeAttached = true;
+                    this.finishAttachment();
+                });
+            } catch (_) { this.finishAttachment(); }
         }
 
         status() {
@@ -92,6 +104,8 @@
             try {
                 if (this.endpoint?.revoked && typeof this.endpoint.revoked.disconnect === 'function')
                     this.endpoint.revoked.disconnect(this.onRevoked);
+                if (this.endpoint?.readyChanged && typeof this.endpoint.readyChanged.disconnect === 'function')
+                    this.endpoint.readyChanged.disconnect(this.onEndpointReady);
             } catch (_) {
                 // The channel may already have been torn down.
             }

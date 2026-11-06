@@ -7,14 +7,16 @@ const { test } = require('node:test');
 function harness() {
     const context = { window: {} };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../native/recoveryPlugin.js'), 'utf8'), context);
-    let listener, callback, request, plays = 0;
-    const endpoint = { sessionId: 'host-session', revoked: {
+    let listener, readyListener, callback, request, plays = 0, calls = 0;
+    const endpoint = { sessionId: 'host-session', ready: true, readyChanged: {
+        connect(fn) { readyListener = fn; }, disconnect(fn) { if (readyListener === fn) readyListener = null; }
+    }, revoked: {
         connect(fn) { listener = fn; }, disconnect(fn) { if (listener === fn) listener = null; }
-    }, invoke(value, done) { request = value; callback = done; } };
+    }, invoke(value, done) { ++calls; request = value; callback = done; } };
     const playbackManager = new Proxy({}, { get() { return () => { ++plays; }; } });
     const plugin = new context.window._recoveryPlugin({ playbackManager, ServerConnections: {}, events: {}, recoveryBridge: endpoint });
     return { context, plugin, endpoint, request: () => request, reply: value => callback(value),
-        revoke: () => listener(), plays: () => plays };
+        revoke: () => listener(), notifyReady: () => readyListener?.(true), calls: () => calls, plays: () => plays };
 }
 
 async function settled(promise) {
@@ -86,7 +88,7 @@ test('destroy settles readiness while apiPromise is unresolved', async () => {
 test('synchronous revocation while connecting prevents invoke and tolerates disconnect failure', async () => {
     const h = harness();
     let calls = 0;
-    const endpoint = { sessionId: 'host-session', revoked: {
+    const endpoint = { sessionId: 'host-session', ready: true, readyChanged: { connect() {}, disconnect() {} }, revoked: {
         connect(fn) { fn(); }, disconnect() { throw new Error('private'); }
     }, invoke() { ++calls; } };
     const plugin = new h.context.window._recoveryPlugin({ recoveryBridge: endpoint });
@@ -95,6 +97,25 @@ test('synchronous revocation while connecting prevents invoke and tolerates disc
     assert.equal(calls, 0);
     assert.doesNotThrow(() => plugin.destroy());
     h.plugin.destroy();
+});
+
+test('pending endpoint sends exactly one handshake after ready and never after revoke', async () => {
+    const h = harness();
+    h.plugin.destroy();
+    let readySignal, revokeSignal, calls = 0, callback;
+    const endpoint = { sessionId: 'next', ready: false,
+        readyChanged: { connect(fn) { readySignal = fn; }, disconnect() {} },
+        revoked: { connect(fn) { revokeSignal = fn; }, disconnect() {} },
+        invoke(_request, done) { ++calls; callback = done; } };
+    const pending = new h.context.window._recoveryPlugin({ recoveryBridge: endpoint });
+    assert.equal(calls, 0);
+    readySignal(true); readySignal(true);
+    assert.equal(calls, 1);
+    revokeSignal();
+    callback({ version: 1, commandId: '1', status: 'accepted' });
+    await pending.ready;
+    assert.equal(pending.status().bridgeAttached, false);
+    pending.destroy();
 });
 
 test('wrong or extended receipt fails without making producer eligible', async () => {

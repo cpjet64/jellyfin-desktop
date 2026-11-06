@@ -430,12 +430,10 @@ int main(int argc, char *argv[])
     //
     QObject::connect(engine, &QQmlApplicationEngine::objectCreated, [&](QObject* object, const QUrl& url)
     {
-      Q_UNUSED(url);
+      if (url != QUrl(QStringLiteral("qrc:/webview.qml"))) return;
 
-      if (object == nullptr)
-        throw FatalException(QObject::tr("Failed to parse application engine script."));
-
-      QQuickWindow* window = Globals::MainWindow();
+      QQuickWindow* window = qobject_cast<QQuickWindow*>(object);
+      if (!window) throw FatalException(QObject::tr("Failed to create the application window."));
 
       // Set window flags for proper popup handling (e.g., WebEngineView dropdowns)
       window->setFlags(window->flags() | Qt::WindowFullscreenButtonHint);
@@ -493,6 +491,7 @@ int main(int argc, char *argv[])
 
       // Initialize WindowManager with window reference
       WindowManager::Get().initializeWindow(window);
+      WebClientFaultGuard::openInitialClient(window);
 
       // Handle other app focus by raising window
       QObject::connect(uniqueApp, &UniqueApplication::otherApplicationStarted, []() {

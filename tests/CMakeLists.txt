@@ -9,7 +9,7 @@ target_compile_features(test_windows_loader_mode PRIVATE cxx_std_17)
 add_test(NAME test_windows_loader_mode COMMAND test_windows_loader_mode)
 set_tests_properties(test_windows_loader_mode PROPERTIES TIMEOUT 60)
 
-add_executable(test_recovery_bridge_session test_recovery_bridge_session.cpp ${CMAKE_SOURCE_DIR}/src/system/RecoveryBridgeSession.cpp ${CMAKE_SOURCE_DIR}/src/system/RecoveryBridgeSession.h)
+add_executable(test_recovery_bridge_session test_recovery_bridge_session.cpp ${CMAKE_SOURCE_DIR}/src/system/RecoveryBridgeSession.cpp ${CMAKE_SOURCE_DIR}/src/system/RecoveryBridgeSession.h ${CMAKE_SOURCE_DIR}/src/system/RecoveryInitialOpening.cpp)
 target_include_directories(test_recovery_bridge_session PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_recovery_bridge_session PRIVATE Qt6::Core Qt6::Test Qt6::WebChannel)
 target_compile_features(test_recovery_bridge_session PRIVATE cxx_std_17)

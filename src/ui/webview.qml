@@ -26,15 +26,21 @@ Window
   property string debugInfo: ""
   property string videoInfo: ""
   property string webUrl: ""
+  property bool initialClientOpened: false
 
   property bool showSystemTrayIcon: webDesktopMode && components.system.isWindows &&
                                     components.settings.windowsTrayIcon
 
   signal reloadWebClient()
 
-  Component.onCompleted: {
-    if (components && components.settings) {
-      webUrl = components.settings.getWebClientUrl(webDesktopMode)
+  function dispatchInitialClient(url) {
+    initialClientOpened = true;
+    web.url = url;
+  }
+  onWebUrlChanged: {
+    if (initialClientOpened) {
+      webClientFaultGuard.observeRecoveryNavigation(mainWindow);
+      web.url = webUrl;
     }
   }
 
@@ -71,6 +77,8 @@ Window
 
   function runWebAction(action)
   {
+    if (action === WebEngineView.Back || action === WebEngineView.Forward || action === WebEngineView.Reload)
+      webClientFaultGuard.observeRecoveryNavigation(mainWindow);
     if (mainWindow.webDesktopMode)
       web.triggerWebAction(action)
   }
@@ -245,7 +253,6 @@ Window
     settings.playbackRequiresUserGesture: false
     profile.httpUserAgent: components.system.getUserAgent()
     profile.httpCacheType: WebEngineProfile.DiskHttpCache
-    url: mainWindow.webUrl
     focus: true
     property string currentHoveredUrl: ""
     onLinkHovered: function(hoveredUrl)
@@ -260,12 +267,16 @@ Window
     {
       console.log("WebEngineView size:", width, "x", height, "backgroundColor:", backgroundColor)
       forceActiveFocus()
-      mainWindow.reloadWebClient.connect(reload)
+      mainWindow.reloadWebClient.connect(function() {
+        webClientFaultGuard.observeRecoveryNavigation(mainWindow);
+        web.reload();
+      })
 
       // Handle CSP workaround from C++
       components.system.pageContentReady.connect(function(html, finalUrl, hadCSP) {
         if (hadCSP) {
           console.log("CSP workaround: navigating to", finalUrl);
+          webClientFaultGuard.observeRecoveryNavigation(mainWindow);
           web.url = finalUrl;
         }
       })
@@ -280,6 +291,12 @@ Window
       web.profile.userScripts.collection = [ nativeshell ];
     }
 
+    onNavigationRequested: function(request) {
+      if (request.isMainFrame) mainWindow.recoveryNavigationObserved = true;
+      webClientFaultGuard.observeRecoveryRequest(mainWindow, web, request.url, request.isMainFrame,
+        request.navigationType === WebEngineNavigationRequest.OtherNavigation);
+    }
+
     onLoadingChanged: function(loadingInfo)
     {
       // we use a timer here to switch to the webview since
@@ -289,7 +306,7 @@ Window
       if (loadingInfo.status == WebEngineView.LoadStartedStatus)
       {
         mainWindow.recoveryNavigationObserved = true;
-        webClientFaultGuard.observeRecoveryNavigation(mainWindow);
+        webClientFaultGuard.observeRecoveryStarted(mainWindow, web, loadingInfo.url);
         console.log("WebEngineLoadRequest starting: " + loadingInfo.url);
       }
       else if (loadingInfo.status == WebEngineView.LoadSucceededStatus)
@@ -298,12 +315,17 @@ Window
       }
       else if (loadingInfo.status == WebEngineView.LoadFailedStatus)
       {
+        webClientFaultGuard.observeRecoveryNavigation(mainWindow);
         console.log("WebEngineLoadRequest failure: " + loadingInfo.url + " error code: " + loadingInfo.errorCode);
         errorLabel.visible = true
         errorLabel.text = "Error loading client, this is bad and should not happen<br>" +
                           "You can try to <a href='reload'>reload</a> or head to our <a href='http://jellyfin.org'>support page</a><br><br>Actual Error: <pre>" +
                           loadingInfo.errorString + " [" + loadingInfo.errorCode + "]</pre><br><br>" +
                           "Provide the <a target='_blank' href='file://"+ components.system.logFilePath + "'>logfile</a> as well."
+      }
+      else if (loadingInfo.status == WebEngineView.LoadStoppedStatus)
+      {
+        webClientFaultGuard.observeRecoveryNavigation(mainWindow);
       }
     }
 
@@ -360,6 +382,7 @@ Window
       if (url == "reload")
       {
         errorLabel.visible = false
+        webClientFaultGuard.observeRecoveryNavigation(mainWindow);
         web.reload()
       }
       else

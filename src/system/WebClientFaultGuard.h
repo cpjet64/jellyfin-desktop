@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QHash>
 #include <QPointer>
+#include <QUrl>
+#include <QSet>
 
 class QWebChannel;
 class RecoveryBridgeSession;
@@ -16,11 +18,14 @@ public:
   static WebClientFaultGuard& instance();
   static void installContextProperties();
   static void registerChannelForWindow(QObject* window);
+  static void openInitialClient(QObject* window);
   bool rendererLost() const { return m_rendererLost; }
   int terminationStatus() const { return m_status; }
   int terminationExitCode() const { return m_exitCode; }
   Q_INVOKABLE void observeRendererLoss(int status, int exitCode);
   Q_INVOKABLE void observeRecoveryNavigation(QObject* window);
+  Q_INVOKABLE void observeRecoveryRequest(QObject* window, QObject* view, const QUrl& url, bool mainFrame, bool expectedKind);
+  Q_INVOKABLE void observeRecoveryStarted(QObject* window, QObject* view, const QUrl& url);
 
 signals:
   void rendererLostChanged();
@@ -30,6 +35,7 @@ private:
   WebClientFaultGuard();
   void attachRecoveryBridge(QObject* window, QWebChannel* channel);
   QHash<QObject*, QPointer<RecoveryBridgeSession>> m_recoverySessions;
+  QSet<QObject*> m_initialDispatches;
   bool m_recoveryExiting = false;
   bool m_rendererLost = false;
   int m_status = 0;

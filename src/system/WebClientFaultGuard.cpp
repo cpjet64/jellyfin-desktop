@@ -8,6 +8,7 @@
 
 #include "core/ComponentManager.h"
 #include "core/Globals.h"
+#include "settings/SettingsComponent.h"
 #include "utils/Utils.h"
 
 WebClientFaultGuard::WebClientFaultGuard()
@@ -32,6 +33,8 @@ void WebClientFaultGuard::installContextProperties()
 
 void WebClientFaultGuard::registerChannelForWindow(QObject* window)
 {
+  if (!window || QThread::currentThread() != instance().thread() || window->thread() != instance().thread())
+    throw FatalException(QObject::tr("Web channel window is unavailable"));
   if (instance().rendererLost()) return;
   auto* object = qvariant_cast<QObject*>(window->property("webChannel"));
   auto* channel = qobject_cast<QWebChannel*>(object);
@@ -43,6 +46,40 @@ void WebClientFaultGuard::registerChannelForWindow(QObject* window)
   ComponentManager::Get().setWebChannel(channel);
 }
 
+void WebClientFaultGuard::openInitialClient(QObject* window)
+{
+  if (!window || QThread::currentThread() != instance().thread() || window->thread() != instance().thread()) return;
+  if (instance().m_recoveryExiting || instance().rendererLost()) return;
+  if (instance().m_initialDispatches.contains(window)) {
+    instance().observeRecoveryNavigation(window);
+    return;
+  }
+  instance().m_initialDispatches.insert(window);
+  QObject::connect(window, &QObject::destroyed, &instance(), [window] { instance().m_initialDispatches.remove(window); });
+  if (window->property("recoveryNavigationObserved").toBool()) {
+    instance().observeRecoveryNavigation(window);
+  }
+  auto* view = window ? window->findChild<QObject*>(QStringLiteral("web")) : nullptr;
+  const QString overrideUrl = window->property("webUrl").toString();
+  const QUrl url(overrideUrl.isEmpty() ? SettingsComponent::Get().getWebClientUrl(window->property("webDesktopMode").toBool()) : overrideUrl);
+  bool attempted = false;
+  bool delivered = false;
+  const auto dispatch = [window, url, &attempted, &delivered] {
+    attempted = true;
+    delivered = QMetaObject::invokeMethod(window, "dispatchInitialClient", Qt::DirectConnection,
+                                           Q_ARG(QVariant, QVariant(url)));
+    return delivered;
+  };
+  const auto session = instance().m_recoverySessions.value(window);
+  if (session && view && session->view() == view && qvariant_cast<QObject*>(view->property("webChannel")) == session->parent()) {
+    session->openInitial(url, dispatch);
+  } else if (session) {
+    session->revoke();
+  }
+  if (!attempted) dispatch(); // Ordinary startup remains available without a qualified session.
+  if (!delivered) throw FatalException(QObject::tr("Initial web client dispatch failed"));
+}
+
 void WebClientFaultGuard::attachRecoveryBridge(QObject* window, QWebChannel* channel)
 {
   if (!window || !channel) return;
@@ -52,7 +89,9 @@ void WebClientFaultGuard::attachRecoveryBridge(QObject* window, QWebChannel* cha
     if (old && old->parent() != channel) old->revoke();
     return;
   }
-  auto* session = new RecoveryBridgeSession(window, channel);
+  auto* view = window->findChild<QObject*>(QStringLiteral("web"));
+  if (!view || view->thread() != thread() || qvariant_cast<QObject*>(view->property("webChannel")) != channel) return;
+  auto* session = new RecoveryBridgeSession(window, view, channel);
   m_recoverySessions.insert(window, session);
   connect(window, &QObject::destroyed, this, [this, window] { m_recoverySessions.remove(window); });
   const auto observed = window->property("recoveryNavigationObserved");
@@ -62,6 +101,24 @@ void WebClientFaultGuard::attachRecoveryBridge(QObject* window, QWebChannel* cha
     return;
   }
   channel->registerObject(QStringLiteral("recoveryBridge"), session->endpoint());
+}
+
+void WebClientFaultGuard::observeRecoveryRequest(QObject* window, QObject* view, const QUrl& url, bool mainFrame, bool expectedKind)
+{
+  if (QThread::currentThread() != thread()) return;
+  if (auto session = m_recoverySessions.value(window)) {
+    if (!view || session->view() != view || qvariant_cast<QObject*>(view->property("webChannel")) != session->parent()) session->revoke();
+    else session->observeRequest(url, mainFrame, expectedKind);
+  }
+}
+
+void WebClientFaultGuard::observeRecoveryStarted(QObject* window, QObject* view, const QUrl& url)
+{
+  if (QThread::currentThread() != thread()) return;
+  if (auto session = m_recoverySessions.value(window)) {
+    if (!view || session->view() != view || qvariant_cast<QObject*>(view->property("webChannel")) != session->parent()) session->revoke();
+    else session->observeStarted(url);
+  }
 }
 
 void WebClientFaultGuard::observeRecoveryNavigation(QObject* window)
