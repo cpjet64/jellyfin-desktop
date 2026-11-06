@@ -34,7 +34,7 @@ WindowsRestartProcess* WindowsRestartProcess::createHealthyWithChannels(const Wi
 }
 
 bool WindowsRestartProcess::bindHealthyModuleLease(std::shared_ptr<HealthyModuleIdentity::StageLease>& lease,
-    WindowsRestartChannel* channel, std::uint64_t launchId)
+    WindowsRestartChannel* channel, std::uint64_t launchId, const HealthyModuleIdentity::LaunchBinding& binding)
 {
   if (!healthyRequired_ || launched_ || healthyLease_ || !lease || !launchId || channel != healthyIdentityChannel_ || !ownsChannel(channel)) return false;
   const auto found = std::find(channels_.begin(), channels_.end(), channel);
@@ -43,8 +43,11 @@ bool WindowsRestartProcess::bindHealthyModuleLease(std::shared_ptr<HealthyModule
   const auto& observed = lease->observation();
   if (!observed.pathComplete || !observed.identityComplete || !observed.hashComplete || !observed.size ||
       observed.digest != HealthyModuleIdentity::expectedDigest()) return false;
+  std::vector<std::uint8_t> frame;
+  if (!HealthyModuleIdentity::frameIdentity(observed, launchId, binding, frame)) return false;
   if (!io_[index]->sealIdentityWriter()) return false;
   healthyLaunchId_ = launchId;
+  healthyBinding_ = binding;
   healthyLease_ = std::move(lease);
   return true;
 }
@@ -76,7 +79,7 @@ bool WindowsRestartProcess::healthyModuleFrame(const WindowsRestartChannel* chan
   HealthyModuleIdentity::FileObservation observation;
   std::uint64_t launchId = 0;
   return healthyModuleEvidence(channel, observation, launchId) &&
-         HealthyModuleIdentity::frameIdentity(observation, launchId, output);
+         HealthyModuleIdentity::frameIdentity(observation, launchId, healthyBinding_, output);
 }
 
 ProcessProgress WindowsRestartProcess::sendHealthyModuleFrame(ULONGLONG deadline)

@@ -15,6 +15,7 @@ struct VerifiedModule::State {
   ~State() { if (identityPipe) CloseHandle(identityPipe); if (parent) CloseHandle(parent); }
 #endif
   std::uint64_t generation = 0, deadline = 0;
+  LaunchBinding binding;
   std::unique_ptr<ImportedModule> module;
 };
 VerifiedModule::VerifiedModule(std::unique_ptr<State> state) : state_(std::move(state)) {}
@@ -32,6 +33,12 @@ bool VerifiedModule::stillValid(std::uint64_t generation) const noexcept
 }
 SourceContract VerifiedModule::renderSourceContract(std::uint64_t generation) const noexcept
 { return stillValid(generation) ? SourceContract::BuilderSourceQualified : SourceContract::Unqualified; }
+bool VerifiedModule::launchBinding(std::uint64_t generation, LaunchBinding& output) const noexcept
+{
+  if (!stillValid(generation)) return false;
+  output = state_->binding;
+  return true;
+}
 SourceContract VerifiedModule::wakeSourceContract(std::uint64_t generation) const noexcept
 { return stillValid(generation) ? SourceContract::BuilderSourceQualified : SourceContract::Unqualified; }
 bool VerifiedModule::acceptsEndpoint(std::uintptr_t pipe, std::uint64_t generation, std::uint64_t deadline) const noexcept
@@ -43,8 +50,7 @@ bool VerifiedModule::acceptsEndpoint(std::uintptr_t pipe, std::uint64_t generati
   if (!state_->identityPipe) return false;
   SetLastError(ERROR_SUCCESS);
   if (CompareObjectHandles(handle, state_->identityPipe) || GetLastError() != ERROR_NOT_SAME_OBJECT) return false;
-  return
-      GetFileType(handle) == FILE_TYPE_PIPE && GetNamedPipeServerProcessId(handle, &peer) &&
+  return GetFileType(handle) == FILE_TYPE_PIPE && GetNamedPipeServerProcessId(handle, &peer) &&
       peer && peer == GetProcessId(state_->parent);
 #else
   (void)pipe; (void)generation; (void)deadline;
@@ -65,6 +71,8 @@ struct ChildModuleGate::State {
   }
 #endif
   std::uint64_t launch = 0, generation = 0, deadline = 0;
+  std::uint64_t expectedRun = 0;
+  LaunchRole expectedRole = LaunchRole::Source;
   ModuleGateProgress progress = ModuleGateProgress::Failed;
   bool begun = false;
   std::unique_ptr<VerifiedModule> verified;
@@ -80,11 +88,12 @@ ChildModuleGate::~ChildModuleGate()
 
 std::unique_ptr<ChildModuleGate> ChildModuleGate::create(std::uintptr_t pipe,
     std::uintptr_t parentProcess, std::uint64_t launch, std::uint64_t generation,
-    std::uint64_t deadline)
+    std::uint64_t deadline, std::uint64_t expectedRun, LaunchRole expectedRole)
 {
 #ifdef _WIN32
   try {
-    if (!pipe || !parentProcess || !launch || !generation || GetTickCount64() >= deadline) return {};
+    if (!pipe || !parentProcess || !launch || !generation || !expectedRun ||
+        (expectedRole != LaunchRole::Source && expectedRole != LaunchRole::Restore) || GetTickCount64() >= deadline) return {};
     const HANDLE sourcePipe = reinterpret_cast<HANDLE>(pipe);
     const HANDLE sourceParent = reinterpret_cast<HANDLE>(parentProcess);
     ULONG peer = 0;
@@ -98,10 +107,11 @@ std::unique_ptr<ChildModuleGate> ChildModuleGate::create(std::uintptr_t pipe,
     if (!s->io->bind(s->pipe)) return {};
     s->reader = std::make_unique<FixtureRestart::WindowsFrameReader>(*s->io, s->pipe);
     s->launch = launch; s->generation = generation; s->deadline = deadline;
+    s->expectedRun = expectedRun; s->expectedRole = expectedRole;
     return std::unique_ptr<ChildModuleGate>(new ChildModuleGate(std::move(s)));
   } catch (...) { return {}; }
 #else
-  (void)pipe; (void)parentProcess; (void)launch; (void)generation; (void)deadline;
+  (void)pipe; (void)parentProcess; (void)launch; (void)generation; (void)deadline; (void)expectedRun; (void)expectedRole;
   return {};
 #endif
 }
@@ -157,7 +167,8 @@ ModuleGateProgress ChildModuleGate::finish()
     const auto* begin = reinterpret_cast<const std::uint8_t*>(frame->constData()) + 4;
     LaunchIdentity expected;
     if (!decodeIdentity(std::vector<std::uint8_t>(begin, begin + frame->size() - 4), expected) ||
-        expected.launch != state_->launch) return state_->progress;
+        expected.launch != state_->launch || expected.binding.run != state_->expectedRun ||
+        expected.binding.role != state_->expectedRole) return state_->progress;
     ImportPreparation preparation;
     if (!preparation.initialize()) return state_->progress;
     auto imported = preparation.takeObservation();
@@ -180,6 +191,7 @@ ModuleGateProgress ChildModuleGate::finish()
         WaitForSingleObject(state_->parent, 0) != WAIT_TIMEOUT) return state_->progress;
     auto verified = std::make_unique<VerifiedModule::State>();
     verified->generation = state_->generation; verified->deadline = state_->deadline;
+    verified->binding = expected.binding;
     verified->parent = state_->parent; state_->parent = nullptr;
     verified->identityPipe = state_->pipe; state_->pipe = nullptr;
     verified->module = std::move(imported);

@@ -1,6 +1,7 @@
 #pragma once
 #ifdef _WIN32
 #include "WindowsRestartIo.h"
+#include "../healthy_restart/module_gate.h"
 #include <windows.h>
 #include <atomic>
 #include <cstdint>
@@ -52,7 +53,8 @@ public:
   // channel must already be owned by this process and remains the only source
   // for the launch-bound parent observation.
   bool bindHealthyModuleLease(std::shared_ptr<HealthyModuleIdentity::StageLease>& lease,
-                              WindowsRestartChannel* channel, std::uint64_t launchId);
+                              WindowsRestartChannel* channel, std::uint64_t launchId,
+                              const HealthyModuleIdentity::LaunchBinding& binding);
   bool healthyModuleEvidence(const WindowsRestartChannel* channel,
                              HealthyModuleIdentity::FileObservation& output, std::uint64_t& launchId) const;
   bool healthyModuleFrame(const WindowsRestartChannel* channel, std::vector<std::uint8_t>& output) const;
@@ -87,6 +89,7 @@ private:
   WindowsRestartChannel* healthyIdentityChannel_ = nullptr;
   HANDLE healthyParentCredential_ = nullptr;
   std::uint64_t healthyLaunchId_ = 0;
+  HealthyModuleIdentity::LaunchBinding healthyBinding_;
   bool healthyRequired_ = false;
   unsigned healthyFrameState_ = 0;
   ULONGLONG healthyFrameDeadline_ = 0;

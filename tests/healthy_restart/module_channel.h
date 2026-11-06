@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <memory>
+#include "module_gate.h"
 
 namespace HealthyModuleIdentity {
 enum class SourceContract { Unqualified, BuilderSourceQualified };
@@ -16,6 +17,7 @@ public:
   VerifiedModule(const VerifiedModule&) = delete;
   VerifiedModule& operator=(const VerifiedModule&) = delete;
   bool stillValid(std::uint64_t generation) const noexcept;
+  bool launchBinding(std::uint64_t generation, LaunchBinding& output) const noexcept;
   SourceContract renderSourceContract(std::uint64_t generation) const noexcept;
   SourceContract wakeSourceContract(std::uint64_t generation) const noexcept;
 private:
@@ -34,7 +36,8 @@ private:
 class ChildModuleGate final {
 public:
   static std::unique_ptr<ChildModuleGate> create(std::uintptr_t pipe, std::uintptr_t parentProcess,
-      std::uint64_t expectedLaunch, std::uint64_t generation, std::uint64_t absoluteDeadline);
+      std::uint64_t expectedLaunch, std::uint64_t generation, std::uint64_t absoluteDeadline,
+      std::uint64_t expectedRun, LaunchRole expectedRole);
   ~ChildModuleGate();
   ChildModuleGate(const ChildModuleGate&) = delete;
   ChildModuleGate& operator=(const ChildModuleGate&) = delete;
