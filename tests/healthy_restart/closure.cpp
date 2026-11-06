@@ -12,7 +12,7 @@ bool sameStop(const Closure::StopKey& a, const Closure::StopKey& b)
 }
 }
 Closure::Closure(std::shared_ptr<Slot> slot, std::uint64_t generation,
-                 std::int64_t deadline, StopKey stop, std::shared_ptr<const std::atomic_bool> lease,
+                 std::int64_t deadline, StopKey stop, std::shared_ptr<const RetirementClaim> lease,
                  Operations operations)
   : slot_(std::move(slot)), generation_(generation), deadline_(deadline), stop_(stop),
     lease_(std::move(lease)), ops_(std::move(operations))
@@ -21,14 +21,8 @@ Closure::Closure(std::shared_ptr<Slot> slot, std::uint64_t generation,
 }
 #ifdef HEALTHY_RETIREMENT_TESTING
 Closure::Closure(std::shared_ptr<Slot> slot, std::shared_ptr<Lifetime> testLifetime,
-                 std::uint64_t generation, std::int64_t deadline, StopKey stop, Operations operations)
-  : Closure(std::move(slot), std::move(testLifetime), generation, deadline, stop,
-            std::make_shared<std::atomic_bool>(true), std::move(operations))
-{
-}
-Closure::Closure(std::shared_ptr<Slot> slot, std::shared_ptr<Lifetime> testLifetime,
                  std::uint64_t generation, std::int64_t deadline, StopKey stop,
-                 std::shared_ptr<const std::atomic_bool> lease, Operations operations)
+                 std::shared_ptr<const RetirementClaim> lease, Operations operations)
   : Closure(std::move(slot), generation, deadline, stop, std::move(lease), std::move(operations))
 {
   testLifetime_ = std::move(testLifetime);
@@ -43,12 +37,13 @@ Closure::~Closure()
 
 bool Closure::validTime()
 {
-  if (invalidated_.load() || !lease_ || !lease_->load() || !ops_.now) return false;
+  if (invalidated_.load() || !lease_ || lease_->generation() != generation_ || !lease_->eligible() || !ops_.now)
+    return false;
   auto lifetime = slot_ ? slot_->current() : nullptr;
 #ifdef HEALTHY_RETIREMENT_TESTING
   if (testLifetime_) lifetime = testLifetime_;
 #endif
-  if (!lifetime || !lifetime->ack(generation_)) return false;
+  if (!lifetime || !lifetime->matchesClaim(lease_) || !lifetime->ack(generation_)) return false;
   const auto now = ops_.now();
   if (now < lastTime_ || now >= deadline_) return false;
   lastTime_ = now;
@@ -184,7 +179,8 @@ bool Closure::closed(std::uint64_t generation) const
 #ifdef HEALTHY_RETIREMENT_TESTING
   if (testLifetime_) lifetime = testLifetime_;
 #endif
-  return generation == generation_ && lease_ && lease_->load() && lifetime &&
+  return generation == generation_ && lease_ && lease_->generation() == generation_ && lease_->eligible() && lifetime &&
+      lifetime->matchesClaim(lease_) &&
       lifetime->ack(generation_) && value.phase == Phase::Closed;
 }
 }
