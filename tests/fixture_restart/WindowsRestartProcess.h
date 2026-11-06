@@ -6,6 +6,7 @@
 #include <vector>
 
 namespace FixtureRestart {
+class WindowsRestartChannel;
 enum class ProcessProgress { Pending, Complete, Failed, Unconfirmed };
 struct WindowsProcessApi {
   decltype(&CreateJobObjectW) createJob = &CreateJobObjectW;
@@ -31,6 +32,8 @@ class WindowsRestartProcess {
 public:
   static WindowsRestartProcess* create(const WindowsProcessApi& api,
       std::vector<HANDLE> childHandles, std::vector<WindowsRestartIo*> io);
+  static WindowsRestartProcess* createWithChannels(const WindowsProcessApi& api,
+      const std::vector<WindowsRestartChannel*>& channels, std::vector<WindowsRestartIo*> io);
   bool release();
   ProcessProgress launch(const std::wstring& executable,
       const std::wstring& arguments, ULONGLONG deadline);
@@ -47,6 +50,7 @@ private:
   WindowsProcessApi api_;
   std::vector<HANDLE> handles_;
   std::vector<WindowsRestartIo*> io_;
+  std::vector<WindowsRestartChannel*> channels_;
   HANDLE job_ = nullptr, process_ = nullptr;
   bool assigned_ = false, forced_ = false, terminationRequested_ = false;
   bool settled_ = true, launched_ = false;

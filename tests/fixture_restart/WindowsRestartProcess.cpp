@@ -1,4 +1,5 @@
 #include "WindowsRestartProcess.h"
+#include "WindowsRestartChannel.h"
 #ifdef _WIN32
 #include <algorithm>
 #include <cstddef>
@@ -19,10 +20,39 @@ WindowsRestartProcess* WindowsRestartProcess::create(const WindowsProcessApi& ap
       return nullptr;
   }
   for (size_t i = 0; i < io.size(); ++i) {
-    if (!io[i] || std::find(io.begin(), io.begin() + i, io[i]) != io.begin() + i)
+    if (!io[i] || io[i]->owned_ || std::find(io.begin(), io.begin() + i, io[i]) != io.begin() + i)
       return nullptr;
   }
-  return new WindowsRestartProcess(api, std::move(handles), std::move(io));
+  auto* process = new WindowsRestartProcess(api, std::move(handles), std::move(io));
+  for (auto* item : process->io_) item->owned_ = true;
+  return process;
+}
+
+WindowsRestartProcess* WindowsRestartProcess::createWithChannels(const WindowsProcessApi& api,
+    const std::vector<WindowsRestartChannel*>& channels, std::vector<WindowsRestartIo*> io)
+{
+  std::vector<HANDLE> children;
+  if (channels.size() != io.size()) return nullptr;
+  size_t index = 0;
+  for (auto* channel : channels) {
+    if (!channel || channel->owned_ || !channel->connected_ || channel->pending_ ||
+        channel->child_ == INVALID_HANDLE_VALUE || !io[index] ||
+        !io[index]->canBind(channel->server_) ||
+        std::find(children.begin(), children.end(), channel->child_) != children.end())
+      return nullptr;
+    children.push_back(channel->child_);
+    ++index;
+  }
+  auto* process = create(api, std::move(children), std::move(io));
+  if (!process) return nullptr;
+  process->channels_ = channels;
+  index = 0;
+  for (auto* channel : channels) {
+    process->io_[index++]->bind(channel->server_);
+    channel->owned_ = true;
+    channel->child_ = INVALID_HANDLE_VALUE;
+  }
+  return process;
 }
 
 void WindowsRestartProcess::closeChildren()
@@ -34,7 +64,8 @@ void WindowsRestartProcess::closeChildren()
 WindowsRestartProcess::~WindowsRestartProcess()
 {
   closeChildren();
-  for (auto* item : io_) item->release();
+  for (auto* item : io_) { item->owned_ = false; item->release(); }
+  for (auto* channel : channels_) { channel->owned_ = false; channel->release(); }
   if (process_) api_.close(process_);
   if (job_) api_.close(job_);
 }

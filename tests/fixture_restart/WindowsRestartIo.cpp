@@ -11,8 +11,21 @@ WindowsRestartIo::~WindowsRestartIo()
 
 bool WindowsRestartIo::release()
 {
-  if (inFlight_) return false;
+  if (inFlight_ || owned_) return false;
   delete this;
+  return true;
+}
+
+bool WindowsRestartIo::canBind(HANDLE pipe) const
+{
+  return !inFlight_ && pipe && pipe != INVALID_HANDLE_VALUE &&
+      (bound_ == INVALID_HANDLE_VALUE || bound_ == pipe);
+}
+
+bool WindowsRestartIo::bind(HANDLE pipe)
+{
+  if (!canBind(pipe)) return false;
+  bound_ = pipe;
   return true;
 }
 
@@ -20,7 +33,8 @@ IoProgress WindowsRestartIo::begin(HANDLE pipe, bool read, const void* data,
                                    DWORD size, ULONGLONG deadline)
 {
   if (inFlight_ || !size || size > 9216 || (!read && !data) ||
-      pipe == INVALID_HANDLE_VALUE || !pipe || api_.now() >= deadline)
+      pipe == INVALID_HANDLE_VALUE || !pipe ||
+      (bound_ != INVALID_HANDLE_VALUE && pipe != bound_) || api_.now() >= deadline)
     return IoProgress::Failed;
   if (overlap_.hEvent) api_.closeHandle(overlap_.hEvent);
   overlap_ = {};

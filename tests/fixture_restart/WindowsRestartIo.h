@@ -5,6 +5,7 @@
 #include <vector>
 
 namespace FixtureRestart {
+class WindowsRestartProcess;
 enum class IoProgress { Pending, Complete, Failed, Unconfirmed };
 
 // The API is injectable so that completion and cancellation races can be
@@ -33,19 +34,24 @@ public:
                    ULONGLONG deadline);
   IoProgress poll();
   IoProgress cancel();
+  bool canBind(HANDLE pipe) const;
+  bool bind(HANDLE pipe);
   bool pending() const { return inFlight_; }
   const std::vector<unsigned char>& bytes() const { return bytes_; }
 private:
+  friend class WindowsRestartProcess;
   ~WindowsRestartIo();
   IoProgress submit();
   IoProgress completion(DWORD count);
   WindowsIoApi api_;
   OVERLAPPED overlap_{};
   HANDLE pipe_ = INVALID_HANDLE_VALUE;
+  HANDLE bound_ = INVALID_HANDLE_VALUE;
   std::vector<unsigned char> bytes_;
   DWORD offset_ = 0;
   ULONGLONG deadline_ = 0;
   bool read_ = false, inFlight_ = false, cancelling_ = false;
+  bool owned_ = false;
   IoProgress state_ = IoProgress::Failed;
 };
 }
