@@ -234,12 +234,17 @@ class TestHealthyGraphArm {
     check(session_->settleAckWrite() == ChildSession::Progress::Pending);
     pipes_.releaseAck = true;
     check(session_->settleAckWrite() == ChildSession::Progress::Ready);
+    check(!endpoints_->retainedSettlement(EndpointRole::Ack));
+    check(session_->settleAckWrite() == ChildSession::Progress::Ready);
+    check(!endpoints_->retainedSettlement(EndpointRole::Ack));
     check(pipes_.writes.size() == 1 && pipes_.writes[0].left(4) == "JGA2");
     const auto& binding = *graph_->session_;
     const GrantAccepted expected{grant_.run, 7, grant_.grant, grant_.revision, digest_,
         binding.host, binding.core, binding.intentRevision, binding.attempt};
     GrantAccepted actual;
     check(decodeGrantAccepted(pipes_.writes[0], expected, actual));
+    check(actual.host == binding.host && actual.core == binding.core &&
+          actual.intentRevision == binding.intentRevision && actual.attempt == binding.attempt);
     check(session_->pollRestore() == ChildSession::Progress::Failed);
     check(!session_->load() && !session_->seek() && !prepared_->closedAck());
     check(pipes_.writes.size() == 1 && state_->stops == 0);
@@ -266,6 +271,9 @@ class TestHealthyGraphArm {
     check(session_->settleAckWrite() == ChildSession::Progress::Pending);
     pipes_.abortAck = true;
     check(session_->settleAckWrite() == ChildSession::Progress::Ready);
+    check(!endpoints_->retainedSettlement(EndpointRole::Ack));
+    check(session_->settleAckWrite() == ChildSession::Progress::Ready);
+    check(!endpoints_->retainedSettlement(EndpointRole::Ack));
     check(pipes_.writes.empty() && session_->pollRestore() == ChildSession::Progress::Failed);
     check(!session_->load() && !session_->seek() && !prepared_->closedAck() && state_->stops == 0);
   }
