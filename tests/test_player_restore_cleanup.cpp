@@ -2,6 +2,7 @@
 #include "player_test_cache.h"
 #include <QtTest/QtTest>
 #ifdef HEALTHY_COPIED_SOURCE_TEST
+#include "healthy_restore_claim_test.h"
 #include <RestartChild.h>
 #include <QCryptographicHash>
 #include <map>
@@ -68,9 +69,15 @@ bool TestPlayerRestoreCleanup::arm(PlayerComponent& player, bool load)
   };
   actions.pollCleanup = [] { return Child::CleanupResult{Child::CleanupResult::Status::Pending, {}, FixtureRestart::CancelFailure::None}; };
   harness->child = std::make_unique<Child>(*gate, gate.get(), &player, binding.run, 9, digest, std::move(actions));
+  auto claim = TestRetirementClaim::reserve(1);
+  if (!claim) return false;
   QByteArray response;
   if (!harness->child->grant(gate.get(), frame, 10, true, response)) return false;
-  if (!player.healthyInstallRetirementClaim(std::make_shared<HealthyRetirement::RetirementClaim>(1), 1)) return false;
+  const auto key = player.m_nativeRestore.key;
+  const HealthyRetirement::RetirementClaim::ArmIdentity identity{key.host, key.core, key.revision, key.attempt};
+  if (!TestRetirementClaim::bind(claim, 1, identity) ||
+      !player.healthyInstallRetirementClaim(claim, 1, HealthyRestart::ClaimInstallMode::BindRestoreReservation) ||
+      !TestRetirementClaim::qualify(claim, 1, identity)) return false;
   harnesses_[&player] = std::move(harness);
 #else
   if (!player.armNativeRestore(grant, 7, 2)) return false;

@@ -1,4 +1,7 @@
 #include "test_player_native_restore.h"
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+#include "healthy_restore_claim_test.h"
+#endif
 #include <FixtureRestartAdapter.h>
 #include <RestartWire.h>
 #include "fixture_restart/OwnedFixtureFile.h"
@@ -32,10 +35,14 @@ void TestPlayerNativeRestore::fixtureBridgeControl()
   actions.beginCleanup = [&](quint64 sequence, quint64 revision) { return bridge.beginCleanup(sequence, revision, 100); };
   actions.pollCleanup = [] { return Child::CleanupResult{Child::CleanupResult::Status::Pending, {}, FixtureRestart::CancelFailure::None}; };
   Child child(*gate, &player, &player, grant.run, 9, digest, std::move(actions));
+  auto claim = TestRetirementClaim::reserve(1); QVERIFY(claim);
   QByteArray response;
   QVERIFY(child.grant(&player, frame, 10, true, response));
-  auto claim = std::make_shared<HealthyRetirement::RetirementClaim>(1);
-  QVERIFY(player.healthyInstallRetirementClaim(claim, 1));
+  const auto key = player.m_nativeRestore.key;
+  const HealthyRetirement::RetirementClaim::ArmIdentity identity{key.host, key.core, key.revision, key.attempt};
+  QVERIFY(TestRetirementClaim::bind(claim, 1, identity));
+  QVERIFY(player.healthyInstallRetirementClaim(claim, 1, HealthyRestart::ClaimInstallMode::BindRestoreReservation));
+  QVERIFY(TestRetirementClaim::qualify(claim, 1, identity));
 #else
   QVERIFY(gate->accept(&player, frame, grant.run, digest, 10, true));
   QVERIFY(bridge.arm());

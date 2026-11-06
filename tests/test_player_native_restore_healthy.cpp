@@ -1,5 +1,6 @@
 #include "test_player_native_restore.h"
 #ifdef HEALTHY_COPIED_SOURCE_TEST
+#include "healthy_restore_claim_test.h"
 #include <mpv/client.h>
 #include <QCryptographicHash>
 #include <vector>
@@ -28,10 +29,15 @@ std::unique_ptr<TestPlayerNativeRestore::CleanupHarness> TestPlayerNativeRestore
   };
   actions.pollCleanup = [] { return Child::CleanupResult{Child::CleanupResult::Status::Pending, {}, FixtureRestart::CancelFailure::None}; };
   harness->child = std::make_unique<Child>(*gate, gate.get(), &player, binding.run, 9, digest, std::move(actions));
+  auto claim = TestRetirementClaim::reserve(1);
+  if (!claim) return {};
   QByteArray response;
   if (!harness->child->grant(gate.get(), frame, 10, true, response)) return {};
-  auto claim = std::make_shared<HealthyRetirement::RetirementClaim>(1);
-  if (!player.healthyInstallRetirementClaim(claim, 1)) return {};
+  const auto key = player.m_nativeRestore.key;
+  const HealthyRetirement::RetirementClaim::ArmIdentity identity{key.host, key.core, key.revision, key.attempt};
+  if (!TestRetirementClaim::bind(claim, 1, identity) ||
+      !player.healthyInstallRetirementClaim(claim, 1, HealthyRestart::ClaimInstallMode::BindRestoreReservation) ||
+      !TestRetirementClaim::qualify(claim, 1, identity)) return {};
   return harness;
 }
 
