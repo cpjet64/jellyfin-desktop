@@ -4,6 +4,10 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+if(HEALTHY_RESTART_DIAGNOSTIC_ONLY)
+  healthy_restart_tests()
+endif()
+
 add_executable(test_fixture_restart_wire test_fixture_restart_wire.cpp fixture_restart/RestartWire.cpp fixture_restart/RestartSource.cpp fixture_restart/RestartBroker.cpp fixture_restart/FixtureEvidence.cpp ${CMAKE_SOURCE_DIR}/src/player/PlaybackCheckpoint.cpp)
 target_include_directories(test_fixture_restart_wire PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_fixture_restart_wire PRIVATE Qt6::Core)

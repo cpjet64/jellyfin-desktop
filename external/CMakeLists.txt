@@ -48,6 +48,10 @@ if(USE_STATIC_MPVQT)
   file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/MpvQt/MpvController "#include \"mpvcontroller.h\"\n")
 endif()
 
+if(HEALTHY_RESTART_DIAGNOSTIC_ONLY)
+  healthy_restart_mpvqt()
+endif()
+
 if(FIXTURE_PRODUCER_COPY_ONLY)
   configure_file("${CMAKE_CURRENT_SOURCE_DIR}/mpvqt_export.h" "${_fixture_copy}/mpvqt/mpvqt_export.h" COPYONLY)
   set(_mpvqt_src "${_fixture_copy}/mpvqt")

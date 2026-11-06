@@ -236,6 +236,10 @@ if(LINUX_DBUS)
   target_link_libraries(jmp_core Qt6::DBus)
 endif()
 
+if(HEALTHY_RESTART_DIAGNOSTIC_ONLY)
+  healthy_restart_core()
+endif()
+
 if(FIXTURE_PRODUCER_COPY_ONLY)
   target_sources(FixtureMpvQt PRIVATE "${_fixture_copy}/mpvqt/frame_capture.cpp"
     "${_fixture_copy}/mpvqt/frame_acceptance.cpp")
