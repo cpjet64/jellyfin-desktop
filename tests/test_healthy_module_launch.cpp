@@ -1,4 +1,5 @@
 #include "healthy_restart/module_channel.h"
+#include "healthy_restart/module_import_prepare.h"
 #include <cstdlib>
 
 using HealthyModuleIdentity::VerifiedModule;
@@ -28,10 +29,20 @@ void invalidSeamCannotCreateModule()
   CHECK(!VerifiedModule::forAccessorTest(7, 0, valid, &live));
   CHECK(!VerifiedModule::forAccessorTest(7, 42, nullptr, &live));
 }
+
+void nativeInspectionIsUnavailable()
+{
+  HealthyModuleIdentity::NativeError error = HealthyModuleIdentity::NativeError::None;
+  CHECK(!HealthyModuleIdentity::ImportedModule::inspect(error));
+  CHECK(error == HealthyModuleIdentity::NativeError::Unsupported);
+  HealthyModuleIdentity::ImportPreparation preparation;
+  CHECK(!preparation.initialize() && !preparation.observation());
+}
 }
 
 int main()
 {
   accessorUsesRetainedLaunch();
   invalidSeamCannotCreateModule();
+  nativeInspectionIsUnavailable();
 }
