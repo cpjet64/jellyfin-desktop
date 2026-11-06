@@ -4,6 +4,18 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Test)
 
+add_executable(test_player_restore_cleanup test_player_restore_cleanup.cpp)
+target_include_directories(test_player_restore_cleanup PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
+target_link_libraries(test_player_restore_cleanup PRIVATE jmp_core Qt6::Test)
+add_test(NAME test_player_restore_cleanup COMMAND test_player_restore_cleanup)
+set_tests_properties(test_player_restore_cleanup PROPERTIES TIMEOUT 60)
+
+add_executable(test_player_restore_observation test_player_restore_observation.cpp)
+target_include_directories(test_player_restore_observation PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
+target_link_libraries(test_player_restore_observation PRIVATE jmp_core Qt6::Test)
+add_test(NAME test_player_restore_observation COMMAND test_player_restore_observation)
+set_tests_properties(test_player_restore_observation PROPERTIES TIMEOUT 60)
+
 add_executable(test_fixture_frame_acceptance fixture_restart/frame_acceptance_test.cpp fixture_restart/frame_acceptance.cpp)
 target_compile_features(test_fixture_frame_acceptance PRIVATE cxx_std_17)
 add_test(NAME test_fixture_frame_acceptance COMMAND test_fixture_frame_acceptance)
