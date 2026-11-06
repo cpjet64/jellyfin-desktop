@@ -32,6 +32,30 @@ bool WindowsRestartIo::bind(HANDLE pipe)
 IoProgress WindowsRestartIo::begin(HANDLE pipe, bool read, const void* data,
                                    DWORD size, ULONGLONG deadline)
 {
+  if (identityWriter_) return IoProgress::Failed;
+  return beginImpl(pipe, read, data, size, deadline);
+}
+
+bool WindowsRestartIo::sealIdentityWriter()
+{
+  if (!owned_ || closed_ || inFlight_ || identityWriter_) return false;
+  identityWriter_ = true;
+  return true;
+}
+
+IoProgress WindowsRestartIo::beginIdentity(HANDLE pipe, const void* data, DWORD size, ULONGLONG deadline)
+{
+  return identityWriter_ ? beginImpl(pipe, false, data, size, deadline) : IoProgress::Failed;
+}
+
+IoProgress WindowsRestartIo::pollIdentity()
+{
+  return identityWriter_ ? pollImpl() : IoProgress::Failed;
+}
+
+IoProgress WindowsRestartIo::beginImpl(HANDLE pipe, bool read, const void* data,
+                                       DWORD size, ULONGLONG deadline)
+{
   if (inFlight_) return IoProgress::Failed;
   if (closed_ || !size || size > 9216 || (!read && !data) ||
       pipe == INVALID_HANDLE_VALUE || !pipe ||
@@ -98,12 +122,17 @@ IoProgress WindowsRestartIo::completion(DWORD count)
 
 IoProgress WindowsRestartIo::poll()
 {
+  return identityWriter_ ? IoProgress::Failed : pollImpl();
+}
+
+IoProgress WindowsRestartIo::pollImpl()
+{
   if (!inFlight_) return state_;
   DWORD count = 0;
   if (api_.result(pipe_, &overlap_, &count, FALSE)) return completion(count);
   const DWORD error = api_.error();
   if (error == ERROR_IO_INCOMPLETE) {
-    if (api_.now() >= deadline_) return cancel();
+    if (api_.now() >= deadline_) return cancelImpl();
     return IoProgress::Pending;
   }
   if (error != ERROR_OPERATION_ABORTED && error != ERROR_BROKEN_PIPE &&
@@ -114,6 +143,11 @@ IoProgress WindowsRestartIo::poll()
 }
 
 IoProgress WindowsRestartIo::cancel()
+{
+  return identityWriter_ ? IoProgress::Failed : cancelImpl();
+}
+
+IoProgress WindowsRestartIo::cancelImpl()
 {
   if (!inFlight_) return state_;
   cancelling_ = true;

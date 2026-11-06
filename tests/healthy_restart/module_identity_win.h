@@ -2,6 +2,9 @@
 
 #include "module_identity.h"
 #include <memory>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace HealthyModuleIdentity {
 // Observations alone are not launch authority or native retirement permission.
@@ -15,11 +18,30 @@ struct FileObservation {
 
 enum class NativeError { None, Unsupported, Unavailable, InvalidDirectory, Open, Reparse, Path, Identity, Size, Read, Digest, Import, Module };
 
+#ifdef _WIN32
+struct StageApi {
+  decltype(&CreateFileW) open = &CreateFileW;
+  decltype(&CloseHandle) close = &CloseHandle;
+  decltype(&GetFileInformationByHandleEx) information = &GetFileInformationByHandleEx;
+  decltype(&GetFinalPathNameByHandleW) finalPath = &GetFinalPathNameByHandleW;
+  decltype(&GetFileSizeEx) size = &GetFileSizeEx;
+  decltype(&SetFilePointerEx) seek = &SetFilePointerEx;
+  decltype(&ReadFile) read = &ReadFile;
+#ifdef HEALTHY_MODULE_TESTING
+  Digest (*overrideDigest)(const Digest&) = nullptr;
+#endif
+};
+#endif
+
 class StageLease {
 public:
   // directoryHandle must be the parent-owned, independently verified fresh
   // staging directory. Caller retains this lease until child/job settlement.
   static std::unique_ptr<StageLease> acquire(std::uintptr_t directoryHandle, NativeError& error);
+#if defined(_WIN32) && defined(HEALTHY_MODULE_TESTING)
+  // Dedicated headless tests only. This cannot produce native qualification.
+  static std::unique_ptr<StageLease> acquireForTest(std::uintptr_t directoryHandle, const StageApi& api, NativeError& error);
+#endif
   ~StageLease();
   StageLease(const StageLease&) = delete;
   StageLease& operator=(const StageLease&) = delete;
@@ -27,6 +49,9 @@ public:
 private:
   struct State;
   explicit StageLease(std::unique_ptr<State> state);
+#ifdef _WIN32
+  static std::unique_ptr<StageLease> acquireImpl(std::uintptr_t directoryHandle, const StageApi& api, NativeError& error);
+#endif
   std::unique_ptr<State> state_;
 };
 
@@ -45,6 +70,7 @@ public:
   std::uintptr_t secondTarget() const noexcept;
   std::uintptr_t module() const noexcept;
   std::uintptr_t executable() const noexcept;
+  bool stillBound() const noexcept;
 private:
   struct State;
   explicit ImportedModule(std::unique_ptr<State> state);

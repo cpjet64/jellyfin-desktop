@@ -41,6 +41,12 @@ public:
 private:
   friend class WindowsRestartProcess;
   ~WindowsRestartIo();
+  bool sealIdentityWriter();
+  IoProgress beginIdentity(HANDLE pipe, const void* data, DWORD size, ULONGLONG deadline);
+  IoProgress pollIdentity();
+  IoProgress beginImpl(HANDLE pipe, bool read, const void* data, DWORD size, ULONGLONG deadline);
+  IoProgress pollImpl();
+  IoProgress cancelImpl();
   IoProgress submit();
   IoProgress completion(DWORD count);
   IoProgress completedError(DWORD error);
@@ -53,6 +59,7 @@ private:
   ULONGLONG deadline_ = 0;
   bool read_ = false, inFlight_ = false, cancelling_ = false;
   bool owned_ = false, closed_ = false;
+  bool identityWriter_ = false;
   IoProgress state_ = IoProgress::Failed;
 };
 }

@@ -3,10 +3,13 @@
 #include "WindowsRestartIo.h"
 #include <windows.h>
 #include <atomic>
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
 
+namespace HealthyModuleIdentity { class StageLease; struct FileObservation; }
 namespace FixtureRestart {
 class WindowsRestartChannel;
 enum class ProcessProgress { Pending, Complete, Failed, Unconfirmed };
@@ -26,6 +29,11 @@ struct WindowsProcessApi {
   decltype(&GetExitCodeProcess) exitCode = &GetExitCodeProcess;
   decltype(&CloseHandle) close = &CloseHandle;
   decltype(&GetTickCount64) now = &GetTickCount64;
+  decltype(&DuplicateHandle) duplicate = &DuplicateHandle;
+  decltype(&GetCurrentProcess) currentProcess = &GetCurrentProcess;
+  decltype(&GetCurrentProcessId) currentProcessId = &GetCurrentProcessId;
+  decltype(&GetProcessId) processId = &GetProcessId;
+  decltype(&GetHandleInformation) handleInfo = &GetHandleInformation;
 };
 
 // Owns the supplied child handles and I/O objects after successful creation.
@@ -36,6 +44,21 @@ public:
       std::vector<HANDLE> childHandles, std::vector<WindowsRestartIo*> io);
   static WindowsRestartProcess* createWithChannels(const WindowsProcessApi& api,
       const std::vector<WindowsRestartChannel*>& channels, std::vector<WindowsRestartIo*> io);
+  // Healthy-only construction keeps the generic process path unchanged.
+  static WindowsRestartProcess* createHealthyWithChannels(const WindowsProcessApi& api,
+      const std::vector<WindowsRestartChannel*>& channels, std::vector<WindowsRestartIo*> io,
+      WindowsRestartChannel* identityChannel);
+  // Transfers the real pre-launch file lease only on success. The selected
+  // channel must already be owned by this process and remains the only source
+  // for the launch-bound parent observation.
+  bool bindHealthyModuleLease(std::shared_ptr<HealthyModuleIdentity::StageLease>& lease,
+                              WindowsRestartChannel* channel, std::uint64_t launchId);
+  bool healthyModuleEvidence(const WindowsRestartChannel* channel,
+                             HealthyModuleIdentity::FileObservation& output, std::uint64_t& launchId) const;
+  bool healthyModuleFrame(const WindowsRestartChannel* channel, std::vector<std::uint8_t>& output) const;
+  ProcessProgress sendHealthyModuleFrame(ULONGLONG deadline);
+  ProcessProgress cancelHealthyModuleFrame();
+  std::uintptr_t healthyParentCredential() const;
   bool release();
   bool ownsChannel(const WindowsRestartChannel* channel) const;
   bool ownsEndpoint(const WindowsRestartChannel* channel, const WindowsRestartIo* io) const;
@@ -60,6 +83,13 @@ private:
   std::vector<HANDLE> handles_;
   std::vector<WindowsRestartIo*> io_;
   std::vector<WindowsRestartChannel*> channels_;
+  std::shared_ptr<HealthyModuleIdentity::StageLease> healthyLease_;
+  WindowsRestartChannel* healthyIdentityChannel_ = nullptr;
+  HANDLE healthyParentCredential_ = nullptr;
+  std::uint64_t healthyLaunchId_ = 0;
+  bool healthyRequired_ = false;
+  unsigned healthyFrameState_ = 0;
+  ULONGLONG healthyFrameDeadline_ = 0;
   HANDLE job_ = nullptr, process_ = nullptr;
   std::thread worker_;
   std::atomic<bool> workerDone_{false};

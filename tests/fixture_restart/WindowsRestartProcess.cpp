@@ -116,6 +116,12 @@ bool WindowsRestartProcess::closeParentChannel(WindowsRestartChannel* channel)
 ProcessProgress WindowsRestartProcess::launch(const std::wstring& executable,
     const std::wstring& arguments, ULONGLONG deadline)
 {
+  if (healthyRequired_) {
+    const auto found = std::find(channels_.begin(), channels_.end(), healthyIdentityChannel_);
+    if (!healthyLease_ || !healthyLaunchId_ || found == channels_.end()) return ProcessProgress::Failed;
+    const size_t index = static_cast<size_t>(found - channels_.begin());
+    if (index >= io_.size() || !ownsEndpoint(healthyIdentityChannel_, io_[index])) return ProcessProgress::Failed;
+  }
   if (launched_ || api_.now() >= deadline || executable.size() < 3 ||
       executable[1] != L':' || (executable[2] != L'\\' && executable[2] != L'/') ||
       executable.find_first_of(L"\"\0", 0, 2) != std::wstring::npos ||
