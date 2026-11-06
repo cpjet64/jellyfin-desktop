@@ -11,7 +11,7 @@ using namespace FixtureRestart;
 namespace {
 HANDLE job = reinterpret_cast<HANDLE>(11), process = reinterpret_cast<HANDLE>(12);
 HANDLE thread = reinterpret_cast<HANDLE>(13), child = reinterpret_cast<HANDLE>(14);
-bool createOk, membershipOk, member, resumeOk, signaled, terminated;
+bool createOk, membershipOk, member, resumeOk, signaled, terminated, waitBad;
 DWORD active, exitValue, attributes, creates, resumes;
 DWORD ioError;
 bool ioDone;
@@ -22,7 +22,7 @@ bool holdCreate, enteredCreate, releaseCreate;
 void reset()
 {
   createOk = membershipOk = member = resumeOk = true;
-  signaled = terminated = false;
+  signaled = terminated = waitBad = false;
   active = 1; exitValue = 0; attributes = creates = resumes = 0; ticks = 1;
   holdCreate = enteredCreate = releaseCreate = false;
 }
@@ -72,7 +72,7 @@ DWORD WINAPI resume(HANDLE h) { CHECK(h == thread); ++resumes; return resumeOk ?
 BOOL WINAPI terminateJob(HANDLE h, UINT) { CHECK(h == job); terminated = true; return TRUE; }
 BOOL WINAPI terminateProcess(HANDLE h, UINT) { CHECK(h == process); terminated = true; return TRUE; }
 DWORD WINAPI wait(HANDLE h, DWORD timeout)
-{ CHECK(h == process && timeout == 0); return signaled ? WAIT_OBJECT_0 : WAIT_TIMEOUT; }
+{ CHECK(h == process && timeout == 0); return waitBad ? WAIT_FAILED : (signaled ? WAIT_OBJECT_0 : WAIT_TIMEOUT); }
 BOOL WINAPI query(HANDLE h, JOBOBJECTINFOCLASS type, LPVOID value, DWORD, LPDWORD)
 {
   CHECK(h == job && type == JobObjectBasicAccountingInformation);
@@ -156,7 +156,7 @@ void forcedIsNotHealthy()
   reset(); auto* p = fixture();
   CHECK(launchFinished(p) == ProcessProgress::Complete);
   CHECK(p->forceCleanup(10) == ProcessProgress::Pending && terminated);
-  CHECK(p->pollHealthy(10) == ProcessProgress::Failed);
+  CHECK(p->pollHealthy(10) == ProcessProgress::Failed && p->pollRunning() == ProcessProgress::Failed);
   signaled = true; active = 0;
   CHECK(p->forceCleanup(10) == ProcessProgress::Complete && p->release());
 }
@@ -258,6 +258,19 @@ void cancelledFailedCreateSettles()
   } while (std::chrono::steady_clock::now() < limit);
   CHECK(status == ProcessProgress::Complete && !terminated && resumes == 0 && p->release());
 }
+void runningIsAQualifiedSnapshot()
+{
+  reset(); auto* p = fixture();
+  CHECK(p->pollRunning() == ProcessProgress::Failed);
+  CHECK(launchFinished(p) == ProcessProgress::Complete);
+  CHECK(p->pollRunning() == ProcessProgress::Complete);
+  membershipOk = false; CHECK(p->pollRunning() == ProcessProgress::Unconfirmed);
+  membershipOk = true; member = false; CHECK(p->pollRunning() == ProcessProgress::Failed);
+  member = true; waitBad = true; CHECK(p->pollRunning() == ProcessProgress::Unconfirmed);
+  waitBad = false; signaled = true; active = 0;
+  CHECK(p->pollRunning() == ProcessProgress::Failed && p->launchEstablished());
+  CHECK(p->pollHealthy(10) == ProcessProgress::Complete && p->release());
+}
 }
 int main()
 {
@@ -267,4 +280,5 @@ int main()
   lateCreatedChildIsNeverResumed();
   lateAfterDeadlineIsNeverResumed();
   cancelledFailedCreateSettles();
+  runningIsAQualifiedSnapshot();
 }

@@ -217,6 +217,19 @@ ProcessProgress WindowsRestartProcess::pollHealthy(ULONGLONG deadline)
   return settle(deadline, true);
 }
 
+ProcessProgress WindowsRestartProcess::pollRunning() const
+{
+  if (!launchEstablished() || forced_ || settled_ || worker_.joinable())
+    return ProcessProgress::Failed;
+  BOOL member = FALSE;
+  if (!api_.inJob(process_, job_, &member)) return ProcessProgress::Unconfirmed;
+  if (!member) return ProcessProgress::Failed;
+  const DWORD wait = api_.wait(process_, 0);
+  if (wait == WAIT_TIMEOUT) return ProcessProgress::Complete;
+  if (wait == WAIT_OBJECT_0) return ProcessProgress::Failed;
+  return ProcessProgress::Unconfirmed;
+}
+
 ProcessProgress WindowsRestartProcess::forceCleanup(ULONGLONG deadline)
 {
   forced_ = true;

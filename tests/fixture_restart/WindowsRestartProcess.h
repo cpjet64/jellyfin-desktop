@@ -44,6 +44,7 @@ public:
   ProcessProgress launch(const std::wstring& executable,
       const std::wstring& arguments, ULONGLONG deadline);
   ProcessProgress pollLaunch();
+  ProcessProgress pollRunning() const;
   ProcessProgress pollHealthy(ULONGLONG deadline);
   ProcessProgress forceCleanup(ULONGLONG deadline);
 private:
