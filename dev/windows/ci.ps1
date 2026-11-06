@@ -178,7 +178,7 @@ Run-Native 'ctest.exe' @('--test-dir', $build, '-LE', 'gui', '--no-tests=error',
 $reportArgs = @('dev/ci/check_results.py', 'junit', "$results/headless-ctest.xml")
 $required = @('test_fault_stop', 'test_webclient_transport', 'test_webclient_fault_guard', 'test_mpv_test_bootstrap', 'test_mpv_test_bootstrap_pure', 'test_smtc_admission_model', 'test_c2a_hold_gate', 'test_c2_error_terminal', 'test_c2_fault_quiescence_policy', 'test_c2_synthetic_service', 'test_c2_fault_restore_permission', 'test_c2_fault_restore_frame', 'test_c2_capture_observation', 'test_c2_quiescence_observation', 'test_player_intent_observation', 'test_synchronous_stop_trace', 'test_synchronous_stop_events', 'test_healthy_cleanup_coordinator', 'test_healthy_wake_binding', 'test_playback_intent_acceptance', 'test_playback_checkpoint', 'test_player_intent_boundary', 'test_recovery_bridge_session', 'test_recovery_bridge_host', 'test_windows_loader_mode', 'test_playback_native_receipts', 'test_player_native_receipts', 'test_native_observation', 'test_player_native_restore', 'test_fixture_restart_broker')
 if ($mode -eq 'static') { $required += @('test_mpvqt_event_ownership', 'test_mpvqt_player_binding', 'test_player_released_state') }
-$required += @('test_fixture_frame_acceptance', 'test_fixture_frame_capture', 'test_windows_restart_io', 'test_windows_restart_process')
+$required += @('test_fixture_frame_acceptance', 'test_fixture_frame_capture', 'test_windows_restart_io', 'test_windows_restart_process', 'test_windows_restart_channel')
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs
 Run-Native $venvPython @('dev/ci/evidence.py', 'build_core', 'passed', 'Native build and core tests passed')
