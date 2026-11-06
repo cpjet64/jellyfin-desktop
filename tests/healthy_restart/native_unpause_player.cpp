@@ -1,6 +1,7 @@
 #include "PlayerComponent.h"
 #include "RestartBroker.h"
 #include "frame_capture.h"
+#include "capture_capability.h"
 #include <MpvController>
 #include <chrono>
 #include <utility>
@@ -70,7 +71,7 @@ bool PlayerComponent::healthyUnpauseAuthorized(bool requireHold) const
 
 bool PlayerComponent::healthyBeginPausedHold(HealthyRestart::PausedHoldBinding binding)
 {
-  if (!healthyUnpauseAuthorized(false) || m_restorePausedHold || m_restorePausedProof ||
+  if (!healthyUnpauseAuthorized(false) || m_healthyCaptureRejected || m_restorePausedHold || m_restorePausedProof ||
       m_nativeRestore.seekAttempted || !nativeObservationCurrent() || !m_nativeObservation.paused) return false;
   const auto receipt = m_nativeReceipts.snapshot();
   const auto key = m_nativeRestore.key;
@@ -81,28 +82,39 @@ bool PlayerComponent::healthyBeginPausedHold(HealthyRestart::PausedHoldBinding b
   try {
     fixture_restart::Capture baseline;
     for (const auto& record : fixture_restart::takeCaptures()) {
-      if (record && record->key.process == binding.frame.process && record->key.core == binding.frame.core &&
-          record->key.context == binding.frame.context && record->key.entry == binding.frame.entry)
-        baseline = record;
+      if (!record || record->key.process != binding.frame.process || record->key.core != binding.frame.core ||
+          record->key.context != binding.frame.context || record->key.entry != binding.frame.entry) {
+        m_healthyCaptureRejected = true;
+        return false;
+      }
+      baseline = record;
     }
-    if (fixture_restart::captureOverflowed() || !baseline) return false;
+    if (fixture_restart::captureOverflowed()) { m_healthyCaptureRejected = true; return false; }
+    if (!baseline) return false;
     auto hold = std::unique_ptr<HealthyRestart::PausedHold>(new HealthyRestart::PausedHold(binding));
     if (!hold->baseline(std::move(baseline)) ||
-        !hold->arm(fixture_restart::currentRenderSerial(), unpauseNowNs())) return false;
+        !hold->arm(fixture_restart::currentRenderSerial(), unpauseNowNs())) {
+      m_healthyCaptureRejected = true; return false;
+    }
     m_restoreHoldBinding = std::move(binding); m_restorePausedHold = std::move(hold);
     return true;
-  } catch (...) { return false; }
+  } catch (...) { m_healthyCaptureRejected = true; return false; }
 }
 
 bool PlayerComponent::healthyCapturePausedHold()
 {
   if (!intentControlThread() || !m_restorePausedHold || !healthyUnpauseAuthorized(false)) return false;
   for (auto& capture : fixture_restart::takeCaptures()) {
-    if (capture && m_healthySeekDispatchNs > 0 && m_nativeRestore.seekSubmissionKnown &&
-        m_nativeRestore.seekAccepted && capture->capturedAt >= static_cast<quint64>(m_healthySeekDispatchNs))
-      m_restorePausedHold->capture(std::move(capture));
+    if (!capture || m_healthySeekDispatchNs < 0 || !m_nativeRestore.seekSubmissionKnown ||
+        !m_nativeRestore.seekAccepted || capture->capturedAt < static_cast<quint64>(m_healthySeekDispatchNs)) continue;
+    if (!(capture->key == m_restoreHoldBinding.frame) || !capture->captureEvidence ||
+        !capture->captureEvidence->matches(*capture, m_nativeRestore.key.attempt, true) ||
+        !fixture_restart::decodeFrame(*capture)) {
+      m_healthyCaptureRejected = true; m_restorePausedHold->invalidate(); return false;
+    }
+    m_restorePausedHold->capture(std::move(capture));
   }
-  if (fixture_restart::captureOverflowed()) { m_restorePausedHold->invalidate(); return false; }
+  if (fixture_restart::captureOverflowed()) { m_healthyCaptureRejected = true; m_restorePausedHold->invalidate(); return false; }
   return true;
 }
 

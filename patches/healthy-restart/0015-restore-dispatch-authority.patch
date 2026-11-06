@@ -1,6 +1,12 @@
 diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
 --- a/player/PlayerComponent.h
 +++ b/player/PlayerComponent.h
+@@ -24,4 +24,4 @@
+-namespace HealthyRetirement { class FixtureGraph; }
++namespace HealthyRetirement { class FixtureGraph; class CaptureController; class Slot; }
+ #include "async_stop.h"
+ #include "paused_hold.h"
+ #include "native_cleanup_state.h"
 @@ -281,6 +281,7 @@ private:
  #ifdef HEALTHY_RETIREMENT_TESTING
    friend class TestHealthyGraphArm;
@@ -14,17 +20,22 @@ diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
    void observeNativeRestoreUnpause(const mpv_event* event);
    bool healthyUnpauseAuthorized(bool requireHold) const;
 +  bool healthyRestoreSubmissionAllowed(bool seeking) const;
-+  bool healthyMarkSeekDispatch();
++  bool healthyAdmitRestoreSubmission(bool seeking);
    bool healthyBindRestoreGate(std::shared_ptr<const FixtureRestart::ChildGate> gate, quint64 run,
        quint64 launch, quint64 grant, quint64 revision, QByteArray digest, std::function<qint64()> clock);
    bool healthyBeginPausedHold(HealthyRestart::PausedHoldBinding binding);
-@@ -382,6 +385,9 @@ private:
+@@ -382,6 +385,14 @@ private:
    HealthyRestart::RestoreCleanupState m_restoreCleanup;
    std::shared_ptr<const FixtureRestart::ChildGate> m_restoreCleanupGate;
    std::function<int(quint64, const char**)> m_restoreDispatch;
 +  std::function<bool(bool)> m_healthyRestoreAuthority;
++  std::function<bool(qint64&)> m_healthyRestoreFinalSnapshot;
++  std::weak_ptr<HealthyRetirement::CaptureController> m_healthyRestoreCapture;
++  std::weak_ptr<HealthyRetirement::Slot> m_healthyRestoreSlot;
++  quint64 m_healthyRestoreGeneration = 0;
 +  PlaybackNativeReceipts::Key m_healthyRestoreAuthorityKey;
-+  qint64 m_healthySeekDispatchNs = 0;
++  qint64 m_healthySeekDispatchNs = -1;
++  bool m_healthyCaptureRejected = false;
    struct RestoreUnpauseState {
      bool attempted = false, submissionKnown = false, submitted = false, replied = false;
      bool replyOk = false, failed = false;
@@ -35,7 +46,7 @@ diff --git a/player/PlayerNativeReceipts.cpp b/player/PlayerNativeReceipts.cpp
  #else
      const char* args[] = {"loadfile", path.constData(), "replace", "pause=yes", nullptr};
  #endif
-+    if (m_nativeRestore.armed && !healthyRestoreSubmissionAllowed(false)) {
++    if (m_nativeRestore.armed && !healthyAdmitRestoreSubmission(false)) {
 +      m_nativeReceipts.submitted(result);
 +      return false;
 +    }
@@ -55,7 +66,7 @@ diff --git a/player/PlayerNativeRestore.cpp b/player/PlayerNativeRestore.cpp
    const QByteArray position = QByteArray::number(ms / 1000) + '.' + QByteArray::number(ms % 1000).rightJustified(3, '0');
    const char* args[] = {"seek", position.constData(), "absolute+exact", nullptr};
    int result = -1;
-+  if (!healthyRestoreSubmissionAllowed(true) || !healthyMarkSeekDispatch()) {
++  if (!healthyAdmitRestoreSubmission(true)) {
 +    m_nativeRestore.seekSubmissionKnown = true;
 +    m_nativeRestore.seekPending = false;
 +    m_nativeRestore.seekError = result;

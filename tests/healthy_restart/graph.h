@@ -144,12 +144,14 @@ private:
   bool restoreLoad();
   bool restoreSeek();
   bool bindRestoreAuthority();
+  bool bindRestoreFinal(const std::shared_ptr<RetirementClaim>& claim, RetirementClaim::ArmIdentity identity);
   bool prepareRestoreAuthority();
   bool restoreLaunch(HealthyModuleIdentity::LaunchBinding& binding, std::uint64_t& launch) const;
   const void* restoreToken(HealthyModuleIdentity::EndpointRole role) const;
   enum class PlaybackProgress { Pending, Ready, Failed };
   PlaybackProgress pollRestorePlayback();
   bool requestRestoreObservation();
+  bool restoreProofReady();
   bool captureBaseline();
   bool captureSessionReady() const;
   bool capturePlayerBound() const;
@@ -195,11 +197,15 @@ private:
     const void* ack = nullptr;
     std::weak_ptr<void> storage;
     std::function<bool()> moduleLive, endpointsLive;
+    std::weak_ptr<const std::atomic_bool> moduleState, endpointState;
+    std::weak_ptr<const std::atomic<qint64>> clockState;
     bool accepted = false;
   };
   bool installRestoreBootstrapForTest(HealthyModuleIdentity::LaunchBinding binding, std::uint64_t launch,
       const void* grant, const void* control, const void* ack, std::weak_ptr<void> storage,
-      std::function<bool()> moduleLive, std::function<bool()> endpointsLive);
+      std::function<bool()> moduleLive, std::function<bool()> endpointsLive,
+      std::weak_ptr<const std::atomic_bool> moduleState, std::weak_ptr<const std::atomic_bool> endpointState,
+      std::weak_ptr<const std::atomic<qint64>> clockState);
   std::shared_ptr<const TestBootstrap> restoreBootstrapForTest_;
   bool bindTestFinalizer(std::function<bool()> finalizer, std::function<void()> destroyedObserver);
   bool invokeTestFinalizer();
