@@ -114,6 +114,13 @@ std::unique_ptr<ChildEndpoints> ChildEndpoints::createImpl(std::unique_ptr<Verif
 std::unique_ptr<ChildEndpoints> ChildEndpoints::createForTest(std::uint64_t deadline, EndpointMode mode,
     const EndpointInput (&inputs)[3], const TestOperations& test)
 {
+  std::unique_ptr<VerifiedModule> none;
+  return createForTest(none, 1, deadline, mode, inputs, test);
+}
+std::unique_ptr<ChildEndpoints> ChildEndpoints::createForTest(std::unique_ptr<VerifiedModule>& module,
+    std::uint64_t generation, std::uint64_t deadline, EndpointMode mode,
+    const EndpointInput (&inputs)[3], const TestOperations& test)
+{
   Operations ops;
   ops.valid = test.valid; ops.accepts = test.accepts;
   ops.compare = [test](std::uintptr_t a, std::uintptr_t b) {
@@ -123,8 +130,7 @@ std::unique_ptr<ChildEndpoints> ChildEndpoints::createForTest(std::uint64_t dead
   };
   if (!test.compare) return {};
   ops.duplicate = test.duplicate; ops.close = test.close; ops.io = test.io;
-  std::unique_ptr<VerifiedModule> none;
-  return createImpl(none, 1, deadline, mode, inputs, std::move(ops));
+  return createImpl(module, generation, deadline, mode, inputs, std::move(ops));
 }
 #endif
 #endif

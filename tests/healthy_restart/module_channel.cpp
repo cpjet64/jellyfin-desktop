@@ -48,9 +48,14 @@ bool VerifiedModule::launchId(std::uint64_t generation, std::uint64_t& output) c
 std::unique_ptr<VerifiedModule> VerifiedModule::forAccessorTest(std::uint64_t generation,
     std::uint64_t launch, bool (*valid)(void*) noexcept, void* context)
 {
+  return forAccessorTest(generation, launch, LaunchBinding{}, valid, context);
+}
+std::unique_ptr<VerifiedModule> VerifiedModule::forAccessorTest(std::uint64_t generation,
+    std::uint64_t launch, const LaunchBinding& binding, bool (*valid)(void*) noexcept, void* context)
+{
   if (!generation || !launch || !valid) return {};
   auto state = std::make_unique<State>();
-  state->generation = generation; state->launch = launch;
+  state->generation = generation; state->launch = launch; state->binding = binding;
   state->testValid = valid; state->testContext = context;
   return std::unique_ptr<VerifiedModule>(new VerifiedModule(std::move(state)));
 }

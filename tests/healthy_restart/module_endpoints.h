@@ -31,6 +31,9 @@ public:
   };
   static std::unique_ptr<ChildEndpoints> createForTest(std::uint64_t deadline, EndpointMode mode,
       const EndpointInput (&inputs)[3], const TestOperations& operations);
+  static std::unique_ptr<ChildEndpoints> createForTest(std::unique_ptr<VerifiedModule>& module,
+      std::uint64_t generation, std::uint64_t deadline, EndpointMode mode,
+      const EndpointInput (&inputs)[3], const TestOperations& operations);
 #endif
   static std::unique_ptr<ChildEndpoints> create(std::unique_ptr<VerifiedModule>& module,
       std::uint64_t generation, std::uint64_t deadline, EndpointMode mode,
