@@ -75,7 +75,7 @@ private:
   bool read_ = false, inFlight_ = false, cancelling_ = false;
   bool owned_ = false, closed_ = false;
   bool identityWriter_ = false;
-  bool tracked_ = false, poisoned_ = false, cancelRequested_ = false;
+  bool tracked_ = false, poisoned_ = false, cancelRequested_ = false, submitting_ = false;
   std::uint64_t nextOperation_ = 0, operation_ = 0;
   std::shared_ptr<const Settlement> settlement_;
   IoProgress state_ = IoProgress::Failed;

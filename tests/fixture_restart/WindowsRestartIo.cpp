@@ -12,7 +12,7 @@ WindowsRestartIo::~WindowsRestartIo()
 
 bool WindowsRestartIo::release()
 {
-  if (inFlight_ || owned_ || settlement_) return false;
+  if (inFlight_ || submitting_ || owned_ || settlement_) return false;
   delete this;
   return true;
 }
@@ -70,7 +70,7 @@ IoProgress WindowsRestartIo::pollIdentity()
 IoProgress WindowsRestartIo::beginImpl(HANDLE pipe, bool read, const void* data,
                                        DWORD size, ULONGLONG deadline, bool tracked)
 {
-  if (inFlight_ || settlement_ || poisoned_) return IoProgress::Failed;
+  if (inFlight_ || submitting_ || settlement_ || poisoned_) return IoProgress::Failed;
   if (tracked && nextOperation_ == (std::numeric_limits<std::uint64_t>::max)()) return IoProgress::Failed;
   if (closed_ || !size || size > 9216 || (!read && !data) ||
       pipe == INVALID_HANDLE_VALUE || !pipe ||
@@ -105,16 +105,24 @@ IoProgress WindowsRestartIo::submit()
     overlap_.hEvent = event;
     DWORD count = 0;
     const DWORD remaining = static_cast<DWORD>(bytes_.size()) - offset_;
+    inFlight_ = true;
+    submitting_ = true;
     const BOOL ok = read_ ? api_.readFile(pipe_, bytes_.data() + offset_, remaining,
                                           &count, &overlap_)
                           : api_.writeFile(pipe_, bytes_.data() + offset_, remaining,
                                            &count, &overlap_);
+    submitting_ = false;
+    if (!inFlight_) return state_; // A reentrant completion already settled this operation.
     if (!ok) {
       const DWORD error = api_.error();
-      if (error != ERROR_IO_PENDING) return completedError(error);
-      inFlight_ = true;
+      if (error != ERROR_IO_PENDING) {
+        inFlight_ = false;
+        if (tracked_ && count) return settleTracked(Settlement::Outcome::Uncertain);
+        return completedError(error);
+      }
       return state_ = IoProgress::Pending;
     }
+    inFlight_ = false;
     if (tracked_) {
       if (!count || count > remaining) return settleTracked(Settlement::Outcome::Uncertain);
       offset_ += count;
