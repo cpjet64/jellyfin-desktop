@@ -54,6 +54,7 @@ private:
   bool request(fixture_restart::FrameKey key, std::uint64_t attempt, Phase phase,
                std::shared_ptr<const RetirementClaim> claim);
   Status status(std::uint64_t attempt, Phase phase) const;
+  Status availability() const;
   bool admitTarget(const fixture_restart::FrameKey& key, std::uint64_t attempt,
                    const std::shared_ptr<const RetirementClaim>& claim,
                    RetirementClaim::ArmIdentity identity) const;
@@ -98,6 +99,7 @@ public:
                std::shared_ptr<const RetirementClaim> claim);
   bool ready(std::uint64_t attempt, CaptureBridge::Phase phase) const;
   CaptureBridge::Status status(std::uint64_t attempt, CaptureBridge::Phase phase) const;
+  CaptureBridge::Status availability() const;
   bool admitTarget(const fixture_restart::FrameKey& key, std::uint64_t attempt,
                    const std::shared_ptr<const RetirementClaim>& claim,
                    RetirementClaim::ArmIdentity identity) const;

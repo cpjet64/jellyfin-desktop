@@ -69,6 +69,20 @@ bool CaptureBridge::ready(std::uint64_t attempt, Phase phase) const
          framebufferQualified_ && attachment_ && width_ == 160 && height_ == 90 && live(original_);
 }
 
+CaptureBridge::Status CaptureBridge::availability() const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto slot = slot_.lock();
+  if (!slot || destroyed_) return Status::Rejected;
+  const auto state = slot->captureAvailability();
+  if (state == CaptureAvailability::Rejected) return Status::Rejected;
+  if (state == CaptureAvailability::Pending || !renderer_ || !framebuffer_) return Status::Pending;
+  const auto lifetime = slot->current();
+  if (!lifetime || !same(original_, lifetime->originalIdentity())) return Status::Rejected;
+  return framebufferQualified_ && attachment_ && width_ == 160 && height_ == 90
+      ? Status::Ready : Status::Rejected;
+}
+
 CaptureBridge::Status CaptureBridge::status(std::uint64_t attempt, Phase phase) const
 {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -235,6 +249,8 @@ CaptureBridge::Status CaptureController::status(std::uint64_t attempt, CaptureBr
 {
   return bridge_->status(attempt, phase);
 }
+
+CaptureBridge::Status CaptureController::availability() const { return bridge_->availability(); }
 
 bool CaptureController::admitTarget(const fixture_restart::FrameKey& key, std::uint64_t attempt,
                                     const std::shared_ptr<const RetirementClaim>& claim,

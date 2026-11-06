@@ -22,6 +22,7 @@ enum class Barrier { Unqualified, TestQualified };
 enum class BarrierResult { Ready, Waiting, Rejected };
 enum class Phase { Active, Closing, Freeing, Acknowledged, Retained };
 enum class Result { Pending, Done, Blocked };
+enum class CaptureAvailability { Pending, Ready, Rejected };
 struct Operations {
   // now is nonblocking, non-reentrant and uses the original monotonic epoch.
   std::function<std::int64_t()> now;
@@ -115,6 +116,7 @@ public:
   std::shared_ptr<CaptureBridge> captureBridge() const;
   bool captureAdmission(const std::shared_ptr<Lifetime>& lifetime);
   bool captureSnapshot(const std::shared_ptr<Lifetime>& lifetime) const;
+  CaptureAvailability captureAvailability() const;
   void invalidate(std::uint64_t generation);
   std::uint64_t generation() const { return generation_; }
 #ifdef HEALTHY_RETIREMENT_TESTING

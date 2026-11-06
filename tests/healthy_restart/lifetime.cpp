@@ -409,6 +409,16 @@ bool Slot::captureSnapshot(const std::shared_ptr<Lifetime>& lifetime) const
          !lifetime->facts_.admissionClosed;
 }
 
+CaptureAvailability Slot::captureAvailability() const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (closed_) return CaptureAvailability::Rejected;
+  if (!lifetime_) return CaptureAvailability::Pending;
+  std::lock_guard<std::mutex> lifetimeLock(lifetime_->mutex_);
+  return lifetime_->ownerValid_ && lifetime_->facts_.phase == Phase::Active &&
+         !lifetime_->facts_.admissionClosed ? CaptureAvailability::Ready : CaptureAvailability::Rejected;
+}
+
 bool Slot::admitCaptureDispatch(const std::shared_ptr<Lifetime>& lifetime,
                                 const std::shared_ptr<const RetirementClaim>& claim,
                                 RetirementClaim::ArmIdentity identity) const
