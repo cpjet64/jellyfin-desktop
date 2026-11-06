@@ -1,5 +1,14 @@
 # Headless tests of the diagnostic retirement protocol and its Qt adapter.
 find_package(Threads REQUIRED)
+add_executable(test_healthy_stop_reservation "${CMAKE_SOURCE_DIR}/tests/test_healthy_stop_reservation.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/healthy_restart/graph_access.cpp" "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp")
+target_include_directories(test_healthy_stop_reservation PRIVATE "${CMAKE_SOURCE_DIR}/tests" "${CMAKE_SOURCE_DIR}/tests/healthy_restart")
+target_compile_features(test_healthy_stop_reservation PRIVATE cxx_std_17)
+target_compile_definitions(test_healthy_stop_reservation PRIVATE HEALTHY_RETIREMENT_TESTING)
+target_link_libraries(test_healthy_stop_reservation PRIVATE Threads::Threads Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml)
+add_test(NAME test_healthy_stop_reservation COMMAND test_healthy_stop_reservation)
+set_tests_properties(test_healthy_stop_reservation PROPERTIES TIMEOUT 60)
+
 add_executable(test_healthy_cleanup_claim "${CMAKE_SOURCE_DIR}/tests/test_healthy_cleanup_claim.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/graph_access.cpp"
   "${CMAKE_SOURCE_DIR}/tests/healthy_restart/lifetime.cpp")

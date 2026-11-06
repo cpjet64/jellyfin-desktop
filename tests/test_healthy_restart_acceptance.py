@@ -26,7 +26,10 @@ PATCHES = ('patches/mpvqt/0001-event-ownership.patch',
            'patches/healthy-restart/0007-async-restore-cleanup.patch',
            'patches/healthy-restart/0008-renderer-capture-capability.patch',
            'patches/healthy-restart/0009-adapter-cleanup.patch',
-           'patches/healthy-restart/0010-cleanup-provenance.patch')
+           'patches/healthy-restart/0010-cleanup-provenance.patch',
+           'patches/healthy-restart/0011-stop-only-reservation.patch',
+           'patches/healthy-restart/0012-contained-stop-continuation.patch',
+           'patches/healthy-restart/0013-arm-test-hooks.patch')
 
 
 class HealthyRestartAcceptance(unittest.TestCase):

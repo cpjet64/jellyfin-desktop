@@ -136,7 +136,10 @@ foreach(_entry IN ITEMS
     "patches/healthy-restart/0007-async-restore-cleanup.patch|3db6b0568be4f9ea6ed577eeca0f415a259db086d9d6bf343b8f4eb2bfc990da"
     "patches/healthy-restart/0008-renderer-capture-capability.patch|47d7be5b1040ba824a795d4fae6c59fcde707f221b48451eeb6606ba5bf2792c"
     "patches/healthy-restart/0009-adapter-cleanup.patch|2fe6910fa124fbadfa9ebe7ba46d78bce81733057efa8f88c26dedc1d70d94c0"
-    "patches/healthy-restart/0010-cleanup-provenance.patch|8edd7969adb0e24776bb093f43b7a716d2eacdd0d69aefe8bc23c28b3c3f19be")
+    "patches/healthy-restart/0010-cleanup-provenance.patch|8edd7969adb0e24776bb093f43b7a716d2eacdd0d69aefe8bc23c28b3c3f19be"
+    "patches/healthy-restart/0011-stop-only-reservation.patch|00f98aacec7b1e51e5f817668061594c0590f74bea04bcb1eb04894fd3180fbe"
+    "patches/healthy-restart/0012-contained-stop-continuation.patch|1cc78786f8671a6f8920f4fcb46cf268188274daf79f16d4a5f78e3f51b5e44d"
+    "patches/healthy-restart/0013-arm-test-hooks.patch|a91339de3b6564437a957f5cd9ca81be91c9e0b37fe21bb01aaab953d17cc4cc")
   string(REPLACE "|" ";" _pair "${_entry}")
   list(GET _pair 0 _relative)
   list(GET _pair 1 _hash)
@@ -191,6 +194,9 @@ _healthy_apply("patches/healthy-restart/0007-async-restore-cleanup.patch" "3db6b
 _healthy_apply("patches/healthy-restart/0008-renderer-capture-capability.patch" "47d7be5b1040ba824a795d4fae6c59fcde707f221b48451eeb6606ba5bf2792c" FALSE)
 _healthy_apply("patches/healthy-restart/0009-adapter-cleanup.patch" "2fe6910fa124fbadfa9ebe7ba46d78bce81733057efa8f88c26dedc1d70d94c0" FALSE)
 _healthy_apply("patches/healthy-restart/0010-cleanup-provenance.patch" "8edd7969adb0e24776bb093f43b7a716d2eacdd0d69aefe8bc23c28b3c3f19be" FALSE)
+_healthy_apply("patches/healthy-restart/0011-stop-only-reservation.patch" "00f98aacec7b1e51e5f817668061594c0590f74bea04bcb1eb04894fd3180fbe" FALSE)
+_healthy_apply("patches/healthy-restart/0012-contained-stop-continuation.patch" "1cc78786f8671a6f8920f4fcb46cf268188274daf79f16d4a5f78e3f51b5e44d" FALSE)
+_healthy_apply("patches/healthy-restart/0013-arm-test-hooks.patch" "a91339de3b6564437a957f5cd9ca81be91c9e0b37fe21bb01aaab953d17cc4cc" FALSE)
 
 foreach(_entry IN LISTS _healthy_output_pins)
   string(REPLACE "|" ";" _pair "${_entry}")
