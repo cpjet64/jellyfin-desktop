@@ -105,7 +105,7 @@ class PinTests(unittest.TestCase):
             (root / path).write_bytes((ROOT / path).read_bytes())
         result = command([sys.executable, '-B', 'dev/ci/test_macos_sdist_select_launch.py'], root, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(b'Ran 10 tests', result.stderr)
+        self.assertIn(b'Ran 13 tests', result.stderr)
         self.assertFalse((root / 'deps').exists())
 
     def test_changed_bytes_fail_before_bootstrap_or_parent_execution(self):
@@ -121,7 +121,7 @@ class PinTests(unittest.TestCase):
                     result = self.bootstrap(root)
                     self.assertNotEqual(result.returncode, 0)
                     self.assertEqual(result.stdout, b'')
-                    self.assertIn(b'AssertionError', result.stderr)
+                    self.assertIn(b'"status": "mismatch"', result.stderr)
                     self.assertNotIn(b'UNTRUSTED_EXECUTED', result.stdout + result.stderr)
                     with patch.dict(launcher.PINS, {target: FILES[path]}), \
                             patch('builtins.compile') as compile_call, patch('builtins.exec') as exec_call:
@@ -146,10 +146,10 @@ class PinTests(unittest.TestCase):
         root = self.materialize('false')
         inputs = {root / name: expected for name, expected in FILES.items()}
         inputs[launcher.PYTHON] = launcher.PINS[launcher.PYTHON]
-        actual_digest = launcher.digest
+        actual_verify = launcher.verified_bytes
         selector = types.SimpleNamespace(ARCHIVES={}, validate_directory=Mock())
-        def fake_digest(path):
-            return inputs[path] if path == launcher.PYTHON else actual_digest(path)
+        def fake_verify(path, expected, name, maximum):
+            return b'python' if path == launcher.PYTHON else actual_verify(path, expected, name, maximum)
         for path in FILES:
             target = root / path
             original = target.read_bytes()
@@ -162,7 +162,7 @@ class PinTests(unittest.TestCase):
                         with patch.object(launcher, 'REPO', root), patch.object(launcher, 'OUTPUT', root / 'absent'), \
                                 patch.object(launcher, 'PINS', inputs), patch.object(launcher.os, 'name', 'nt'), \
                                 patch.object(launcher.shutil, 'disk_usage', return_value=types.SimpleNamespace(free=2**40)), \
-                                patch.object(launcher, 'digest', side_effect=fake_digest), \
+                                patch.object(launcher, 'verified_bytes', side_effect=fake_verify), \
                                 patch.object(launcher, 'load_verified', return_value=selector) as load:
                             with self.assertRaisesRegex(ValueError, 'input hash mismatch'):
                                 launcher.preflight()
@@ -174,14 +174,14 @@ class PinTests(unittest.TestCase):
         root = self.materialize('false')
         inputs = {root / name: expected for name, expected in FILES.items()}
         inputs[launcher.PYTHON] = launcher.PINS[launcher.PYTHON]
-        actual_digest = launcher.digest
+        actual_verify = launcher.verified_bytes
         selector = types.SimpleNamespace(ARCHIVES={}, validate_directory=Mock())
-        def fake_digest(path):
-            return inputs[path] if path == launcher.PYTHON else actual_digest(path)
+        def fake_verify(path, expected, name, maximum):
+            return b'python' if path == launcher.PYTHON else actual_verify(path, expected, name, maximum)
         with patch.object(launcher, 'REPO', root), patch.object(launcher, 'OUTPUT', root / 'absent'), \
                 patch.object(launcher, 'PINS', inputs), patch.object(launcher.os, 'name', 'nt'), \
                 patch.object(launcher.shutil, 'disk_usage', return_value=types.SimpleNamespace(free=2**40)), \
-                patch.object(launcher, 'digest', side_effect=fake_digest), patch.object(launcher, 'selector', None), \
+                patch.object(launcher, 'verified_bytes', side_effect=fake_verify), patch.object(launcher, 'selector', None), \
                 patch.object(launcher, 'load_verified', return_value=selector) as load:
             launcher.preflight()
             self.assertEqual(load.call_count, 2)

@@ -4,6 +4,7 @@ Popen interruption before it returns a handle cannot be settled by this launcher
 The held direct child is the only process covered; no descendant guarantee is made.
 The deadline is checked only while polling; preflight and a quick exit are not bounded.
 Synthetic tests do not validate Windows pipe APIs or establish runtime proof.
+Diagnostics count CRLF pairs separately; lone LF and lone CR exclude those pairs.
 """
 import ctypes
 import hashlib
@@ -32,12 +33,62 @@ DEADLINE = 180
 STDOUT_LIMIT = 16 * 1024 * 1024
 STDERR_LIMIT = 1024 * 1024
 HEADROOM = 2 * 1024 * 1024 * 1024
-BOOTSTRAP = "import hashlib,sys,types; p=sys.argv[1:3]; h=sys.argv[3:5]; b=[open(x,'rb').read() for x in p]; assert all(hashlib.sha256(x).hexdigest()==y for x,y in zip(b,h)); m=types.ModuleType('macos_sdist_static'); m.__file__=p[0]; sys.modules[m.__name__]=m; exec(compile(b[0],p[0],'exec'),m.__dict__); sys.argv=sys.argv[5:]; exec(compile(b[1],p[1],'exec'),{'__name__':'__main__','__file__':p[1]})"
+BOOTSTRAP = '''import hashlib,json,os,sys,types
+p=sys.argv[1:3]; h=sys.argv[3:5]; buffers=[]; records=[]
+for name,path,expected in zip(("static", "selector"),p,h):
+    record={"stage":"child", "input":name, "expected_sha256":expected, "expected_length":None, "crlf":None, "lone_lf":None, "lone_cr":None}
+    try:
+        with open(path,"rb") as stream: data=stream.read(1048577)
+        if len(data)>1048576: record.update(status="oversized",actual_sha256=None,actual_length=None)
+        else:
+            actual=hashlib.sha256(data).hexdigest(); crlf=data.count(b"\\r\\n")
+            record.update(status="match" if actual==expected else "mismatch",actual_sha256=actual,actual_length=len(data),crlf=crlf,lone_lf=data.count(b"\\n")-crlf,lone_cr=data.count(b"\\r")-crlf)
+            buffers.append(data)
+    except FileNotFoundError: record.update(status="missing",actual_sha256=None,actual_length=None)
+    except OSError: record.update(status="unreadable",actual_sha256=None,actual_length=None)
+    records.append(record)
+if any(record["status"]!="match" for record in records):
+    try:
+        for record in records: print(json.dumps(record,sort_keys=True),file=sys.stderr,flush=True)
+    except BaseException: pass
+    os._exit(1)
+m=types.ModuleType("macos_sdist_static"); m.__file__=p[0]; sys.modules[m.__name__]=m
+exec(compile(buffers[0],p[0],"exec"),m.__dict__); sys.argv=sys.argv[5:]
+exec(compile(buffers[1],p[1],"exec"),{"__name__":"__main__","__file__":p[1]})'''
 
 
-def load_verified(path, name):
-    data = path.read_bytes()
-    if hashlib.sha256(data).hexdigest() != PINS[path]:
+def verified_bytes(path, expected, name, maximum):
+    record = {"stage": "preflight", "input": name, "expected_sha256": expected,
+              "expected_length": None, "actual_sha256": None, "actual_length": None,
+              "crlf": None, "lone_lf": None, "lone_cr": None}
+    try:
+        with path.open("rb") as stream:
+            data = stream.read(maximum + 1)
+        if len(data) > maximum:
+            record["status"] = "oversized"
+        else:
+            actual = hashlib.sha256(data).hexdigest()
+            crlf = data.count(b"\r\n")
+            record.update(status="match" if actual == expected else "mismatch", actual_sha256=actual,
+                          actual_length=len(data), crlf=crlf, lone_lf=data.count(b"\n") - crlf,
+                          lone_cr=data.count(b"\r") - crlf)
+            if actual == expected:
+                return data
+    except FileNotFoundError:
+        record["status"] = "missing"
+    except OSError:
+        record["status"] = "unreadable"
+    try:
+        print(json.dumps(record, sort_keys=True), file=sys.stderr)
+    except BaseException:
+        pass
+    raise ValueError("input hash mismatch")
+
+
+def load_verified(path, name, data=None):
+    if data is None:
+        data = verified_bytes(path, PINS[path], path.name, 1024 * 1024)
+    elif hashlib.sha256(data).hexdigest() != PINS[path]:
         raise ValueError("input hash mismatch")
     module = types.ModuleType(name)
     module.__file__ = str(path)
@@ -80,11 +131,12 @@ def preflight():
         raise ValueError("output already exists")
     if shutil.disk_usage(REPO / "deps").free < HEADROOM + STDOUT_LIMIT + STDERR_LIMIT:
         raise ValueError("insufficient space")
-    for path, expected in PINS.items():
-        if digest(path) != expected:
-            raise ValueError("input hash mismatch")
-    load_verified(REPO / "dev/ci/macos_sdist_static.py", "macos_sdist_static")
-    selector = load_verified(REPO / "dev/ci/macos_sdist_select.py", "macos_sdist_select")
+    inputs = {path: verified_bytes(path, expected, "python" if path == PYTHON else path.name,
+                                   16 * 1024 * 1024 if path == PYTHON else 1024 * 1024)
+              for path, expected in PINS.items()}
+    static, script = REPO / "dev/ci/macos_sdist_static.py", REPO / "dev/ci/macos_sdist_select.py"
+    load_verified(static, "macos_sdist_static", inputs[static])
+    selector = load_verified(script, "macos_sdist_select", inputs[script])
     selector.validate_directory(REPO / "deps")
     selector.validate_directory(SOURCE)
     for name, spec in selector.ARCHIVES.items():

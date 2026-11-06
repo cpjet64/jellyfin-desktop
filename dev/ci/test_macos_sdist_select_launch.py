@@ -2,8 +2,10 @@ import errno
 import hashlib
 import io
 import json
+from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -14,6 +16,85 @@ subject.selector = macos_sdist_select
 
 
 class LaunchTests(unittest.TestCase):
+    def test_preflight_diagnostic_read_and_emission_failures(self):
+        for error, status in ((FileNotFoundError(), 'missing'), (PermissionError(), 'unreadable')):
+            with self.subTest(status=status), patch.object(Path, 'open', side_effect=error), \
+                    patch.object(sys, 'stderr', new_callable=io.StringIO) as output:
+                with self.assertRaisesRegex(ValueError, 'input hash mismatch'):
+                    subject.verified_bytes(Path('fixed'), 'a' * 64, 'static', 10)
+                record = json.loads(output.getvalue())
+                self.assertEqual(record['status'], status)
+                self.assertIsNone(record['actual_sha256'])
+        with patch.object(Path, 'open', side_effect=OSError()), patch('builtins.print', side_effect=OSError()):
+            with self.assertRaisesRegex(ValueError, 'input hash mismatch'):
+                subject.verified_bytes(Path('fixed'), 'a' * 64, 'static', 10)
+
+    def test_bootstrap_bounded_failures_and_diagnostic_failure(self):
+        with tempfile.TemporaryDirectory(dir=subject.REPO) as directory:
+            root = Path(directory)
+            script = root / 'select.py'
+            script.write_bytes(b'raise RuntimeError("must not execute")')
+            expected = hashlib.sha256(script.read_bytes()).hexdigest()
+            for kind in ('missing', 'unreadable', 'oversized'):
+                source = root / kind
+                if kind == 'unreadable':
+                    source.mkdir()
+                elif kind == 'oversized':
+                    source.write_bytes(b'x' * (1024 * 1024 + 1))
+                args = [sys.executable, '-I', '-S', '-B', '-c', subject.BOOTSTRAP,
+                        str(source), str(script), expected, expected, str(script)]
+                result = subprocess.run(args, capture_output=True, timeout=10,
+                                        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                self.assertNotEqual(result.returncode, 0)
+                record = json.loads(result.stderr.splitlines()[0])
+                self.assertEqual(record['status'], kind)
+                self.assertIsNone(record['actual_sha256'])
+                self.assertIsNone(record['actual_length'])
+            broken = 'import sys; sys.stderr=type("Broken",(),{"write":lambda *a:1/0,"flush":lambda *a:1/0})()\n'
+            args[5] = broken + subject.BOOTSTRAP
+            result = subprocess.run(args, capture_output=True, timeout=10,
+                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            self.assertEqual(result.returncode, 1)
+
+    def test_bootstrap_failure_diagnostics_and_no_execution(self):
+        variants = (b'line\n', b'line\r\n', b'a\r\nb\nc\r', b'\xef\xbb\xbfx\n', b'x\nextra')
+        with tempfile.TemporaryDirectory(dir=subject.REPO) as directory:
+            root = Path(directory)
+            source, script, marker = root / 'static.py', root / 'select.py', root / 'executed'
+            script.write_bytes(('open(' + repr(str(marker)) + ', "w").write("bad")').encode())
+            expected = hashlib.sha256(b'unchanged').hexdigest()
+            for data in variants:
+                with self.subTest(data=data):
+                    source.write_bytes(data)
+                    args = [sys.executable, '-I', '-S', '-B', '-c', subject.BOOTSTRAP,
+                            str(source), str(script), expected, hashlib.sha256(script.read_bytes()).hexdigest(),
+                            str(script)]
+                    result = subprocess.run(args, capture_output=True, timeout=10,
+                                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                    self.assertNotEqual(result.returncode, 0)
+                    record = json.loads(result.stderr.splitlines()[0])
+                    other = json.loads(result.stderr.splitlines()[1])
+                    self.assertEqual((record['stage'], record['input'], record['status']),
+                                     ('child', 'static', 'mismatch'))
+                    self.assertEqual((other['stage'], other['input'], other['status']),
+                                     ('child', 'selector', 'match'))
+                    self.assertEqual(record['actual_sha256'], hashlib.sha256(data).hexdigest())
+                    self.assertEqual(record['actual_length'], len(data))
+                    self.assertEqual((record['crlf'], record['lone_lf'], record['lone_cr']),
+                                     (data.count(b'\r\n'), data.count(b'\n') - data.count(b'\r\n'),
+                                      data.count(b'\r') - data.count(b'\r\n')))
+                    self.assertFalse(marker.exists())
+            source.write_bytes(b'unchanged')
+            args = [sys.executable, '-I', '-S', '-B', '-c', subject.BOOTSTRAP,
+                    str(source), str(script), expected, '0' * 64, str(script)]
+            result = subprocess.run(args, capture_output=True, timeout=10,
+                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            self.assertEqual(result.returncode, 1)
+            records = [json.loads(line) for line in result.stderr.splitlines()]
+            self.assertEqual([(r['stage'], r['input'], r['status']) for r in records],
+                             [('child', 'static', 'match'), ('child', 'selector', 'mismatch')])
+            self.assertFalse(marker.exists())
+
     def test_real_isolated_help_imports_sibling_without_archive_read(self):
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         static = subject.REPO / "dev/ci/macos_sdist_static.py"
