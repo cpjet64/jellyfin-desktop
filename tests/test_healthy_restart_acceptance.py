@@ -18,7 +18,8 @@ OPTIONS = {'HEALTHY_RESTART_DIAGNOSTIC_ONLY': 'ON', 'PLAYER_INTENT_DIAGNOSTIC_ON
            'MPVQT_C2_DIAGNOSTIC_ONLY': 'OFF', 'FIXTURE_PRODUCER_COPY_ONLY': 'OFF'}
 PATCHES = ('patches/mpvqt/0001-event-ownership.patch',
            'patches/healthy-restart/0001-render-capture.patch',
-           'patches/healthy-restart/0002-player-event-order.patch')
+           'patches/healthy-restart/0002-player-event-order.patch',
+           'patches/healthy-restart/0003-render-retirement.patch')
 
 
 class HealthyRestartAcceptance(unittest.TestCase):
@@ -107,6 +108,21 @@ class HealthyRestartAcceptance(unittest.TestCase):
                      'input/apple/InputAppleMediaKeys.h', 'input/apple/InputAppleMediaKeys.mm',
                      'settings/AudioSettingsController.cpp', 'taskbar/TaskbarComponentWin.cpp'):
             self.assertTrue((copied / path).is_file(), path)
+
+    def test_copied_renderer_retirement_is_unqualified_by_default(self):
+        result = self.run_copy()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        copied = self.root / 'healthy-restart-copy/mpvqt'
+        renderer = (copied / 'mpvrenderer.cpp').read_text(encoding='utf-8')
+        create = renderer.split('MpvRenderer::createFramebufferObject(', 1)[1]
+        create = create.split('MpvRenderer::installHealthyLifetime(', 1)[0]
+        self.assertLess(create.index('slot->current()'), create.index('existing->enterRender'))
+        self.assertLess(create.index('slot->beginCreation()'), create.index('installHealthyLifetime'))
+        self.assertLess(create.index('installHealthyLifetime'), create.index('mpv_render_context_set_update_callback'))
+        lifetime = (copied / 'lifetime.cpp').read_text(encoding='utf-8')
+        install = lifetime.split('Slot::install(', 1)[1].split('Slot::request(', 1)[0]
+        self.assertIn('Barrier::Unqualified', install)
+        self.assertIn('if (barrier_ == Barrier::Unqualified)', lifetime)
 
 
 class HealthyRestartWrapper(unittest.TestCase):

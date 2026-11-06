@@ -114,7 +114,8 @@ endforeach()
 foreach(_entry IN ITEMS
     "patches/mpvqt/0001-event-ownership.patch|7092502b85f555db6f108bf3ec1a09e47d56680f7f5428cff7fc6fe4dd91b299"
     "patches/healthy-restart/0001-render-capture.patch|cb95ccdcf16a887fa0ad53b340d1be3d0b8b861cf313b65f39d41b30b43ba7da"
-    "patches/healthy-restart/0002-player-event-order.patch|3d81103253e2dd26a5dfac22eb348496f685a4673b71622dfa2c8d4c86cb89be")
+    "patches/healthy-restart/0002-player-event-order.patch|3d81103253e2dd26a5dfac22eb348496f685a4673b71622dfa2c8d4c86cb89be"
+    "patches/healthy-restart/0003-render-retirement.patch|4820106e976b0b6167ce3c96b55f008b9535069dbd087e291bcf7339331829c3")
   string(REPLACE "|" ";" _pair "${_entry}")
   list(GET _pair 0 _relative)
   list(GET _pair 1 _hash)
@@ -161,6 +162,7 @@ endforeach()
 _healthy_apply("patches/mpvqt/0001-event-ownership.patch" "7092502b85f555db6f108bf3ec1a09e47d56680f7f5428cff7fc6fe4dd91b299" TRUE)
 _healthy_apply("patches/healthy-restart/0001-render-capture.patch" "cb95ccdcf16a887fa0ad53b340d1be3d0b8b861cf313b65f39d41b30b43ba7da" FALSE)
 _healthy_apply("patches/healthy-restart/0002-player-event-order.patch" "3d81103253e2dd26a5dfac22eb348496f685a4673b71622dfa2c8d4c86cb89be" FALSE)
+_healthy_apply("patches/healthy-restart/0003-render-retirement.patch" "4820106e976b0b6167ce3c96b55f008b9535069dbd087e291bcf7339331829c3" FALSE)
 
 foreach(_entry IN LISTS _healthy_output_pins)
   string(REPLACE "|" ";" _pair "${_entry}")

@@ -23,10 +23,11 @@ function(healthy_restart_mpvqt)
   add_library(HealthyRestartMpvQt STATIC
     "${_mpvqt_src}/mpvabstractitem.cpp" "${_mpvqt_src}/mpvcontroller.cpp"
     "${_mpvqt_src}/mpvrenderer-wrapper.cpp" "${_mpvqt_src}/frame_capture.cpp"
-    "${_mpvqt_src}/frame_acceptance.cpp")
+    "${_mpvqt_src}/frame_acceptance.cpp" "${_mpvqt_src}/lifetime.cpp"
+    "${_mpvqt_src}/lifetime_qt.cpp")
   target_compile_definitions(HealthyRestartMpvQt PUBLIC MPVQT_EXTERNAL_EVENTS)
   target_include_directories(HealthyRestartMpvQt PUBLIC "${_mpvqt_src}" "${CMAKE_CURRENT_SOURCE_DIR}")
-  target_link_libraries(HealthyRestartMpvQt PUBLIC Qt6::Quick ${MPV_LIBRARY})
+  target_link_libraries(HealthyRestartMpvQt PUBLIC Qt6::Quick Qt6::Core Qt6::Gui Threads::Threads ${MPV_LIBRARY})
   set_target_properties(HealthyRestartMpvQt PROPERTIES POSITION_INDEPENDENT_CODE ON AUTOMOC ON)
 endfunction()
 
