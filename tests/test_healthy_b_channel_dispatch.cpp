@@ -9,10 +9,12 @@
 #include "player_test_cache.h"
 #include <QCoreApplication>
 #include <QCryptographicHash>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <limits>
 
 using namespace HealthyModuleIdentity;
 using namespace HealthyRetirement;
@@ -20,9 +22,18 @@ using namespace FixtureRestart;
 #define CHECK(value) do { if (!(value)) { std::fprintf(stderr, "check failed at line %d: %s\n", __LINE__, #value); std::_Exit(3); } } while (false)
 
 class TestHealthyGraphArm {
-  static constexpr qint64 normal = 1000000000LL, overall = 31000000000LL;
+  static qint64 now()
+  {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+  }
+  static qint64 deadline(qint64 start, qint64 interval)
+  {
+    CHECK(start >= 0 && interval > 0 && start <= std::numeric_limits<qint64>::max() - interval);
+    return start + interval;
+  }
+  static constexpr qint64 endpointDeadline = 31000000000LL;
   struct State {
-    qint64 now = 10;
     std::function<void()> revokeInModule, revokeInDispatch;
     int dispatches = 0;
     std::vector<std::vector<QByteArray>> commands;
@@ -30,6 +41,9 @@ class TestHealthyGraphArm {
   };
   PlayerTestCache cache_;
   BChannelIo pipes_;
+  const qint64 start_ = now();
+  const qint64 normal_ = deadline(start_, 1000000000LL);
+  const qint64 overall_ = deadline(start_, 31000000000LL);
   std::shared_ptr<State> state_ = std::make_shared<State>();
   Grant grant_{1, 2, 3, QByteArray(64, 'a'), 3000, true};
   QByteArray digest_ = QCryptographicHash::hash(encodeGrant(grant_), QCryptographicHash::Sha256);
@@ -57,10 +71,10 @@ class TestHealthyGraphArm {
     std::memcpy(binding.expectedGrantDigest.data(), digest_.constData(), size_t(digest_.size()));
     auto module = VerifiedModule::forAccessorTest(9, 7, binding, moduleValid, state_.get());
     EndpointInput inputs[] = {{EndpointRole::Grant, 1}, {EndpointRole::Control, 2}, {EndpointRole::Ack, 3}};
-    auto endpoints = ChildEndpoints::createForTest(module, 9, overall, EndpointMode::Restore, inputs, bChannelEndpointOperations());
+    auto endpoints = ChildEndpoints::createForTest(module, 9, endpointDeadline, EndpointMode::Restore, inputs, bChannelEndpointOperations());
     CHECK(endpoints && !module); endpoints_ = std::shared_ptr<ChildEndpoints>(std::move(endpoints));
     const auto state = state_;
-    prepared_ = FixtureGraph::prepare(9, normal, overall, [state] { return state->now; });
+    prepared_ = FixtureGraph::prepare(9, normal_, overall_, now);
     CHECK(prepared_); graph_ = prepared_->graphOnGuiThread(); CHECK(graph_);
     graph_->containment_ = prepared_->containment(); graph_->module_ = endpoints_->capability();
     graph_->endpoints_ = endpoints_; graph_->access_->endpoints = endpoints_;
@@ -77,7 +91,7 @@ class TestHealthyGraphArm {
       return 0;
     };
     graph_->player_->m_observationDispatch = [](quint64, const char**) { return 0; };
-    graph_->owner_ = std::make_shared<Owner>(prepared_->containment(), overall, [state] { return state->now; },
+    graph_->owner_ = std::make_shared<Owner>(prepared_->containment(), overall_, now,
                                              [](std::shared_ptr<RenderJob>) { return false; });
     installRenderer();
     session_ = std::make_unique<ChildSession>(*prepared_, endpoints_, 9);
@@ -115,9 +129,9 @@ class TestHealthyGraphArm {
     CHECK(accepted.host == s.host && accepted.core == s.core &&
           accepted.intentRevision == s.intentRevision && accepted.attempt == s.attempt);
     pipes_.control = encodeRestorePermit({grant_.run, 7, grant_.grant, grant_.revision, 1, digest_});
-    for (int i = 0; i < 40 && !s.gate->allowsRestore(grant_.run, 7, grant_.grant, grant_.revision, digest_, state_->now); ++i)
+    for (int i = 0; i < 40 && !s.gate->allowsRestore(grant_.run, 7, grant_.grant, grant_.revision, digest_, now()); ++i)
       CHECK(session_->pollRestore() != ChildSession::Progress::Failed);
-    CHECK(s.gate->allowsRestore(grant_.run, 7, grant_.grant, grant_.revision, digest_, state_->now));
+    CHECK(s.gate->allowsRestore(grant_.run, 7, grant_.grant, grant_.revision, digest_, now()));
     auto& player = *graph_->player_;
     CHECK(player.m_restoreGate == s.gate && player.m_healthyRestoreAuthority);
     CHECK(player.healthyRestoreSubmissionAllowed(false));
