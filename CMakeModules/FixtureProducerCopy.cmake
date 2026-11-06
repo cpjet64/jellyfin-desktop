@@ -38,7 +38,7 @@ set(_fixture_player_inputs
   "OpenGLDetect.cpp|8dc58b06d131a2a7416189405145735c3fdb0d7f6632d31285862b524ee2b77c"
   "OpenGLDetect.h|576ecf842f1cc1b4d0aabef1bc87e060a057d23015a0ca39be7f96108e881970"
   "PlayerComponent.cpp|febe98eb5babf108f5ad53542ad99b3b3e207ada13a2f36432235f9692cc2b7c"
-  "PlayerComponent.h|6595598d8a2bde93af0104ea52b97115e6f27fdda2c85ddb8be905e5fbec261b"
+  "PlayerComponent.h|047877c4c057926643a89356b2ee0facd7898ec29d06f839460139d29705d75b"
   "PlayerComponentCommands.cpp|407656d9a30cae0e9c1380e80c79903ade593c8bfba53e2e59c62cf06e987825"
   "PlayerIntentCommands.cpp|36a8572d536a22e5aa35caa7a8d3a8c736c5b7471535c209232a1dfb986f4e9b"
   "PlaybackNativeReceipts.cpp|aded68382fd4c6dcd255c8c4c4b01a82cf1bee9e367fd5f2a71f244f788fa414"
@@ -46,8 +46,8 @@ set(_fixture_player_inputs
   "PlayerNativeReceipts.cpp|faad896cf062840fe61e019285989ac25ab3ad0d258541c2c694d8a9ee1139ef"
   "NativePlaybackObservation.cpp|042ab0b147803502797e9264e5c5400e42469da77381b8fb16172a56f6d44447"
   "NativePlaybackObservation.h|6bbef23c9b2273d01f8a6298ce81fc49a7e17673a43e1f0a234d85ccfcc394ed"
-  "PlayerNativeObservation.cpp|ba326be32111d413ac55464e9f95dc04db39e77b2d51e0361e39222fa069f026"
-  "PlayerNativeRestore.cpp|ff74c0c99cebf8f8e8ac1bf06f6c066222ab7253612b75361b7cd85a4cd6adb4"
+  "PlayerNativeObservation.cpp|6784a8284ba18ca864316c2ccba9e8ee90c8e4f7dcdc1e499e8f5446b511ceb3"
+  "PlayerNativeRestore.cpp|ed3f1a9aac0ca6b2c00795f5908f44e2213de7a9fa8548dd32db7c3d27052ccb"
   "PlaybackIntent.cpp|fc7ac3efaa2015c42420deea8c657b8db86a5795f4f7383785c3113ba64349fe"
   "PlaybackIntent.h|ccefa6ddf3be574bc2580af21b59567e49c3fbe5c68a0634a9426fa02c5f31b3"
   "PlaybackCheckpoint.cpp|ad66683598a4f46956e5f4711fbf580faf0828057be39fe5ed055b9c327f8f52"
@@ -83,7 +83,7 @@ set(_fixture_output_hashes
   "player/MpvVideoItem.h|697c7c2d34cdf99c266dcab77623a9be5c35ab966cb555739932159e8bed13cf"
   "player/PlayerMpvEvents.cpp|4640cd20afb7539adf4fb5420273f871ce38aead8d64c4f393d8a32b7d02215f"
   "player/PlayerComponent.cpp|1bac5bf2562fe2d56b0936d28182d0fe6fcc72697b139608709f9061a3fdf400"
-  "player/PlayerComponent.h|3373a403b81ec73dd8e7fb0e26f7f07f107f9aa5c6d82829447d1c3f8be507bc"
+  "player/PlayerComponent.h|9c5ba8ecc6ba9f0b8e1be8772e4a80d383cccdd494f8c3d31d852ff2223dbc3f"
   "tests/test_webclient_containment.cpp|c8a607dcea1de26ebfaf7eb3668814cf7c2605940fcb29b86eda827c31e55bf6")
 
 function(_fixture_copy_inputs source destination list_name)
