@@ -8,9 +8,11 @@ namespace HealthyRetirement {
 using FixtureRestart::IoProgress;
 using HealthyModuleIdentity::EndpointRole;
 
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
 ChildSession::ChildSession(PreparedGraph& graph,
     std::shared_ptr<HealthyModuleIdentity::ChildEndpoints> endpoints, std::uint64_t generation)
   : graph_(&graph), endpoints_(std::move(endpoints)), generation_(generation) {}
+#endif
 
 #ifdef HEALTHY_CHILD_SESSION_TESTING
 ChildSession::ChildSession(std::shared_ptr<HealthyModuleIdentity::ChildEndpoints> endpoints,
@@ -24,9 +26,13 @@ bool ChildSession::valid() const
 #ifdef HEALTHY_CHILD_SESSION_TESTING
   if (testing_) return !failed_ && endpoints_ && test_.valid && test_.valid();
 #endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
   const auto capability = endpoints_ ? endpoints_->capability() : nullptr;
   return !failed_ && graph_ && capability && capability->stillValid(generation_) &&
       graph_->ownsEndpoints(endpoints_) && graph_->graphOnGuiThread();
+#else
+  return false;
+#endif
 }
 
 bool ChildSession::fail()
@@ -37,7 +43,9 @@ bool ChildSession::fail()
 #ifdef HEALTHY_CHILD_SESSION_TESTING
     if (testing_) { if (test_.invalidate) test_.invalidate(); return false; }
 #endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
     if (graph_) graph_->invalidate();
+#endif
   }
   return false;
 }
@@ -49,7 +57,11 @@ bool ChildSession::initialize(const QString& path)
 #ifdef HEALTHY_CHILD_SESSION_TESTING
   if (testing_) return test_.initialize && test_.initialize(path);
 #endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
   return graph_->graphOnGuiThread()->restoreInitialize(path);
+#else
+  return false;
+#endif
 }
 
 bool ChildSession::grant(const QByteArray& frame, QByteArray& response)
@@ -57,7 +69,11 @@ bool ChildSession::grant(const QByteArray& frame, QByteArray& response)
 #ifdef HEALTHY_CHILD_SESSION_TESTING
   if (testing_) return test_.grant && test_.grant(frame, true, response);
 #endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
   return graph_->graphOnGuiThread()->restoreGrant(frame, true, response);
+#else
+  return false;
+#endif
 }
 
 bool ChildSession::control(const QByteArray& frame, QByteArray& response)
@@ -65,7 +81,11 @@ bool ChildSession::control(const QByteArray& frame, QByteArray& response)
 #ifdef HEALTHY_CHILD_SESSION_TESTING
   if (testing_) return test_.control && test_.control(frame, response);
 #endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
   return graph_->graphOnGuiThread()->restoreControl(frame, response);
+#else
+  return false;
+#endif
 }
 
 bool ChildSession::dispatch(bool seeking)
@@ -73,8 +93,12 @@ bool ChildSession::dispatch(bool seeking)
 #ifdef HEALTHY_CHILD_SESSION_TESTING
   if (testing_) return seeking ? (test_.seek && test_.seek()) : (test_.load && test_.load());
 #endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
   auto* graph = graph_->graphOnGuiThread();
   return seeking ? graph->restoreSeek() : graph->restoreLoad();
+#else
+  return false;
+#endif
 }
 
 void ChildSession::revokeGraph()
@@ -82,7 +106,9 @@ void ChildSession::revokeGraph()
 #ifdef HEALTHY_CHILD_SESSION_TESTING
   if (testing_) { if (test_.revoke) test_.revoke(); return; }
 #endif
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
   if (graph_) if (auto* graph = graph_->graphOnGuiThread()) graph->restoreRevoke();
+#endif
 }
 
 ChildSession::Io ChildSession::beginRead(Role role, unsigned size)
@@ -185,7 +211,8 @@ bool ChildSession::pollControl()
 
 ChildSession::Progress ChildSession::pollRestore()
 {
-  if (!started_ || !valid() || !pollAck() || !pollControl() || !pollGrant() || !pollAck()) {
+  if (!started_ || !valid() || !pollAck() || !valid() || !pollControl() || !valid() ||
+      !pollGrant() || !valid() || !pollAck() || !valid()) {
     fail(); return Progress::Failed;
   }
   return grantAck_ ? Progress::Ready : Progress::Pending;
