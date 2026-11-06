@@ -38,7 +38,8 @@ HEADLESS_TESTS = ("test_systemcomponent", "test_log", "test_settings", "test_dis
                   "test_fixture_restart_wire", "test_fixture_restart_child", "test_restart_child_player",
                   "test_restart_source_player", "test_healthy_retirement_lifetime",
                   "test_healthy_retirement_races", "test_healthy_retirement_qt",
-                  "test_healthy_retirement_owner", "test_healthy_retirement_owner_context")
+                  "test_healthy_retirement_owner", "test_healthy_retirement_owner_context",
+                  "test_healthy_module_identity")
 LINUX_DESKTOP_TOOLS = frozenset(("xvfb-run", "xauth", "dbus-run-session", "glxinfo"))
 
 
