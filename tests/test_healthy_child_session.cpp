@@ -88,7 +88,7 @@ std::shared_ptr<ChildEndpoints> endpoints()
   o.accepts = [](std::uintptr_t v) { return v != 0; };
   o.compare = [](std::uintptr_t a, std::uintptr_t b) { return a == b ? EndpointComparison::Same : EndpointComparison::Different; };
   o.duplicate = [](std::uintptr_t v, HANDLE& out) { out = handle(static_cast<int>(v + 100)); return true; };
-  o.close = [](HANDLE) {};
+  o.close = [](HANDLE) { return true; };
   o.io.createEvent = event; o.io.closeHandle = closeEvent; o.io.resetEvent = resetEvent;
   o.io.readFile = readIo; o.io.writeFile = writeIo; o.io.result = result;
   o.io.error = lastError; o.io.cancel = cancelIo; o.io.now = now;
