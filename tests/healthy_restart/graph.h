@@ -13,6 +13,8 @@ class MpvVideoItem;
 class PlayerComponent;
 class QQuickWindow;
 class QThread;
+class QByteArray;
+class QString;
 namespace HealthyModuleIdentity { class VerifiedModule; class ChildEndpoints; }
 
 namespace HealthyRetirement {
@@ -22,6 +24,7 @@ class QtScheduler;
 class FixtureGraph;
 class GraphRetirement;
 class GraphAccessOps;
+class ChildSession;
 struct ClosedAck {
   const std::uint64_t generation, coreGeneration, closureGeneration, revision, attempt;
   const std::int64_t completedAt;
@@ -36,6 +39,7 @@ struct GraphAccess {
   std::function<void(FixtureGraph*)> guiInvalidate;
   std::atomic_bool revoked{false};
   std::shared_ptr<RetirementClaim> intentClaim;
+  std::weak_ptr<HealthyModuleIdentity::ChildEndpoints> endpoints;
   std::mutex mutex;
   std::optional<ClosedAck> closed;
   std::function<bool(std::uint64_t)> capability;
@@ -55,6 +59,8 @@ public:
   bool begin(std::shared_ptr<HealthyModuleIdentity::ChildEndpoints> endpoints);
 private:
   friend class FixtureGraph;
+  friend class ChildSession;
+  bool ownsEndpoints(const std::shared_ptr<HealthyModuleIdentity::ChildEndpoints>& endpoints) const noexcept;
   std::shared_ptr<Containment> containment_;
   std::shared_ptr<Slot> slot_;
   std::shared_ptr<GraphAccess> access_;
@@ -86,12 +92,25 @@ public:
 private:
   friend class PreparedGraph;
   friend class GraphAccessOps;
+  friend class ChildSession;
+  class Session;
   FixtureGraph(std::shared_ptr<Slot> slot, std::shared_ptr<GraphAccess> access,
                std::int64_t normalDeadline, std::int64_t overallDeadline, Clock clock);
   bool begin(const std::shared_ptr<Containment>& containment,
              std::shared_ptr<HealthyModuleIdentity::ChildEndpoints> endpoints);
   void deliverRedraw();
   void invalidate() noexcept;
+  bool sessionReady(bool source) const;
+  bool sourceLoad(const QString& path, bool paused);
+  bool sourceFreeze(QByteArray& frame);
+  bool sourceBeginStop(const QByteArray& control);
+  HealthyRestart::AsyncStop::Status sourcePollStop(QByteArray& response);
+  bool restoreInitialize(const QString& path);
+  bool restoreGrant(const QByteArray& frame, bool eof, QByteArray& response);
+  bool restoreControl(const QByteArray& frame, QByteArray& response);
+  bool restoreLoad();
+  bool restoreSeek();
+  bool restoreRevoke();
   struct NativeCell { std::shared_ptr<NativeTeardownState> state; };
   std::shared_ptr<Slot> slot_;
   std::shared_ptr<GraphAccess> access_;
@@ -104,6 +123,7 @@ private:
   std::unique_ptr<QQuickWindow> window_;
   QPointer<MpvVideoItem> item_;
   std::unique_ptr<PlayerComponent> player_;
+  std::unique_ptr<Session> session_;
   std::unique_ptr<QtScheduler> scheduler_;
   std::shared_ptr<GraphRetirement> retirement_;
   std::shared_ptr<NativeCell> native_;
@@ -112,5 +132,6 @@ private:
   std::shared_ptr<Owner> owner_;
   bool retirementRequested_ = false;
   bool presented_ = false;
+  mutable std::int64_t lastSessionNow_ = 0;
 };
 }

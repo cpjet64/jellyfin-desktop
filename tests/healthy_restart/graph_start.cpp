@@ -32,6 +32,7 @@ bool FixtureGraph::begin(const std::shared_ptr<Containment>& containment,
   if (started < 0 || started >= normalDeadline_) { containment->markLost(); return false; }
   try {
     endpoints_ = std::move(endpoints);
+    access_->endpoints = endpoints_;
     module_ = verified;
     const auto revoked = std::shared_ptr<const std::atomic_bool>(access_, &access_->revoked);
     if (!slot_->bindModule(module_, revoked)) { containment->markLost(); return false; }
@@ -84,8 +85,8 @@ bool FixtureGraph::present()
     const auto before = clock_();
     if (before < 0 || before >= normalDeadline_) { owner_->invalidate(); return false; }
     presented_ = true;
-    window_->resize(640, 360);
-    item_->setSize(QSizeF(640, 360));
+    window_->resize(160, 90);
+    item_->setSize(QSizeF(160, 90));
     window_->show();
     const auto after = clock_();
     if (after >= before && after < normalDeadline_ && containment->intact() &&

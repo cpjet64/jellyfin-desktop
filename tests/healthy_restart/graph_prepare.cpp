@@ -1,6 +1,7 @@
 #include "graph.h"
 #include "graph_retirement.h"
 #include "graph_access.h"
+#include "graph_session.h"
 #include "owner_qt.h"
 #include "module_endpoints.h"
 #include "player/MpvVideoItem.h"
@@ -58,6 +59,10 @@ FixtureGraph* PreparedGraph::graphOnGuiThread() const noexcept
 std::optional<ClosedAck> PreparedGraph::closedAck() const
 {
   return GraphRetirement::readAck(access_);
+}
+bool PreparedGraph::ownsEndpoints(const std::shared_ptr<HealthyModuleIdentity::ChildEndpoints>& endpoints) const noexcept
+{
+  return access_ && endpoints && access_->endpoints.lock() == endpoints;
 }
 
 void PreparedGraph::invalidate() noexcept
