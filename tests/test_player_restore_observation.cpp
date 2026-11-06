@@ -45,6 +45,7 @@ void TestPlayerRestoreObservation::restart(PlayerComponent& player)
 
 void TestPlayerRestoreObservation::prepare(PlayerComponent& player)
 {
+#ifdef MPVQT_EXTERNAL_EVENTS
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
   const PlayerComponent::RestoreGrant grant{3, 4, 0, 3125, true};
@@ -59,6 +60,9 @@ void TestPlayerRestoreObservation::prepare(PlayerComponent& player)
   reply(player, 1, "NR1|1|42|yes|yes|0|yes|no|no");
   QVERIFY(player.nativeObservationCurrent());
   QVERIFY(!player.nativePostSeekObservationCurrent());
+#else
+  Q_UNUSED(player);
+#endif
 }
 
 void TestPlayerRestoreObservation::barrierAndStaleReply()
