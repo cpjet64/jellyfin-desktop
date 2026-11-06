@@ -23,6 +23,7 @@ class QString;
 #ifdef HEALTHY_RETIREMENT_TESTING
 class TestHealthyGraphArm;
 class TestHealthyGraphCapture;
+class TestHealthyGraphLifetime;
 #endif
 namespace HealthyModuleIdentity { class VerifiedModule; class ChildEndpoints; }
 
@@ -113,6 +114,7 @@ private:
 #ifdef HEALTHY_RETIREMENT_TESTING
   friend class ::TestHealthyGraphArm;
   friend class ::TestHealthyGraphCapture;
+  friend class ::TestHealthyGraphLifetime;
 #endif
   friend class PreparedGraph;
   friend class GraphAccessOps;
@@ -175,6 +177,20 @@ private:
   bool captureBaselineRequested_ = false;
   bool captureTargetRequested_ = false;
 #ifdef HEALTHY_RETIREMENT_TESTING
+  bool bindTestFinalizer(std::function<bool()> finalizer, std::function<void()> destroyedObserver);
+  bool invokeTestFinalizer();
+  struct TestFinalizerBinding {
+    std::weak_ptr<Containment> containment;
+    std::weak_ptr<Slot> slot;
+    std::weak_ptr<Lifetime> lifetime;
+    std::uint64_t generation = 0;
+    std::thread::id thread;
+    QThread* qtThread = nullptr;
+    std::function<bool()> finalizer;
+    bool consumed = false;
+  };
+  std::unique_ptr<TestFinalizerBinding> testFinalizer_;
+  std::function<void()> testDestroyedObserver_;
   std::function<bool()> captureSessionReadyForTest_;
   std::optional<HealthyModuleIdentity::LaunchBinding> captureBindingForTest_;
   std::uint64_t captureLaunchForTest_ = 0;

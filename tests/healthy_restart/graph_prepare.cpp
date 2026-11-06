@@ -116,5 +116,8 @@ FixtureGraph::~FixtureGraph()
 {
   cancelCapture();
   access_->graph.store(nullptr);
+#ifdef HEALTHY_RETIREMENT_TESTING
+  try { if (testDestroyedObserver_) testDestroyedObserver_(); } catch (...) {}
+#endif
 }
 }
