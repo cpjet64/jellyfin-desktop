@@ -15,7 +15,7 @@ native playback, a live restart, or cross-process recovery.
 - At `e97f1c3`, Windows static ON/ON passed 38/38 and system OFF/OFF passed
   35/35 (`deps/w789-proof/`). The application SHA-256 values were
   `41fc41b93e9d0dc1e4f2833240ca823ce81b823617809da68c546f9b40f68a6f`
-  and `78260c061821d53a01e69e4a6178d617a10b0ab96251c5eba469300fa0ec9af`,
+  and `78260c061821d53a01e69e4a6178d617a10b0ab96251c5eba469300fa0ec9afd`,
   respectively. OFF checks establish unavailable behavior only. The Player
   receipt tests inject private mpv events; they do not prove real `mpv_wait_event`.
 - Eight fixture-copy tests passed; a fresh Debug held fixture compiled without
