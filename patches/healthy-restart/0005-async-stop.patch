@@ -1,28 +1,28 @@
 diff --git a/fixture_restart/FixtureRestartAdapter.cpp b/fixture_restart/FixtureRestartAdapter.cpp
-index a02f890..0cde0af 100644
+index 479803b..8b166f7 100644
 --- a/fixture_restart/FixtureRestartAdapter.cpp
 +++ b/fixture_restart/FixtureRestartAdapter.cpp
-@@ -34 +34 @@ bool FixtureRestartAdapter::arm()
+@@ -44 +44 @@ bool FixtureRestartAdapter::arm()
 -  if (armed_ || !grant || !gate_.allowed(grant->revision) || !host_ || !attempt_) return false;
 +  if (player_.m_healthyStopAdmissionClosed.load() || armed_ || !grant || !gate_.allowed(grant->revision) || !host_ || !attempt_) return false;
-@@ -49,0 +50 @@ bool FixtureRestartAdapter::load(const QString& resolvedFixturePath)
+@@ -61,0 +62 @@ bool FixtureRestartAdapter::load(const QString& resolvedFixturePath)
 +  if (player_.m_healthyStopAdmissionClosed.load()) return false;
-@@ -57,0 +59 @@ bool FixtureRestartAdapter::seek()
+@@ -69,0 +71 @@ bool FixtureRestartAdapter::seek()
 +  if (player_.m_healthyStopAdmissionClosed.load()) return false;
-@@ -72,0 +75,5 @@ bool FixtureRestartAdapter::cancel()
+@@ -84,0 +87,5 @@ bool FixtureRestartAdapter::cancel()
 +  if (player_.m_healthyStopAdmissionClosed.load()) {
 +    if (!player_.intentControlThread()) return false;
 +    player_.cancelHealthyReplacementStop();
 +    return true;
 +  }
-@@ -77,0 +85 @@ bool FixtureRestartAdapter::loadA(const QString& path, const QByteArray& expecte
+@@ -89,0 +97 @@ bool FixtureRestartAdapter::loadA(const QString& path, const QByteArray& expecte
 +  if (player_.m_healthyStopAdmissionClosed.load()) return false;
-@@ -90,0 +99 @@ bool FixtureRestartAdapter::captureA(const FixtureRestart::Grant& binding, Fixtu
+@@ -102,0 +111 @@ bool FixtureRestartAdapter::captureA(const FixtureRestart::Grant& binding, Fixtu
 +  if (player.m_healthyStopAdmissionClosed.load()) return false;
-@@ -121 +130 @@ bool FixtureRestartAdapter::captureA(const FixtureRestart::Grant& binding, Fixtu
+@@ -133 +142 @@ bool FixtureRestartAdapter::captureA(const FixtureRestart::Grant& binding, Fixtu
 -bool FixtureRestartAdapter::internalReplacementStop(const FixtureRestart::Evidence& frozen)
 +bool FixtureRestartAdapter::beginInternalReplacementStop(const FixtureRestart::Evidence& frozen, qint64 deadlineNs)
-@@ -127,5 +136,6 @@ bool FixtureRestartAdapter::internalReplacementStop(const FixtureRestart::Eviden
+@@ -139,5 +148,6 @@ bool FixtureRestartAdapter::internalReplacementStop(const FixtureRestart::Eviden
 -  const auto revision = player.m_playbackIntent.snapshot().revision;
 -  player.invalidateNativeReceipt();
 -  const auto result = player.stopMpv();
@@ -35,12 +35,12 @@ index a02f890..0cde0af 100644
 +{
 +  return player_.pollHealthyReplacementStop();
 diff --git a/fixture_restart/FixtureRestartAdapter.h b/fixture_restart/FixtureRestartAdapter.h
-index 1f43ee4..feff249 100644
+index 0eb9a7e..18f999d 100644
 --- a/fixture_restart/FixtureRestartAdapter.h
 +++ b/fixture_restart/FixtureRestartAdapter.h
 @@ -2,0 +3 @@
 +#include "async_stop.h"
-@@ -18 +19,2 @@ public:
+@@ -22 +23,2 @@ public:
 -  bool internalReplacementStop(const FixtureRestart::Evidence& frozen);
 +  bool beginInternalReplacementStop(const FixtureRestart::Evidence& frozen, qint64 deadlineNs);
 +  HealthyRestart::AsyncStop::Status pollInternalReplacementStop();
