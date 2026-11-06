@@ -99,6 +99,7 @@ function(healthy_restart_core)
     "${_healthy_copy}/mpvqt/module_import_prepare.cpp" "${_healthy_copy}/mpvqt/module_gate.cpp"
     "${_healthy_copy}/mpvqt/module_channel.cpp" "${_healthy_copy}/mpvqt/module_endpoints.cpp"
     "${_healthy_copy}/mpvqt/lifetime_module.cpp" "${_healthy_copy}/mpvqt/graph_access.cpp"
+    "${_healthy_copy}/mpvqt/graph_capture.cpp"
     "${_healthy_copy}/mpvqt/graph_close.cpp" "${_healthy_copy}/mpvqt/graph_prepare.cpp"
     "${_healthy_copy}/mpvqt/graph_retire.cpp" "${_healthy_copy}/mpvqt/graph_retirement.cpp"
     "${_healthy_copy}/mpvqt/graph_start.cpp" "${_healthy_copy}/mpvqt/graph_session.cpp"
@@ -146,6 +147,11 @@ function(healthy_restart_test_overlay)
     HEALTHY_MODULE_TESTING HEALTHY_ENDPOINT_TESTING)
   target_compile_definitions(HealthyGraphTestMpvQt PRIVATE ${_graph_test_definitions})
   target_compile_definitions(HealthyGraphTestCore PRIVATE ${_graph_test_definitions})
+  add_executable(healthy_graph_capture test_healthy_graph_capture.cpp)
+  target_compile_definitions(healthy_graph_capture PRIVATE ${_graph_test_definitions})
+  target_link_libraries(healthy_graph_capture PRIVATE HealthyGraphTestCore Qt6::Test)
+  add_test(NAME healthy_graph_capture COMMAND healthy_graph_capture)
+  set_tests_properties(healthy_graph_capture PROPERTIES TIMEOUT 60)
   if(WIN32)
     add_executable(healthy_graph_arm test_healthy_graph_arm.cpp)
     target_compile_definitions(healthy_graph_arm PRIVATE ${_graph_test_definitions})

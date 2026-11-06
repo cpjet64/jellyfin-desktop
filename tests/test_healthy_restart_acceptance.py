@@ -29,7 +29,8 @@ PATCHES = ('patches/mpvqt/0001-event-ownership.patch',
            'patches/healthy-restart/0010-cleanup-provenance.patch',
            'patches/healthy-restart/0011-stop-only-reservation.patch',
            'patches/healthy-restart/0012-contained-stop-continuation.patch',
-           'patches/healthy-restart/0013-arm-test-hooks.patch')
+           'patches/healthy-restart/0013-arm-test-hooks.patch',
+           'patches/healthy-restart/0014-graph-capture-test-friend.patch')
 
 
 class HealthyRestartAcceptance(unittest.TestCase):
@@ -101,6 +102,12 @@ class HealthyRestartAcceptance(unittest.TestCase):
         result = self.run_copy()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         copied = self.root / 'healthy-restart-copy'
+        header = (copied / 'player/PlayerComponent.h').read_text(encoding='utf-8')
+        restore = header.split('struct RestoreState', 1)[1].split('} m_nativeRestore;', 1)[0]
+        self.assertIn('NativeStopResult cleanupResult', restore)
+        self.assertNotIn('m_restoreCleanup', restore)
+        self.assertNotIn('struct RestoreUnpauseState', restore)
+        self.assertIn('friend class TestHealthyGraphCapture;', header)
         player = (copied / 'player/PlayerMpvEvents.cpp').read_text(encoding='utf-8')
         setup = player.split('void PlayerComponent::setupMpvEvents()', 1)[1].split('void PlayerComponent::finishMpvEventSetup()', 1)[0]
         finish = player.split('void PlayerComponent::finishMpvEventSetup()', 1)[1].split('void PlayerComponent::subscribeMpvSettings()', 1)[0]
@@ -222,7 +229,7 @@ class HealthyRestartWrapper(unittest.TestCase):
             for name in ('closure_player.cpp', 'closure_wake.cpp', 'closure_wake_native.cpp', 'async_stop.cpp',
                          'async_stop_player.cpp', 'module_identity.cpp', 'module_identity_win.cpp',
                          'module_identity_import.cpp', 'module_import_prepare.cpp', 'module_gate.cpp', 'module_channel.cpp',
-                         'module_endpoints.cpp', 'lifetime_module.cpp', 'graph_access.cpp', 'graph_close.cpp',
+                         'module_endpoints.cpp', 'lifetime_module.cpp', 'graph_access.cpp', 'graph_capture.cpp', 'graph_close.cpp',
                          'graph_prepare.cpp', 'graph_retire.cpp', 'graph_retirement.cpp', 'graph_start.cpp',
                          'graph_session.cpp', 'child_session.cpp', 'paused_hold.cpp', 'native_unpause_player.cpp',
                          'native_cleanup_player.cpp', 'child_session_grant.cpp', 'child_session_control.cpp',
@@ -282,7 +289,7 @@ class HealthyRestartWrapper(unittest.TestCase):
                          'async_stop.cpp', 'async_stop_player.cpp', 'module_identity.cpp',
                          'module_identity_win.cpp', 'module_identity_import.cpp', 'module_import_prepare.cpp',
                          'module_gate.cpp', 'module_channel.cpp', 'module_endpoints.cpp', 'lifetime_module.cpp',
-                         'graph_access.cpp', 'graph_close.cpp', 'graph_prepare.cpp', 'graph_retire.cpp',
+                         'graph_access.cpp', 'graph_capture.cpp', 'graph_close.cpp', 'graph_prepare.cpp', 'graph_retire.cpp',
                          'graph_retirement.cpp', 'graph_start.cpp', 'graph_session.cpp', 'child_session.cpp',
                          'paused_hold.cpp', 'native_unpause_player.cpp', 'native_cleanup_player.cpp',
                          'child_session_grant.cpp', 'child_session_control.cpp', 'child_session_failure.cpp', 'resume_progress.cpp'):
