@@ -87,8 +87,10 @@ if(WIN32)
     fixture_restart/WindowsRestartParent.cpp fixture_restart/WindowsFrameReader.cpp
     fixture_restart/WindowsRestartIo.cpp fixture_restart/WindowsRestartChannel.cpp
     fixture_restart/RestartWire.cpp fixture_restart/RestartBroker.cpp fixture_restart/FixtureEvidence.cpp
+    healthy_restart/module_identity.cpp healthy_restart/module_identity_win.cpp
     ${CMAKE_SOURCE_DIR}/src/player/PlaybackCheckpoint.cpp)
   target_include_directories(test_windows_broker_operations PRIVATE ${CMAKE_SOURCE_DIR}/src)
+  target_compile_definitions(test_windows_broker_operations PRIVATE HEALTHY_MODULE_TESTING)
   target_link_libraries(test_windows_broker_operations PRIVATE Qt6::Core advapi32 bcrypt)
   target_compile_features(test_windows_broker_operations PRIVATE cxx_std_17)
   add_test(NAME test_windows_broker_operations COMMAND test_windows_broker_operations)

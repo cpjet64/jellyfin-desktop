@@ -210,6 +210,8 @@ $required += @('test_healthy_closure', 'test_healthy_closure_wake', 'test_health
 $required += @('test_healthy_module_gate_wire', 'test_healthy_module_gate_import', 'test_healthy_module_gate_factory')
 $required += @('test_healthy_graph_retirement', 'test_healthy_graph_retirement_guard', 'test_healthy_graph_retirement_access')
 $required += @('test_healthy_identity_commitment', 'test_healthy_module_gate_endpoints')
+$required += @('test_healthy_paused_hold', 'test_healthy_resume_progress', 'test_restart_closed_wire', 'test_healthy_module_launch')
+$required += @('test_healthy_child_session', 'test_healthy_child_session_source')
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs
 Run-Native $venvPython @('dev/ci/evidence.py', 'build_core', 'passed', 'Native build and core tests passed')

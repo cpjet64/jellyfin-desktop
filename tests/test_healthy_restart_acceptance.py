@@ -21,7 +21,8 @@ PATCHES = ('patches/mpvqt/0001-event-ownership.patch',
            'patches/healthy-restart/0002-player-event-order.patch',
            'patches/healthy-restart/0003-render-retirement.patch',
            'patches/healthy-restart/0004-async-teardown.patch',
-           'patches/healthy-restart/0005-async-stop.patch')
+           'patches/healthy-restart/0005-async-stop.patch',
+           'patches/healthy-restart/0006-checked-unpause.patch')
 
 
 class HealthyRestartAcceptance(unittest.TestCase):
@@ -182,6 +183,11 @@ class HealthyRestartWrapper(unittest.TestCase):
                          'module_identity_import.cpp', 'module_import_prepare.cpp', 'module_gate.cpp', 'module_channel.cpp',
                          'module_endpoints.cpp', 'lifetime_module.cpp', 'graph_access.cpp', 'graph_close.cpp',
                          'graph_prepare.cpp', 'graph_retire.cpp', 'graph_retirement.cpp', 'graph_start.cpp',
+                         'graph_session.cpp', 'child_session.cpp', 'paused_hold.cpp', 'native_unpause_player.cpp',
+                         '../fixture_restart/FixtureRestartAdapter.cpp', '../fixture_restart/FixtureEvidence.cpp',
+                         '../fixture_restart/RestartBroker.cpp', '../fixture_restart/RestartWire.cpp',
+                         '../fixture_restart/RestartChild.cpp', '../fixture_restart/RestartChildPlayer.cpp',
+                         '../fixture_restart/RestartSource.cpp', '../fixture_restart/RestartSourcePlayer.cpp',
                          '../fixture_restart/WindowsFrameReader.cpp', '../fixture_restart/WindowsRestartIo.cpp'):
                 copied = work / 'build/copy/mpvqt' / name
                 copied.parent.mkdir(parents=True, exist_ok=True)
@@ -234,7 +240,8 @@ class HealthyRestartWrapper(unittest.TestCase):
                          'module_identity_win.cpp', 'module_identity_import.cpp', 'module_import_prepare.cpp',
                          'module_gate.cpp', 'module_channel.cpp', 'module_endpoints.cpp', 'lifetime_module.cpp',
                          'graph_access.cpp', 'graph_close.cpp', 'graph_prepare.cpp', 'graph_retire.cpp',
-                         'graph_retirement.cpp', 'graph_start.cpp'):
+                         'graph_retirement.cpp', 'graph_start.cpp', 'graph_session.cpp', 'child_session.cpp',
+                         'paused_hold.cpp', 'native_unpause_player.cpp'):
                 self.assertEqual(sources.count((work / 'build/copy/mpvqt' / name).as_posix()), 1, name)
             defs = (work / 'build/core-defs.txt').read_text(encoding='utf-8')
             self.assertNotIn('HEALTHY_RETIREMENT_TESTING', defs)

@@ -42,7 +42,9 @@ HEADLESS_TESTS = ("test_systemcomponent", "test_log", "test_settings", "test_dis
                   "test_healthy_module_identity", "test_healthy_closure", "test_healthy_closure_wake",
                   "test_healthy_async_stop", "test_healthy_module_gate_wire", "test_healthy_module_gate_import",
                   "test_healthy_graph_retirement", "test_healthy_graph_retirement_guard",
-                  "test_healthy_graph_retirement_access", "test_healthy_identity_commitment")
+                  "test_healthy_graph_retirement_access", "test_healthy_identity_commitment",
+                  "test_healthy_paused_hold", "test_healthy_resume_progress", "test_restart_closed_wire",
+                  "test_healthy_module_launch")
 LINUX_DESKTOP_TOOLS = frozenset(("xvfb-run", "xauth", "dbus-run-session", "glxinfo"))
 
 
