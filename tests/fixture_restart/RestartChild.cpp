@@ -111,7 +111,8 @@ bool RestartChild::control(const void* channel, const QByteArray& request, QByte
 
 bool RestartChild::beginCancellation(const Control& control)
 {
-  if (cancelPhase_ != CancelPhase::None || gate_.canceled() || !gate_.cancel(closedGate, nullptr)) return false;
+  if (cancelPhase_ != CancelPhase::None || gate_.canceled() ||
+      !gate_.cancelVerified(control.sequence, control.revision)) return false;
   cancelSequence_ = control.sequence;
   cancelRevision_ = control.revision;
   cancelPhase_ = CancelPhase::AwaitArm;
