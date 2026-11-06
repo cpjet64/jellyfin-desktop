@@ -67,6 +67,20 @@ void cases()
   CHECK(!ChildEndpoints::createForTest(100, EndpointMode::Restore, source, operations()));
   auto errorOps = operations(); errorOps.compare = [](std::uintptr_t, std::uintptr_t) { return EndpointComparison::Error; };
   CHECK(!ChildEndpoints::createForTest(100, EndpointMode::Source, source, errorOps));
+  duplicated = closed = 0;
+  auto aliasOps = operations();
+  aliasOps.compare = [](std::uintptr_t a, std::uintptr_t b) {
+    return a >= 100 && b >= 100 ? EndpointComparison::Same : EndpointComparison::Different;
+  };
+  CHECK(!ChildEndpoints::createForTest(100, EndpointMode::Source, source, aliasOps));
+  CHECK(duplicated == 2 && closed == 2);
+  duplicated = closed = 0;
+  auto copiedError = operations();
+  copiedError.compare = [](std::uintptr_t a, std::uintptr_t b) {
+    return a >= 100 && b >= 100 ? EndpointComparison::Error : EndpointComparison::Different;
+  };
+  CHECK(!ChildEndpoints::createForTest(100, EndpointMode::Source, source, copiedError));
+  CHECK(duplicated == 2 && closed == 2);
   duplicated = closed = 0; failDuplicate = 3;
   CHECK(!ChildEndpoints::createForTest(100, EndpointMode::Source, source, operations()));
   CHECK(closed == 2); failDuplicate = 0;
