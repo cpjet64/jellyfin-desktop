@@ -163,6 +163,8 @@ class TestHealthyGraphArm {
     check(cleanup.origin == HealthyRestart::RestoreCleanupState::Origin::InternalFailure);
     check(cleanup.firstFailure == HealthyRestart::FailureCause::OwnershipLost);
     check(cleanup.cancel && cleanup.cancel->sequence == 1 && cleanup.cancel->revision == 4);
+    QByteArray forbidden("unchanged");
+    check(!graph_->restorePollCancellation(forbidden) && forbidden.isEmpty());
     (void)graph_->player_->beginNativeRestoreCleanup(graph_->session_->gate, std::nullopt, overall,
                                                       HealthyRestart::FailureCause::ProtocolViolation);
     check(cleanup.firstFailure == HealthyRestart::FailureCause::OwnershipLost);
