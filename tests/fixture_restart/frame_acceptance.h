@@ -24,7 +24,7 @@ struct FrameRecord {
     std::vector<std::uint8_t> rgba;
     int updateResult = 0, infoResult = 0, renderResult = 0;
     std::uint64_t updateFlags = 0, nextFlags = 0;
-    std::uint64_t thread = 0, actualContext = 0, capturedAt = 0;
+    std::uint64_t thread = 0, actualContext = 0, capturedAt = 0; // steady_clock nanoseconds
 };
 
 using Capture = std::shared_ptr<const FrameRecord>;

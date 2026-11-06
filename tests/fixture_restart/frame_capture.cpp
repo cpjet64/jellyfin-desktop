@@ -81,7 +81,8 @@ void publishCapture(const CaptureTicket &ticket, QImage image, std::uint64_t upd
     record->nextFlags = nextFlags;
     record->renderResult = renderResult;
     record->thread = reinterpret_cast<std::uintptr_t>(QThread::currentThreadId());
-    record->capturedAt = static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+    record->capturedAt = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
     record->actualContext = context;
     std::lock_guard<std::mutex> lock(mutex);
     if (!armed || ticket.generation != generation || !(ticket.key == activeKey)) return;
