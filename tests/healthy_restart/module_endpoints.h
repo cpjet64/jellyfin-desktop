@@ -44,6 +44,10 @@ public:
   std::shared_ptr<const VerifiedModule> capability() const noexcept;
 #ifdef _WIN32
   FixtureRestart::IoProgress begin(EndpointRole role, bool read, const void* data, DWORD size);
+  FixtureRestart::IoProgress beginTrackedGrantRead(DWORD size);
+  std::uint64_t grantReadOperation() const noexcept;
+  std::shared_ptr<const FixtureRestart::WindowsRestartIo::Settlement> grantReadSettlement() const noexcept;
+  bool consumeGrantReadSettlement(std::uint64_t operation);
   FixtureRestart::IoProgress poll(EndpointRole role);
   FixtureRestart::IoProgress cancel(EndpointRole role);
   bool closeSettled(EndpointRole role);
