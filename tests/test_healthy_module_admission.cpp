@@ -10,6 +10,8 @@ using HealthyRetirement::RetirementClaim;
 namespace {
 int moduleCalls = 0, endpointCalls = 0;
 bool moduleLive = true, endpointLive = true;
+DWORD ioError = ERROR_IO_PENDING;
+int cancelMode = 0;
 const VerifiedModule* hookModule = nullptr;
 ChildEndpoints* hookEndpoints = nullptr;
 bool validModule(void*) noexcept {
@@ -20,6 +22,13 @@ bool validModule(void*) noexcept {
 HANDLE WINAPI event(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCWSTR) { return reinterpret_cast<HANDLE>(99); }
 BOOL WINAPI closeEvent(HANDLE) { return TRUE; }
 ULONGLONG WINAPI now() { return 1; }
+BOOL WINAPI reset(HANDLE) { return TRUE; }
+BOOL WINAPI pendingRead(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED)
+{ ioError = ERROR_IO_PENDING; return FALSE; }
+BOOL WINAPI cancelIo(HANDLE, LPOVERLAPPED) { return TRUE; }
+BOOL WINAPI resultIo(HANDLE, LPOVERLAPPED, LPDWORD count, BOOL)
+{ *count = 0; ioError = cancelMode == 1 ? ERROR_ACCESS_DENIED : cancelMode == 2 ? ERROR_BROKEN_PIPE : ERROR_OPERATION_ABORTED; return FALSE; }
+DWORD WINAPI lastError() { return ioError; }
 
 ChildEndpoints::TestOperations operations()
 {
@@ -36,6 +45,8 @@ ChildEndpoints::TestOperations operations()
   result.duplicate = [](std::uintptr_t value, HANDLE& out) { out = reinterpret_cast<HANDLE>(value + 100); return true; };
   result.close = [](HANDLE) { return true; };
   result.io.createEvent = event; result.io.closeHandle = closeEvent; result.io.now = now;
+  result.io.resetEvent = reset; result.io.readFile = pendingRead; result.io.cancel = cancelIo;
+  result.io.result = resultIo; result.io.error = lastError;
   return result;
 }
 
@@ -117,6 +128,63 @@ void lastCallbacksCannotHideLoss()
     CHECK(!fixture.endpoints->admissionSnapshot(7, fixture.control, fixture.ack) && !fixture.claim->open());
   }
 }
+
+void cancellationLossAndEmptyAbort()
+{
+  moduleLive = endpointLive = true;
+  {
+    Fixture fixture; cancelMode = 1;
+    CHECK(fixture.endpoints->begin(EndpointRole::Control, true, nullptr, 1) == FixtureRestart::IoProgress::Pending);
+    CHECK(fixture.endpoints->cancel(EndpointRole::Control) == FixtureRestart::IoProgress::Unconfirmed);
+    CHECK(!fixture.claim->open() && !fixture.endpoints->admissionSnapshot(7, fixture.control, fixture.ack));
+    cancelMode = 0;
+    (void)fixture.endpoints->cancel(EndpointRole::Control);
+    const auto retained = fixture.endpoints->retainedSettlement(EndpointRole::Control);
+    if (retained) CHECK(fixture.endpoints->consumeRetainedSettlement(EndpointRole::Control, retained->operation));
+  }
+  {
+    Fixture fixture; cancelMode = 0;
+    CHECK(fixture.endpoints->begin(EndpointRole::Control, true, nullptr, 1) == FixtureRestart::IoProgress::Pending);
+    CHECK(fixture.endpoints->cancel(EndpointRole::Control) == FixtureRestart::IoProgress::Failed);
+    CHECK(fixture.endpoints->canceledWithoutData(EndpointRole::Control) && fixture.claim->open());
+    CHECK(fixture.endpoints->admissionSnapshot(7, fixture.control, fixture.ack));
+  }
+  {
+    Fixture fixture; cancelMode = 2;
+    CHECK(fixture.endpoints->begin(EndpointRole::Control, true, nullptr, 1) == FixtureRestart::IoProgress::Pending);
+    CHECK(fixture.endpoints->cancel(EndpointRole::Control) == FixtureRestart::IoProgress::Failed);
+    CHECK(!fixture.claim->open() && !fixture.endpoints->admissionSnapshot(7, fixture.control, fixture.ack));
+    cancelMode = 0;
+  }
+}
+
+void loseModule(void* context) noexcept
+{ static_cast<VerifiedModule*>(context)->invalidateAdmissionForTest(); }
+void loseEndpoints(void* context) noexcept
+{ static_cast<ChildEndpoints*>(context)->invalidateAdmissionForTest(); }
+
+void bindingLossDoesNotWaitOrPublish()
+{
+  moduleLive = endpointLive = true;
+  {
+    auto claim = std::make_shared<RetirementClaim>(7);
+    auto module = VerifiedModule::forAccessorTest(7, 42, validModule, nullptr);
+    module->setAdmissionBindHookForTest(loseModule, module.get());
+    CHECK(!module->bindAdmissionClaim(claim, 7));
+    CHECK(!claim->open() && !module->admissionSnapshot(7));
+  }
+  {
+    auto claim = std::make_shared<RetirementClaim>(7);
+    auto module = VerifiedModule::forAccessorTest(7, 42, validModule, nullptr);
+    const EndpointInput input[] = {{EndpointRole::Grant, 1}, {EndpointRole::Control, 2}, {EndpointRole::Ack, 3}};
+    auto endpoints = ChildEndpoints::createForTest(module, 7, 100, EndpointMode::Restore, input, operations());
+    CHECK(endpoints);
+    const auto control = endpoints->token(EndpointRole::Control), ack = endpoints->token(EndpointRole::Ack);
+    endpoints->setAdmissionBindHookForTest(loseEndpoints, endpoints.get());
+    CHECK(!endpoints->bindAdmissionClaim(claim, 7));
+    CHECK(!claim->open() && !endpoints->admissionSnapshot(7, control, ack));
+  }
+}
 }
 
 int main()
@@ -126,4 +194,6 @@ int main()
   observedEndpointLossRevokes();
   callbackLossIsLatched();
   lastCallbacksCannotHideLoss();
+  cancellationLossAndEmptyAbort();
+  bindingLossDoesNotWaitOrPublish();
 }

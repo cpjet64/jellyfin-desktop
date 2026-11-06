@@ -19,6 +19,8 @@ struct ChildEndpoints::Operations {
   FixtureRestart::WindowsIoApi io;
 #ifdef HEALTHY_ENDPOINT_TESTING
   bool testOnly = false;
+  void (*testBindHook)(void*) noexcept = nullptr;
+  void* testBindContext = nullptr;
 #endif
 };
 #endif
@@ -35,25 +37,23 @@ struct ChildEndpoints::State {
   std::shared_ptr<const VerifiedModule> module;
   std::uint64_t generation = 0, deadline = 0;
   EndpointMode mode = EndpointMode::Source;
-  mutable std::atomic_int admissionState{0}; // unbound, binding, bound, lost, binding-lost
+  mutable std::atomic_int admissionState{0}; // unbound, bound, lost
   mutable std::atomic_bool controlLive{false}, ackLive{false};
   std::shared_ptr<HealthyRetirement::RetirementClaim> admissionClaim;
   void loseAdmission(bool contain = false) const noexcept {
-    auto state = admissionState.load();
-    while (state == 0 || state == 1) {
-      if (admissionState.compare_exchange_weak(state, state == 1 ? 4 : 3)) break;
-    }
-    if (state == 1 || state == 4) {
-      std::shared_ptr<HealthyRetirement::RetirementClaim> claim;
-      while (!(claim = std::atomic_load(&admissionClaim))) {}
-      if (contain) claim->contain(); else claim->revoke();
-      admissionState.store(3);
-    } else if (state == 2 || (state == 3 && contain)) {
-      if (const auto claim = std::atomic_load(&admissionClaim)) {
-        if (contain) claim->contain(); else claim->revoke();
+    auto claim = std::atomic_load(&admissionClaim);
+    if (!claim) {
+      int expected = 0;
+      if (admissionState.compare_exchange_strong(expected, 3)) {
+        if (const auto late = std::atomic_load(&admissionClaim)) {
+          if (contain) late->contain(); else late->revoke();
+        }
+        return;
       }
-      admissionState.store(3);
+      claim = std::atomic_load(&admissionClaim);
     }
+    if (claim) { if (contain) claim->contain(); else claim->revoke(); }
+    admissionState.store(3);
   }
 #ifdef _WIN32
   Operations operations;
@@ -207,16 +207,15 @@ bool ChildEndpoints::bindAdmissionClaim(const std::shared_ptr<HealthyRetirement:
 {
   if (!state_ || !state_->module || !claim || !generation || generation != state_->generation ||
       claim->generation() != generation || !state_->module->bindAdmissionClaim(claim, generation)) return false;
+  std::shared_ptr<HealthyRetirement::RetirementClaim> existing;
+  if (!std::atomic_compare_exchange_strong(&state_->admissionClaim, &existing, claim) && existing != claim) return false;
+#ifdef HEALTHY_ENDPOINT_TESTING
+  if (state_->operations.testOnly && state_->operations.testBindHook)
+    state_->operations.testBindHook(state_->operations.testBindContext);
+#endif
   int expected = 0;
-  if (!state_->admissionState.compare_exchange_strong(expected, 1)) {
-    const auto existing = std::atomic_load(&state_->admissionClaim);
-    if (expected >= 3 && (!existing || existing == claim)) claim->revoke();
-    return expected == 2 && existing == claim;
-  }
-  std::atomic_store(&state_->admissionClaim, claim);
-  expected = 1;
-  if (state_->admissionState.compare_exchange_strong(expected, 2)) return true;
-  claim->revoke(); state_->admissionState.store(3); return false;
+  if (state_->admissionState.compare_exchange_strong(expected, 2) || expected == 2) return true;
+  claim->revoke(); return false;
 }
 bool ChildEndpoints::admissionSnapshot(std::uint64_t generation, const void* control, const void* ack) const noexcept
 {
@@ -235,6 +234,12 @@ bool ChildEndpoints::admissionSnapshot(std::uint64_t generation, const void* con
 void ChildEndpoints::invalidateAdmissionForTest() noexcept
 {
   if (state_ && state_->operations.testOnly) state_->enterContainment();
+}
+void ChildEndpoints::setAdmissionBindHookForTest(void (*hook)(void*) noexcept, void* context) noexcept
+{
+  if (state_ && state_->operations.testOnly && state_->admissionState.load() == 0) {
+    state_->operations.testBindHook = hook; state_->operations.testBindContext = context;
+  }
 }
 #endif
 void ChildEndpoints::beginContainment() noexcept
@@ -342,6 +347,12 @@ FixtureRestart::IoProgress ChildEndpoints::cancel(EndpointRole role)
   if (entry->containment) return entry->io->cancelSettlementOnly();
   const auto authority = [state = state_.get(), entry] { return state->authorityValid() && !entry->containment; };
   const auto result = entry->io->cancelGuarded(authority);
+  const auto settlement = entry->io->settlement();
+  const bool emptyAbort = entry->io->canceledWithoutData() ||
+      (settlement && settlement->outcome == FixtureRestart::WindowsRestartIo::Settlement::Outcome::Aborted &&
+       settlement->transferred == 0 && settlement->bytes.empty());
+  if (result == FixtureRestart::IoProgress::Unconfirmed ||
+      (result == FixtureRestart::IoProgress::Failed && !emptyAbort)) state_->loseAdmission();
   if (entry->containment && result != FixtureRestart::IoProgress::Pending && result != FixtureRestart::IoProgress::Unconfirmed)
     return FixtureRestart::IoProgress::Failed;
   return result;

@@ -26,6 +26,7 @@ public:
 #ifdef HEALTHY_MODULE_TESTING
   // Injects an observed loss only in the dedicated headless test build.
   void invalidateAdmissionForTest() const noexcept;
+  void setAdmissionBindHookForTest(void (*hook)(void*) noexcept, void* context) const noexcept;
   // Dedicated accessor tests only; never present in the native fixture.
   static std::unique_ptr<VerifiedModule> forAccessorTest(std::uint64_t generation,
       std::uint64_t launch, bool (*valid)(void*) noexcept, void* context);

@@ -19,28 +19,27 @@ struct VerifiedModule::State {
   std::uint64_t generation = 0, deadline = 0, launch = 0;
   LaunchBinding binding;
   std::unique_ptr<ImportedModule> module;
-  // 0 unbound, 1 binding, 2 bound, 3 lost, 4 loss during binding.
-  // exposing a snapshot; a concurrent loss prevents that publication.
+  // Publish the claim before bound state; loss never waits for a binder.
   mutable std::atomic_int admissionState{0};
   std::shared_ptr<HealthyRetirement::RetirementClaim> admissionClaim;
   void loseAdmission() const noexcept {
-    auto state = admissionState.load();
-    while (state == 0 || state == 1) {
-      if (admissionState.compare_exchange_weak(state, state == 1 ? 4 : 3)) break;
+    auto claim = std::atomic_load(&admissionClaim);
+    if (!claim) {
+      int expected = 0;
+      if (admissionState.compare_exchange_strong(expected, 3)) {
+        if (const auto late = std::atomic_load(&admissionClaim)) late->revoke();
+        return;
+      }
+      claim = std::atomic_load(&admissionClaim);
     }
-    if (state == 1 || state == 4) {
-      std::shared_ptr<HealthyRetirement::RetirementClaim> claim;
-      while (!(claim = std::atomic_load(&admissionClaim))) {}
-      claim->revoke();
-      admissionState.store(3);
-    } else if (state == 2) {
-      if (const auto claim = std::atomic_load(&admissionClaim)) claim->revoke();
-      admissionState.store(3);
-    }
+    if (claim) claim->revoke();
+    admissionState.store(3);
   }
 #ifdef HEALTHY_MODULE_TESTING
   bool (*testValid)(void*) noexcept = nullptr;
   void* testContext = nullptr;
+  void (*testBindHook)(void*) noexcept = nullptr;
+  void* testBindContext = nullptr;
 #endif
 };
 VerifiedModule::VerifiedModule(std::unique_ptr<State> state) : state_(std::move(state)) {}
@@ -50,16 +49,14 @@ bool VerifiedModule::bindAdmissionClaim(const std::shared_ptr<HealthyRetirement:
 {
   if (!state_ || !claim || !generation || generation != state_->generation || claim->generation() != generation)
     return false;
+  std::shared_ptr<HealthyRetirement::RetirementClaim> existing;
+  if (!std::atomic_compare_exchange_strong(&state_->admissionClaim, &existing, claim) && existing != claim) return false;
+#ifdef HEALTHY_MODULE_TESTING
+  if (state_->testValid && state_->testBindHook) state_->testBindHook(state_->testBindContext);
+#endif
   int expected = 0;
-  if (!state_->admissionState.compare_exchange_strong(expected, 1)) {
-    const auto existing = std::atomic_load(&state_->admissionClaim);
-    if (expected >= 3 && (!existing || existing == claim)) claim->revoke();
-    return expected == 2 && existing == claim;
-  }
-  std::atomic_store(&state_->admissionClaim, claim);
-  expected = 1;
-  if (state_->admissionState.compare_exchange_strong(expected, 2)) return true;
-  claim->revoke(); state_->admissionState.store(3); return false;
+  if (state_->admissionState.compare_exchange_strong(expected, 2) || expected == 2) return true;
+  claim->revoke(); return false;
 }
 bool VerifiedModule::admissionSnapshot(std::uint64_t generation) const noexcept
 {
@@ -107,6 +104,12 @@ bool VerifiedModule::launchId(std::uint64_t generation, std::uint64_t& output) c
 void VerifiedModule::invalidateAdmissionForTest() const noexcept
 {
   if (state_ && state_->testValid) state_->loseAdmission();
+}
+void VerifiedModule::setAdmissionBindHookForTest(void (*hook)(void*) noexcept, void* context) const noexcept
+{
+  if (state_ && state_->testValid && state_->admissionState.load() == 0) {
+    state_->testBindHook = hook; state_->testBindContext = context;
+  }
 }
 std::unique_ptr<VerifiedModule> VerifiedModule::forAccessorTest(std::uint64_t generation,
     std::uint64_t launch, bool (*valid)(void*) noexcept, void* context)
