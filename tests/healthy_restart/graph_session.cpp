@@ -141,76 +141,79 @@ HealthyRestart::AsyncStop::Status FixtureGraph::sourcePollStop(QByteArray& respo
   response.clear(); invalidate(); return HealthyRestart::AsyncStop::Status::Failed;
 }
 
+FixtureRestart::RestartChild::ArmResult FixtureGraph::restoreArmActual()
+{
+  using Result = FixtureRestart::RestartChild::ArmResult;
+  const auto* grant = session_->gate->acceptedGrant();
+  if (!grant || !sessionReady(false))
+    return session_->gate->canceled() ? session_->adapter->armActual() : Result{};
+  const auto binding = *grant;
+  session_->binding = binding;
+  auto claim = RetirementClaim::makeArmReservation(slot_->generation());
+  if (!claim || !claim->reserveArm(slot_->generation()) ||
+      access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) return Result{};
+  std::shared_ptr<RetirementClaim> empty;
+  if (!std::atomic_compare_exchange_strong(&access_->intentClaim, &empty, claim)) return Result{};
+  if (access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) {
+    claim->contain();
+    return Result{};
+  }
+#ifdef HEALTHY_RETIREMENT_TESTING
+  try { if (preArmHook) preArmHook(); } catch (...) { claim->contain(); return Result{}; }
+#endif
+  if (access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) {
+    claim->contain();
+    return Result{};
+  }
+  Result result;
+  {
+    QScopedValueRollback<bool> inFlight(session_->armInFlight, true);
+    result = session_->adapter->armActual();
+  }
+  if (result.status != Result::Status::Armed) return result;
+  session_->host = result.identity.host; session_->core = result.identity.core;
+  session_->intentRevision = result.identity.intentRevision; session_->attempt = result.identity.attempt;
+  const RetirementClaim::ArmIdentity identity{result.identity.host, result.identity.core,
+      result.identity.intentRevision, result.identity.attempt};
+  if (!claim->bindArm(slot_->generation(), identity)) return Result{};
+#ifdef HEALTHY_RETIREMENT_TESTING
+  try { if (bindHook) bindHook(); } catch (...) { claim->denyRetirement(slot_->generation(), identity); return Result{}; }
+#endif
+  if (claim->contained() || !player_->healthyInstallRetirementClaim(claim, slot_->generation(),
+      HealthyRestart::ClaimInstallMode::BindRestoreReservation)) {
+    claim->denyRetirement(slot_->generation(), identity);
+    return Result{};
+  }
+  if (session_->firstFailure != HealthyRestart::FailureCause::None) {
+    beginRestoreFailure(session_->firstFailure);
+    return Result{};
+  }
+  const bool claimInstalled = installRetirementClaim();
+  if (!claimInstalled) return Result{}; // Actual identity remains in Session for containment.
+  const bool retained = cleanupSessionReady();
+  if (session_->firstFailure != HealthyRestart::FailureCause::None) {
+    beginRestoreFailure(session_->firstFailure);
+    return Result{};
+  }
+  if (!retained) {
+    if (session_->gate->matchesVerifiedCancel(session_->cancelSequence, session_->cancelRevision)) {
+      player_->m_healthyStopLease->enterCleanup(slot_->generation());
+      return result; // Preserve authenticated cancellation's actual arm receipt.
+    }
+    session_->firstFailure = HealthyRestart::FailureCause::OwnershipLost;
+    session_->gate->cancel(closeFailedGate, nullptr);
+    return Result{};
+  }
+  if (session_->gate->canceled()) player_->m_healthyStopLease->enterCleanup(slot_->generation());
+  return result;
+}
+
 FixtureRestart::RestartChild::Actions FixtureGraph::restoreActions(
     const QString& path, quint64 launchId, const QByteArray& digest)
 {
   FixtureRestart::RestartChild::Actions actions;
   actions.now = clock_;
-  actions.armActual = [this] {
-    using Result = FixtureRestart::RestartChild::ArmResult;
-    const auto* grant = session_->gate->acceptedGrant();
-    if (!grant || !sessionReady(false))
-      return session_->gate->canceled() ? session_->adapter->armActual() : Result{};
-    const auto binding = *grant;
-    session_->binding = binding;
-    auto claim = RetirementClaim::makeArmReservation(slot_->generation());
-    if (!claim || !claim->reserveArm(slot_->generation()) ||
-        access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) return Result{};
-    std::shared_ptr<RetirementClaim> empty;
-    if (!std::atomic_compare_exchange_strong(&access_->intentClaim, &empty, claim)) return Result{};
-    if (access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) {
-      claim->contain();
-      return Result{};
-    }
-#ifdef HEALTHY_RETIREMENT_TESTING
-    try { if (preArmHook) preArmHook(); } catch (...) { claim->contain(); return Result{}; }
-#endif
-    if (access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) {
-      claim->contain();
-      return Result{};
-    }
-    Result result;
-    {
-      QScopedValueRollback<bool> inFlight(session_->armInFlight, true);
-      result = session_->adapter->armActual();
-    }
-    if (result.status != Result::Status::Armed) return result;
-    session_->host = result.identity.host; session_->core = result.identity.core;
-    session_->intentRevision = result.identity.intentRevision; session_->attempt = result.identity.attempt;
-    const RetirementClaim::ArmIdentity identity{result.identity.host, result.identity.core,
-        result.identity.intentRevision, result.identity.attempt};
-    if (!claim->bindArm(slot_->generation(), identity)) return Result{};
-#ifdef HEALTHY_RETIREMENT_TESTING
-    try { if (bindHook) bindHook(); } catch (...) { claim->denyRetirement(slot_->generation(), identity); return Result{}; }
-#endif
-    if (claim->contained() || !player_->healthyInstallRetirementClaim(claim, slot_->generation(),
-        HealthyRestart::ClaimInstallMode::BindRestoreReservation)) {
-      claim->denyRetirement(slot_->generation(), identity);
-      return Result{};
-    }
-    if (session_->firstFailure != HealthyRestart::FailureCause::None) {
-      beginRestoreFailure(session_->firstFailure);
-      return Result{};
-    }
-    const bool claimInstalled = installRetirementClaim();
-    if (!claimInstalled) return Result{}; // Actual identity remains in Session for containment.
-      const bool retained = cleanupSessionReady();
-    if (session_->firstFailure != HealthyRestart::FailureCause::None) {
-      beginRestoreFailure(session_->firstFailure);
-      return Result{};
-    }
-    if (!retained) {
-      if (session_->gate->matchesVerifiedCancel(session_->cancelSequence, session_->cancelRevision)) {
-        player_->m_healthyStopLease->enterCleanup(slot_->generation());
-        return result; // Preserve authenticated cancellation's actual arm receipt.
-      }
-      session_->firstFailure = HealthyRestart::FailureCause::OwnershipLost;
-      session_->gate->cancel(closeFailedGate, nullptr);
-      return Result{};
-    }
-    if (session_->gate->canceled()) player_->m_healthyStopLease->enterCleanup(slot_->generation());
-    return result;
-  };
+  actions.armActual = [this] { return restoreArmActual(); };
   actions.beginCleanup = [this](quint64 sequence, quint64 revision) {
     if (!session_ || !session_->gate || !session_->gate->canceled() || !player_ ||
         !sequence || revision <= session_->binding.revision || !cleanupSessionReady()) return false;

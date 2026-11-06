@@ -126,6 +126,7 @@ private:
   bool sourceBeginStop(const QByteArray& control);
   HealthyRestart::AsyncStop::Status sourcePollStop(QByteArray& response);
   bool restoreInitialize(const QString& path);
+  FixtureRestart::RestartChild::ArmResult restoreArmActual();
   FixtureRestart::RestartChild::Actions restoreActions(const QString& path, quint64 launchId, const QByteArray& digest);
   bool restoreGrant(const QByteArray& frame, bool eof, QByteArray& response);
   bool restoreControl(const QByteArray& frame, QByteArray& response);
