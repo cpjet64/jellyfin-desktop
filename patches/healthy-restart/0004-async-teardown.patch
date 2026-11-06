@@ -1,5 +1,5 @@
 diff --git a/mpvqt/mpvabstractitem.cpp b/mpvqt/mpvabstractitem.cpp
-index f056284..bfe00db 100644
+index f056284..8118c39 100644
 --- a/mpvqt/mpvabstractitem.cpp
 +++ b/mpvqt/mpvabstractitem.cpp
 @@ -12,0 +13,2 @@
@@ -21,7 +21,7 @@ index f056284..bfe00db 100644
 +    const auto slot = token ? token->slot() : nullptr;
 +    const auto lifetime = slot ? slot->current() : nullptr;
 +    if (QThread::currentThread() != thread() || !slot || !lifetime ||
-+        !lifetime->ack(slot->generation()) || d_ptr->m_mpv_gl ||
++        !lifetime->ack(slot->generation()) || d_ptr->m_mpv_gl || d_ptr->m_healthyRender->context.load() ||
 +        !d_ptr->m_workerThread || !d_ptr->m_mpv) return {};
 +    auto state = std::make_shared<HealthyRetirement::NativeTeardownState>(
 +        d_ptr->m_workerThread, d_ptr->m_mpv, thread());
@@ -38,7 +38,7 @@ index f056284..bfe00db 100644
 -    if (!lifetime || !lifetime->mayDestroy(slot->generation(), eventWorkerClosed)) return false;
 +    if (QThread::currentThread() != thread() || !slot || !lifetime ||
 +        !closure.closed(slot->generation()) || d_ptr->m_healthyNative.lock().get() != &state ||
-+        d_ptr->m_workerThread || d_ptr->m_mpv || d_ptr->m_mpv_gl ||
++        d_ptr->m_workerThread || d_ptr->m_mpv || d_ptr->m_mpv_gl || d_ptr->m_healthyRender->context.load() ||
 +        !lifetime->mayDestroy(slot->generation(), true)) return false;
 +    if (!state.finalize()) return false;
 diff --git a/mpvqt/mpvabstractitem.h b/mpvqt/mpvabstractitem.h
@@ -60,11 +60,71 @@ index a659a90..dc9c82e 100644
 +    bool healthyFinalizeClosed(const HealthyRetirement::Closure &closure,
 +                               HealthyRetirement::NativeTeardownState &state);
 diff --git a/mpvqt/mpvabstractitem_p.h b/mpvqt/mpvabstractitem_p.h
-index 77fa134..c81918d 100644
+index 77fa134..4b5a820 100644
 --- a/mpvqt/mpvabstractitem_p.h
 +++ b/mpvqt/mpvabstractitem_p.h
-@@ -25,0 +26 @@ public:
+@@ -11,0 +12 @@
++#include "closure_render.h"
+@@ -25,0 +27,3 @@ public:
 +    std::weak_ptr<HealthyRetirement::NativeTeardownState> m_healthyNative;
++    std::shared_ptr<HealthyRetirement::RenderContextState> m_healthyRender =
++        std::make_shared<HealthyRetirement::RenderContextState>();
+diff --git a/mpvqt/mpvrenderer.cpp b/mpvqt/mpvrenderer.cpp
+index 05d7297..8bb51fa 100644
+--- a/mpvqt/mpvrenderer.cpp
++++ b/mpvqt/mpvrenderer.cpp
+@@ -40 +40,2 @@ MpvRenderer::MpvRenderer(MpvAbstractItem *new_obj, std::shared_ptr<HealthyRetire
+-    : m_mpvAItem{new_obj}, m_healthyToken{std::move(token)}
++    : m_healthyCore{new_obj->d_ptr->m_mpv}, m_healthyRender{new_obj->d_ptr->m_healthyRender},
++      m_healthyToken{std::move(token)}
+@@ -42 +43 @@ MpvRenderer::MpvRenderer(MpvAbstractItem *new_obj, std::shared_ptr<HealthyRetire
+-    m_mpvAItem->window()->setPersistentSceneGraph(true);
++    new_obj->window()->setPersistentSceneGraph(true);
+@@ -83 +84,2 @@ void MpvRenderer::render()
+-    auto *context = m_mpvAItem->d_ptr->m_mpv_gl;
++    auto *context = m_healthyRender->context.load();
++    if (!context) { slot->invalidate(slot->generation()); return; }
+@@ -109 +111 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-    if (!m_mpvAItem->d_ptr->m_mpv_gl) {
++    if (!m_healthyRender->context.load() && m_healthyCore) {
+@@ -139 +141,3 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-        int result = mpv_render_context_create(&m_mpvAItem->d_ptr->m_mpv_gl, m_mpvAItem->d_ptr->m_mpv, params);
++        mpv_render_context *created = nullptr;
++        int result = mpv_render_context_create(&created, m_healthyCore, params);
++        m_healthyRender->context.store(created);
+@@ -141 +145 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-            if (m_mpvAItem->d_ptr->m_mpv_gl) slot->recordCreated(m_mpvAItem->d_ptr->m_mpv_gl);
++            if (created) slot->recordCreated(created);
+@@ -145 +149 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-        if (!slot->recordCreated(m_mpvAItem->d_ptr->m_mpv_gl)) { slot->creationFailed(); return nullptr; }
++        if (!slot->recordCreated(created)) { slot->creationFailed(); return nullptr; }
+@@ -152,2 +156 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-        mpv_render_context_set_update_callback(m_mpvAItem->d_ptr->m_mpv_gl, on_mpv_redraw, m_healthyToken.get());
+-        Q_EMIT m_mpvAItem->ready();
++        mpv_render_context_set_update_callback(created, on_mpv_redraw, m_healthyToken.get());
+@@ -182,4 +185,3 @@ std::shared_ptr<HealthyRetirement::Lifetime> MpvRenderer::installHealthyLifetime
+-    operations.clearPointer = [item = m_mpvAItem](void *value) {
+-        if (item->d_ptr->m_mpv_gl != value) return false;
+-        item->d_ptr->m_mpv_gl = nullptr;
+-        return true;
++    operations.clearPointer = [render = m_healthyRender](void *value) {
++        auto *expected = static_cast<mpv_render_context *>(value);
++        return render->context.compare_exchange_strong(expected, nullptr);
+@@ -187 +189 @@ std::shared_ptr<HealthyRetirement::Lifetime> MpvRenderer::installHealthyLifetime
+-    return slot->install(identity, m_mpvAItem->d_ptr->m_mpv_gl, std::move(operations));
++    return slot->install(identity, m_healthyRender->context.load(), std::move(operations));
+diff --git a/mpvqt/mpvrenderer.h b/mpvqt/mpvrenderer.h
+index 7cdd86a..aa23a2c 100644
+--- a/mpvqt/mpvrenderer.h
++++ b/mpvqt/mpvrenderer.h
+@@ -12 +12,2 @@
+-namespace HealthyRetirement { class QtToken; class Slot; class Lifetime; }
++namespace HealthyRetirement { class QtToken; class Slot; class Lifetime; struct RenderContextState; }
++struct mpv_handle;
+@@ -23 +24,2 @@ public:
+-    MpvAbstractItem *m_mpvAItem{nullptr};
++    mpv_handle *m_healthyCore{nullptr};
++    std::shared_ptr<HealthyRetirement::RenderContextState> m_healthyRender;
 diff --git a/player/PlayerMpvEvents.cpp b/player/PlayerMpvEvents.cpp
 index 4018e5b..b8eb993 100644
 --- a/player/PlayerMpvEvents.cpp
