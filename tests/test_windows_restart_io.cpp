@@ -16,6 +16,7 @@ LPVOID pendingBuffer = nullptr;
 LPOVERLAPPED pendingOverlap = nullptr;
 DWORD resultError = ERROR_IO_INCOMPLETE;
 DWORD errorBytes = 0;
+bool leaveErrorCountUntouched = false;
 DWORD cancelError = ERROR_SUCCESS;
 bool reenterCancel = false;
 bool reenterRead = false;
@@ -43,6 +44,7 @@ BOOL WINAPI readFake(HANDLE, LPVOID buffer, DWORD size, LPDWORD count, LPOVERLAP
   if (readMode == 1) { errorCode = ERROR_BROKEN_PIPE; return FALSE; }
   if (readMode == 2) { readMode = 1; *count = 1; return TRUE; }
   if (readMode == 3) { *count = 1; errorCode = ERROR_BROKEN_PIPE; return FALSE; }
+  if (readMode == 4) { *count = 0; errorCode = ERROR_BROKEN_PIPE; return FALSE; }
   if (synchronousLate) { clockValue = 5; *count = size; return TRUE; }
   errorCode = ERROR_IO_PENDING; return FALSE;
 }
@@ -58,7 +60,10 @@ BOOL WINAPI resultFake(HANDLE, LPOVERLAPPED, LPDWORD count, BOOL)
         reentrantIo->beginTrackedRead(reinterpret_cast<HANDLE>(2), 8, 10) == IoProgress::Failed;
   }
   if (resultEof) { errorCode = ERROR_NO_DATA; return FALSE; }
-  if (!complete) { *count = errorBytes; errorCode = resultError; return FALSE; }
+  if (!complete) {
+    if (!leaveErrorCountUntouched) *count = errorBytes;
+    errorCode = resultError; return FALSE;
+  }
   *count = completedBytes;
   return TRUE;
 }
@@ -155,7 +160,7 @@ void resetTracked()
   resultEof = false; resultError = ERROR_IO_INCOMPLETE; cancelError = ERROR_SUCCESS;
   completedBytes = 0; errorBytes = 0; clockValue = 1; pendingBuffer = nullptr;
   pendingOverlap = nullptr; reenterCancel = false; reentrantIo = nullptr; closeCount = 0;
-  resultCalls = 0; reenterRead = false; readRetained = false;
+  resultCalls = 0; reenterRead = false; readRetained = false; leaveErrorCountUntouched = false;
   reenterResult = false; nestedBlocked = false;
 }
 
@@ -292,6 +297,28 @@ void nestedPollCannotReuseActiveOperation()
   CHECK(nestedBlocked && resultCalls == 2 && !io->settlement());
   CHECK(io->release());
 }
+
+void missingTransferCountIsUncertain()
+{
+  resetTracked(); auto* io = trackedRead();
+  resultError = ERROR_OPERATION_ABORTED; leaveErrorCountUntouched = true;
+  CHECK(io->cancel() == IoProgress::Failed);
+  auto settled = io->settlement();
+  CHECK(settled && settled->outcome == WindowsRestartIo::Settlement::Outcome::Uncertain);
+  CHECK(io->consumeSettlement(settled->operation));
+  CHECK(io->beginTrackedRead(reinterpret_cast<HANDLE>(2), 8, 10) == IoProgress::Failed);
+  CHECK(io->release());
+  resetTracked(); readMode = 1; io = new WindowsRestartIo(fakeApi());
+  CHECK(io->beginTrackedRead(reinterpret_cast<HANDLE>(2), 8, 10) == IoProgress::Failed);
+  settled = io->settlement();
+  CHECK(settled && settled->outcome == WindowsRestartIo::Settlement::Outcome::Uncertain);
+  CHECK(io->consumeSettlement(settled->operation) && io->release());
+  resetTracked(); readMode = 4; io = new WindowsRestartIo(fakeApi());
+  CHECK(io->beginTrackedRead(reinterpret_cast<HANDLE>(2), 8, 10) == IoProgress::Eof);
+  settled = io->settlement();
+  CHECK(settled && settled->outcome == WindowsRestartIo::Settlement::Outcome::Eof);
+  CHECK(io->consumeSettlement(settled->operation) && io->release());
+}
 }
 int main()
 {
@@ -310,4 +337,5 @@ int main()
   trackedTimeoutAndReentrantCompletion();
   trackedSynchronousErrorsAndReentrantSubmission();
   nestedPollCannotReuseActiveOperation();
+  missingTransferCountIsUncertain();
 }
