@@ -1,5 +1,6 @@
 #include "player/PlayerComponent.h"
 #include "player_test_cache.h"
+#include "healthy_restore_claim_test.h"
 #include "RestartBroker.h"
 #include "RestartWire.h"
 #include "frame_capture.h"
@@ -77,14 +78,19 @@ void TestHealthyUnpausePlayer::prepare(PlayerComponent& player, bool paused,
   player.m_mpvGeneration = 8;
   player.m_healthyStopClock = [] { return qint64(1); };
   QVERIFY(player.healthyBindRestoreCleanupGate(gate, 100000));
+  auto claim = TestRetirementClaim::reserve(9); QVERIFY(claim);
   const PlayerComponent::RestoreGrant grant{3, 4, 0, 3000, paused};
   QVERIFY(player.armNativeRestore(grant, 7, 2));
+  const auto key = player.m_nativeRestore.key;
+  const HealthyRetirement::RetirementClaim::ArmIdentity identity{key.host, key.core, key.revision, key.attempt};
+  QVERIFY(TestRetirementClaim::bind(claim, 9, identity));
+  QVERIFY(player.healthyInstallRetirementClaim(claim, 9, HealthyRestart::ClaimInstallMode::BindRestoreReservation));
+  QVERIFY(TestRetirementClaim::qualify(claim, 9, identity));
   player.m_restoreDispatch = [](quint64, const char**) { return 0; };
   player.m_observationDispatch = [](quint64, const char**) { return 0; };
   QVERIFY(player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
   player.m_nativeReceipts.reply(2, true, 42);
   player.m_nativeReceipts.start(42);
-  QVERIFY(player.healthyInstallRetirementClaim(std::make_shared<HealthyRetirement::RetirementClaim>(9), 9));
 }
 
 void TestHealthyUnpausePlayer::observe(PlayerComponent& player, quint64 id, bool paused)

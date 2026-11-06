@@ -2,6 +2,7 @@
 #include <RestartWire.h>
 #include <player/PlayerComponent.h>
 #include "player_test_cache.h"
+#include "healthy_restore_claim_test.h"
 #include <QCryptographicHash>
 #include <QtTest/QtTest>
 #include <mpv/client.h>
@@ -43,13 +44,18 @@ void TestRestartChildPlayer::actualArmAndNoLoadCleanup()
   actions.beginCleanup = [&](quint64 seq, quint64 rev) { return adapter.beginCleanup(seq, rev, 100); };
   actions.pollCleanup = [&] { return adapter.pollCleanup(); };
   Child child(*gate, &player, &player, 1, 9, digest(), std::move(actions));
+  auto claim = TestRetirementClaim::reserve(1); QVERIFY(claim);
   QByteArray response;
   QVERIFY(child.grant(&player, FixtureRestart::encodeGrant(grant()), 10, true, response));
   QCOMPARE(armed.status, FixtureRestart::RestartChild::ArmResult::Status::Armed);
   QCOMPARE(armed.identity.host, quint64(7)); QCOMPARE(armed.identity.core, quint64(8));
   QCOMPARE(armed.identity.attempt, quint64(2)); QVERIFY(armed.identity.intentRevision);
   QVERIFY(!adapter.seek()); // renderer-issued target capability is not wired
-  QVERIFY(player.healthyInstallRetirementClaim(std::make_shared<HealthyRetirement::RetirementClaim>(1), 1));
+  const HealthyRetirement::RetirementClaim::ArmIdentity identity{armed.identity.host, armed.identity.core,
+      armed.identity.intentRevision, armed.identity.attempt};
+  QVERIFY(TestRetirementClaim::bind(claim, 1, identity));
+  QVERIFY(player.healthyInstallRetirementClaim(claim, 1, HealthyRestart::ClaimInstallMode::BindRestoreReservation));
+  QVERIFY(TestRetirementClaim::qualify(claim, 1, identity));
   response.clear();
   QVERIFY(child.control(&player, FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 1, 4}), response));
   QVERIFY(response.isEmpty());
@@ -86,10 +92,15 @@ void TestRestartChildPlayer::wrongGateAndExpiredDeadline()
   actions.beginCleanup = [&](quint64 seq, quint64 rev) { return adapter.beginCleanup(seq, rev, 100); };
   actions.pollCleanup = [&] { return adapter.pollCleanup(); };
   Child child(*gate, &player, &player, 1, 9, digest(), std::move(actions));
+  auto claim = TestRetirementClaim::reserve(1); QVERIFY(claim);
   QByteArray response;
   QVERIFY(child.grant(&player, FixtureRestart::encodeGrant(grant()), 10, true, response));
   QCOMPARE(armed.status, Child::ArmResult::Status::Armed);
-  QVERIFY(player.healthyInstallRetirementClaim(std::make_shared<HealthyRetirement::RetirementClaim>(1), 1));
+  const HealthyRetirement::RetirementClaim::ArmIdentity identity{armed.identity.host, armed.identity.core,
+      armed.identity.intentRevision, armed.identity.attempt};
+  QVERIFY(TestRetirementClaim::bind(claim, 1, identity));
+  QVERIFY(player.healthyInstallRetirementClaim(claim, 1, HealthyRestart::ClaimInstallMode::BindRestoreReservation));
+  QVERIFY(TestRetirementClaim::qualify(claim, 1, identity));
   now = 100; response.clear();
   QVERIFY(child.control(&player, FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 1, 4}), response));
   QVERIFY(!response.isEmpty());
