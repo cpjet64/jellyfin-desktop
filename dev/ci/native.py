@@ -17,6 +17,7 @@ from headless_requirements import missing_build_inputs
 from linux_mpris_receipt import run_active_stop, update_obligation
 from evidence import update
 from explicit_mpv import explicit_inputs, cmake_options, default_options, verify_cache
+from healthy_diagnostic import run as run_healthy_diagnostic
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
@@ -262,6 +263,7 @@ def portable_checks():
     command("qt-unix-manifest-tests", [sys.executable, "dev/ci/test_qt_unix_manifest.py"])
     command("mac-session-tests", [sys.executable, "dev/ci/test_macos_session.py"])
     command("headless-routing-tests", [sys.executable, "dev/ci/test_headless_routing.py"])
+    command("healthy-diagnostic-routing-tests", [sys.executable, "dev/ci/test_healthy_diagnostic.py"])
 
 
 def verify_mpvqt_source():
@@ -411,6 +413,8 @@ def run_stages(system, mode, desktop_missing):
     from build_manifest import capture
     capture(ROOT, Path(os.environ["CI_EVIDENCE_DIR"]), BUILD / "tests/test_renderer_loss_offscreen")
     headless_checks()
+    if mode == "static":
+        run_healthy_diagnostic(system, ROOT, BUILD, RESULTS, command, os.environ)
     directory = Path(os.environ["CI_EVIDENCE_DIR"])
     update(directory, "build_core", "passed", "Native build and classified core checks passed")
     update(directory, "offscreen", "blocked", "Native render-thread contract is unresolved; fixture held before launch")

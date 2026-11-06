@@ -94,11 +94,11 @@ class TestHeadlessRouting(unittest.TestCase):
             stack.enter_context(patch.object(native, "update"))
             stack.enter_context(patch.object(build_manifest, "capture"))
             stack.enter_context(patch.object(native, "update_obligation"))
-            for name in ("configure", "headless_checks", "runtime_ctest", "offscreen", "run_active_stop"):
+            for name in ("configure", "headless_checks", "run_healthy_diagnostic", "runtime_ctest", "offscreen", "run_active_stop"):
                 stack.enter_context(patch.object(native, name, side_effect=lambda *a, n=name: events.append(n)))
             stack.enter_context(patch.object(native, "desktop_preflight", side_effect=RuntimeError("BLOCKED")))
             native.run_stages("Darwin", "static", [])
-        self.assertEqual(events, ["configure", "headless_checks"])
+        self.assertEqual(events, ["configure", "headless_checks", "run_healthy_diagnostic"])
 
     def test_all_desktop_gates_still_run_when_available(self):
         events = []
@@ -107,10 +107,10 @@ class TestHeadlessRouting(unittest.TestCase):
             stack.enter_context(patch.object(native, "update"))
             stack.enter_context(patch.object(build_manifest, "capture"))
             obligation = stack.enter_context(patch.object(native, "update_obligation"))
-            for name in ("configure", "headless_checks", "desktop_preflight", "runtime_ctest", "offscreen", "run_active_stop"):
+            for name in ("configure", "headless_checks", "run_healthy_diagnostic", "desktop_preflight", "runtime_ctest", "offscreen", "run_active_stop"):
                 stack.enter_context(patch.object(native, name, side_effect=lambda *a, n=name: events.append(n)))
             native.run_stages("Linux", "static", [])
-        self.assertEqual(events, ["configure", "headless_checks", "desktop_preflight", "runtime_ctest"])
+        self.assertEqual(events, ["configure", "headless_checks", "run_healthy_diagnostic", "desktop_preflight", "runtime_ctest"])
         obligation.assert_called_once_with(Path("unused"), "blocked", "Native render-thread contract is unresolved; fixture held before launch")
 
     def test_missing_linux_display_is_still_a_failure(self):
