@@ -1,6 +1,6 @@
 #include "player/PlayerComponent.h"
 #include "player_test_cache.h"
-#include "fixture_restart/RestartBroker.h"
+#include <RestartBroker.h>
 #include <QtTest/QtTest>
 
 class TestHealthyRestoreCleanup : public QObject

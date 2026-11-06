@@ -1,5 +1,5 @@
-#include <fixture_restart/FixtureRestartAdapter.h>
-#include <fixture_restart/RestartWire.h>
+#include <FixtureRestartAdapter.h>
+#include <RestartWire.h>
 #include <player/PlayerComponent.h>
 #include "player_test_cache.h"
 #include <QCryptographicHash>
