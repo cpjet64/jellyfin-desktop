@@ -1,6 +1,7 @@
 #include "player/PlayerComponent.h"
 #include "player_test_cache.h"
 #include <RestartBroker.h>
+#include <QCryptographicHash>
 #include <QtTest/QtTest>
 
 class TestHealthyRestoreCleanup : public QObject
@@ -43,7 +44,9 @@ TestHealthyRestoreCleanup::prepare(PlayerComponent& player, int& stops, bool loa
   if (!player.bindNativeReceiptHost(7)) return {};
   player.m_mpvGeneration = 8;
   const FixtureRestart::Grant binding{1, 3, 4, QByteArray(64, 'a'), 3000, true};
-  if (!gate->accept(&player, FixtureRestart::encodeGrant(binding), binding, 1, true)) return {};
+  const auto frame = FixtureRestart::encodeGrant(binding);
+  const auto digest = QCryptographicHash::hash(frame, QCryptographicHash::Sha256);
+  if (!gate->accept(&player, frame, binding.run, digest, 1, true)) return {};
   player.m_healthyStopClock = [] { return qint64{1}; };
   player.m_restoreDispatch = [&](quint64, const char** args) {
     if (QByteArray(args[0]) == "stop") ++stops;
