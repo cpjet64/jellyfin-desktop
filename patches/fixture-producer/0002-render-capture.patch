@@ -1,0 +1,33 @@
+diff --git a/mpvqt/mpvrenderer.cpp b/mpvqt/mpvrenderer.cpp
+index 46a6a00..220548d 100644
+--- a/mpvqt/mpvrenderer.cpp
++++ b/mpvqt/mpvrenderer.cpp
+@@ -8,6 +8,7 @@
+ #include "mpvabstractitem.h"
+ #include "mpvabstractitem_p.h"
+ #include "mpvcontroller.h"
++#include "frame_capture.h"
+ 
+ #include <QGuiApplication>
+ #include <QOpenGLContext>
+@@ -57,7 +58,19 @@ void MpvRenderer::render()
+                                  {MPV_RENDER_PARAM_INVALID, nullptr}};
+     // See render_gl.h on what OpenGL environment mpv expects, and
+     // other API details.
+-    mpv_render_context_render(m_mpvAItem->d_ptr->m_mpv_gl, params);
++    const auto ticket = fixture_restart::captureTicket(reinterpret_cast<std::uintptr_t>(this));
++    auto *context = m_mpvAItem->d_ptr->m_mpv_gl;
++    const uint64_t updates = mpv_render_context_update(context);
++    mpv_render_frame_info next{};
++    mpv_render_param info{MPV_RENDER_PARAM_NEXT_FRAME_INFO, &next};
++    const int infoResult = mpv_render_context_get_info(context, info);
++    const auto serial = fixture_restart::nextRenderSerial();
++    const int renderResult = mpv_render_context_render(context, params);
++    if (ticket.generation && fbo->width() == 160 && fbo->height() == 90) {
++        const auto glContext = reinterpret_cast<std::uintptr_t>(QOpenGLContext::currentContext());
++        fixture_restart::publishCapture(ticket, fbo->toImage(true), updates, infoResult,
++                                        next.flags, renderResult, glContext, serial);
++    }
+ }
+ 
+ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size)
