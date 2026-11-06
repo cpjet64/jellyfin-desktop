@@ -279,6 +279,28 @@ class TestHealthyGraphArm {
     check(!graph_->player_->m_nativeRestore.loadAttempted && !session_->seek());
     check(pipes_.writes.size() == 1 && !prepared_->closedAck() && state_->stops == 0);
   }
+  void queuedPermitThenEndpointLoss()
+  {
+    initialize();
+    auto progress = ChildSession::Progress::Pending;
+    for (int i = 0; i < 20 && progress == ChildSession::Progress::Pending; ++i)
+      progress = session_->pollRestore();
+    check(progress == ChildSession::Progress::Ready);
+    const auto& binding = *graph_->session_;
+    check(graph_->player_->m_nativeRestore.armed && !graph_->player_->m_nativeRestore.loadAttempted);
+    check(binding.host && binding.core && binding.intentRevision && binding.attempt);
+    const auto permit = encodeRestorePermit({grant_.run, 7, grant_.grant, grant_.revision, 1, digest_});
+    check(!permit.isEmpty() && pipes_.pending[1].overlap);
+    pipes_.control = permit;
+    pipes_.endpointValid = false;
+    check(session_->pollRestore() == ChildSession::Progress::Failed);
+    check(binding.gate->canceled());
+    check(!binding.gate->allowsRestore(grant_.run, 7, grant_.grant, grant_.revision, digest_, state_->now));
+    check(pipes_.control == permit); // The lost endpoint did not admit its pending read.
+    check(!session_->load() && !session_->seek() && !graph_->player_->m_nativeRestore.loadAttempted);
+    check(pipes_.writes.size() == 1 && pipes_.writes[0].left(4) == "JGA2");
+    check(!prepared_->closedAck() && state_->stops == 0);
+  }
   void acceptanceWriteAbortsAfterFailure()
   {
     pipes_.holdAck = true;
@@ -300,6 +322,7 @@ public:
   static void run()
   {
     { TestHealthyGraphArm test; test.readyThenLossBeforeDirectLoad(); }
+    { TestHealthyGraphArm test; test.queuedPermitThenEndpointLoss(); }
     { TestHealthyGraphArm test; test.endpointLossAfterArm(); }
     { TestHealthyGraphArm test; test.endpointLossDuringPoll(); }
     { TestHealthyGraphArm test; test.runCase(); }
