@@ -154,7 +154,7 @@ target_link_libraries(test_native_observation PRIVATE Qt6::Core)
 add_test(NAME test_native_observation COMMAND test_native_observation)
 set_tests_properties(test_native_observation PROPERTIES TIMEOUT 60)
 
-add_executable(test_player_native_restore test_player_native_restore.cpp fixture_restart/FixtureRestartAdapter.cpp
+add_executable(test_player_native_restore test_player_native_restore.cpp test_player_native_restore.h test_player_native_restore_capture.cpp fixture_restart/FixtureRestartAdapter.cpp
   fixture_restart/RestartBroker.cpp fixture_restart/FixtureEvidence.cpp)
 target_include_directories(test_player_native_restore PRIVATE ${CMAKE_SOURCE_DIR}/tests/fixture_restart ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
 target_link_libraries(test_player_native_restore PRIVATE jmp_core Qt6::Test)

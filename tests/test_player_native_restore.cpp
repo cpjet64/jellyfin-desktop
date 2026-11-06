@@ -7,30 +7,7 @@
 #include "fixture_restart/OwnedFixtureFile.h"
 #include <QTemporaryFile>
 #include <QtTest/QtTest>
-class TestPlayerNativeRestore : public QObject
-{
-  Q_OBJECT
-  PlayerTestCache cache_;
-private:
-  static void prepare(PlayerComponent& player);
-  static void observationReply(PlayerComponent& player, quint64 id, const QByteArray& text, int error = 0);
-  static void loadReplyAndStart(PlayerComponent& player, quint64 attempt, qint64 entry);
-private slots:
-  void actualObservationBoundary();
-  void lateAndDuplicateObservation();
-  void pausedLoadAndExactSeek();
-  void cancellationBeforeLoad();
-  void staleObservationAndGrant();
-  void cancellationAfterLoad();
-  void fixtureBridgeControl();
-  void fixtureBridgeCapture();
-  void unavailableSystemMode();
-  void lateAfterEndAndCoreChange();
-  void malformedAndUnrelatedReplies();
-  void reorderedLoadAndNativeConsumption();
-  void cancellationDuringSeek();
-  void reentrantCancellationAndSeekFailure();
-};
+#include "test_player_native_restore.h"
 
 void TestPlayerNativeRestore::loadReplyAndStart(PlayerComponent& player, quint64 attempt, qint64 entry)
 {
@@ -454,47 +431,4 @@ void TestPlayerNativeRestore::fixtureBridgeControl()
   QVERIFY(!staleBridge.arm());
 #endif
 }
-void TestPlayerNativeRestore::fixtureBridgeCapture()
-{
-#ifdef MPVQT_EXTERNAL_EVENTS
-  PlayerComponent player;
-  player.m_mpvGeneration = 3;
-  player.m_receiptDispatch = [](quint64, const QString&) { return 0; };
-  QVERIFY(!ownedFixtureTemplate().isEmpty());
-  QTemporaryFile file(ownedFixtureTemplate());
-  QVERIFY(file.open());
-  const QByteArray data("fixture-a");
-  QCOMPARE(file.write(data), qint64(data.size()));
-  QVERIFY(file.flush());
-  const auto hash = QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex();
-  FixtureRestart::ChildGate gate(&player, 100);
-  FixtureRestartAdapter adapter(player, gate, 4, 1);
-  QVERIFY(adapter.loadA(file.fileName(), hash, false));
-  loadReplyAndStart(player, 1, 42);
-  const auto key = player.m_nativeReceipts.snapshot().key;
-  FixtureRestart::Grant binding{1, 2, 3, hash, 0, false};
-  FixtureRestart::Evidence frozen;
-  QVERIFY(player.recordFixturePosition(PlayerComponent::FixtureAsset::TestClip, key, 42, 3000));
-  QVERIFY(!adapter.captureA(binding, frozen));
-  player.m_observationDispatch = [](quint64, const char**) { return 0; };
-  QVERIFY(player.requestNativeObservation(key, 9, 10000, false));
-  observationReply(player, 9, "NR1|1|42|yes|yes|3|no|no|no");
-  QVERIFY(adapter.captureA(binding, frozen));
-  QVERIFY(FixtureRestart::validateFixtureEvidence(frozen));
-  QVERIFY(file.seek(file.size()));
-  QCOMPARE(file.write("x", 1), qint64(1));
-  QVERIFY(file.flush());
-  QVERIFY(!adapter.internalReplacementStop(frozen));
-  QVERIFY(file.resize(data.size()));
-  QVERIFY(file.flush());
-  const auto revision = player.m_playbackIntent.snapshot().revision;
-  player.m_stopDispatch = [] { return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
-  QVERIFY(adapter.internalReplacementStop(frozen));
-  QCOMPARE(player.m_playbackIntent.snapshot().revision, revision);
-  QVERIFY(player.m_nativeReceipts.snapshot().invalid);
-  QVERIFY(!adapter.internalReplacementStop(frozen));
-#endif
-}
-
 QTEST_GUILESS_MAIN(TestPlayerNativeRestore)
-#include "test_player_native_restore.moc"
