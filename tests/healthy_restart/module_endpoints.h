@@ -47,6 +47,7 @@ public:
   FixtureRestart::IoProgress poll(EndpointRole role);
   FixtureRestart::IoProgress cancel(EndpointRole role);
   bool closeSettled(EndpointRole role);
+  bool canceledWithoutData(EndpointRole role) const;
   const std::vector<unsigned char>* bytes(EndpointRole role) const noexcept;
 #endif
 private:

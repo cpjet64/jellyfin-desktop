@@ -51,6 +51,7 @@ public:
   bool bind(HANDLE pipe);
   bool pending() const { return inFlight_; }
   bool canReleaseStorage() const { return !retainedWork(); }
+  bool canceledWithoutData() const { return confirmedEmptyCancellation_ && canReleaseStorage(); }
   const std::vector<unsigned char>& bytes() const { return bytes_; }
 private:
   friend class WindowsRestartProcess;
@@ -78,6 +79,7 @@ private:
   bool owned_ = false, closed_ = false;
   bool identityWriter_ = false;
   bool tracked_ = false, poisoned_ = false, cancelRequested_ = false, submitting_ = false;
+  bool confirmedEmptyCancellation_ = false;
   unsigned activeCalls_ = 0;
   std::uint64_t nextOperation_ = 0, operation_ = 0;
   std::shared_ptr<const Settlement> settlement_;

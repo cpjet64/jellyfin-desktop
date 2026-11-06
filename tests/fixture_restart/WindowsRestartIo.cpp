@@ -77,6 +77,7 @@ IoProgress WindowsRestartIo::pollIdentity()
 IoProgress WindowsRestartIo::beginImpl(HANDLE pipe, bool read, const void* data,
                                        DWORD size, ULONGLONG deadline, bool tracked)
 {
+  confirmedEmptyCancellation_ = false;
   if (inFlight_ || submitting_ || activeCalls_ || settlement_ || poisoned_) return IoProgress::Failed;
   if (tracked && nextOperation_ == (std::numeric_limits<std::uint64_t>::max)()) return IoProgress::Failed;
   ActiveCall active(activeCalls_);
@@ -199,7 +200,7 @@ IoProgress WindowsRestartIo::pollImpl()
 {
   ActiveCall active(activeCalls_);
   if (!inFlight_) return state_;
-  DWORD count = tracked_ ? MAXDWORD : 0;
+  DWORD count = MAXDWORD;
   const BOOL completed = api_.result(pipe_, &overlap_, &count, FALSE);
   if (!inFlight_) return state_;
   if (completed) return completion(count);
@@ -212,6 +213,8 @@ IoProgress WindowsRestartIo::pollImpl()
       error != ERROR_NO_DATA && error != ERROR_PIPE_NOT_CONNECTED)
     return IoProgress::Unconfirmed;
   inFlight_ = false;
+  confirmedEmptyCancellation_ = read_ && cancelling_ && error == ERROR_OPERATION_ABORTED &&
+      count == 0 && offset_ == 0;
   if (tracked_ && error == ERROR_OPERATION_ABORTED)
     return count == 0 ? settleTracked(Settlement::Outcome::Aborted)
                       : settleTracked(Settlement::Outcome::Uncertain);
@@ -234,7 +237,7 @@ IoProgress WindowsRestartIo::cancelImpl()
     (void)api_.cancel(pipe_, &overlap_);
     if (!inFlight_) return state_;
   }
-  DWORD count = tracked_ ? MAXDWORD : 0;
+  DWORD count = MAXDWORD;
   const BOOL completed = api_.result(pipe_, &overlap_, &count, FALSE);
   if (!inFlight_) return state_;
   if (completed) return completion(count);
@@ -243,6 +246,8 @@ IoProgress WindowsRestartIo::cancelImpl()
       error != ERROR_NO_DATA && error != ERROR_PIPE_NOT_CONNECTED)
     return IoProgress::Unconfirmed;
   inFlight_ = false;
+  confirmedEmptyCancellation_ = read_ && cancelling_ && error == ERROR_OPERATION_ABORTED &&
+      count == 0 && offset_ == 0;
   if (tracked_ && error == ERROR_OPERATION_ABORTED)
     return count == 0 ? settleTracked(Settlement::Outcome::Aborted)
                       : settleTracked(Settlement::Outcome::Uncertain);

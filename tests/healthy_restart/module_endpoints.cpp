@@ -187,6 +187,12 @@ bool ChildEndpoints::closeSettled(EndpointRole role)
   entry->writeComplete = false;
   return true;
 }
+bool ChildEndpoints::canceledWithoutData(EndpointRole role) const
+{
+  auto* entry = state_ ? state_->find(role) : nullptr;
+  return entry && entry->pipe && !entry->closeFailed && entry->io &&
+      state_->operations.valid() && entry->io->canceledWithoutData();
+}
 const std::vector<unsigned char>* ChildEndpoints::bytes(EndpointRole role) const noexcept
 {
   auto* entry = state_ ? state_->find(role) : nullptr;
