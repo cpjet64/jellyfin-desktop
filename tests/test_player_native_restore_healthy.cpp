@@ -1,22 +1,45 @@
 #include "test_player_native_restore.h"
 #ifdef HEALTHY_COPIED_SOURCE_TEST
 #include <mpv/client.h>
+#include <QCryptographicHash>
 #include <vector>
 
-namespace { bool closeGate(void*) { return true; } }
-
-std::shared_ptr<FixtureRestart::ChildGate> TestPlayerNativeRestore::bindCleanup(PlayerComponent& player)
+std::unique_ptr<TestPlayerNativeRestore::CleanupHarness> TestPlayerNativeRestore::armCleanup(
+    PlayerComponent& player, const PlayerComponent::RestoreGrant& grant)
 {
-  auto gate = std::make_shared<FixtureRestart::ChildGate>(&player, 100);
+  using Child = FixtureRestart::RestartChild;
+  auto harness = std::make_unique<CleanupHarness>();
+  harness->gate = std::make_shared<FixtureRestart::ChildGate>(&player, 100);
   player.m_healthyStopClock = [] { return qint64(10); };
-  if (!player.healthyBindRestoreCleanupGate(gate)) return {};
-  return gate;
+  if (!player.healthyBindRestoreCleanupGate(harness->gate, 100)) return {};
+  const FixtureRestart::Grant binding{1, grant.id, grant.parentRevision, QByteArray(64, 'a'), grant.positionMs, grant.desiredPaused};
+  const QByteArray frame = FixtureRestart::encodeGrant(binding);
+  const QByteArray digest = QCryptographicHash::hash(frame, QCryptographicHash::Sha256);
+  Child::Actions actions; actions.now = [] { return qint64(10); };
+  actions.armActual = [&player, grant] {
+    if (!player.armNativeRestore(grant, 7, 2)) return Child::ArmResult{};
+    const auto key = player.m_nativeRestore.key;
+    return Child::ArmResult{Child::ArmResult::Status::Armed, {key.host, key.core, key.revision, key.attempt}};
+  };
+  const auto gate = harness->gate;
+  actions.beginCleanup = [&player, gate](quint64 sequence, quint64 revision) {
+    return player.beginNativeRestoreCleanup(gate, HealthyRestart::VerifiedCleanupCancel{sequence, revision},
+                                            100, HealthyRestart::FailureCause::None);
+  };
+  actions.pollCleanup = [] { return Child::CleanupResult{Child::CleanupResult::Status::Pending, {}, FixtureRestart::CancelFailure::None}; };
+  harness->child = std::make_unique<Child>(*gate, gate.get(), &player, binding.run, 9, digest, std::move(actions));
+  QByteArray response;
+  if (!harness->child->grant(gate.get(), frame, 10, true, response)) return {};
+  auto claim = std::make_shared<HealthyRetirement::RetirementClaim>(1);
+  if (!player.healthyInstallRetirementClaim(claim, 1)) return {};
+  return harness;
 }
 
-bool TestPlayerNativeRestore::beginCleanup(PlayerComponent& player,
-    const std::shared_ptr<FixtureRestart::ChildGate>& gate)
+bool TestPlayerNativeRestore::beginCleanup(PlayerComponent& player, CleanupHarness& harness)
 {
-  return gate && gate->cancel(closeGate, nullptr) && player.beginNativeRestoreCancellation(gate, 1, 100);
+  QByteArray response;
+  return harness.child && harness.child->control(&player,
+      FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 1, 5}), response) && response.isEmpty();
 }
 
 void TestPlayerNativeRestore::completeNoLoad(PlayerComponent& player)

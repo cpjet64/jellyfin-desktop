@@ -2,7 +2,9 @@
 #include "player_test_cache.h"
 #include <QtTest/QtTest>
 #ifdef HEALTHY_COPIED_SOURCE_TEST
-#include <RestartBroker.h>
+#include <RestartChild.h>
+#include <QCryptographicHash>
+#include <map>
 #include <memory>
 #endif
 
@@ -11,10 +13,15 @@ class TestPlayerRestoreCleanup : public QObject
   Q_OBJECT
   PlayerTestCache cache_;
 private:
-  static bool arm(PlayerComponent& player, bool load);
-  static bool readyToSeek(PlayerComponent& player);
+  bool arm(PlayerComponent& player, bool load);
+  bool readyToSeek(PlayerComponent& player);
 #ifdef HEALTHY_COPIED_SOURCE_TEST
-  static bool beginCleanup(PlayerComponent& player);
+  struct Harness {
+    std::shared_ptr<FixtureRestart::ChildGate> gate;
+    std::unique_ptr<FixtureRestart::RestartChild> child;
+  };
+  std::map<PlayerComponent*, std::unique_ptr<Harness>> harnesses_;
+  bool beginCleanup(PlayerComponent& player);
 #endif
 private slots:
   void newerLoadAndStop();
@@ -23,21 +30,48 @@ private slots:
   void asyncFailureAndReentrancy();
   void newerIntentAfterFailure();
   void systemModeUnavailable();
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  void bindingMustPrecedeArm();
+  void queuedStopReplyAfterContainment();
+#endif
 };
 
 bool TestPlayerRestoreCleanup::arm(PlayerComponent& player, bool load)
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
 #ifdef HEALTHY_COPIED_SOURCE_TEST
-  auto gate = std::make_shared<FixtureRestart::ChildGate>(&player, 100);
+  auto harness = std::make_unique<Harness>();
+  auto gate = harness->gate = std::make_shared<FixtureRestart::ChildGate>(&player, 100);
   player.m_healthyStopClock = [] { return qint64(10); };
   player.m_restoreDispatch = [](quint64, const char**) { return 0; };
-  if (!player.healthyBindRestoreCleanupGate(gate)) return false;
+  if (!player.healthyBindRestoreCleanupGate(gate, 100)) return false;
 #endif
   if (!player.bindNativeReceiptHost(7)) return false;
   player.m_mpvGeneration = 8;
   const PlayerComponent::RestoreGrant grant{3, 4, 0, 3000, false};
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  using Child = FixtureRestart::RestartChild;
+  const FixtureRestart::Grant binding{1, grant.id, grant.parentRevision, QByteArray(64, 'a'), grant.positionMs, grant.desiredPaused};
+  const auto frame = FixtureRestart::encodeGrant(binding);
+  const auto digest = QCryptographicHash::hash(frame, QCryptographicHash::Sha256);
+  Child::Actions actions; actions.now = [] { return qint64(10); };
+  actions.armActual = [&player, grant] {
+    if (!player.armNativeRestore(grant, 7, 2)) return Child::ArmResult{};
+    const auto key = player.m_nativeRestore.key;
+    return Child::ArmResult{Child::ArmResult::Status::Armed, {key.host, key.core, key.revision, key.attempt}};
+  };
+  actions.beginCleanup = [&player, gate](quint64 seq, quint64 rev) {
+    return player.beginNativeRestoreCleanup(gate, HealthyRestart::VerifiedCleanupCancel{seq, rev}, 100, HealthyRestart::FailureCause::None);
+  };
+  actions.pollCleanup = [] { return Child::CleanupResult{Child::CleanupResult::Status::Pending, {}, FixtureRestart::CancelFailure::None}; };
+  harness->child = std::make_unique<Child>(*gate, gate.get(), &player, binding.run, 9, digest, std::move(actions));
+  QByteArray response;
+  if (!harness->child->grant(gate.get(), frame, 10, true, response)) return false;
+  if (!player.healthyInstallRetirementClaim(std::make_shared<HealthyRetirement::RetirementClaim>(1), 1)) return false;
+  harnesses_[&player] = std::move(harness);
+#else
   if (!player.armNativeRestore(grant, 7, 2)) return false;
+#endif
   if (!load) return true;
   player.m_restoreDispatch = [](quint64, const char**) { return 0; };
   return player.dispatchNativeRestoreLoad(QStringLiteral("fixture"));
@@ -49,9 +83,11 @@ bool TestPlayerRestoreCleanup::arm(PlayerComponent& player, bool load)
 #ifdef HEALTHY_COPIED_SOURCE_TEST
 bool TestPlayerRestoreCleanup::beginCleanup(PlayerComponent& player)
 {
-  auto gate = std::const_pointer_cast<FixtureRestart::ChildGate>(player.m_restoreCleanupGate);
-  return gate && gate->cancel([](void*) { return true; }, nullptr) &&
-      player.beginNativeRestoreCancellation(gate, 1, 100);
+  const auto it = harnesses_.find(&player);
+  if (it == harnesses_.end()) return false;
+  QByteArray response;
+  return it->second->child->control(&player,
+      FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 1, 5}), response) && response.isEmpty();
 }
 #endif
 
@@ -253,6 +289,69 @@ void TestPlayerRestoreCleanup::systemModeUnavailable()
   QCOMPARE(player.m_playbackIntent.snapshot().desired, before.desired);
 #endif
 }
+
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+void TestPlayerRestoreCleanup::bindingMustPrecedeArm()
+{
+  PlayerComponent before;
+  before.m_healthyStopClock = [] { return qint64(10); };
+  auto gate = std::make_shared<FixtureRestart::ChildGate>(&before, 100);
+  QVERIFY(before.healthyBindRestoreCleanupGate(gate, 100));
+  QVERIFY(!before.healthyBindRestoreCleanupGate(gate, 100));
+
+  PlayerComponent after;
+  QVERIFY(after.bindNativeReceiptHost(7)); after.m_mpvGeneration = 8;
+  const PlayerComponent::RestoreGrant grant{3, 4, 0, 3000, false};
+  QVERIFY(after.armNativeRestore(grant, 7, 2));
+  after.m_healthyStopClock = [] { return qint64(10); };
+  auto late = std::make_shared<FixtureRestart::ChildGate>(&after, 100);
+  QVERIFY(!after.healthyBindRestoreCleanupGate(late, 100));
+
+  PlayerComponent reentrant;
+  QVERIFY(reentrant.bindNativeReceiptHost(7)); reentrant.m_mpvGeneration = 8;
+  bool armed = false;
+  reentrant.m_healthyStopClock = [&] { armed = reentrant.armNativeRestore(grant, 7, 2); return qint64(10); };
+  auto during = std::make_shared<FixtureRestart::ChildGate>(&reentrant, 100);
+  QVERIFY(!reentrant.healthyBindRestoreCleanupGate(during, 100));
+  QVERIFY(armed);
+}
+
+void TestPlayerRestoreCleanup::queuedStopReplyAfterContainment()
+{
+  PlayerComponent player;
+  QVERIFY(readyToSeek(player));
+  quint64 stopId = 0;
+  int dispatches = 0;
+  player.m_restoreDispatch = [&](quint64 id, const char**) { stopId = id; ++dispatches; return 0; };
+  mpv_event none{}; none.event_id = MPV_EVENT_NONE;
+  mpv_event stop{}; stop.event_id = MPV_EVENT_COMMAND_REPLY;
+  bool deliver = false;
+  player.m_healthyStopEventWait = [&]() -> mpv_event* {
+    if (deliver) { deliver = false; return &stop; }
+    return &none;
+  };
+  QVERIFY(beginCleanup(player));
+  QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Pending);
+  QVERIFY(stopId);
+  QCOMPARE(dispatches, 1);
+  stop.reply_userdata = stopId;
+  player.m_healthyStopLease->contain();
+  deliver = true;
+  QVERIFY(QMetaObject::invokeMethod(&player, "handleMpvEvents", Qt::QueuedConnection));
+  QCoreApplication::processEvents();
+  QVERIFY(!deliver);
+  QVERIFY(player.m_restoreCleanup.stopReply);
+  QVERIFY(player.m_restoreCleanup.stopOk);
+  QCOMPARE(player.m_restoreCleanup.replyError, 0);
+  QVERIFY(player.m_healthyStopLease->contained());
+  QCOMPARE(player.m_restoreCleanup.status, PlayerComponent::RestoreCleanupStatus::Pending);
+  QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Failed);
+  QCOMPARE(dispatches, 1);
+  QVERIFY(!player.m_restoreCleanup.idle.requested);
+  QVERIFY(!player.m_restoreCleanup.position.requested);
+  player.m_healthyStopEventWait = {};
+}
+#endif
 
 QTEST_GUILESS_MAIN(TestPlayerRestoreCleanup)
 #include "test_player_restore_cleanup.moc"

@@ -145,17 +145,18 @@ void TestPlayerNativeRestore::cancellationBeforeLoad()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   PlayerComponent player;
-#ifdef HEALTHY_COPIED_SOURCE_TEST
-  const auto cleanupGate = bindCleanup(player); QVERIFY(cleanupGate);
-#endif
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
   PlayerComponent::RestoreGrant grant{3, 4, 0, 1000, true};
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  auto cleanup = armCleanup(player, grant); QVERIFY(cleanup);
+#else
   QVERIFY(player.armNativeRestore(grant, 7, 2));
+#endif
   int calls = 0;
   player.m_restoreDispatch = [&](quint64, const char**) { ++calls; return 0; };
 #ifdef HEALTHY_COPIED_SOURCE_TEST
-  QVERIFY(beginCleanup(player, cleanupGate));
+  QVERIFY(beginCleanup(player, *cleanup));
 #else
   player.cancelNativeRestore();
 #endif
@@ -196,20 +197,21 @@ void TestPlayerNativeRestore::cancellationAfterLoad()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   PlayerComponent player;
-#ifdef HEALTHY_COPIED_SOURCE_TEST
-  const auto cleanupGate = bindCleanup(player); QVERIFY(cleanupGate);
-#endif
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
   PlayerComponent::RestoreGrant grant{3, 4, 0, 3000, false};
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  auto cleanup = armCleanup(player, grant); QVERIFY(cleanup);
+#else
   QVERIFY(player.armNativeRestore(grant, 7, 2));
+#endif
   int commands = 0, stops = 0;
   player.m_restoreDispatch = [&](quint64, const char**) { ++commands; return 0; };
   player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
   QVERIFY(player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
   loadReplyAndStart(player, 2, 42);
 #ifdef HEALTHY_COPIED_SOURCE_TEST
-  QVERIFY(beginCleanup(player, cleanupGate));
+  QVERIFY(beginCleanup(player, *cleanup));
   QVERIFY(!player.dispatchNativeRestoreSeek());
   completeStopped(player, 42);
   QCOMPARE(commands, 2); QCOMPARE(stops, 0);
@@ -337,13 +339,14 @@ void TestPlayerNativeRestore::cancellationDuringSeek()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   PlayerComponent player;
-#ifdef HEALTHY_COPIED_SOURCE_TEST
-  const auto cleanupGate = bindCleanup(player); QVERIFY(cleanupGate);
-#endif
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
   const PlayerComponent::RestoreGrant grant{3, 4, 0, 3125, false};
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  auto cleanup = armCleanup(player, grant); QVERIFY(cleanup);
+#else
   QVERIFY(player.armNativeRestore(grant, 7, 2));
+#endif
   int commands = 0, stops = 0;
   player.m_restoreDispatch = [&](quint64, const char**) { ++commands; return 0; };
   player.m_stopDispatch = [&] { ++stops; return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
@@ -355,7 +358,7 @@ void TestPlayerNativeRestore::cancellationDuringSeek()
   observationReply(player, 1, "NR1|1|42|yes|yes|0|yes|no|no");
   QVERIFY(player.dispatchNativeRestoreSeek());
 #ifdef HEALTHY_COPIED_SOURCE_TEST
-  QVERIFY(beginCleanup(player, cleanupGate));
+  QVERIFY(beginCleanup(player, *cleanup));
 #else
   player.cancelNativeRestore();
 #endif
@@ -387,13 +390,14 @@ void TestPlayerNativeRestore::reentrantCancellationAndSeekFailure()
   QVERIFY(!observation.nativeObservationCurrent());
 
   PlayerComponent player;
-#ifdef HEALTHY_COPIED_SOURCE_TEST
-  const auto cleanupGate = bindCleanup(player); QVERIFY(cleanupGate);
-#endif
   QVERIFY(player.bindNativeReceiptHost(7));
   player.m_mpvGeneration = 8;
   const PlayerComponent::RestoreGrant grant{3, 4, 0, 3125, false};
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  auto cleanup = armCleanup(player, grant); QVERIFY(cleanup);
+#else
   QVERIFY(player.armNativeRestore(grant, 7, 2));
+#endif
   int commands = 0, stops = 0;
 #ifdef HEALTHY_COPIED_SOURCE_TEST
   bool cleanupStarted = false;
@@ -403,7 +407,7 @@ void TestPlayerNativeRestore::reentrantCancellationAndSeekFailure()
     ++commands;
     if (commands == 2) {
 #ifdef HEALTHY_COPIED_SOURCE_TEST
-      cleanupStarted = beginCleanup(player, cleanupGate);
+      cleanupStarted = beginCleanup(player, *cleanup);
 #else
       player.cancelNativeRestore();
 #endif

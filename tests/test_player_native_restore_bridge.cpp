@@ -23,14 +23,21 @@ void TestPlayerNativeRestore::fixtureBridgeControl()
   FixtureRestartAdapter bridge(player, *gate, 7, 2, 9, digest, [] { return 10; });
 #ifdef HEALTHY_COPIED_SOURCE_TEST
   player.m_healthyStopClock = [] { return qint64(10); };
-  QVERIFY(bridge.bindCleanupGate(gate));
-#endif
-  QVERIFY(gate->accept(&player, frame, grant.run, digest, 10, true));
-#ifdef HEALTHY_COPIED_SOURCE_TEST
-  QCOMPARE(bridge.armActual().status, FixtureRestart::RestartChild::ArmResult::Status::Armed);
+  QCOMPARE(bridge.armActual().status, FixtureRestart::RestartChild::ArmResult::Status::Unknown);
+  QVERIFY(!player.m_nativeRestore.armed);
+  QVERIFY(bridge.bindCleanupGate(gate, 100));
+  using Child = FixtureRestart::RestartChild;
+  Child::Actions actions; actions.now = [] { return qint64(10); };
+  actions.armActual = [&] { return bridge.armActual(); };
+  actions.beginCleanup = [&](quint64 sequence, quint64 revision) { return bridge.beginCleanup(sequence, revision, 100); };
+  actions.pollCleanup = [] { return Child::CleanupResult{Child::CleanupResult::Status::Pending, {}, FixtureRestart::CancelFailure::None}; };
+  Child child(*gate, &player, &player, grant.run, 9, digest, std::move(actions));
+  QByteArray response;
+  QVERIFY(child.grant(&player, frame, 10, true, response));
   auto claim = std::make_shared<HealthyRetirement::RetirementClaim>(1);
   QVERIFY(player.healthyInstallRetirementClaim(claim, 1));
 #else
+  QVERIFY(gate->accept(&player, frame, grant.run, digest, 10, true));
   QVERIFY(bridge.arm());
 #endif
   QVERIFY(!bridge.load(file.fileName())); QCOMPARE(loads, 0);
@@ -38,8 +45,9 @@ void TestPlayerNativeRestore::fixtureBridgeControl()
   QVERIFY(bridge.load(file.fileName())); QCOMPARE(loads, 1);
 #ifdef HEALTHY_COPIED_SOURCE_TEST
   loadReplyAndStart(player, 2, 42);
-  QVERIFY(gate->cancel([](void*) { return true; }, nullptr));
-  QVERIFY(bridge.beginCleanup(1, 4, 100));
+  response.clear();
+  QVERIFY(child.control(&player, FixtureRestart::encodeControl({FixtureRestart::ControlKind::UserStop, 1, 4}), response));
+  QVERIFY(response.isEmpty());
   completeStopped(player, 42);
   QCOMPARE(bridge.pollCleanup().status, FixtureRestart::RestartChild::CleanupResult::Status::Stopped);
   QCOMPARE(stops, 0);
