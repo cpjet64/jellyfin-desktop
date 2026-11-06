@@ -18,15 +18,17 @@ struct Fake : Operations {
   bool ack = true;
   bool cancelDuringLaunch = false, cancelDuringTransfer = false, lateAck = false;
   bool cancelDuringClosed = false, cancelDuringWait = false, cancelDuringEligibility = false;
+  bool reenterStep = false, cancelDuringOwn = false;
+  Evidence* mutateEvidence = nullptr;
   bool holdTransfer = false, holdAck = false;
   Broker* target = nullptr;
   int stopCalls = 0, waitCalls = 0, launchCalls = 0, transferCalls = 0;
   QByteArray frame;
   qint64 nowMs() const override { return clock; }
-  bool ownsAChannel(const void* candidate) const override { return held && candidate == channel; }
-  bool validateEvidence(const Evidence&) const override { return evidenceValid; }
+  bool ownsAChannel(const void* candidate) const override { if (cancelDuringOwn) target->cancel(); return held && candidate == channel; }
+  bool validateEvidence(const Evidence&) const override { if (mutateEvidence) mutateEvidence->grant.positionMs = 1; return evidenceValid; }
   Progress internalReplacementStop(qint64 deadline) override { ++stopCalls; CHECK(deadline == 150100); return stopped ? Progress::Complete : Progress::Failed; }
-  Progress waitAClosed(qint64 deadline) override { CHECK(deadline == 150100); if (cancelDuringClosed) target->cancel(); return closed ? Progress::Complete : Progress::Failed; }
+  Progress waitAClosed(qint64 deadline) override { CHECK(deadline == 150100); if (reenterStep) target->step(); if (cancelDuringClosed) target->cancel(); return closed ? Progress::Complete : Progress::Failed; }
   bool eligibleForB(const Grant&) const override { if (cancelDuringEligibility) target->cancel(); return eligible; }
   Progress waitAAndChildren(qint64 deadline, bool& forcedResult) override {
     ++waitCalls; CHECK(deadline == 150100); if (cancelDuringWait) target->cancel(); forcedResult = forced; return exited ? Progress::Complete : Progress::Failed;
@@ -44,7 +46,7 @@ struct Fake : Operations {
   }
   Progress cancelBAndAwaitAck(qint64 deadline) override { CHECK(deadline == 180100); if (holdAck) return Progress::Pending; if (lateAck) clock = deadline; return ack ? Progress::Complete : Progress::Failed; }
   Progress waitBGrantAccepted(qint64 deadline) override { CHECK(deadline == 150100); if (cancelDuringAccepted) target->cancel(); return accepted ? Progress::Complete : Progress::Failed; }
-  Progress issueRestorePermit(qint64 deadline) override { CHECK(deadline == 150100); if (cancelDuringPermit) target->cancel(); return permit ? Progress::Complete : Progress::Failed; }
+  Progress issueRestorePermit(qint64 deadline, const std::function<bool()>& current) override { CHECK(deadline == 150100); if (cancelDuringPermit) target->cancel(); return current() && permit ? Progress::Complete : Progress::Failed; }
   Progress monitorB(qint64 deadline) override { CHECK(deadline == 150100); return monitor ? Progress::Complete : Progress::Failed; }
   Progress cleanupOwned(qint64 deadline) override { CHECK(deadline == 180100); return Progress::Complete; }
 };
@@ -222,6 +224,20 @@ static void closureAndIntentGate()
   }
 }
 
+static void captureReentryAndAliasing()
+{
+  Fake ops; Broker broker(ops, ops.channel, sample().grant); ops.target = &broker;
+  Evidence input = sample(); ops.mutateEvidence = &input;
+  CHECK(broker.capture(ops.channel, input));
+  CHECK(input.grant.positionMs == 1 && broker.frozenEvidence().grant.positionMs == 5000);
+  ops.mutateEvidence = nullptr; ops.reenterStep = true;
+  CHECK(broker.startReplacement()); drive(broker);
+  CHECK(broker.completed() && ops.launchCalls == 1 && ops.stopCalls == 1);
+  Fake canceled; Broker rejected(canceled, canceled.channel, sample().grant); canceled.target = &rejected;
+  canceled.cancelDuringOwn = true;
+  CHECK(!rejected.capture(canceled.channel, sample()) && canceled.launchCalls == 0);
+}
+
 static bool checkedStop(void* p) { ++*static_cast<int*>(p); return true; }
 static bool failedStop(void* p) { ++*static_cast<int*>(p); return false; }
 
@@ -286,6 +302,6 @@ static void ordering()
 int main(int argc, char** argv)
 {
   QCoreApplication app(argc, argv);
-  framing(); lifecycle(); evidenceValidation(); failures(); closureAndIntentGate(); ordering();
+  framing(); lifecycle(); evidenceValidation(); failures(); closureAndIntentGate(); captureReentryAndAliasing(); ordering();
   return 0;
 }
