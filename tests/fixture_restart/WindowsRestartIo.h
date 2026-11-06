@@ -47,6 +47,8 @@ public:
   IoProgress beginGuarded(HANDLE pipe, bool read, const void* data, DWORD size,
                           ULONGLONG deadline, const std::function<bool()>& authority);
   IoProgress beginTrackedRead(HANDLE pipe, DWORD size, ULONGLONG deadline);
+  IoProgress beginTrackedReadGuarded(HANDLE pipe, DWORD size, ULONGLONG deadline,
+                                     const std::function<bool()>& authority);
   std::uint64_t operation() const { return operation_; }
   std::shared_ptr<const Settlement> settlement() const { return settlement_; }
   bool consumeSettlement(std::uint64_t operation);
@@ -54,6 +56,7 @@ public:
   IoProgress cancel();
   IoProgress pollSettlementOnly();
   IoProgress cancelSettlementOnly();
+  bool retainCompleted();
   IoProgress pollGuarded(const std::function<bool()>& authority);
   IoProgress cancelGuarded(const std::function<bool()>& authority);
   bool canBind(HANDLE pipe) const;
@@ -64,7 +67,7 @@ public:
   const std::vector<unsigned char>& bytes() const { return bytes_; }
 private:
   friend class WindowsRestartProcess;
-  bool retainedWork() const { return inFlight_ || submitting_ || activeCalls_ || settlement_; }
+  bool retainedWork() const { return inFlight_ || submitting_ || activeCalls_ || settlement_ || unpublished_; }
   ~WindowsRestartIo();
   bool sealIdentityWriter();
   IoProgress beginIdentity(HANDLE pipe, const void* data, DWORD size, ULONGLONG deadline);
@@ -91,6 +94,8 @@ private:
   bool identityWriter_ = false;
   bool tracked_ = false, poisoned_ = false, cancelRequested_ = false, submitting_ = false;
   bool settlementOnly_ = false;
+  bool unpublished_ = false;
+  bool settlementPublished_ = false;
   bool confirmedEmptyCancellation_ = false;
   unsigned activeCalls_ = 0;
   std::uint64_t nextOperation_ = 0, operation_ = 0;

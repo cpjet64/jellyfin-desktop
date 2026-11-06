@@ -60,6 +60,16 @@ IoProgress WindowsRestartIo::beginGuarded(HANDLE pipe, bool read, const void* da
   return beginImpl(pipe, read, data, size, deadline);
 }
 
+IoProgress WindowsRestartIo::beginTrackedReadGuarded(HANDLE pipe, DWORD size, ULONGLONG deadline,
+                                                      const std::function<bool()>& authority)
+{
+  if (identityWriter_ || !authority) return IoProgress::Failed;
+  const auto previous = continuationGuard_;
+  continuationGuard_ = &authority;
+  struct Restore { const std::function<bool()>*& slot; const std::function<bool()>* old; ~Restore() { slot = old; } } restore{continuationGuard_, previous};
+  return beginImpl(pipe, true, nullptr, size, deadline, true);
+}
+
 bool WindowsRestartIo::consumeSettlement(std::uint64_t operation)
 {
   if (!settlement_ || !operation || settlement_->operation != operation) return false;
@@ -107,6 +117,7 @@ IoProgress WindowsRestartIo::beginImpl(HANDLE pipe, bool read, const void* data,
   read_ = read;
   tracked_ = tracked;
   settlementOnly_ = false;
+  settlementPublished_ = false;
   operation_ = ++nextOperation_;
   cancelling_ = false;
   cancelRequested_ = false;
@@ -196,6 +207,7 @@ IoProgress WindowsRestartIo::completion(DWORD count)
 
 IoProgress WindowsRestartIo::settleTracked(Settlement::Outcome outcome)
 {
+  if (settlementPublished_) return state_ = IoProgress::Failed;
   try {
     auto value = std::make_shared<Settlement>();
     value->operation = operation_;
@@ -205,6 +217,7 @@ IoProgress WindowsRestartIo::settleTracked(Settlement::Outcome outcome)
     value->read = read_;
     value->bytes.assign(bytes_.begin(), bytes_.begin() + offset_);
     settlement_ = std::move(value);
+    settlementPublished_ = true;
   } catch (...) {
     poisoned_ = true;
     return state_ = IoProgress::Failed;
@@ -258,6 +271,16 @@ IoProgress WindowsRestartIo::cancelSettlementOnly()
   if (settlementOnly_ && settlement_) return state_;
   if (identityWriter_ || !latchSettlementOnly()) return IoProgress::Unconfirmed;
   return cancelImpl();
+}
+
+bool WindowsRestartIo::retainCompleted()
+{
+  if (!canReleaseStorage() || read_ || settlementPublished_ || state_ != IoProgress::Complete || !operation_) return false;
+  settlementOnly_ = true;
+  (void)settleTracked(Settlement::Outcome::Completed);
+  if (settlement_) return true;
+  unpublished_ = true;
+  return false;
 }
 
 IoProgress WindowsRestartIo::pollImpl()

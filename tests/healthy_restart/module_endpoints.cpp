@@ -23,8 +23,8 @@ struct ChildEndpoints::State {
 #ifdef _WIN32
     HANDLE pipe = nullptr;
     FixtureRestart::WindowsRestartIo* io = nullptr;
-    bool reading = false, readComplete = false, writeComplete = false, closeFailed = false;
-    bool trackedGrant = false, containment = false;
+    bool reading = false, readComplete = false, writeComplete = false, writeConsumed = false, closeFailed = false;
+    bool trackedRead = false, containment = false, retentionUncertain = false;
 #endif
   } entries[3];
   std::shared_ptr<const VerifiedModule> module;
@@ -46,9 +46,18 @@ struct ChildEndpoints::State {
     return nullptr;
   }
 #ifdef _WIN32
+  void enterContainment() noexcept {
+    for (auto& entry : entries) {
+      if (entry.containment) continue;
+      entry.containment = true;
+      if (entry.writeComplete && !entry.writeConsumed && entry.io && !entry.io->retainCompleted())
+        entry.retentionUncertain = true;
+      entry.readComplete = entry.writeComplete = false;
+    }
+  }
   bool authorityValid() {
     try { if (operations.valid && operations.valid()) return true; } catch (...) {}
-    for (auto& entry : entries) entry.containment = true;
+    enterContainment();
     return false;
   }
 #endif
@@ -58,7 +67,7 @@ ChildEndpoints::~ChildEndpoints()
 {
 #ifdef _WIN32
   if (state_) for (const auto& entry : state_->entries)
-    if (entry.closeFailed || (entry.io && !entry.io->canReleaseStorage())) { (void)state_.release(); break; }
+    if (entry.closeFailed || entry.retentionUncertain || (entry.io && !entry.io->canReleaseStorage())) { (void)state_.release(); break; }
 #endif
 }
 std::unique_ptr<ChildEndpoints> ChildEndpoints::create(std::unique_ptr<VerifiedModule>& module,
@@ -158,17 +167,17 @@ std::shared_ptr<const VerifiedModule> ChildEndpoints::capability() const noexcep
 #ifdef _WIN32
 void ChildEndpoints::beginContainment() noexcept
 {
-  if (!state_) return;
-  for (auto& entry : state_->entries) entry.containment = true;
+  if (state_) state_->enterContainment();
 }
 FixtureRestart::IoProgress ChildEndpoints::begin(EndpointRole role, bool read, const void* data, DWORD size)
 {
   auto* entry = state_ ? state_->find(role) : nullptr;
-  if (!entry || !entry->pipe || entry->closeFailed || entry->trackedGrant || entry->containment ||
-      !entry->io->canReleaseStorage() || !state_->authorityValid()) return FixtureRestart::IoProgress::Failed;
+  if (!entry || !entry->pipe || entry->closeFailed || !state_->authorityValid()) return FixtureRestart::IoProgress::Failed;
+  if (entry->trackedRead || entry->containment || (entry->writeComplete && !entry->writeConsumed) ||
+      !entry->io->canReleaseStorage()) return FixtureRestart::IoProgress::Failed;
   const bool expectedRead = role == EndpointRole::Control || (state_->mode == EndpointMode::Restore && role == EndpointRole::Grant);
   if (read != expectedRead) return FixtureRestart::IoProgress::Failed;
-  entry->reading = read; entry->readComplete = false; entry->writeComplete = false;
+  entry->reading = read; entry->readComplete = false; entry->writeComplete = false; entry->writeConsumed = false;
   const auto authority = [state = state_.get(), entry] { return state->authorityValid() && !entry->containment; };
   const auto result = entry->io->beginGuarded(entry->pipe, read, data, size, state_->deadline, authority);
   if (entry->containment) return result == FixtureRestart::IoProgress::Pending ? result : FixtureRestart::IoProgress::Failed;
@@ -178,34 +187,55 @@ FixtureRestart::IoProgress ChildEndpoints::begin(EndpointRole role, bool read, c
 }
 FixtureRestart::IoProgress ChildEndpoints::beginTrackedGrantRead(DWORD size)
 {
-  auto* entry = state_ ? state_->find(EndpointRole::Grant) : nullptr;
-  if (!entry || state_->mode != EndpointMode::Restore || !entry->pipe || entry->closeFailed ||
-      entry->trackedGrant || entry->containment || !entry->io->canReleaseStorage() || !state_->authorityValid())
+  return beginTrackedRead(EndpointRole::Grant, size);
+}
+FixtureRestart::IoProgress ChildEndpoints::beginTrackedRead(EndpointRole role, DWORD size)
+{
+  auto* entry = state_ ? state_->find(role) : nullptr;
+  if (!entry || (role != EndpointRole::Control && (role != EndpointRole::Grant || state_->mode != EndpointMode::Restore)) ||
+      !entry->pipe || entry->closeFailed || !state_->authorityValid() || entry->trackedRead || entry->containment ||
+      !entry->io->canReleaseStorage())
     return FixtureRestart::IoProgress::Failed;
   const auto previous = entry->io->operation();
-  entry->trackedGrant = true;
+  entry->trackedRead = true;
   entry->reading = true; entry->readComplete = false; entry->writeComplete = false;
-  const auto result = entry->io->beginTrackedRead(entry->pipe, size, state_->deadline);
+  const auto authority = [state = state_.get(), entry] { return state->authorityValid() && !entry->containment; };
+  const auto result = entry->io->beginTrackedReadGuarded(entry->pipe, size, state_->deadline, authority);
   if (entry->io->operation() == previous && !entry->io->pending() && !entry->io->settlement())
-    entry->trackedGrant = false;
+    entry->trackedRead = false;
+  if (entry->containment && result != FixtureRestart::IoProgress::Pending && result != FixtureRestart::IoProgress::Unconfirmed)
+    return FixtureRestart::IoProgress::Failed;
   return result;
 }
 std::uint64_t ChildEndpoints::grantReadOperation() const noexcept
 {
-  auto* entry = state_ ? state_->find(EndpointRole::Grant) : nullptr;
-  return entry && entry->trackedGrant ? entry->io->operation() : 0;
+  return trackedReadOperation(EndpointRole::Grant);
+}
+std::uint64_t ChildEndpoints::trackedReadOperation(EndpointRole role) const noexcept
+{
+  auto* entry = state_ ? state_->find(role) : nullptr;
+  return entry && entry->trackedRead ? entry->io->operation() : 0;
 }
 std::shared_ptr<const FixtureRestart::WindowsRestartIo::Settlement>
 ChildEndpoints::grantReadSettlement() const noexcept
 {
-  auto* entry = state_ ? state_->find(EndpointRole::Grant) : nullptr;
-  return entry && entry->trackedGrant ? entry->io->settlement() : nullptr;
+  return trackedReadSettlement(EndpointRole::Grant);
+}
+std::shared_ptr<const FixtureRestart::WindowsRestartIo::Settlement>
+ChildEndpoints::trackedReadSettlement(EndpointRole role) const noexcept
+{
+  auto* entry = state_ ? state_->find(role) : nullptr;
+  return entry && entry->trackedRead ? entry->io->settlement() : nullptr;
 }
 bool ChildEndpoints::consumeGrantReadSettlement(std::uint64_t operation)
 {
-  auto* entry = state_ ? state_->find(EndpointRole::Grant) : nullptr;
-  if (!entry || !entry->trackedGrant || !entry->io->consumeSettlement(operation)) return false;
-  entry->trackedGrant = false;
+  return consumeTrackedReadSettlement(EndpointRole::Grant, operation);
+}
+bool ChildEndpoints::consumeTrackedReadSettlement(EndpointRole role, std::uint64_t operation)
+{
+  auto* entry = state_ ? state_->find(role) : nullptr;
+  if (!entry || !entry->trackedRead || !entry->io->consumeSettlement(operation)) return false;
+  entry->trackedRead = false;
   return true;
 }
 FixtureRestart::IoProgress ChildEndpoints::poll(EndpointRole role)
@@ -217,9 +247,9 @@ FixtureRestart::IoProgress ChildEndpoints::poll(EndpointRole role)
     entry->readComplete = entry->writeComplete = false;
     return entry->io->pollSettlementOnly();
   }
-  const bool tracked = entry->trackedGrant;
+  const bool tracked = entry->trackedRead;
   const auto authority = [state = state_.get(), entry] { return state->authorityValid() && !entry->containment; };
-  const auto result = tracked ? entry->io->poll() : entry->io->pollGuarded(authority);
+  const auto result = entry->io->pollGuarded(authority);
   if (entry->containment) return result == FixtureRestart::IoProgress::Pending || result == FixtureRestart::IoProgress::Unconfirmed
       ? result : FixtureRestart::IoProgress::Failed;
   entry->readComplete = !tracked && entry->reading && result == FixtureRestart::IoProgress::Complete;
@@ -251,22 +281,35 @@ bool ChildEndpoints::consumeRetainedSettlement(EndpointRole role, std::uint64_t 
 {
   auto* entry = state_ ? state_->find(role) : nullptr;
   if (!entry || !entry->containment || !entry->io->consumeSettlement(operation)) return false;
-  entry->trackedGrant = false;
+  entry->trackedRead = false;
   return true;
+}
+bool ChildEndpoints::containmentUncertain(EndpointRole role) const noexcept
+{
+  auto* entry = state_ ? state_->find(role) : nullptr;
+  return !entry || !entry->containment || entry->retentionUncertain;
 }
 bool ChildEndpoints::closeSettled(EndpointRole role)
 {
   auto* entry = state_ ? state_->find(role) : nullptr;
-  if (!entry || !entry->pipe || entry->closeFailed || entry->containment ||
+  if (!entry || !entry->pipe || entry->closeFailed || !state_->authorityValid() || entry->containment ||
       (role != EndpointRole::Evidence && role != EndpointRole::Ack) ||
-      !entry->io || !entry->writeComplete || !entry->io->canReleaseStorage() ||
-      !state_->authorityValid()) return false;
+      !entry->io || !entry->writeComplete || !entry->writeConsumed || !entry->io->canReleaseStorage()) return false;
   entry->closeFailed = true; // Reentrant use cannot issue another close.
   try { if (!state_->operations.close(entry->pipe)) return false; }
   catch (...) { return false; }
   entry->pipe = nullptr;
   entry->closeFailed = false;
   entry->writeComplete = false;
+  return true;
+}
+bool ChildEndpoints::consumeCompletedWrite(EndpointRole role)
+{
+  auto* entry = state_ ? state_->find(role) : nullptr;
+  if (!entry || (role != EndpointRole::Evidence && role != EndpointRole::Ack) || !entry->pipe ||
+      entry->closeFailed || !state_->authorityValid() || entry->containment || !entry->writeComplete || entry->writeConsumed ||
+      !entry->io || !entry->io->canReleaseStorage()) return false;
+  entry->writeConsumed = true;
   return true;
 }
 bool ChildEndpoints::canceledWithoutData(EndpointRole role) const

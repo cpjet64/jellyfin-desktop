@@ -48,6 +48,10 @@ public:
 #ifdef _WIN32
   void beginContainment() noexcept;
   FixtureRestart::IoProgress begin(EndpointRole role, bool read, const void* data, DWORD size);
+  FixtureRestart::IoProgress beginTrackedRead(EndpointRole role, DWORD size);
+  std::uint64_t trackedReadOperation(EndpointRole role) const noexcept;
+  std::shared_ptr<const FixtureRestart::WindowsRestartIo::Settlement> trackedReadSettlement(EndpointRole role) const noexcept;
+  bool consumeTrackedReadSettlement(EndpointRole role, std::uint64_t operation);
   FixtureRestart::IoProgress beginTrackedGrantRead(DWORD size);
   std::uint64_t grantReadOperation() const noexcept;
   std::shared_ptr<const FixtureRestart::WindowsRestartIo::Settlement> grantReadSettlement() const noexcept;
@@ -56,7 +60,9 @@ public:
   FixtureRestart::IoProgress cancel(EndpointRole role);
   std::shared_ptr<const FixtureRestart::WindowsRestartIo::Settlement> retainedSettlement(EndpointRole role) const noexcept;
   bool consumeRetainedSettlement(EndpointRole role, std::uint64_t operation);
+  bool containmentUncertain(EndpointRole role) const noexcept;
   bool closeSettled(EndpointRole role);
+  bool consumeCompletedWrite(EndpointRole role);
   bool canceledWithoutData(EndpointRole role) const;
   const std::vector<unsigned char>* bytes(EndpointRole role) const noexcept;
 #endif
