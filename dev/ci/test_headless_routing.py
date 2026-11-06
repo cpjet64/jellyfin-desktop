@@ -170,7 +170,8 @@ class TestHeadlessRouting(unittest.TestCase):
                      'test_healthy_paused_hold', 'test_healthy_resume_progress', 'test_restart_closed_wire', 'test_healthy_module_launch',
                      'test_healthy_child_session', 'test_healthy_child_session_source',
                      'test_restart_cancel_wire', 'test_restart_child_cancel', 'test_healthy_capture_capability',
-                     'test_healthy_child_session_cancel', 'test_healthy_child_session_grant_io', 'test_verified_cancel_gate'):
+                     'test_healthy_child_session_cancel', 'test_healthy_child_session_grant_io', 'test_verified_cancel_gate',
+                     'test_windows_restart_io_guard_cancel'):
             self.assertEqual(script.count("'" + name + "'"), 1)
         self.assertEqual(script.count("'tests/test_windows_loader_driver.py'"), 1)
         self.assertEqual(script.count("tests/test_windows_mpv_runtime_configure.py"), 1)

@@ -215,6 +215,7 @@ $required += @('test_healthy_child_session', 'test_healthy_child_session_source'
 $required += @('test_restart_cancel_wire', 'test_restart_child_cancel', 'test_healthy_capture_capability')
 $required += @('test_healthy_child_session_cancel', 'test_healthy_child_session_grant_io')
 $required += @('test_verified_cancel_gate')
+$required += @('test_windows_restart_io_guard_cancel')
 foreach ($name in $required) { $reportArgs += @('--require', $name) }
 Run-Native $venvPython $reportArgs
 Run-Native $venvPython @('dev/ci/evidence.py', 'build_core', 'passed', 'Native build and core tests passed')
