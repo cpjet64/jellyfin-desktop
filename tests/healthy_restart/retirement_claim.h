@@ -7,12 +7,14 @@ class PlayerComponent;
 class TestRetirementClaim;
 namespace HealthyRetirement {
 class Lifetime;
+class Slot;
 class FixtureGraph;
 class GraphAccessOps;
 // One atomic record orders playback revocation, cleanup admission and render free.
 class RetirementClaim final {
 public:
   enum class Admission { New, Existing, Rejected };
+  enum class Dispatch { Load, Seek };
   struct ArmIdentity {
     std::uint64_t host = 0, core = 0, revision = 0, attempt = 0;
     bool operator==(const ArmIdentity& other) const noexcept
@@ -42,6 +44,7 @@ public:
   bool contained() const noexcept { return state_.load() & Contained; }
 private:
   friend class Lifetime;
+  friend class Slot;
   friend class FixtureGraph;
   friend class GraphAccessOps;
   friend class ::PlayerComponent;
@@ -52,7 +55,8 @@ private:
     CleanupOnly = 1, StopAdmitted = 2, StopSubmitted = 4, StopCompleted = 8,
     RenderClaimed = 16, RenderRetired = 32, Revoked = 64, Contained = 128, StopQualified = 256,
     Reservation = 512, ArmPending = 1024, Binding = 2048, StopOnlyBound = 4096,
-    RetirementEligible = 8192, RetirementDenied = 16384
+    RetirementEligible = 8192, RetirementDenied = 16384,
+    LoadAdmitted = 32768, SeekAdmitted = 65536
   };
   struct ReservationTag {};
   RetirementClaim(std::uint64_t generation, ReservationTag) : generation_(generation), state_(Reservation) {}
@@ -83,6 +87,19 @@ private:
     const auto state = state_.load();
     return generation && generation == generation_ && (state & StopOnlyBound) && !(state & Binding) &&
            armIdentity_ == identity;
+  }
+  // Admission shares the revocation/containment atomic; success is one-shot.
+  bool admitRestoreDispatch(std::uint64_t generation, ArmIdentity identity, Dispatch operation) const noexcept
+  {
+    if ((operation != Dispatch::Load && operation != Dispatch::Seek) || !matchesArm(generation, identity)) return false;
+    const auto flag = operation == Dispatch::Load ? LoadAdmitted : SeekAdmitted;
+    auto current = state_.load();
+    for (;;) {
+      if (!(current & RetirementEligible) ||
+          (current & (CleanupOnly | RenderClaimed | Revoked | RetirementDenied | flag)) ||
+          (operation == Dispatch::Seek && !(current & LoadAdmitted))) return false;
+      if (state_.compare_exchange_weak(current, current | flag)) return true;
+    }
   }
   bool installable(std::uint64_t generation, ArmIdentity identity) const noexcept
   {
