@@ -22,7 +22,10 @@ class QtScheduler;
 class FixtureGraph;
 class GraphRetirement;
 class GraphAccessOps;
-struct ClosedAck { const std::uint64_t generation; const std::int64_t completedAt; };
+struct ClosedAck {
+  const std::uint64_t generation, coreGeneration, closureGeneration, revision, attempt;
+  const std::int64_t completedAt;
+};
 
 // Only the graph writes this pointer; queued work reads it on the GUI thread.
 // The access record remains alive after the graph itself has been destroyed.

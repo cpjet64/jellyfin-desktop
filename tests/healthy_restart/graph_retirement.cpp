@@ -97,6 +97,8 @@ std::optional<ClosedAck> GraphRetirement::readAck(const std::shared_ptr<GraphAcc
 FixtureGraph::Progress GraphRetirement::publish()
 {
   const auto generation = slot_->generation();
+  const auto stop = *stop_;
+  const auto closureGeneration = closure_->facts().generation;
   const auto clock = boundaries_.closure.now;
   if (!clock) { owner_->invalidate(); return FixtureGraph::Progress::Failed; }
   std::int64_t before;
@@ -112,7 +114,7 @@ FixtureGraph::Progress GraphRetirement::publish()
     access_->stopClaim = claim_;
     access_->clock = clock;
     access_->deadline = deadline_;
-    access_->closed.emplace(ClosedAck{generation, now});
+    access_->closed.emplace(ClosedAck{generation, stop.core, closureGeneration, stop.revision, stop.attempt, now});
     return FixtureGraph::Progress::Closed;
   } catch (...) { return FixtureGraph::Progress::Failed; }
 }
