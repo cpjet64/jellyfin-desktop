@@ -16,6 +16,7 @@
 #include "QtHelper.h"
 #include "PlaybackIntent.h"
 #include "PlaybackNativeReceipts.h"
+#include "NativePlaybackObservation.h"
 
 #include <mpv/client.h>
 
@@ -250,16 +251,29 @@ Q_SIGNALS:
 
 private:
   friend class TestPlayerNativeReceipts;
+  friend class TestPlayerNativeRestore;
+  friend class FixtureRestartAdapter;
   // Private host-only seam. The future host must resolve TestClip and establish
   // seekability; no WebChannel method or production host invokes this seam.
   enum class FixtureAsset { TestClip };
+  static constexpr qint64 FixtureDurationMs = 10000;
   bool bindNativeReceiptHost(quint64 host);
   void revokeNativeReceiptHost();
-  bool beginNativeReceipt(FixtureAsset asset, const QString& fixturePath, quint64 host, quint64 attempt);
+  bool beginNativeReceipt(FixtureAsset asset, const QString& fixturePath, quint64 host, quint64 attempt,
+                          bool initiallyPaused = false);
+  struct RestoreGrant { quint64 id = 0, parentRevision = 0, expectedRevision = 0; qint64 positionMs = -1; bool desiredPaused = true; };
+  bool armNativeRestore(const RestoreGrant& grant, quint64 host, quint64 attempt);
+  bool dispatchNativeRestoreLoad(const QString& fixturePath);
+  bool dispatchNativeRestoreSeek();
+  NativeStopResult cancelNativeRestore();
+  void observeNativeRestore(const mpv_event* event);
   bool consumeFixtureCheckpoint(PlaybackNativeReceipts::Key key, const QByteArray& checkpoint);
   bool recordFixturePosition(FixtureAsset asset, PlaybackNativeReceipts::Key key, qint64 entry, qint64 positionMs);
   bool fixturePositionCurrent() const;
+  bool nativeObservationCurrent() const;
   void observeNativeReceipt(const mpv_event* event);
+  bool requestNativeObservation(PlaybackNativeReceipts::Key key, quint64 id, qint64 durationMs, bool paused);
+  void observeNativeObservation(const mpv_event* event);
   void invalidateNativeReceipt();
   PlaybackNativeReceipts m_nativeReceipts;
   quint64 m_receiptHost = 0;
@@ -268,6 +282,21 @@ private:
   quint64 m_lastReceiptAttempt = 0;
   quint64 m_lastReceiptRevision = 0;
   qint64 m_fixturePosition = -1;
+  struct ObservationState {
+    PlaybackNativeReceipts::Key key;
+    quint64 id = 0;
+    qint64 durationMs = 0, requestedNs = 0, receivedNs = 0, positionMs = -1;
+    bool paused = false, pending = false, accepted = false, valid = false;
+  } m_nativeObservation;
+  quint64 m_lastObservationId = 0;
+  std::function<int(quint64, const char**)> m_observationDispatch;
+  struct RestoreState {
+    RestoreGrant grant;
+    PlaybackNativeReceipts::Key key;
+    bool armed = false, cancelled = false, loadAttempted = false, seekPending = false;
+    bool seekAccepted = false, seekReply = false, seekOk = false, restarted = false;
+  } m_nativeRestore;
+  std::function<int(quint64, const char**)> m_restoreDispatch;
   std::function<int(quint64, const QString&)> m_receiptDispatch;
   static quint64 newIntentEpoch();
   bool intentControlThread() const;

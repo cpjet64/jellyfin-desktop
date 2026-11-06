@@ -17,6 +17,14 @@ PlaybackCheckpoint PlayerComponent::makePlaybackCheckpoint() const
 {
   PlaybackCheckpoint candidate;
   candidate.intent = m_playbackIntent.snapshot();
+  if (nativeObservationCurrent()) {
+    candidate.intent.timelineQualified = true;
+    candidate.positionKnown = true;
+    candidate.positionMs = m_nativeObservation.positionMs;
+    candidate.item = QStringLiteral("fixture-clip");
+    candidate.source = QStringLiteral("fixture-source");
+    return candidate;
+  }
   if (fixturePositionCurrent()) {
     candidate.intent.timelineQualified = true;
     candidate.positionKnown = true;

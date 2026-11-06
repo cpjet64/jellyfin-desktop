@@ -47,6 +47,19 @@ target_compile_features(test_playback_native_receipts PRIVATE cxx_std_17)
 add_test(NAME test_playback_native_receipts COMMAND test_playback_native_receipts)
 set_tests_properties(test_playback_native_receipts PROPERTIES TIMEOUT 60)
 
+add_executable(test_native_observation test_native_observation.cpp ${CMAKE_SOURCE_DIR}/src/player/NativePlaybackObservation.cpp)
+target_include_directories(test_native_observation PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_native_observation PRIVATE Qt6::Core)
+add_test(NAME test_native_observation COMMAND test_native_observation)
+set_tests_properties(test_native_observation PROPERTIES TIMEOUT 60)
+
+add_executable(test_player_native_restore test_player_native_restore.cpp)
+target_include_directories(test_player_native_restore PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
+target_link_libraries(test_player_native_restore PRIVATE jmp_core Qt6::Test)
+add_test(NAME test_player_native_restore COMMAND test_player_native_restore)
+set_tests_properties(test_player_native_restore PROPERTIES TIMEOUT 60)
+
+
 add_executable(test_player_native_receipts test_player_native_receipts.cpp)
 target_include_directories(test_player_native_receipts PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
 target_link_libraries(test_player_native_receipts PRIVATE jmp_core Qt6::Test)

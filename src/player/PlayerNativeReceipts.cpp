@@ -39,10 +39,11 @@ void PlayerComponent::revokeNativeReceiptHost()
   m_receiptHostRevoked = true;
 }
 
-bool PlayerComponent::beginNativeReceipt(FixtureAsset asset, const QString& fixturePath, quint64 host, quint64 attempt)
+bool PlayerComponent::beginNativeReceipt(FixtureAsset asset, const QString& fixturePath, quint64 host, quint64 attempt,
+                                         bool initiallyPaused)
 {
 #ifndef MPVQT_EXTERNAL_EVENTS
-  Q_UNUSED(asset); Q_UNUSED(fixturePath); Q_UNUSED(host); Q_UNUSED(attempt);
+  Q_UNUSED(asset); Q_UNUSED(fixturePath); Q_UNUSED(host); Q_UNUSED(attempt); Q_UNUSED(initiallyPaused);
   return false;
 #else
   if (!intentControlThread() || asset != FixtureAsset::TestClip || fixturePath.isEmpty() || !host || host != m_receiptHost || !m_mpvGeneration || attempt <= m_lastReceiptAttempt ||
@@ -63,7 +64,16 @@ bool PlayerComponent::beginNativeReceipt(FixtureAsset asset, const QString& fixt
   m_fixtureCheckpointConsumed = false;
   if (!m_nativeReceipts.begin(key) || !m_nativeReceipts.consume(key)) return false;
   int result = -1;
-  if (m_receiptDispatch) {
+  if (initiallyPaused) {
+    const auto path = fixturePath.toUtf8();
+#if MPV_CLIENT_API_VERSION >= MPV_MAKE_VERSION(2, 3)
+    const char* args[] = {"loadfile", path.constData(), "replace", "-1", "pause=yes", nullptr};
+#else
+    const char* args[] = {"loadfile", path.constData(), "replace", "pause=yes", nullptr};
+#endif
+    if (m_restoreDispatch) result = m_restoreDispatch(receiptTag | attempt, args);
+    else if (m_mpv && m_mpv->mpv()) result = mpv_command_async(m_mpv->mpv(), receiptTag | attempt, args);
+  } else if (m_receiptDispatch) {
     result = m_receiptDispatch(attempt, fixturePath);
   } else if (m_mpv && m_mpv->mpv()) {
     const auto path = fixturePath.toUtf8();
@@ -91,6 +101,7 @@ bool PlayerComponent::consumeFixtureCheckpoint(PlaybackNativeReceipts::Key key, 
 void PlayerComponent::invalidateNativeReceipt()
 {
   m_fixturePosition = -1;
+  m_nativeObservation.valid = false;
   m_nativeReceipts.invalidate();
 }
 
@@ -98,7 +109,7 @@ bool PlayerComponent::fixturePositionCurrent() const
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   const auto receipt = m_nativeReceipts.snapshot();
-  return m_fixturePosition >= 0 && !receipt.invalid && receipt.replyOk && receipt.started && !receipt.ended &&
+  return (m_fixturePosition >= 0 || nativeObservationCurrent()) && !receipt.invalid && receipt.replyOk && receipt.started && !receipt.ended &&
          receipt.key.host == m_receiptHost && receipt.key.core == m_mpvGeneration &&
          receipt.key.revision == m_playbackIntent.snapshot().revision;
 #else
@@ -117,6 +128,7 @@ bool PlayerComponent::recordFixturePosition(FixtureAsset asset, PlaybackNativeRe
       key.host != receipt.key.host || key.core != receipt.key.core || key.revision != receipt.key.revision || key.attempt != receipt.key.attempt ||
       key.host != m_receiptHost || key.core != m_mpvGeneration || key.revision != m_playbackIntent.snapshot().revision) return false;
   m_fixturePosition = positionMs;
+  m_nativeObservation.valid = false;
   return true;
 #else
   Q_UNUSED(asset); Q_UNUSED(key); Q_UNUSED(entry); Q_UNUSED(positionMs);
@@ -127,6 +139,7 @@ bool PlayerComponent::recordFixturePosition(FixtureAsset asset, PlaybackNativeRe
 void PlayerComponent::observeNativeReceipt(const mpv_event* event)
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
+  observeNativeObservation(event);
   if (!event || !m_nativeReceipts.snapshot().key.attempt) return;
   const auto receipt = m_nativeReceipts.snapshot();
   if (receipt.key.core != m_mpvGeneration) {
@@ -152,6 +165,7 @@ void PlayerComponent::observeNativeReceipt(const mpv_event* event)
   case MPV_EVENT_SHUTDOWN: invalidateNativeReceipt(); break;
   default: break;
   }
+  observeNativeRestore(event);
 #else
   Q_UNUSED(event);
 #endif
