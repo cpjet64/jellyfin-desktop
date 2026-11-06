@@ -9,6 +9,10 @@
 #include <QThread>
 
 namespace HealthyRetirement {
+#ifdef HEALTHY_RETIREMENT_TESTING
+namespace { std::function<void()> preArmHook; }
+void setGraphPreArmHookForTest(std::function<void()> hook) { preArmHook = std::move(hook); }
+#endif
 namespace {
 quint64 freshId()
 {
@@ -153,6 +157,13 @@ FixtureRestart::RestartChild::Actions FixtureGraph::restoreActions(
         access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) return Result{};
     std::shared_ptr<RetirementClaim> empty;
     if (!std::atomic_compare_exchange_strong(&access_->intentClaim, &empty, claim)) return Result{};
+    if (access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) {
+      claim->contain();
+      return Result{};
+    }
+#ifdef HEALTHY_RETIREMENT_TESTING
+    try { if (preArmHook) preArmHook(); } catch (...) { claim->contain(); return Result{}; }
+#endif
     if (access_->phase.load() != AccessPhase::Normal || access_->revoked.load()) {
       claim->contain();
       return Result{};

@@ -25,6 +25,7 @@ namespace HealthyModuleIdentity { class VerifiedModule; class ChildEndpoints; }
 namespace HealthyRetirement {
 #ifdef HEALTHY_RETIREMENT_TESTING
 void setGraphInstallHookForTest(std::function<bool()> hook);
+void setGraphPreArmHookForTest(std::function<void()> hook);
 #endif
 class Closure;
 class NativeTeardownState;
