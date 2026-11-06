@@ -41,11 +41,12 @@ foreach ($flag in @('-DUSE_STATIC_MPVQT=ON', '-DMPVQT_EXTERNAL_EVENTS=ON',
     if ($flag -notin $configure) { throw "Missing $flag" }
 }
 $build = $script:calls[1][1]; $test = $script:calls[2][1]; $report = $script:calls[3][1]
-foreach ($name in @('windows_mpv_runtime', 'healthy_graph_arm', 'healthy_graph_failure_provenance', 'healthy_graph_capture')) {
+foreach ($name in @('windows_mpv_runtime', 'healthy_graph_arm', 'healthy_graph_failure_provenance', 'healthy_graph_capture', 'healthy_graph_capture_lifetime')) {
     if ($name -notin $build) { throw "Missing target $name" }
 }
 if ('--no-tests=error' -notin $test -or '--output-junit' -notin $test -or
-    'healthy_graph_capture' -notin $report -or 'healthy_graph_failure_provenance' -notin $report) { throw 'Incomplete diagnostic report contract' }
+    'healthy_graph_capture' -notin $report -or 'healthy_graph_capture_lifetime' -notin $report -or
+    'healthy_graph_failure_provenance' -notin $report) { throw 'Incomplete diagnostic report contract' }
 if (($test -join ' ') -match 'healthy_mpvqt_event_ownership|test_healthy_restart') { throw 'Held test selected' }
 foreach ($phase in @('configure', 'build', 'test', 'report')) { Expect-Failure $phase }
 if ($env:QT_QPA_PLATFORM -ne 'previous-platform' -or $env:JELLYFIN_TEST_OWNED_ROOT -ne 'previous-root') { throw 'Failure did not restore environment' }
