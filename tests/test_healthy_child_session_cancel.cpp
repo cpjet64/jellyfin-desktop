@@ -38,7 +38,7 @@ void cancellationAfterPending(bool abort)
   auto e = cancellationEndpoints(); CHECK(e);
   auto ops = operations(); int validations = 0; ChildSession* current = nullptr;
   ops.control = [](const QByteArray&, QByteArray& ack) { ack = "no-arm"; return true; };
-  ops.validateCanceledGrant = [&](const QByteArray&) { ++validations; return false; };
+  ops.validateCanceledGrant = [&](const QByteArray& frame) { ++validations; return frame == grant(); };
   ops.pollCancellation = [&](QByteArray& ack) { if (current->grantReadSettled()) ack = "terminal"; return true; };
   ChildSession session(e, 1, ops); current = &session;
   CHECK(session.beginRestore(QStringLiteral("fixture"))); feed(102, cancel());
@@ -46,11 +46,16 @@ void cancellationAfterPending(bool abort)
   CHECK(cancelRequested && ackFrames.size() == 1 && ackFrames[0] == "no-arm");
   CHECK(!session.grantReadSettled() && s.grants == 0 && s.loads == 0 && s.seeks == 0);
   if (abort) abortGrant = true;
-  else feed(101, QByteArray("ab"));
+  else feed(101, grant().left(2));
   for (int i = 0; i < 5; ++i) session.pollRestore();
+  if (!abort) {
+    CHECK(!session.grantReadSettled() && validations == 0);
+    feed(101, grant().mid(2));
+    for (int i = 0; i < 5 && !session.grantReadSettled(); ++i) session.pollRestore();
+  }
   CHECK(session.grantReadSettled());
   CHECK(ackFrames.size() == 1); // NoArm already occupied this callback's terminal response.
-  CHECK(validations == 0 && s.grants == 0 && s.loads == 0 && s.seeks == 0);
+  CHECK(validations == (abort ? 0 : 1) && s.grants == 0 && s.loads == 0 && s.seeks == 0);
 }
 void malformedCompletion()
 {

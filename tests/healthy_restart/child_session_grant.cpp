@@ -65,7 +65,8 @@ bool ChildSession::pollGrant()
     if (cancelReceived_) { grantSettled_ = true; return validate(); }
     grantStage_ = GrantStage::Eof;
   }
-  if (cancelReceived_) { grantSettled_ = true; return true; }
+  // Once cancellation wins, drain only the current bounded frame.  The
+  // reducer never dispatches Grant acceptance on this path.
   return beginGrantRead(grantStage_ == GrantStage::Eof ? 1 : grantTarget_ - unsigned(grantFrame_.size()));
 }
 

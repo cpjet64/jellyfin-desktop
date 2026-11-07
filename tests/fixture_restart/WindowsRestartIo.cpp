@@ -343,6 +343,7 @@ IoProgress WindowsRestartIo::cancelImpl()
   if (!inFlight_) return state_;
   if (continuationGuard_ && !continuationAllowed() && !latchSettlementOnly()) return IoProgress::Unconfirmed;
   if (completed) return completion(count);
+  if (error == ERROR_IO_INCOMPLETE && api_.now() < deadline_) return IoProgress::Pending;
   if (error != ERROR_OPERATION_ABORTED && error != ERROR_BROKEN_PIPE &&
       error != ERROR_NO_DATA && error != ERROR_PIPE_NOT_CONNECTED)
     return IoProgress::Unconfirmed;

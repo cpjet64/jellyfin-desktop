@@ -97,7 +97,7 @@ void latePartialCompletion()
   CHECK(!p->grantReadSettlement() && !p->bytes(EndpointRole::Grant));
   CHECK(p->beginTrackedGrantRead(8) == IoProgress::Failed);
   CHECK(p->begin(EndpointRole::Grant, true, nullptr, 8) == IoProgress::Failed);
-  CHECK(p->cancel(EndpointRole::Grant) == IoProgress::Unconfirmed);
+  CHECK(p->cancel(EndpointRole::Grant) == IoProgress::Pending);
   CHECK(p->poll(EndpointRole::Grant) == IoProgress::Pending);
   feed(101, QByteArray("abc"));
   CHECK(p->poll(EndpointRole::Grant) == IoProgress::Complete);
@@ -117,7 +117,7 @@ void invalidatedCapabilityStillSettles()
   CHECK(p->beginTrackedGrantRead(4) == IoProgress::Pending);
   const auto operation = p->grantReadOperation(); s.live = false;
   CHECK(!p->token(EndpointRole::Grant));
-  CHECK(p->cancel(EndpointRole::Grant) == IoProgress::Unconfirmed);
+  CHECK(p->cancel(EndpointRole::Grant) == IoProgress::Pending);
   feed(101, QByteArray("z")); CHECK(p->poll(EndpointRole::Grant) == IoProgress::Complete);
   const auto settled = p->grantReadSettlement(); CHECK(settled && settled->transferred == 1 && settled->bytes[0] == 'z');
   CHECK(p->consumeGrantReadSettlement(operation));

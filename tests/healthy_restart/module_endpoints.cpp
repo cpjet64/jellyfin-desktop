@@ -361,7 +361,8 @@ FixtureRestart::IoProgress ChildEndpoints::poll(EndpointRole role)
   const bool tracked = entry->trackedRead;
   const auto authority = [state = state_.get(), entry] { return state->authorityValid() && !entry->containment; };
   const auto result = entry->io->pollGuarded(authority);
-  state_->observeIo(role, result);
+  if (result != FixtureRestart::IoProgress::Failed || !entry->io->canceledWithoutData())
+    state_->observeIo(role, result);
   if (entry->containment) return result == FixtureRestart::IoProgress::Pending || result == FixtureRestart::IoProgress::Unconfirmed
       ? result : FixtureRestart::IoProgress::Failed;
   entry->readComplete = !tracked && entry->reading && result == FixtureRestart::IoProgress::Complete;
