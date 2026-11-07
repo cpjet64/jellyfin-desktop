@@ -5,7 +5,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = 'E:/CursorAI/JellyfinDesktop/deps/worktrees/integration'
-$proof = "$root/deps/w1215-proof"
+$proof = "$root/deps/w1220-proof"
 $build = "$root/deps/w1192-healthy-build"
 if ($SourceSha -notmatch '^[0-9a-f]{40}$' -or (git -C $root rev-parse HEAD) -ne $SourceSha) { throw 'source mismatch' }
 if ($LASTEXITCODE -ne 0) { throw 'source lookup failed' }
@@ -68,8 +68,8 @@ function Run-Check($label, $program, $arguments, $limitMs) {
   if ((Get-FileHash -LiteralPath $helper).Hash -ne '7AE01DFD262A18BF863C057D570993B2C4DC529FCC03AC1E58D15F0DEDB0EBD5') {
     throw 'job launcher identity mismatch'
   }
-  $executable = (Get-Command $program -CommandType Application -ErrorAction Stop).Source
-  if (![IO.Path]::IsPathFullyQualified($executable) -or !(Test-Path -LiteralPath $executable -PathType Leaf)) {
+  $executable = (Get-Command $program -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+  if (!$executable -or ![IO.Path]::IsPathFullyQualified($executable) -or !(Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "executable unavailable: $program"
   }
   $receipt = "$proof/$label.receipt"
