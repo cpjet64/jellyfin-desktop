@@ -1,21 +1,42 @@
 #include "player/PlayerComponent.h"
 #include "player_test_cache.h"
 #include <QtTest/QtTest>
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+#include <restore_test_fixture.h>
+#endif
 
 class TestPlayerRestoreObservation : public QObject
 {
   Q_OBJECT
+#ifndef HEALTHY_COPIED_SOURCE_TEST
   PlayerTestCache cache_;
+#endif
   static void reply(PlayerComponent& player, quint64 id, const QByteArray& value);
   static void seekReply(PlayerComponent& player, int error = 0);
   static void restart(PlayerComponent& player);
   static void prepare(PlayerComponent& player);
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  static void diagnosticReplacement(int mode);
+#endif
 private slots:
+  void initTestCase();
   void barrierAndStaleReply();
   void failedSeekAndReplacement();
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  void diagnosticStopReplacement();
+  void diagnosticLoadReplacement();
+  void diagnosticCoreReplacement();
+#endif
   void ordinaryObservation();
   void unavailableWithoutExternalEvents();
 };
+
+void TestPlayerRestoreObservation::initTestCase()
+{
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  HealthyRestoreTestFixture::initializeProcessCache();
+#endif
+}
 
 void TestPlayerRestoreObservation::reply(PlayerComponent& player, quint64 id, const QByteArray& value)
 {
@@ -33,7 +54,7 @@ void TestPlayerRestoreObservation::seekReply(PlayerComponent& player, int error)
 {
   mpv_event event{};
   event.event_id = MPV_EVENT_COMMAND_REPLY;
-  event.reply_userdata = (quint64{1} << 61) | 2;
+  event.reply_userdata = (quint64{1} << 61) | player.m_nativeReceipts.snapshot().key.attempt;
   event.error = error;
   player.observeNativeReceipt(&event);
 }
@@ -70,6 +91,33 @@ void TestPlayerRestoreObservation::prepare(PlayerComponent& player)
 void TestPlayerRestoreObservation::barrierAndStaleReply()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  HealthyRestoreTestFixture fixture;
+  QVERIFY(fixture.initialize(true, 3000)); QVERIFY(fixture.acceptGrantAndPermit());
+  QVERIFY(fixture.load()); QCOMPARE(fixture.state()->loads, 1u); QVERIFY(fixture.state()->pausedLoad);
+  QVERIFY(fixture.replyLoad(42)); QVERIFY(fixture.observe(1, 42, "0"));
+  QVERIFY(fixture.publishBaseline()); QVERIFY(fixture.armTarget());
+  auto& player = *fixture.player();
+  const auto key = player.m_nativeReceipts.snapshot().key;
+  QVERIFY(fixture.seek()); QCOMPARE(fixture.state()->seeks, 1u);
+  QVERIFY(!player.requestNativeObservation(key, 3, 10000, true));
+  restart(player); QVERIFY(!player.requestNativeObservation(key, 3, 10000, true));
+  seekReply(player); QVERIFY(!player.requestNativeObservation(key, 3, 10000, true));
+  restart(player);
+  reply(player, 1, "NR1|1|42|yes|yes|3|yes|no|no");
+  QVERIFY(!player.nativePostSeekObservationCurrent());
+  QVERIFY(player.requestNativeObservation(key, 3, 10000, true));
+  reply(player, 1, "NR1|1|42|yes|yes|3|yes|no|no");
+  QVERIFY(!player.nativePostSeekObservationCurrent());
+  reply(player, 3, "NR1|1|42|yes|yes|3.101|yes|no|no");
+  QVERIFY(player.nativeObservationCurrent()); QVERIFY(!player.nativePostSeekObservationCurrent());
+  QVERIFY(player.requestNativeObservation(key, 4, 10000, true));
+  reply(player, 4, "NR1|1|42|yes|yes|3.100|yes|no|no");
+  QVERIFY(player.nativePostSeekObservationCurrent());
+  QVERIFY(player.requestNativeObservation(key, 5, 10000, false));
+  reply(player, 5, "NR1|1|42|yes|yes|3|no|no|no");
+  QVERIFY(player.nativeObservationCurrent()); QVERIFY(!player.nativePostSeekObservationCurrent());
+#else
   PlayerComponent player;
   prepare(player);
   const auto key = player.m_nativeReceipts.snapshot().key;
@@ -96,11 +144,23 @@ void TestPlayerRestoreObservation::barrierAndStaleReply()
   QVERIFY(player.nativeObservationCurrent());
   QVERIFY(!player.nativePostSeekObservationCurrent());
 #endif
+#endif
 }
 
 void TestPlayerRestoreObservation::failedSeekAndReplacement()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  HealthyRestoreTestFixture fixture;
+  QVERIFY(fixture.initialize(true, 3000)); QVERIFY(fixture.acceptGrantAndPermit());
+  QVERIFY(fixture.load()); QVERIFY(fixture.replyLoad(42)); QVERIFY(fixture.observe(1, 42, "0"));
+  QVERIFY(fixture.publishBaseline()); QVERIFY(fixture.armTarget()); QVERIFY(fixture.seek());
+  QCOMPARE(fixture.state()->loads, 1u); QCOMPARE(fixture.state()->seeks, 1u);
+  auto& player = *fixture.player(); const auto key = player.m_nativeReceipts.snapshot().key;
+  seekReply(player, -1); restart(player);
+  QVERIFY(!player.requestNativeObservation(key, 2, 10000, true));
+  QVERIFY(!player.nativePostSeekObservationCurrent());
+#else
   PlayerComponent player;
   prepare(player);
   const auto key = player.m_nativeReceipts.snapshot().key;
@@ -130,7 +190,35 @@ void TestPlayerRestoreObservation::failedSeekAndReplacement()
   reply(loaded, 2, "NR1|1|42|yes|yes|3.125|yes|no|no");
   QVERIFY(!loaded.nativePostSeekObservationCurrent());
 #endif
+#endif
 }
+
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+void TestPlayerRestoreObservation::diagnosticReplacement(int mode)
+{
+  HealthyRestoreTestFixture fixture;
+  QVERIFY(fixture.initialize(true, 3000)); QVERIFY(fixture.acceptGrantAndPermit());
+  QVERIFY(fixture.load()); QVERIFY(fixture.replyLoad(42)); QVERIFY(fixture.observe(1, 42, "0"));
+  QVERIFY(fixture.publishBaseline()); QVERIFY(fixture.armTarget()); QVERIFY(fixture.seek());
+  QCOMPARE(fixture.state()->loads, 1u); QCOMPARE(fixture.state()->seeks, 1u);
+  auto& player = *fixture.player(); const auto key = player.m_nativeReceipts.snapshot().key;
+  seekReply(player); restart(player);
+  QVERIFY(player.requestNativeObservation(key, 2, 10000, true));
+  if (mode == 0) player.requestNativeStop();
+  else if (mode == 1) player.load(QStringLiteral("replacement"), {}, {});
+  else ++player.m_mpvGeneration;
+  const auto generation = player.m_mpvGeneration;
+  reply(player, 2, "NR1|1|42|yes|yes|3|yes|no|no");
+  QVERIFY(!player.nativePostSeekObservationCurrent());
+  if (mode == 2) {
+    QByteArray response; QVERIFY(!fixture.cancel(2, 5, response));
+    QCOMPARE(player.m_mpvGeneration, generation); QCOMPARE(fixture.state()->stops, 0u);
+  }
+}
+void TestPlayerRestoreObservation::diagnosticStopReplacement() { diagnosticReplacement(0); }
+void TestPlayerRestoreObservation::diagnosticLoadReplacement() { diagnosticReplacement(1); }
+void TestPlayerRestoreObservation::diagnosticCoreReplacement() { diagnosticReplacement(2); }
+#endif
 
 void TestPlayerRestoreObservation::ordinaryObservation()
 {

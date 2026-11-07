@@ -11,7 +11,9 @@
 class TestPlayerNativeRestore : public QObject
 {
   Q_OBJECT
+#ifndef HEALTHY_COPIED_SOURCE_TEST
   PlayerTestCache cache_;
+#endif
 private:
   static void prepare(PlayerComponent& player);
   static void observationReply(PlayerComponent& player, quint64 id, const QByteArray& text, int error = 0);
@@ -25,8 +27,11 @@ private:
   static bool beginCleanup(PlayerComponent& player, CleanupHarness& harness);
   static void completeNoLoad(PlayerComponent& player);
   static void completeStopped(PlayerComponent& player, qint64 entry);
+  static void completeGraphStopped(PlayerComponent& player, qint64 entry);
+  static void diagnosticPositionRejected(qint64 position);
 #endif
 private slots:
+  void initTestCase();
   void actualObservationBoundary();
   void lateAndDuplicateObservation();
   void pausedLoadAndExactSeek();
@@ -41,4 +46,9 @@ private slots:
   void reorderedLoadAndNativeConsumption();
   void cancellationDuringSeek();
   void reentrantCancellationAndSeekFailure();
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  void diagnosticPosition1000Rejected();
+  void diagnosticPosition3125Rejected();
+  void diagnosticReentrantObservation();
+#endif
 };

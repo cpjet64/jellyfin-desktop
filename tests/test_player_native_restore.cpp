@@ -8,6 +8,16 @@
 #include <QTemporaryFile>
 #include <QtTest/QtTest>
 #include "test_player_native_restore.h"
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+#include <restore_test_fixture.h>
+#endif
+
+void TestPlayerNativeRestore::initTestCase()
+{
+#ifdef HEALTHY_COPIED_SOURCE_TEST
+  HealthyRestoreTestFixture::initializeProcessCache();
+#endif
+}
 
 void TestPlayerNativeRestore::loadReplyAndStart(PlayerComponent& player, quint64 attempt, qint64 entry)
 {
@@ -103,6 +113,7 @@ void TestPlayerNativeRestore::lateAndDuplicateObservation()
 #endif
 }
 
+#ifndef HEALTHY_COPIED_SOURCE_TEST
 void TestPlayerNativeRestore::pausedLoadAndExactSeek()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
@@ -168,6 +179,7 @@ void TestPlayerNativeRestore::cancellationBeforeLoad()
 #endif
 }
 
+#endif
 void TestPlayerNativeRestore::staleObservationAndGrant()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
@@ -193,6 +205,7 @@ void TestPlayerNativeRestore::staleObservationAndGrant()
 #endif
 }
 
+#ifndef HEALTHY_COPIED_SOURCE_TEST
 void TestPlayerNativeRestore::cancellationAfterLoad()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
@@ -226,6 +239,7 @@ void TestPlayerNativeRestore::cancellationAfterLoad()
 #endif
 }
 
+#endif
 void TestPlayerNativeRestore::unavailableSystemMode()
 {
 #ifndef MPVQT_EXTERNAL_EVENTS
@@ -302,6 +316,7 @@ void TestPlayerNativeRestore::malformedAndUnrelatedReplies()
 #endif
 }
 
+#ifndef HEALTHY_COPIED_SOURCE_TEST
 void TestPlayerNativeRestore::reorderedLoadAndNativeConsumption()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
@@ -441,4 +456,5 @@ void TestPlayerNativeRestore::reentrantCancellationAndSeekFailure()
 #endif
 #endif
 }
+#endif
 QTEST_GUILESS_MAIN(TestPlayerNativeRestore)
