@@ -13,7 +13,8 @@ void TestHealthyGraphDispatch::permitThenLostEndpointRejectsDirectSeek()
 
 void TestHealthyGraphDispatch::revocationDuringSeekAuthorization()
 {
-  for (bool module : {false, true}) {
+  const bool module = variant != 0;
+  {
     Fixture fixture; fixture.initialize(); fixture.acceptGrantAndPermit();
     DISPATCH_CHECK(fixture.graph->restoreLoad()); fixture.replyLoad(42);
     fixture.observe(1, 42, "0.000"); fixture.qualifyBaseline(); fixture.armTarget();
@@ -160,7 +161,8 @@ void TestHealthyGraphDispatch::cancelAfterTargetArmRejectsSeek()
 
 void TestHealthyGraphDispatch::wrongOwnerRejectsDirectSeek()
 {
-  for (int mode = 0; mode != 5; ++mode) {
+  const int mode = variant;
+  {
     Fixture fixture; fixture.initialize(); fixture.acceptGrantAndPermit();
     DISPATCH_CHECK(fixture.graph->restoreLoad()); fixture.replyLoad(42);
     fixture.observe(1, 42, "0.000"); fixture.qualifyBaseline(); fixture.armTarget();

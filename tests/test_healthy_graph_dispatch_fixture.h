@@ -140,6 +140,10 @@ class TestHealthyGraphDispatch {
   static void wrongEntryCannotQualifyBaseline();
   static void bootstrapRejectsMalformed();
 public:
+  static int variant;
+  static bool runSelected(const QByteArray& selected);
+  static void traceLoad();
+  static void traceSeek();
   static void runLoadCases();
   static void runSeekCases();
 };

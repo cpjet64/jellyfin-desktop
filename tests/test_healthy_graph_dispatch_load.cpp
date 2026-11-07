@@ -2,7 +2,8 @@
 
 void TestHealthyGraphDispatch::bothGrantsLoadPaused()
 {
-  for (bool desiredPaused : {false, true}) {
+  const bool desiredPaused = variant != 0;
+  {
     Fixture fixture; fixture.initialize(desiredPaused); fixture.acceptGrantAndPermit();
     DISPATCH_CHECK(fixture.graph->restoreLoad());
     DISPATCH_CHECK(fixture.live->loads == 1 && fixture.live->seeks == 0 && fixture.live->pausedLoad);
@@ -185,7 +186,8 @@ void TestHealthyGraphDispatch::cleanupRetainsOriginalOwnerAfterLoad()
 
 void TestHealthyGraphDispatch::wrongOwnerRejectsDirectLoad()
 {
-  for (int mode = 0; mode != 5; ++mode) {
+  const int mode = variant;
+  {
     Fixture fixture; fixture.initialize(); fixture.acceptGrantAndPermit();
     auto& player = *fixture.graph->player_;
     if (mode == 0) ++player.m_nativeRestore.key.host;
@@ -226,7 +228,7 @@ void TestHealthyGraphDispatch::pendingLoadExpiresWithoutSuccess()
   DISPATCH_CHECK(fixture.graph->pollRestorePlayback() == Progress::Pending);
   fixture.live->clockOffset = 20000000000LL;
   DISPATCH_CHECK(fixture.graph->pollRestorePlayback() == Progress::Failed);
-  DISPATCH_CHECK(fixture.graph->access_->phase.load() != AccessPhase::Normal);
+  DISPATCH_CHECK(!fixture.graph->player_->m_restorePausedProof);
   DISPATCH_CHECK(fixture.live->loads == 1 && fixture.live->seeks == 0);
   fixture.checkNoUnpause();
 }
