@@ -23,6 +23,7 @@ public:
   struct State {
     std::atomic_bool module{true}, endpoints{true};
     std::atomic<qint64> clockNs{0}, clockOffset{0};
+    unsigned clockCalls = 0, clockHookAt = 0;
     unsigned loads = 0, seeks = 0, stops = 0;
     quint64 idleQuery = 0, positionQuery = 0;
     bool pausedLoad = false;
@@ -41,6 +42,7 @@ public:
   bool initialize(bool desiredPaused = false, qint64 checkpointMs = 3000);
   bool prepare(bool desiredPaused = false, qint64 checkpointMs = 3000);
   bool initializeRestore();
+  bool cleanupBindPending() const;
   bool acceptGrant();
   bool installPermit();
   bool acceptGrantAndPermit();

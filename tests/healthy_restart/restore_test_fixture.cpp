@@ -48,7 +48,10 @@ bool HealthyRestoreTestFixture::prepare(bool desiredPaused, qint64 checkpointMs)
   if (start < 0 || start > std::numeric_limits<qint64>::max() - 40000000000LL) return false;
   const auto state = state_;
   const auto clock = [state] {
-    auto hook = std::move(state->clockHook); if (hook) hook();
+    ++state->clockCalls;
+    if (!state->clockHookAt || state->clockCalls == state->clockHookAt) {
+      auto hook = std::move(state->clockHook); if (hook) hook();
+    }
     const auto current = now(), offset = state->clockOffset.load();
     if ((offset > 0 && current > std::numeric_limits<qint64>::max() - offset) ||
         (offset < 0 && current < std::numeric_limits<qint64>::min() - offset)) return qint64{-1};
@@ -87,6 +90,13 @@ bool HealthyRestoreTestFixture::prepare(bool desiredPaused, qint64 checkpointMs)
 
 bool HealthyRestoreTestFixture::initializeRestore()
 { return graph_ && media_ && graph_->restoreInitialize(media_->fileName()); }
+
+bool HealthyRestoreTestFixture::cleanupBindPending() const
+{
+  const auto* p = player();
+  return gate() && p && !p->m_restoreCleanupGate && !p->m_nativeRestore.armed &&
+      !p->m_nativeRestore.loadAttempted && !p->m_restoreCleanup.claimed;
+}
 
 bool HealthyRestoreTestFixture::installBootstrap(bool desiredPaused, qint64 checkpointMs)
 {
