@@ -229,8 +229,17 @@ class TestHealthyGraphArm {
       check(session_->pollRestore() != ChildSession::Progress::Failed);
     check(pipes_.pending[2].overlap && pipes_.writes.empty());
     check(graph_->player_->m_nativeRestore.armed && !graph_->player_->m_nativeRestore.loadAttempted);
+    const auto gate = graph_->session_->gate;
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    check(gate && claim && !gate->canceled());
+    prepared_->invalidate();
+    check(claim->contained() && !prepared_->graphOnGuiThread());
     session_->invalidate();
-    check(graph_->session_->gate->canceled());
+    check(graph_->session_->gate == gate && gate->canceled());
+    check(graph_->session_->firstFailure == HealthyRestart::FailureCause::OwnershipLost);
+    check(std::atomic_load(&graph_->access_->intentClaim) == claim && claim->contained());
+    check(session_->pollFailureCleanup() == ChildSession::Progress::Failed);
+    check(!prepared_->slot()->hasContextRecord());
     check(session_->settleAckWrite() == ChildSession::Progress::Pending);
     pipes_.releaseAck = true;
     check(session_->settleAckWrite() == ChildSession::Progress::Ready);
@@ -246,6 +255,8 @@ class TestHealthyGraphArm {
     check(actual.host == binding.host && actual.core == binding.core &&
           actual.intentRevision == binding.intentRevision && actual.attempt == binding.attempt);
     check(session_->pollRestore() == ChildSession::Progress::Failed);
+    session_->invalidate();
+    check(graph_->session_->firstFailure == HealthyRestart::FailureCause::OwnershipLost && claim->contained());
     check(!session_->load() && !session_->seek() && !prepared_->closedAck());
     check(pipes_.writes.size() == 1 && state_->stops == 0);
   }
@@ -308,7 +319,17 @@ class TestHealthyGraphArm {
     for (int i = 0; i < 20 && !pipes_.pending[2].overlap; ++i)
       check(session_->pollRestore() != ChildSession::Progress::Failed);
     check(pipes_.pending[2].overlap && graph_->player_->m_nativeRestore.armed);
+    const auto gate = graph_->session_->gate;
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    check(gate && claim && !gate->canceled());
+    prepared_->invalidate();
+    check(claim->contained() && !prepared_->graphOnGuiThread());
     session_->invalidate();
+    check(graph_->session_->gate == gate && gate->canceled());
+    check(graph_->session_->firstFailure == HealthyRestart::FailureCause::OwnershipLost);
+    check(std::atomic_load(&graph_->access_->intentClaim) == claim && claim->contained());
+    check(session_->pollFailureCleanup() == ChildSession::Progress::Failed);
+    check(!prepared_->slot()->hasContextRecord());
     check(session_->settleAckWrite() == ChildSession::Progress::Pending);
     pipes_.abortAck = true;
     check(session_->settleAckWrite() == ChildSession::Progress::Ready);
@@ -316,6 +337,8 @@ class TestHealthyGraphArm {
     check(session_->settleAckWrite() == ChildSession::Progress::Ready);
     check(!endpoints_->retainedSettlement(EndpointRole::Ack));
     check(pipes_.writes.empty() && session_->pollRestore() == ChildSession::Progress::Failed);
+    session_->invalidate();
+    check(graph_->session_->firstFailure == HealthyRestart::FailureCause::OwnershipLost && claim->contained());
     check(!session_->load() && !session_->seek() && !prepared_->closedAck() && state_->stops == 0);
   }
 public:
