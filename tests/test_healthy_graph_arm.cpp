@@ -467,32 +467,34 @@ class TestHealthyGraphArm {
     check(!prepared_->closedAck() && state_->dispatches == 0);
   }
 public:
-  static void run()
+  static bool run(const QByteArray& selected)
   {
-    { TestHealthyGraphArm test; test.cancelBeforeGrant(); }
-    { TestHealthyGraphArm test; test.normalPermitBaseline(); }
-    { TestHealthyGraphArm test; test.failedCleanupReadinessRejectsPermit(); }
-    { TestHealthyGraphArm test; test.playerBindingFailureRetainsUnknown(); }
-    { TestHealthyGraphArm test; test.deadlineAfterArm(); }
-    { TestHealthyGraphArm test; test.foreignClaimPreventsArm(); }
-    { TestHealthyGraphArm test; test.failureCrossesInstallation(); }
-    { TestHealthyGraphArm test; test.installationFailureRetainsCleanupAuthority(); }
-    { TestHealthyGraphArm test; test.reservationPrecedesPlayerArm(); }
-    { TestHealthyGraphArm test; test.containmentCrossesInstallation(); }
-    { TestHealthyGraphArm test; test.containmentDuringPlayerArm(); }
-    { TestHealthyGraphArm test; test.reentrantCancelAfterArm(); }
-    { TestHealthyGraphArm test; test.cancelAfterValidationBeforeArm(); }
-    { TestHealthyGraphArm test; test.duplicateCancellationRejected(); }
-    { TestHealthyGraphArm test; test.changedCoreCannotSettle(); }
-    { TestHealthyGraphArm test; test.wrongGateRejected(); }
-    { TestHealthyGraphArm test; test.internalFailureAfterArm(); }
-    { TestHealthyGraphArm test; test.containmentBeforeArm(); }
-    { TestHealthyGraphArm test; test.containmentAfterArm(); }
+#define RUN_CASE(name) if (selected == #name) { TestHealthyGraphArm test; test.name(); return true; }
+    RUN_CASE(cancelBeforeGrant)
+    RUN_CASE(normalPermitBaseline)
+    RUN_CASE(failedCleanupReadinessRejectsPermit)
+    RUN_CASE(playerBindingFailureRetainsUnknown)
+    RUN_CASE(deadlineAfterArm)
+    RUN_CASE(foreignClaimPreventsArm)
+    RUN_CASE(failureCrossesInstallation)
+    RUN_CASE(installationFailureRetainsCleanupAuthority)
+    RUN_CASE(reservationPrecedesPlayerArm)
+    RUN_CASE(containmentCrossesInstallation)
+    RUN_CASE(containmentDuringPlayerArm)
+    RUN_CASE(reentrantCancelAfterArm)
+    RUN_CASE(cancelAfterValidationBeforeArm)
+    RUN_CASE(duplicateCancellationRejected)
+    RUN_CASE(changedCoreCannotSettle)
+    RUN_CASE(wrongGateRejected)
+    RUN_CASE(internalFailureAfterArm)
+    RUN_CASE(containmentBeforeArm)
+    RUN_CASE(containmentAfterArm)
+#undef RUN_CASE
+    return false;
   }
 };
-
 int main(int argc, char** argv)
 {
   QCoreApplication application(argc, argv);
-  TestHealthyGraphArm::run();
+  return argc == 2 && TestHealthyGraphArm::run(argv[1]) ? 0 : 2;
 }
