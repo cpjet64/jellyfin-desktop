@@ -14,6 +14,10 @@ bool TestHealthyGraphDispatch::runSelected(const QByteArray& selected)
   RUN_CASE(claimRevocationBeforeLoadAdmission)
   RUN_CASE(clockCancellationBeforeLoadAdmission)
   RUN_CASE(clockRevokesEndpointBeforeLoadAdmission)
+  RUN_CASE(lastLivenessCallbackRevokesLoadAuthority)
+  RUN_CASE(moduleCallbackRevokesEndpointBeforeLoad)
+  RUN_CASE(lastLivenessCallbackRevokesClaimBeforeLoad)
+  RUN_CASE(lastLivenessCallbackExpiresLoadDeadline)
   RUN_CASE(admittedLoadCannotRetry)
   RUN_CASE(cleanupRetainsOriginalOwnerAfterLoad)
   if (selected == "wrongOwnerRejectsDirectLoad_0") { variant = 0; dispatchCase = "wrongOwnerRejectsDirectLoad_0"; wrongOwnerRejectsDirectLoad(); return true; }
@@ -30,6 +34,9 @@ bool TestHealthyGraphDispatch::runSelected(const QByteArray& selected)
   if (selected == "revocationDuringSeekAuthorization_1") { variant = 1; dispatchCase = "revocationDuringSeekAuthorization_1"; revocationDuringSeekAuthorization(); return true; }
   RUN_CASE(sameGenerationDifferentClaimRejectsSeek)
   RUN_CASE(clockInvalidatesTargetBeforeSeekAdmission)
+  RUN_CASE(lastLivenessCallbackInvalidatesTarget)
+  if (selected == "lastLivenessCallbackClosesSeekAdmission_0") { variant = 0; lastLivenessCallbackClosesSeekAdmission(); return true; }
+  if (selected == "lastLivenessCallbackClosesSeekAdmission_1") { variant = 1; lastLivenessCallbackClosesSeekAdmission(); return true; }
   RUN_CASE(targetAckRequiredBeforeSeek)
   RUN_CASE(staleTargetAckRejectsSeek)
   RUN_CASE(otherRendererAckCannotAuthorizeSeek)
@@ -59,6 +66,7 @@ void TestHealthyGraphDispatch::traceLoad()
   DISPATCH_CHECK(fixture.graph->player_->dispatchNativeRestoreLoad(fixture.media->fileName()));
   const auto& callbacks = fixture.live->callbacksAtSubmission;
   DISPATCH_CHECK(fixture.live->loads == 1 && !callbacks.empty());
+  DISPATCH_CHECK(traceBytes(callbacks) == expectedLoadTrace);
   std::fprintf(stderr, "load trace: %.*s\n", int(callbacks.size()), callbacks.data());
 }
 
@@ -71,6 +79,7 @@ void TestHealthyGraphDispatch::traceSeek()
   DISPATCH_CHECK(fixture.graph->player_->dispatchNativeRestoreSeek());
   const auto& callbacks = fixture.live->callbacksAtSubmission;
   DISPATCH_CHECK(fixture.live->seeks == 1 && !callbacks.empty());
+  DISPATCH_CHECK(traceBytes(callbacks) == expectedSeekTrace);
   std::fprintf(stderr, "seek trace: %.*s\n", int(callbacks.size()), callbacks.data());
 }
 

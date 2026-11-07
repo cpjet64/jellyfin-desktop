@@ -28,14 +28,27 @@ using namespace HealthyRetirement;
 using namespace FixtureRestart;
 extern const char* dispatchCase;
 #define DISPATCH_CHECK(value) do { if (!(value)) { std::fprintf(stderr, "%s: check failed at line %d: %s\n", dispatchCase, __LINE__, #value); std::_Exit(3); } } while (false)
+// W1192/4d4441f8 positive controls: C = gate/authority clock preflight;
+// M,E = module and endpoint liveness, in each transport preflight pass.
+// The last E is the final reentrant transport callback before callback-free
+// snapshots and the shared-claim admission CAS. Seek repeats a clock check
+// between transport passes. These are fixed observations, never auto-updated.
+inline constexpr const char* expectedLoadTrace = "CCMEMEMEME";
+inline constexpr const char* expectedSeekTrace = "CCMEMECMEME";
+inline QByteArray traceBytes(const std::vector<char>& value) { return QByteArray(value.data(), int(value.size())); }
 
 class TestRetirementClaim {
 public:
   static std::shared_ptr<RetirementClaim> reserve(std::uint64_t generation, RetirementClaim::ArmIdentity identity)
   {
     auto claim = RetirementClaim::makeArmReservation(generation);
-    DISPATCH_CHECK(claim && claim->reserveArm(generation) && claim->bindArm(generation, identity));
+    DISPATCH_CHECK(claim && claim->reserveArm(generation) && claim->bindArm(generation, identity) &&
+                   claim->qualifyRetirement(generation, identity));
     return claim;
+  }
+  static bool admitted(const std::shared_ptr<const RetirementClaim>& claim, bool seek)
+  {
+    return claim && (claim->state_.load() & (seek ? RetirementClaim::SeekAdmitted : RetirementClaim::LoadAdmitted));
   }
 };
 
@@ -128,6 +141,7 @@ class TestHealthyGraphDispatch {
   static void clockCancellationBeforeLoadAdmission();
   static void clockRevokesEndpointBeforeLoadAdmission();
   static void lastLivenessCallbackRevokesLoadAuthority();
+  static void moduleCallbackRevokesEndpointBeforeLoad();
   static void lastLivenessCallbackRevokesClaimBeforeLoad();
   static void lastLivenessCallbackExpiresLoadDeadline();
   static void admittedLoadCannotRetry();

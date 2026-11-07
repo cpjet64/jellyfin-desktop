@@ -56,55 +56,45 @@ void TestHealthyGraphDispatch::clockInvalidatesTargetBeforeSeekAdmission()
 
 void TestHealthyGraphDispatch::lastLivenessCallbackInvalidatesTarget()
 {
-  std::vector<char> callbacks;
-  {
-    Fixture control; control.initialize(); control.acceptGrantAndPermit();
-    DISPATCH_CHECK(control.graph->restoreLoad()); control.replyLoad(42);
-    control.observe(1, 42, "0.000"); control.qualifyBaseline(); control.armTarget();
-    control.live->trace = true;
-    DISPATCH_CHECK(control.graph->player_->dispatchNativeRestoreSeek());
-    callbacks = control.live->callbacksAtSubmission;
-    DISPATCH_CHECK(control.live->seeks == 1 && !callbacks.empty());
-  }
-  DISPATCH_CHECK(callbacks.back() == 'M' || callbacks.back() == 'E');
-  DISPATCH_CHECK(std::find(callbacks.begin(), callbacks.end(), 'C') != callbacks.end());
   Fixture victim; victim.initialize(); victim.acceptGrantAndPermit();
   DISPATCH_CHECK(victim.graph->restoreLoad()); victim.replyLoad(42);
   victim.observe(1, 42, "0.000"); victim.qualifyBaseline(); victim.armTarget();
-  auto state = victim.live; state->trace = true; state->triggerAt = callbacks.size();
+  DISPATCH_CHECK(victim.graph->player_->healthyRestoreSubmissionAllowed(true));
+  const auto claim = std::atomic_load(&victim.graph->access_->intentClaim);
+  DISPATCH_CHECK(claim && claim->open() && !TestRetirementClaim::admitted(claim, true));
+  auto state = victim.live; state->trace = true; state->triggerAt = 11;
   auto* renderer = victim.renderer.get();
-  state->finalCallbackHook = [renderer] { renderer->replaceFramebuffer(); };
+  state->finalCallbackHook = [state, renderer] { DISPATCH_CHECK(traceBytes(state->callbacks) == expectedSeekTrace); renderer->replaceFramebuffer(); };
   DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreSeek());
   DISPATCH_CHECK(state->finalCallbackFired && state->loads == 1 && state->seeks == 0);
+  DISPATCH_CHECK(!victim.graph->captureTargetReady());
+  DISPATCH_CHECK(!TestRetirementClaim::admitted(claim, true));
+  DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreSeek() && state->seeks == 0);
   victim.checkNoUnpause();
 }
 
 void TestHealthyGraphDispatch::lastLivenessCallbackClosesSeekAdmission()
 {
-  std::vector<char> callbacks;
+  const int mode = variant;
   {
-    Fixture control; control.initialize(); control.acceptGrantAndPermit();
-    DISPATCH_CHECK(control.graph->restoreLoad()); control.replyLoad(42);
-    control.observe(1, 42, "0.000"); control.qualifyBaseline(); control.armTarget();
-    control.live->trace = true;
-    DISPATCH_CHECK(control.graph->player_->dispatchNativeRestoreSeek());
-    callbacks = control.live->callbacksAtSubmission;
-    DISPATCH_CHECK(control.live->seeks == 1 && !callbacks.empty());
-  }
-  DISPATCH_CHECK(callbacks.back() == 'M' || callbacks.back() == 'E');
-  for (int mode = 0; mode != 2; ++mode) {
     Fixture victim; victim.initialize(); victim.acceptGrantAndPermit();
     DISPATCH_CHECK(victim.graph->restoreLoad()); victim.replyLoad(42);
     victim.observe(1, 42, "0.000"); victim.qualifyBaseline(); victim.armTarget();
-    auto state = victim.live; state->trace = true; state->triggerAt = callbacks.size();
+    DISPATCH_CHECK(victim.graph->player_->healthyRestoreSubmissionAllowed(true));
+    auto state = victim.live; state->trace = true; state->triggerAt = mode == 0 ? 11 : 7;
     const auto claim = std::atomic_load(&victim.graph->access_->intentClaim);
     DISPATCH_CHECK(claim && claim->open());
+    DISPATCH_CHECK(!TestRetirementClaim::admitted(claim, true));
     const auto deadline = victim.graph->normalDeadline_;
     state->finalCallbackHook = [state, claim, deadline, mode] {
-      if (mode == 0) claim->revoke(); else state->clockNs = deadline;
+      DISPATCH_CHECK(traceBytes(state->callbacks) == (mode == 0 ? expectedSeekTrace : "CCMEMEC"));
+      if (mode == 0) claim->revoke(); else state->clockOffset = deadline - Fixture::now();
     };
     DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreSeek());
     DISPATCH_CHECK(state->finalCallbackFired && state->loads == 1 && state->seeks == 0);
+    DISPATCH_CHECK(mode == 0 ? !claim->open() : state->clockNs.load() >= deadline);
+    DISPATCH_CHECK(!TestRetirementClaim::admitted(claim, true));
+    DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreSeek() && state->seeks == 0);
     victim.checkNoUnpause();
   }
 }

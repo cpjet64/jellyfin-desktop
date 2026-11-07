@@ -93,63 +93,76 @@ void TestHealthyGraphDispatch::clockRevokesEndpointBeforeLoadAdmission()
 
 void TestHealthyGraphDispatch::lastLivenessCallbackRevokesLoadAuthority()
 {
-  std::vector<char> callbacks;
-  {
-    Fixture control; control.initialize(); control.acceptGrantAndPermit();
-    control.live->trace = true;
-    DISPATCH_CHECK(control.graph->player_->dispatchNativeRestoreLoad(control.media->fileName()));
-    callbacks = control.live->callbacksAtSubmission;
-    DISPATCH_CHECK(control.live->loads == 1 && !callbacks.empty());
-  }
-  const auto last = callbacks.back();
-  DISPATCH_CHECK(last == 'M' || last == 'E');
-  DISPATCH_CHECK(std::find(callbacks.begin(), callbacks.end(), 'C') != callbacks.end());
   Fixture victim; victim.initialize(); victim.acceptGrantAndPermit();
-  auto state = victim.live; state->trace = true; state->triggerAt = callbacks.size();
-  state->finalCallbackHook = [state, last] {
-    if (last == 'M') state->endpoints = false; else state->module = false;
+  DISPATCH_CHECK(victim.graph->player_->healthyRestoreSubmissionAllowed(false));
+  const auto claim = std::atomic_load(&victim.graph->access_->intentClaim);
+  DISPATCH_CHECK(claim && claim->open() && !TestRetirementClaim::admitted(claim, false));
+  auto state = victim.live; state->trace = true; state->triggerAt = 10;
+  state->finalCallbackHook = [state] {
+    DISPATCH_CHECK(traceBytes(state->callbacks) == expectedLoadTrace);
+    state->module = false;
   };
   DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreLoad(victim.media->fileName()));
   DISPATCH_CHECK(state->finalCallbackFired && state->loads == 0 && state->seeks == 0);
+  DISPATCH_CHECK(!state->module.load() && state->endpoints.load());
+  DISPATCH_CHECK(!TestRetirementClaim::admitted(claim, false));
+  DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreLoad(victim.media->fileName()) && state->loads == 0);
+  victim.checkNoUnpause();
+}
+
+void TestHealthyGraphDispatch::moduleCallbackRevokesEndpointBeforeLoad()
+{
+  Fixture victim; victim.initialize(); victim.acceptGrantAndPermit();
+  DISPATCH_CHECK(victim.graph->player_->healthyRestoreSubmissionAllowed(false));
+  const auto claim = std::atomic_load(&victim.graph->access_->intentClaim);
+  DISPATCH_CHECK(claim && claim->open() && !TestRetirementClaim::admitted(claim, false));
+  auto state = victim.live; state->trace = true; state->triggerAt = 9;
+  state->finalCallbackHook = [state] {
+    DISPATCH_CHECK(traceBytes(state->callbacks) == "CCMEMEMEM");
+    state->endpoints = false;
+  };
+  DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreLoad(victim.media->fileName()));
+  DISPATCH_CHECK(state->finalCallbackFired && state->loads == 0 && state->seeks == 0);
+  DISPATCH_CHECK(!state->endpoints.load() && state->module.load());
+  DISPATCH_CHECK(!TestRetirementClaim::admitted(claim, false));
+  DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreLoad(victim.media->fileName()) && state->loads == 0);
   victim.checkNoUnpause();
 }
 
 void TestHealthyGraphDispatch::lastLivenessCallbackRevokesClaimBeforeLoad()
 {
-  std::vector<char> callbacks;
-  {
-    Fixture control; control.initialize(); control.acceptGrantAndPermit(); control.live->trace = true;
-    DISPATCH_CHECK(control.graph->player_->dispatchNativeRestoreLoad(control.media->fileName()));
-    callbacks = control.live->callbacksAtSubmission;
-    DISPATCH_CHECK(control.live->loads == 1 && !callbacks.empty());
-  }
-  DISPATCH_CHECK(callbacks.back() == 'M' || callbacks.back() == 'E');
   Fixture victim; victim.initialize(); victim.acceptGrantAndPermit();
-  auto state = victim.live; state->trace = true; state->triggerAt = callbacks.size();
+  DISPATCH_CHECK(victim.graph->player_->healthyRestoreSubmissionAllowed(false));
+  auto state = victim.live; state->trace = true; state->triggerAt = 10;
   const auto claim = std::atomic_load(&victim.graph->access_->intentClaim);
   DISPATCH_CHECK(claim && claim->open());
-  state->finalCallbackHook = [claim] { claim->revoke(); };
+  DISPATCH_CHECK(!TestRetirementClaim::admitted(claim, false));
+  state->finalCallbackHook = [state, claim] { DISPATCH_CHECK(traceBytes(state->callbacks) == expectedLoadTrace); claim->revoke(); };
   DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreLoad(victim.media->fileName()));
   DISPATCH_CHECK(state->finalCallbackFired && state->loads == 0 && state->seeks == 0);
+  DISPATCH_CHECK(!claim->open());
+  DISPATCH_CHECK(!TestRetirementClaim::admitted(claim, false));
+  DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreLoad(victim.media->fileName()) && state->loads == 0);
   victim.checkNoUnpause();
 }
 
 void TestHealthyGraphDispatch::lastLivenessCallbackExpiresLoadDeadline()
 {
-  std::vector<char> callbacks;
-  {
-    Fixture control; control.initialize(); control.acceptGrantAndPermit(); control.live->trace = true;
-    DISPATCH_CHECK(control.graph->player_->dispatchNativeRestoreLoad(control.media->fileName()));
-    callbacks = control.live->callbacksAtSubmission;
-    DISPATCH_CHECK(control.live->loads == 1 && !callbacks.empty());
-  }
-  DISPATCH_CHECK(callbacks.back() == 'M' || callbacks.back() == 'E');
   Fixture victim; victim.initialize(); victim.acceptGrantAndPermit();
-  auto state = victim.live; state->trace = true; state->triggerAt = callbacks.size();
+  DISPATCH_CHECK(victim.graph->player_->healthyRestoreSubmissionAllowed(false));
+  const auto claim = std::atomic_load(&victim.graph->access_->intentClaim);
+  DISPATCH_CHECK(claim && claim->open() && !TestRetirementClaim::admitted(claim, false));
+  auto state = victim.live; state->trace = true; state->triggerAt = 2;
   const auto deadline = victim.graph->normalDeadline_;
-  state->finalCallbackHook = [state, deadline] { state->clockNs = deadline; };
+  state->finalCallbackHook = [state, deadline] {
+    DISPATCH_CHECK(traceBytes(state->callbacks) == "CC");
+    state->clockOffset = deadline - Fixture::now();
+  };
   DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreLoad(victim.media->fileName()));
   DISPATCH_CHECK(state->finalCallbackFired && state->loads == 0 && state->seeks == 0);
+  DISPATCH_CHECK(state->clockNs.load() >= deadline);
+  DISPATCH_CHECK(!TestRetirementClaim::admitted(claim, false));
+  DISPATCH_CHECK(!victim.graph->player_->dispatchNativeRestoreLoad(victim.media->fileName()) && state->loads == 0);
   victim.checkNoUnpause();
 }
 
