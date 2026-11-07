@@ -20,10 +20,12 @@ class QQuickWindow;
 class QThread;
 class QByteArray;
 class QString;
+namespace FixtureRestart { class ChildGate; }
 #ifdef HEALTHY_RETIREMENT_TESTING
 class TestHealthyGraphArm;
 class TestHealthyGraphCapture;
 class TestHealthyGraphDispatch;
+class HealthyRestoreTestFixture;
 class TestHealthyGraphLifetime;
 #endif
 namespace HealthyModuleIdentity { class VerifiedModule; class ChildEndpoints; enum class EndpointRole; struct LaunchBinding; }
@@ -71,6 +73,7 @@ class PreparedGraph {
 public:
   enum class FailureProgress { Pending, Qualified, Unknown };
   bool beginRestoreFailure(HealthyRestart::FailureCause cause);
+  bool recordRestoreFailure(HealthyRestart::FailureCause cause);
   FailureProgress pollRestoreFailure();
   const std::shared_ptr<Containment>& containment() const { return containment_; }
   const std::shared_ptr<Slot>& slot() const { return slot_; }
@@ -116,6 +119,7 @@ private:
   friend class ::TestHealthyGraphArm;
   friend class ::TestHealthyGraphCapture;
   friend class ::TestHealthyGraphDispatch;
+  friend class ::HealthyRestoreTestFixture;
   friend class ::TestHealthyGraphLifetime;
 #endif
   friend class PreparedGraph;
@@ -135,7 +139,7 @@ private:
   bool sourceFreeze(QByteArray& frame);
   bool sourceBeginStop(const QByteArray& control);
   HealthyRestart::AsyncStop::Status sourcePollStop(QByteArray& response);
-  bool restoreInitialize(const QString& path);
+  bool restoreInitialize(const QString& path, std::shared_ptr<FixtureRestart::ChildGate>* retainedGate = nullptr);
   FixtureRestart::RestartChild::ArmResult restoreArmActual();
   FixtureRestart::RestartChild::Actions restoreActions(const QString& path);
   bool restoreGrant(const QByteArray& frame, bool eof, QByteArray& response);
@@ -162,6 +166,7 @@ private:
   void cancelCapture() noexcept;
   bool restoreRevoke();
   bool beginRestoreFailure(HealthyRestart::FailureCause cause);
+  bool recordRestoreFailure(HealthyRestart::FailureCause cause);
   PreparedGraph::FailureProgress pollRestoreFailure();
   struct NativeCell { std::shared_ptr<NativeTeardownState> state; };
   std::shared_ptr<Slot> slot_;

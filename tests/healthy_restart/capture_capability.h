@@ -6,6 +6,7 @@
 
 class MpvRenderer;
 class TestCaptureCapability;
+class HealthyRestoreRendererFixture;
 class TestRendererFailure;
 class QImage;
 namespace HealthyRetirement {
@@ -50,6 +51,7 @@ private:
   friend class CaptureEvidence;
 #ifdef HEALTHY_RETIREMENT_TESTING
   friend class ::TestCaptureCapability;
+  friend class ::HealthyRestoreRendererFixture;
   friend class ::TestRendererFailure;
 #endif
   explicit CaptureBridge(std::weak_ptr<Slot> slot);

@@ -1,0 +1,12 @@
+diff --git a/player/PlayerComponent.h b/player/PlayerComponent.h
+--- a/player/PlayerComponent.h
++++ b/player/PlayerComponent.h
+@@ -280,7 +280,8 @@ private:
+   friend class TestHealthyRestoreCleanup;
+ #ifdef HEALTHY_RETIREMENT_TESTING
+   friend class TestHealthyGraphArm;
+   friend class TestHealthyGraphCapture;
+   friend class TestHealthyGraphDispatch;
++  friend class HealthyRestoreTestFixture;
+ #endif
+   friend class FixtureRestartAdapter;

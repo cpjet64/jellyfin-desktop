@@ -1,0 +1,10 @@
+diff --git a/fixture_restart/FixtureRestartAdapter.cpp b/fixture_restart/FixtureRestartAdapter.cpp
+--- a/fixture_restart/FixtureRestartAdapter.cpp
++++ b/fixture_restart/FixtureRestartAdapter.cpp
+@@ -144,4 +144,4 @@ bool FixtureRestartAdapter::seek()
+ {
+-  // Held until the renderer-issued target-arm capability is wired here.
+-  return false;
++  if (player_.m_healthyStopAdmissionClosed.load()) return false;
++  return current() && player_.dispatchNativeRestoreSeek();
+ }
