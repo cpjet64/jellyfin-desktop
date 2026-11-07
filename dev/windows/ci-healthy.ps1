@@ -1,11 +1,16 @@
+. "$PSScriptRoot/healthy-diagnostic-cases.ps1"
 function Invoke-HealthyDiagnostic {
     param([string]$Root, [string]$Build, [string]$Qt, [string]$Mpv,
           [string]$Python, [string]$Results)
-    $tests = @('healthy_async_stop_player', 'healthy_unpause_player', 'healthy_fixture_adapter_cleanup',
+    $targets = @('healthy_async_stop_player', 'healthy_unpause_player', 'healthy_fixture_adapter_cleanup',
         'healthy_healthy_restore_cancel', 'healthy_async_stop_source', 'healthy_player_native_receipts',
         'healthy_player_restore_cleanup', 'healthy_player_restore_observation', 'healthy_player_native_restore',
         'healthy_graph_arm', 'healthy_graph_failure_provenance', 'healthy_graph_capture', 'healthy_graph_capture_lifetime',
         'healthy_graph_dispatch', 'healthy_b_channel_dispatch')
+    $tests = @(Get-HealthyDiagnosticCases $targets)
+    if ($tests.Count -eq 0 -or @($tests | Sort-Object -Unique).Count -ne $tests.Count) {
+        throw 'Diagnostic test selection is empty or duplicated'
+    }
     foreach ($path in @($Qt, "$Mpv/include", "$Mpv/libmpv-2.dll.lib", "$Mpv/libmpv-2.dll")) {
         if (-not (Test-Path -LiteralPath $path)) { throw "Missing diagnostic prerequisite: $path" }
     }
@@ -18,7 +23,7 @@ function Invoke-HealthyDiagnostic {
         "-DMPV_LIBRARY=$Mpv/libmpv-2.dll.lib", '-DUSE_STATIC_MPVQT=ON', '-DMPVQT_EXTERNAL_EVENTS=ON',
         '-DPLAYER_INTENT_DIAGNOSTIC_ONLY=ON', '-DHEALTHY_RESTART_DIAGNOSTIC_ONLY=ON')
     Run-Native 'cmake.exe' $configure
-    Run-Native 'cmake.exe' (@('--build', $Build, '--target', 'windows_mpv_runtime') + $tests + @('--parallel', '4'))
+    Run-Native 'cmake.exe' (@('--build', $Build, '--target', 'windows_mpv_runtime') + $targets + @('--parallel', '4'))
     $report = Join-Path $Results 'healthy-diagnostic-ctest.xml'
     if (Test-Path -LiteralPath $report) { throw 'Diagnostic report already exists' }
     $regex = '^(' + (($tests | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')$'

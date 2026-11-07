@@ -54,21 +54,31 @@ $expectedTargets = @('windows_mpv_runtime') + $expected
 if ($targets.Count -ne 16 -or (($targets | Sort-Object) -join '|') -cne (($expectedTargets | Sort-Object) -join '|')) {
     throw 'Diagnostic build targets differ from the approved inventory'
 }
+$expectedCases = @(Get-HealthyDiagnosticCases $expected)
+if ($expectedCases.Count -ne 186 -or @($expectedCases | Sort-Object -Unique).Count -ne 186) {
+    throw 'Diagnostic case inventory is incomplete or duplicated'
+}
+foreach ($held in @('lastLivenessCallbackRevokesLoadAuthority', 'lastLivenessCallbackRevokesClaimBeforeLoad',
+    'lastLivenessCallbackExpiresLoadDeadline', 'lastLivenessCallbackInvalidatesTarget',
+    'lastLivenessCallbackClosesSeekAdmission')) {
+    if ("healthy_graph_dispatch.$held" -notin $expectedCases) { throw 'Held case missing from required inventory' }
+}
 $regexIndex = [array]::IndexOf($test, '-R')
 if ($regexIndex -lt 0 -or $regexIndex + 1 -ge $test.Count) { throw 'Missing CTest selection' }
-$expectedRegex = '^(' + (($expected | Sort-Object | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')$'
+$expectedRegex = '^(' + (($expectedCases | Sort-Object | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')$'
 $actualRegex = $test[$regexIndex + 1]
 if ($actualRegex -notmatch '^\^\((.*)\)\$$') { throw 'CTest selection is not anchored' }
 $actualNames = @($Matches[1] -split '\|' | Sort-Object)
 $sortedRegex = '^(' + ($actualNames -join '|') + ')$'
-if ($actualNames.Count -ne 15 -or $sortedRegex -cne $expectedRegex) { throw 'CTest selection differs from the approved inventory' }
+if ($actualNames.Count -ne 186 -or $sortedRegex -cne $expectedRegex) { throw 'CTest selection differs from the approved inventory' }
 $reportNames = @($report | Select-Object -Skip 2)
-if ($reportNames.Count -ne 15 -or (($reportNames | Sort-Object) -join '|') -cne (($expected | Sort-Object) -join '|')) {
+if ($reportNames.Count -ne 186 -or (($reportNames | Sort-Object) -join '|') -cne (($expectedCases | Sort-Object) -join '|')) {
     throw 'JUnit requirements differ from the approved inventory'
 }
 if ('--no-tests=error' -notin $test -or '--output-junit' -notin $test -or
-    'healthy_graph_capture' -notin $report -or 'healthy_graph_capture_lifetime' -notin $report -or
-    'healthy_graph_failure_provenance' -notin $report) { throw 'Incomplete diagnostic report contract' }
+    'healthy_graph_capture.positiveHandoff' -notin $report -or
+    'healthy_graph_capture_lifetime.qualified-destruction' -notin $report -or
+    'healthy_graph_failure_provenance.ready-loss' -notin $report) { throw 'Incomplete diagnostic report contract' }
 if (($test -join ' ') -match 'healthy_mpvqt_event_ownership|test_healthy_restart') { throw 'Held test selected' }
 foreach ($phase in @('configure', 'build', 'test', 'report')) { Expect-Failure $phase }
 if ($env:QT_QPA_PLATFORM -ne 'previous-platform' -or $env:JELLYFIN_TEST_OWNED_ROOT -ne 'previous-root') { throw 'Failure did not restore environment' }

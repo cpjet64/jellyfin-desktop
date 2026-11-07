@@ -1,12 +1,14 @@
 """Exercise diagnostic routing and failure propagation without native launches."""
 
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
 
 import healthy_diagnostic as diagnostic
 import native
+from test_healthy_case_inventory import HealthyCaseInventoryTest
 
 PORTABLE_DIAGNOSTICS = (
     "healthy_async_stop_player", "healthy_unpause_player", "healthy_fixture_adapter_cleanup",
@@ -69,8 +71,13 @@ class DiagnosticRoutingTest(unittest.TestCase):
 
     def test_explicit_selection_and_owned_cache(self):
         self.invoke()
-        self.assertEqual(diagnostic.DIAGNOSTIC_TESTS, PORTABLE_DIAGNOSTICS)
-        self.assertEqual(len(PORTABLE_DIAGNOSTICS), 12)
+        self.assertEqual(diagnostic.DIAGNOSTIC_TARGETS, PORTABLE_DIAGNOSTICS)
+        self.assertEqual(len(diagnostic.DIAGNOSTIC_TESTS), 147)
+        self.assertEqual(len(set(diagnostic.DIAGNOSTIC_TESTS)), 147)
+        for held in ('lastLivenessCallbackRevokesLoadAuthority', 'lastLivenessCallbackRevokesClaimBeforeLoad',
+                     'lastLivenessCallbackExpiresLoadDeadline', 'lastLivenessCallbackInvalidatesTarget',
+                     'lastLivenessCallbackClosesSeekAdmission'):
+            self.assertIn('healthy_graph_dispatch.' + held, diagnostic.DIAGNOSTIC_TESTS)
         self.assertTrue(set(PORTABLE_DIAGNOSTICS).isdisjoint(NONPORTABLE_OR_HELD))
         names = [item[0] for item in self.calls]
         self.assertEqual(names, ["healthy-diagnostic-configure", "healthy-diagnostic-build", "healthy-diagnostic-ctest"])
@@ -80,7 +87,7 @@ class DiagnosticRoutingTest(unittest.TestCase):
         self.assertIn("-DUSE_STATIC_MPVQT=ON", configure)
         self.assertIn("-DMPVQT_EXTERNAL_EVENTS=ON", configure)
         self.assertEqual(build[build.index("--target") + 1:], list(PORTABLE_DIAGNOSTICS))
-        self.assertEqual(ctest[ctest.index("-R") + 1], "^(" + "|".join(PORTABLE_DIAGNOSTICS) + ")$")
+        self.assertEqual(ctest[ctest.index("-R") + 1], "^(" + "|".join(map(re.escape, diagnostic.DIAGNOSTIC_TESTS)) + ")$")
         self.assertIn("--no-tests=error", ctest)
         self.assertTrue(Path(self.calls[-1][2]["env"]["JELLYFIN_TEST_OWNED_ROOT"]).is_dir())
 
