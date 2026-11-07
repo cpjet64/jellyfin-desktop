@@ -135,7 +135,9 @@ function(healthy_restart_dispatch_cases)
     lastLivenessCallbackRevokesClaimBeforeLoad
     lastLivenessCallbackExpiresLoadDeadline
     lastLivenessCallbackInvalidatesTarget
-    lastLivenessCallbackClosesSeekAdmission
+    moduleCallbackRevokesEndpointBeforeLoad
+    lastLivenessCallbackClosesSeekAdmission_0
+    lastLivenessCallbackClosesSeekAdmission_1
     trace-load trace-seek)
     add_test(NAME healthy_graph_dispatch.${case} COMMAND healthy_graph_dispatch ${case})
     set_tests_properties(healthy_graph_dispatch.${case} PROPERTIES TIMEOUT 60)

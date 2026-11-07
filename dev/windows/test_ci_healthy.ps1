@@ -55,12 +55,13 @@ if ($targets.Count -ne 16 -or (($targets | Sort-Object) -join '|') -cne (($expec
     throw 'Diagnostic build targets differ from the approved inventory'
 }
 $expectedCases = @(Get-HealthyDiagnosticCases $expected)
-if ($expectedCases.Count -ne 186 -or @($expectedCases | Sort-Object -Unique).Count -ne 186) {
+if ($expectedCases.Count -ne 188 -or @($expectedCases | Sort-Object -Unique).Count -ne 188) {
     throw 'Diagnostic case inventory is incomplete or duplicated'
 }
 foreach ($held in @('lastLivenessCallbackRevokesLoadAuthority', 'lastLivenessCallbackRevokesClaimBeforeLoad',
     'lastLivenessCallbackExpiresLoadDeadline', 'lastLivenessCallbackInvalidatesTarget',
-    'lastLivenessCallbackClosesSeekAdmission')) {
+    'moduleCallbackRevokesEndpointBeforeLoad', 'lastLivenessCallbackClosesSeekAdmission_0',
+    'lastLivenessCallbackClosesSeekAdmission_1')) {
     if ("healthy_graph_dispatch.$held" -notin $expectedCases) { throw 'Held case missing from required inventory' }
 }
 $regexIndex = [array]::IndexOf($test, '-R')
@@ -70,9 +71,9 @@ $actualRegex = $test[$regexIndex + 1]
 if ($actualRegex -notmatch '^\^\((.*)\)\$$') { throw 'CTest selection is not anchored' }
 $actualNames = @($Matches[1] -split '\|' | Sort-Object)
 $sortedRegex = '^(' + ($actualNames -join '|') + ')$'
-if ($actualNames.Count -ne 186 -or $sortedRegex -cne $expectedRegex) { throw 'CTest selection differs from the approved inventory' }
+if ($actualNames.Count -ne 188 -or $sortedRegex -cne $expectedRegex) { throw 'CTest selection differs from the approved inventory' }
 $reportNames = @($report | Select-Object -Skip 2)
-if ($reportNames.Count -ne 186 -or (($reportNames | Sort-Object) -join '|') -cne (($expectedCases | Sort-Object) -join '|')) {
+if ($reportNames.Count -ne 188 -or (($reportNames | Sort-Object) -join '|') -cne (($expectedCases | Sort-Object) -join '|')) {
     throw 'JUnit requirements differ from the approved inventory'
 }
 if ('--no-tests=error' -notin $test -or '--output-junit' -notin $test -or

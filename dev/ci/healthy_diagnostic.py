@@ -83,7 +83,8 @@ DISPATCH_CASES = (
     'retainedHoldCannotOutliveTargetQualification', 'otherRendererAckCannotAuthorizeSeek',
     'lastLivenessCallbackRevokesLoadAuthority', 'lastLivenessCallbackRevokesClaimBeforeLoad',
     'lastLivenessCallbackExpiresLoadDeadline', 'lastLivenessCallbackInvalidatesTarget',
-    'lastLivenessCallbackClosesSeekAdmission', 'trace-load', 'trace-seek',
+    'moduleCallbackRevokesEndpointBeforeLoad', 'lastLivenessCallbackClosesSeekAdmission_0',
+    'lastLivenessCallbackClosesSeekAdmission_1', 'trace-load', 'trace-seek',
 )
 CASE_GROUPS = {
     'healthy_graph_capture': CAPTURE_CASES,

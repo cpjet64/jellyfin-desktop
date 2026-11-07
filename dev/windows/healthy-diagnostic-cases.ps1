@@ -59,7 +59,8 @@ function Get-HealthyDiagnosticCases {
             'wrongOwnerRejectsDirectSeek_4', 'admittedSeekCannotRetry', 'wrongEntryCannotQualifyBaseline', 'preSeekTargetCannotQualify',
             'postSubmitTargetBeforeReplyCanQualify', 'restartBeforeSeekReplyCannotQualify', 'earlyObservationCannotQualify', 'desiredPausedCompletesHold',
             'retainedHoldCannotOutliveTargetQualification', 'otherRendererAckCannotAuthorizeSeek', 'lastLivenessCallbackRevokesLoadAuthority', 'lastLivenessCallbackRevokesClaimBeforeLoad',
-            'lastLivenessCallbackExpiresLoadDeadline', 'lastLivenessCallbackInvalidatesTarget', 'lastLivenessCallbackClosesSeekAdmission', 'trace-load',
+            'lastLivenessCallbackExpiresLoadDeadline', 'lastLivenessCallbackInvalidatesTarget', 'moduleCallbackRevokesEndpointBeforeLoad',
+            'lastLivenessCallbackClosesSeekAdmission_0', 'lastLivenessCallbackClosesSeekAdmission_1', 'trace-load',
             'trace-seek'
         )
         'healthy_b_channel_dispatch' = @(

@@ -72,11 +72,12 @@ class DiagnosticRoutingTest(unittest.TestCase):
     def test_explicit_selection_and_owned_cache(self):
         self.invoke()
         self.assertEqual(diagnostic.DIAGNOSTIC_TARGETS, PORTABLE_DIAGNOSTICS)
-        self.assertEqual(len(diagnostic.DIAGNOSTIC_TESTS), 147)
-        self.assertEqual(len(set(diagnostic.DIAGNOSTIC_TESTS)), 147)
+        self.assertEqual(len(diagnostic.DIAGNOSTIC_TESTS), 149)
+        self.assertEqual(len(set(diagnostic.DIAGNOSTIC_TESTS)), 149)
         for held in ('lastLivenessCallbackRevokesLoadAuthority', 'lastLivenessCallbackRevokesClaimBeforeLoad',
                      'lastLivenessCallbackExpiresLoadDeadline', 'lastLivenessCallbackInvalidatesTarget',
-                     'lastLivenessCallbackClosesSeekAdmission'):
+                     'moduleCallbackRevokesEndpointBeforeLoad', 'lastLivenessCallbackClosesSeekAdmission_0',
+                     'lastLivenessCallbackClosesSeekAdmission_1'):
             self.assertIn('healthy_graph_dispatch.' + held, diagnostic.DIAGNOSTIC_TESTS)
         self.assertTrue(set(PORTABLE_DIAGNOSTICS).isdisjoint(NONPORTABLE_OR_HELD))
         names = [item[0] for item in self.calls]
