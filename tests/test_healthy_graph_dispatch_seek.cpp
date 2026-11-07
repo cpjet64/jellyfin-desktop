@@ -144,6 +144,8 @@ void TestHealthyGraphDispatch::otherRendererAckCannotAuthorizeSeek()
   DISPATCH_CHECK(first.graph->player_->nativeObservationCurrent() && first.graph->player_->m_nativeObservation.paused);
   const auto otherClaim = TestRetirementClaim::reserve(9, {key.host, key.core, key.revision, key.attempt});
   auto otherSlot = std::make_shared<Slot>(9, first.graph->deadline_, Fixture::now);
+  auto otherController = CaptureController::create(otherSlot);
+  DISPATCH_CHECK(otherController);
   auto revoked = std::make_shared<std::atomic_bool>(false);
   DISPATCH_CHECK(otherSlot->bindModuleForTest([] { return true; }, revoked));
   int otherContext = 0;
