@@ -5,7 +5,7 @@
 #include "RestartWire.h"
 #include "frame_capture.h"
 #include "player/PlayerComponent.h"
-#include "player_test_cache.h"
+#include "restore_test_fixture.h"
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QPainter>
@@ -20,18 +20,6 @@ using namespace FixtureRestart;
 static const char* activeCase = "setup";
 #define CHECK(value) do { if (!(value)) { std::fprintf(stderr, "%s: check failed at line %d: %s\n", activeCase, __LINE__, #value); std::_Exit(3); } } while (false)
 
-class TestRetirementClaim {
-public:
-  static std::shared_ptr<RetirementClaim> reserve(std::uint64_t generation)
-  {
-    auto claim = RetirementClaim::makeArmReservation(generation);
-    CHECK(claim && claim->reserveArm(generation));
-    return claim;
-  }
-  static bool bind(const std::shared_ptr<RetirementClaim>& claim, RetirementClaim::ArmIdentity identity)
-  { return claim->bindArm(claim->generation(), identity); }
-};
-
 class TestCaptureCapability {
   using Bridge = CaptureBridge;
   static constexpr Identity identity{11, 12, 13};
@@ -42,7 +30,7 @@ class TestCaptureCapability {
 public:
   explicit TestCaptureCapability(const std::shared_ptr<Slot>& slot) : bridge_(slot->captureBridge()) {}
   bool initialize() { return bridge_ && bridge_->rendererCreated(identity) && bridge_->framebuffer(identity, fbo()); }
-  bool baselineReady() const { return bridge_->ready(2, Bridge::Phase::Baseline); }
+  bool baselineReady(std::uint64_t attempt) const { return bridge_->ready(attempt, Bridge::Phase::Baseline); }
   bool issue(bool publish, int index = 0)
   {
     if (!bridge_->framebufferCurrent(identity, fbo())) return false;
@@ -57,7 +45,7 @@ public:
     const auto ticket = bridge_->issue(identity, fixture_restart::nextRenderSerial());
     if (!ticket.request) return false;
     QImage value = mode == 0 ? QImage(160, 89, QImage::Format_RGBA8888) : image(mode == 1 ? 90 : 0);
-    if (mode == 2) value = value.mirrored(false, true);
+    if (mode == 2) value = value.flipped(Qt::Vertical);
     bridge_->publish(ticket, identity, value, 0, 0, 0, 0);
     return true;
   }
@@ -76,20 +64,6 @@ public:
     bridge_->publish(*queued_, identity, image(0), 0, 0, 0, 0);
     return fixture_restart::takeCaptures().empty();
   }
-  bool replacementRejectsOldTicket(TestCaptureCapability& replacement)
-  {
-    if (!queued_ || !replacement.queued_ || queued_->renderer == replacement.queued_->renderer) return false;
-    if (!(queued_->key == replacement.queued_->key) || queued_->request != replacement.queued_->request ||
-        queued_->framebuffer != replacement.queued_->framebuffer) return false;
-    const auto frame = image(0);
-    replacement.bridge_->publish(*queued_, identity, frame, 0, 0, 0, 0);
-    if (!fixture_restart::takeCaptures().empty()) return false;
-    auto forged = *queued_; forged.serial = replacement.queued_->serial;
-    replacement.bridge_->publish(forged, identity, frame, 0, 0, 0, 0);
-    if (!fixture_restart::takeCaptures().empty()) return false;
-    replacement.bridge_->publish(*replacement.queued_, identity, frame, 0, 0, 0, 0);
-    return fixture_restart::takeCaptures().size() == 1;
-  }
   bool replayRejected()
   {
     const auto ticket = bridge_->issue(identity, fixture_restart::nextRenderSerial());
@@ -101,6 +75,49 @@ public:
   }
   void replaceFramebuffer() { CHECK(bridge_->framebuffer(identity, fbo(8))); }
   void cancelRenderer() { bridge_->rendererDestroyed(); }
+  static void staleRendererGeneration()
+  {
+    struct Incarnation {
+      int context = 0;
+      std::shared_ptr<Slot> slot = std::make_shared<Slot>(9, 100, [] { return qint64{1}; });
+      std::shared_ptr<RetirementClaim> claim = std::make_shared<RetirementClaim>(9);
+      std::unique_ptr<CaptureController> controller;
+      std::unique_ptr<TestCaptureCapability> renderer;
+      Incarnation() {
+        HealthyRetirement::Operations ops;
+        ops.currentIdentity = [] { return identity; };
+        ops.unregisterCallback = [](void*) {};
+        ops.invalidateQueued = [](std::uint64_t) { return true; };
+        ops.freeContext = [](void*) {};
+        ops.clearPointer = [](void*) { return true; };
+        CHECK(slot->beginCreation() && slot->beforeCreate() && slot->recordCreated(&context));
+        CHECK(slot->install(identity, &context, ops));
+        controller = CaptureController::create(slot); CHECK(controller);
+        renderer = std::make_unique<TestCaptureCapability>(slot);
+        CHECK(renderer->initialize());
+      }
+    };
+    fixture_restart::disarmCapture();
+    (void)fixture_restart::takeCaptures();
+    Incarnation old, current;
+    const fixture_restart::FrameKey key{1, 2, 3, 4, 5, 0};
+    CHECK(old.renderer->bridge_->request(key, 20, Bridge::Phase::Baseline, old.claim));
+    CHECK(current.renderer->bridge_->request(key, 20, Bridge::Phase::Baseline, current.claim));
+    const auto ticket = current.renderer->bridge_->issue(identity, 1);
+    CHECK(ticket.request);
+    const auto pixels = image(0);
+    current.renderer->bridge_->publish(ticket, identity, pixels, 0, 0, 0, 0);
+    CHECK(fixture_restart::takeCaptures().size() == 1);
+    const auto stale = old.renderer->bridge_->issue(identity, 2);
+    const auto next = current.renderer->bridge_->issue(identity, 2);
+    CHECK(stale.request && next.request && stale.renderer != next.renderer);
+    CHECK(stale.key == next.key && stale.request == next.request &&
+          stale.framebuffer == next.framebuffer && stale.serial == next.serial);
+    current.renderer->bridge_->publish(stale, identity, pixels, 0, 0, 0, 0);
+    CHECK(fixture_restart::takeCaptures().empty());
+    current.renderer->bridge_->publish(next, identity, pixels, 0, 0, 0, 0);
+    CHECK(fixture_restart::takeCaptures().size() == 1);
+  }
 private:
   static QImage image(int index)
   {
@@ -117,12 +134,11 @@ private:
 constexpr Identity TestCaptureCapability::identity;
 
 class TestHealthyGraphCapture {
-  PlayerTestCache cache_;
-  std::unique_ptr<PreparedGraph> prepared_;
+  HealthyRestoreTestFixture fixture_;
+  PreparedGraph* prepared_ = nullptr;
   FixtureGraph* graph_ = nullptr;
   std::shared_ptr<RetirementClaim> claim_;
   std::unique_ptr<TestCaptureCapability> renderer_;
-  int context_ = 0;
   static std::int64_t now()
   {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -142,60 +158,6 @@ class TestHealthyGraphCapture {
     CHECK(!graph->captureTarget());
     CHECK(!graph->captureTargetReady());
   }
-  void installRenderer()
-  {
-    const auto slot = prepared_->slot();
-    CHECK(slot->beginCreation() && slot->beforeCreate() && slot->recordCreated(&context_));
-    HealthyRetirement::Operations ops;
-    ops.currentIdentity = [] { return Identity{11, 12, 13}; };
-    ops.unregisterCallback = [](void*) {};
-    ops.invalidateQueued = [](std::uint64_t) { return true; };
-    ops.freeContext = [](void*) {};
-    ops.clearPointer = [](void*) { return true; };
-    CHECK(slot->install({11, 12, 13}, &context_, ops));
-    renderer_ = std::make_unique<TestCaptureCapability>(slot);
-    CHECK(renderer_->initialize());
-  }
-  void installPlayer(bool failClaim)
-  {
-    graph_->player_ = std::make_unique<PlayerComponent>();
-    auto& player = *graph_->player_;
-    graph_->session_ = std::make_unique<FixtureGraph::Session>();
-    auto gate = std::make_shared<ChildGate>(&context_, graph_->deadline_);
-    Grant grant{1, 3, 4, QByteArray(64, 'a'), 3000, false};
-    const auto encoded = encodeGrant(grant);
-    const auto digest = QCryptographicHash::hash(encoded, QCryptographicHash::Sha256);
-    CHECK(gate->accept(&context_, encoded, grant, digest, now(), true));
-    const RestorePermit permit{1, 5, 3, 4, 1, digest};
-    CHECK(gate->installPermit(encodeRestorePermit(permit), permit, now()));
-    CHECK(player.healthyBindRestoreCleanupGate(gate, graph_->deadline_));
-    CHECK(player.bindNativeReceiptHost(7)); player.m_mpvGeneration = 8;
-    claim_ = TestRetirementClaim::reserve(9);
-    const PlayerComponent::RestoreGrant restore{3, 4, 0, 3000, false};
-    CHECK(player.armNativeRestore(restore, 7, 2));
-    const auto key = player.m_nativeRestore.key;
-    CHECK(TestRetirementClaim::bind(claim_, {key.host, key.core, key.revision, key.attempt}));
-    std::atomic_store(&graph_->access_->intentClaim, claim_);
-    CHECK(player.healthyInstallRetirementClaim(claim_, 9, HealthyRestart::ClaimInstallMode::BindRestoreReservation));
-    if (failClaim) setGraphInstallHookForTest([] { return false; });
-    const bool installed = graph_->installRetirementClaim();
-    if (failClaim) setGraphInstallHookForTest({});
-    CHECK(installed != failClaim);
-    if (failClaim) return;
-    player.m_restoreDispatch = [](quint64, const char**) { return 0; };
-    player.m_observationDispatch = [](quint64, const char**) { return 0; };
-    CHECK(player.dispatchNativeRestoreLoad(QStringLiteral("fixture")));
-    player.m_nativeReceipts.reply(2, true, 42); player.m_nativeReceipts.start(42);
-    CHECK(player.healthyBindRestoreGate(gate, 1, 5, 3, 4, digest, now));
-    auto& session = *graph_->session_;
-    session.gate = gate; session.host = key.host; session.core = key.core;
-    session.intentRevision = key.revision; session.attempt = key.attempt;
-    session.binding = grant; session.run = 1; session.launch = 5; session.digest = digest;
-    HealthyModuleIdentity::LaunchBinding launch;
-    launch.role = HealthyModuleIdentity::LaunchRole::Restore; launch.run = 1;
-    std::memcpy(launch.expectedGrantDigest.data(), digest.constData(), size_t(digest.size()));
-    graph_->captureBindingForTest_ = launch; graph_->captureLaunchForTest_ = 5;
-  }
   void observe(quint64 id, const QByteArray& position)
   {
     auto& player = *graph_->player_;
@@ -209,13 +171,16 @@ class TestHealthyGraphCapture {
   }
   void initialize(bool failClaim = false)
   {
-    fixture_restart::disarmCapture();
-    prepared_ = prepare(); CHECK(prepared_);
-    graph_ = prepared_->graphOnGuiThread(); CHECK(graph_);
-    graph_->containment_ = prepared_->containment();
-    graph_->captureSessionReadyForTest_ = [] { return true; };
-    installRenderer(); installPlayer(failClaim);
-    if (!failClaim) observe(1, "0.000");
+    CHECK(fixture_.initialize());
+    prepared_ = fixture_.prepared(); graph_ = fixture_.graph(); CHECK(prepared_ && graph_);
+    renderer_ = std::make_unique<TestCaptureCapability>(prepared_->slot());
+    if (failClaim) setGraphInstallHookForTest([] { return false; });
+    const bool accepted = fixture_.acceptGrant();
+    if (failClaim) setGraphInstallHookForTest({});
+    claim_ = fixture_.claim();
+    if (failClaim) { CHECK(!accepted); return; }
+    CHECK(accepted && fixture_.installPermit() && fixture_.load() && fixture_.replyLoad(42));
+    CHECK(fixture_.observe(1, 42, "0.000"));
   }
   void armTargetAndSeek()
   {
@@ -230,7 +195,7 @@ class TestHealthyGraphCapture {
     auto& player = *graph_->player_;
     CHECK(player.dispatchNativeRestoreSeek());
     mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY;
-    event.reply_userdata = (quint64{1} << 61) | 2; player.observeNativeReceipt(&event);
+    event.reply_userdata = (quint64{1} << 61) | player.m_nativeRestore.key.attempt; player.observeNativeReceipt(&event);
     event = {}; event.event_id = MPV_EVENT_PLAYBACK_RESTART; player.observeNativeReceipt(&event);
   }
   void sampleHold()
@@ -272,14 +237,17 @@ class TestHealthyGraphCapture {
   void wrongLaunchBindingRejected()
   {
     initialize();
-    auto& launch = *graph_->captureBindingForTest_;
+    CHECK(graph_->restoreBootstrapForTest_);
+    auto bootstrap = std::make_shared<FixtureGraph::TestBootstrap>(*graph_->restoreBootstrapForTest_);
+    graph_->restoreBootstrapForTest_ = bootstrap;
+    auto& launch = bootstrap->binding;
     launch.role = HealthyModuleIdentity::LaunchRole::Source;
     CHECK(!graph_->captureBaseline());
     launch.role = HealthyModuleIdentity::LaunchRole::Restore; ++launch.run;
     CHECK(!graph_->captureBaseline());
     --launch.run; launch.expectedGrantDigest[0] ^= 1;
     CHECK(!graph_->captureBaseline());
-    launch.expectedGrantDigest[0] ^= 1; ++graph_->captureLaunchForTest_;
+    launch.expectedGrantDigest[0] ^= 1; ++bootstrap->launch;
     CHECK(!graph_->captureBaseline());
     CHECK(!graph_->captureTarget() && !graph_->captureTargetReady());
     checkNoPlaybackAdvance();
@@ -346,11 +314,11 @@ class TestHealthyGraphCapture {
   }
   void slotInvalidatedBeforeRendererIssue()
   {
-    initialize(); CHECK(graph_->captureBaseline()); CHECK(!renderer_->baselineReady());
+    initialize(); CHECK(graph_->captureBaseline()); CHECK(!renderer_->baselineReady(graph_->session_->attempt));
     prepared_->slot()->invalidate(9);
-    CHECK(!renderer_->queue() && !renderer_->baselineReady());
+    CHECK(!renderer_->queue() && !renderer_->baselineReady(graph_->session_->attempt));
     CHECK(renderer_->lateDeliveryRejected());
-    CHECK(!renderer_->issue(true, 0) && !renderer_->baselineReady());
+    CHECK(!renderer_->issue(true, 0) && !renderer_->baselineReady(graph_->session_->attempt));
     CHECK(!graph_->captureTarget() && !graph_->captureTargetReady());
     checkNoPlaybackAdvance();
   }
@@ -358,8 +326,8 @@ class TestHealthyGraphCapture {
   {
     initialize(); CHECK(graph_->captureBaseline()); CHECK(renderer_->queue());
     prepared_->slot()->invalidate(9);
-    CHECK(!renderer_->baselineReady() && renderer_->lateDeliveryRejected());
-    CHECK(!renderer_->issue(true, 0) && !renderer_->baselineReady());
+    CHECK(!renderer_->baselineReady(graph_->session_->attempt) && renderer_->lateDeliveryRejected());
+    CHECK(!renderer_->issue(true, 0) && !renderer_->baselineReady(graph_->session_->attempt));
     CHECK(!graph_->captureTarget() && !graph_->captureTargetReady());
     checkNoPlaybackAdvance();
   }
@@ -389,20 +357,14 @@ class TestHealthyGraphCapture {
   }
   void sameIdentityRejectsOldRendererGeneration()
   {
-    initialize(); CHECK(graph_->captureBaseline()); CHECK(renderer_->queue());
-    TestHealthyGraphCapture replacement; replacement.initialize();
-    CHECK(replacement.graph_->captureBaseline()); CHECK(replacement.renderer_->queue());
-    CHECK(renderer_->replacementRejectsOldTicket(*replacement.renderer_));
-    CHECK(!replacement.graph_->captureTargetReady());
-    replacement.checkNoPlaybackAdvance();
+    TestCaptureCapability::staleRendererGeneration();
   }
   int badImage_ = 0;
 public:
-  static void run()
+  static void run(const QByteArray& selected)
   {
-    activeCase = "uninitializedGraphRejectsCapture";
-    uninitializedGraphRejectsCapture();
-#define RUN_CASE(name) do { activeCase = #name; TestHealthyGraphCapture test; test.name(); } while (false)
+    if (selected == "uninitializedGraphRejectsCapture") { uninitializedGraphRejectsCapture(); return; }
+#define RUN_CASE(name) if (selected == #name) { activeCase = #name; TestHealthyGraphCapture test; test.name(); return; }
     RUN_CASE(positiveHandoff);
     RUN_CASE(wrongBindingRejected);
     RUN_CASE(wrongLaunchBindingRejected);
@@ -410,9 +372,11 @@ public:
     RUN_CASE(revokedClaimRejectsCapture);
     RUN_CASE(cleanupRetainsAccessButClosesCapture);
     RUN_CASE(rendererDestructionRejectsCapture);
-    for (int mode = 0; mode != 3; ++mode) {
+    if (selected.startsWith("badBaselineRejected-")) {
+      bool ok = false; const int mode = selected.mid(20).toInt(&ok);
+      CHECK(ok && mode >= 0 && mode < 3);
       activeCase = "badBaselineRejected";
-      TestHealthyGraphCapture test; test.badImage_ = mode; test.badBaselineRejected();
+      TestHealthyGraphCapture test; test.badImage_ = mode; test.badBaselineRejected(); return;
     }
     RUN_CASE(replayAndContextRejected);
     RUN_CASE(changedEntryRejected);
@@ -424,11 +388,13 @@ public:
     RUN_CASE(targetPixelsBeforeTargetArmRejected);
     RUN_CASE(sameIdentityRejectsOldRendererGeneration);
 #undef RUN_CASE
+    CHECK(false);
   }
 };
 
 int main(int argc, char** argv)
 {
   QCoreApplication app(argc, argv);
-  TestHealthyGraphCapture::run();
+  CHECK(argc == 2);
+  TestHealthyGraphCapture::run(argv[1]);
 }
