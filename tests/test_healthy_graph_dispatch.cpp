@@ -32,6 +32,7 @@ bool TestHealthyGraphDispatch::runSelected(const QByteArray& selected)
   RUN_CASE(clockInvalidatesTargetBeforeSeekAdmission)
   RUN_CASE(targetAckRequiredBeforeSeek)
   RUN_CASE(staleTargetAckRejectsSeek)
+  RUN_CASE(otherRendererAckCannotAuthorizeSeek)
   RUN_CASE(cancelAfterTargetArmRejectsSeek)
   if (selected == "wrongOwnerRejectsDirectSeek_0") { variant = 0; dispatchCase = "wrongOwnerRejectsDirectSeek_0"; wrongOwnerRejectsDirectSeek(); return true; }
   if (selected == "wrongOwnerRejectsDirectSeek_1") { variant = 1; dispatchCase = "wrongOwnerRejectsDirectSeek_1"; wrongOwnerRejectsDirectSeek(); return true; }
@@ -80,7 +81,7 @@ int main(int argc, char** argv)
   if (argc == 2 && QByteArray(argv[1]) == "trace-seek") { TestHealthyGraphDispatch::traceSeek(); return 0; }
   if (argc == 2 && TestHealthyGraphDispatch::runSelected(argv[1])) return 0;
   const QByteArray selected = argc == 2 ? QByteArray(argv[1]) : QByteArray();
-  if (selected.startsWith("lastLivenessCallback") || selected == "otherRendererAckCannotAuthorizeSeek")
+  if (selected.startsWith("lastLivenessCallback"))
     std::fprintf(stderr, "Held Graph dispatch selector: %s\n", selected.constData());
   else std::fprintf(stderr, "Unknown Graph dispatch selector\n");
   return 2;

@@ -29,6 +29,16 @@ using namespace FixtureRestart;
 extern const char* dispatchCase;
 #define DISPATCH_CHECK(value) do { if (!(value)) { std::fprintf(stderr, "%s: check failed at line %d: %s\n", dispatchCase, __LINE__, #value); std::_Exit(3); } } while (false)
 
+class TestRetirementClaim {
+public:
+  static std::shared_ptr<RetirementClaim> reserve(std::uint64_t generation, RetirementClaim::ArmIdentity identity)
+  {
+    auto claim = RetirementClaim::makeArmReservation(generation);
+    DISPATCH_CHECK(claim && claim->reserveArm(generation) && claim->bindArm(generation, identity));
+    return claim;
+  }
+};
+
 // Injected renderer boundary; no native renderer or GL context is created.
 class TestCaptureCapability {
   using Bridge = CaptureBridge;
@@ -63,6 +73,14 @@ public:
     bridge_->publish(*ticket_, identity, image(index), 0, 0, 0, 0);
   }
   void replaceFramebuffer() { DISPATCH_CHECK(bridge_->framebuffer(identity, {8, 160, 90, 0, 0, 0, true, true})); }
+  bool acknowledgeIndependentTarget(fixture_restart::FrameKey baseline, std::uint64_t attempt,
+                                    const std::shared_ptr<const RetirementClaim>& claim)
+  {
+    if (!bridge_->request(baseline, attempt, Bridge::Phase::Baseline, claim) || !queue()) return false;
+    auto target = baseline; target.phase = 2; target.seek = attempt;
+    return bridge_->request(target, attempt, Bridge::Phase::Target, claim) && queue() &&
+        bridge_->ready(attempt, Bridge::Phase::Target);
+  }
 };
 
 class TestHealthyGraphDispatch {

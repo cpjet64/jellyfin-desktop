@@ -137,13 +137,32 @@ void TestHealthyGraphDispatch::otherRendererAckCannotAuthorizeSeek()
   Fixture first; first.initialize(); first.acceptGrantAndPermit();
   DISPATCH_CHECK(first.graph->restoreLoad()); first.replyLoad(42);
   first.observe(1, 42, "0.000"); first.qualifyBaseline();
-  Fixture other; other.initialize(); other.acceptGrantAndPermit();
-  DISPATCH_CHECK(other.graph->restoreLoad()); other.replyLoad(42);
-  other.observe(1, 42, "0.000"); other.qualifyBaseline(); other.armTarget();
+  const auto key = first.graph->player_->m_nativeRestore.key;
+  const auto claim = std::atomic_load(&first.graph->access_->intentClaim);
+  DISPATCH_CHECK(claim && claim->open() && first.graph->player_->healthyRestoreSubmissionAllowed(false));
+  DISPATCH_CHECK(first.graph->player_->restoreOwnsCurrent() && first.graph->captureTargetRequested_);
+  DISPATCH_CHECK(first.graph->player_->nativeObservationCurrent() && first.graph->player_->m_nativeObservation.paused);
+  const auto otherClaim = TestRetirementClaim::reserve(9, {key.host, key.core, key.revision, key.attempt});
+  auto otherSlot = std::make_shared<Slot>(9, first.graph->deadline_, Fixture::now);
+  auto revoked = std::make_shared<std::atomic_bool>(false);
+  DISPATCH_CHECK(otherSlot->bindModuleForTest([] { return true; }, revoked));
+  int otherContext = 0;
+  DISPATCH_CHECK(otherSlot->beginCreation() && otherSlot->beforeCreate() && otherSlot->recordCreated(&otherContext));
+  HealthyRetirement::Operations ops;
+  ops.currentIdentity = [] { return Identity{11, 12, 13}; };
+  ops.unregisterCallback = [](void*) {};
+  ops.invalidateQueued = [](std::uint64_t) { return true; };
+  ops.freeContext = [](void*) {};
+  ops.clearPointer = [](void*) { return true; };
+  DISPATCH_CHECK(otherSlot->install({11, 12, 13}, &otherContext, ops));
+  DISPATCH_CHECK(otherSlot->bindStopClaimForTest(otherClaim));
+  TestCaptureCapability other(otherSlot); DISPATCH_CHECK(other.initialize());
+  DISPATCH_CHECK(other.acknowledgeIndependentTarget({first.graph->session_->launch, key.core, 13, 42, 1, 0},
+                                                     key.attempt, otherClaim));
   DISPATCH_CHECK(!first.graph->captureTargetReady());
   DISPATCH_CHECK(!first.graph->player_->dispatchNativeRestoreSeek());
-  DISPATCH_CHECK(first.live->loads == 1 && first.live->seeks == 0 && other.live->seeks == 0);
-  first.checkNoUnpause(); other.checkNoUnpause();
+  DISPATCH_CHECK(first.live->loads == 1 && first.live->seeks == 0 && claim->open());
+  first.checkNoUnpause();
 }
 
 void TestHealthyGraphDispatch::cancelAfterTargetArmRejectsSeek()
