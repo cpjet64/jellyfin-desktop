@@ -101,6 +101,9 @@ class TestHealthyGraphArm {
   void installRenderer()
   {
     const auto slot = prepared_->slot();
+    const auto module = graph_->module_;
+    const std::shared_ptr<const std::atomic_bool> revoked(graph_->access_, &graph_->access_->revoked);
+    CHECK(slot->bindModuleForTest([module] { return module && module->stillValid(9); }, revoked));
     CHECK(slot->beginCreation() && slot->beforeCreate() && slot->recordCreated(&context_));
     HealthyRetirement::Operations ops;
     ops.currentIdentity = [] { return Identity{11, 12, 13}; };
