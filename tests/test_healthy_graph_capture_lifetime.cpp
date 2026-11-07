@@ -313,18 +313,24 @@ class TestHealthyGraphLifetime {
     CHECK(delivered && rejected && !s.access->graph.load());
   }
 public:
-  static void run()
+  static bool run(const QString& name)
   {
-    qualifiedDestruction(); incompleteClosureRetainsGraph(); wrongGenerationRetainsGraph();
-    rejectedFinalizerRetainsGraph(); reentrantReleaseAndQueuedDelivery(); canceledRetirementRetainsGraph();
-    wrongThreadRetainsGraph();
-    queuedCallbackOutlivesGraph();
-    queuedQtDeliveryAfterDestruction();
+    if (name == "qualified-destruction") qualifiedDestruction();
+    else if (name == "incomplete-closure") incompleteClosureRetainsGraph();
+    else if (name == "wrong-generation") wrongGenerationRetainsGraph();
+    else if (name == "rejected-finalizer") rejectedFinalizerRetainsGraph();
+    else if (name == "reentrant-release") reentrantReleaseAndQueuedDelivery();
+    else if (name == "canceled-retirement") canceledRetirementRetainsGraph();
+    else if (name == "wrong-thread") wrongThreadRetainsGraph();
+    else if (name == "queued-worker") queuedCallbackOutlivesGraph();
+    else if (name == "queued-qt") queuedQtDeliveryAfterDestruction();
+    else return false;
+    return true;
   }
 };
 
 int main(int argc, char** argv)
 {
   QCoreApplication app(argc, argv);
-  TestHealthyGraphLifetime::run();
+  return argc == 2 && TestHealthyGraphLifetime::run(QString::fromLocal8Bit(argv[1])) ? 0 : 1;
 }

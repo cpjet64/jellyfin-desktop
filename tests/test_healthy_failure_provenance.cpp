@@ -319,20 +319,23 @@ class TestHealthyGraphArm {
     check(!session_->load() && !session_->seek() && !prepared_->closedAck() && state_->stops == 0);
   }
 public:
-  static void run()
+  static bool run(const QString& name)
   {
-    { TestHealthyGraphArm test; test.readyThenLossBeforeDirectLoad(); }
-    { TestHealthyGraphArm test; test.queuedPermitThenEndpointLoss(); }
-    { TestHealthyGraphArm test; test.endpointLossAfterArm(); }
-    { TestHealthyGraphArm test; test.endpointLossDuringPoll(); }
-    { TestHealthyGraphArm test; test.runCase(); }
-    { TestHealthyGraphArm test; test.acceptanceWriteInFlightAtFailure(); }
-    { TestHealthyGraphArm test; test.acceptanceWriteAbortsAfterFailure(); }
+    TestHealthyGraphArm test;
+    if (name == "ready-loss") test.readyThenLossBeforeDirectLoad();
+    else if (name == "queued-permit-loss") test.queuedPermitThenEndpointLoss();
+    else if (name == "loss-after-arm") test.endpointLossAfterArm();
+    else if (name == "loss-during-poll") test.endpointLossDuringPoll();
+    else if (name == "initialization-failure") test.runCase();
+    else if (name == "ack-in-flight") test.acceptanceWriteInFlightAtFailure();
+    else if (name == "ack-aborts") test.acceptanceWriteAbortsAfterFailure();
+    else return false;
+    return true;
   }
 };
 
 int main(int argc, char** argv)
 {
   QCoreApplication app(argc, argv);
-  TestHealthyGraphArm::run();
+  return argc == 2 && TestHealthyGraphArm::run(QString::fromLocal8Bit(argv[1])) ? 0 : 1;
 }
