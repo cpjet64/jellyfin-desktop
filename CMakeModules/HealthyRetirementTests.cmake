@@ -249,6 +249,7 @@ if(WIN32)
       "${CMAKE_SOURCE_DIR}/tests/healthy_restart/module_endpoints.cpp"
       "${CMAKE_SOURCE_DIR}/tests/fixture_restart/WindowsRestartIo.cpp"
       "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartWire.cpp"
+      "${CMAKE_SOURCE_DIR}/tests/fixture_restart/RestartBroker.cpp"
       "${CMAKE_SOURCE_DIR}/tests/fixture_restart/FixtureEvidence.cpp"
       "${CMAKE_SOURCE_DIR}/src/player/PlaybackCheckpoint.cpp")
     target_include_directories(test_healthy_${name} PRIVATE "${CMAKE_SOURCE_DIR}/tests" "${CMAKE_SOURCE_DIR}/src")
