@@ -69,13 +69,13 @@ function(_healthy_rewrite name input output)
       input/apple/InputAppleMediaKeys.h input/apple/InputAppleMediaKeys.mm
       settings/AudioSettingsController.cpp taskbar/TaskbarComponentWin.cpp)
   set(_data "${input}")
-  if(name STREQUAL "mpvqt/closure_player.cpp" OR name STREQUAL "fixture_restart/FixtureRestartAdapter.cpp" OR name MATCHES "^mpvqt/graph_")
+  if(name STREQUAL "mpvqt/closure_player.cpp" OR name STREQUAL "fixture_restart/FixtureRestartAdapter.cpp" OR name MATCHES "^mpvqt/graph_" OR name MATCHES "^mpvqt/restore_test_")
     string(REPLACE "\"player/PlayerComponent.h\"" "\"../player/PlayerComponent.h\"" _data "${_data}")
     string(REPLACE "\"player/MpvVideoItem.h\"" "\"../player/MpvVideoItem.h\"" _data "${_data}")
   elseif(name STREQUAL "mpvqt/async_stop_player.cpp" OR name STREQUAL "mpvqt/native_restore_authority.cpp")
     string(REPLACE "\"PlayerComponent.h\"" "\"../player/PlayerComponent.h\"" _data "${_data}")
   endif()
-  if(name STREQUAL "mpvqt/graph.h" OR name MATCHES "^mpvqt/graph_")
+  if(name STREQUAL "mpvqt/graph.h" OR name MATCHES "^mpvqt/graph_" OR name MATCHES "^mpvqt/restore_test_")
     string(REPLACE "\"fixture_restart/" "\"../fixture_restart/" _data "${_data}")
   endif()
   if(name STREQUAL "fixture_restart/FixtureRestartAdapter.cpp" OR name STREQUAL "fixture_restart/FixtureEvidence.cpp")
@@ -145,7 +145,9 @@ foreach(_entry IN ITEMS
     "patches/healthy-restart/0013-arm-test-hooks.patch|a91339de3b6564437a957f5cd9ca81be91c9e0b37fe21bb01aaab953d17cc4cc"
     "patches/healthy-restart/0014-graph-capture-test-friend.patch|e98019cf81a53a1212a53e2554f87c0bc36d3e1f2263b9b79ca9e5375bc1fd83"
     "patches/healthy-restart/0015-restore-dispatch-authority.patch|67c46e81bdd69507c95b3bcc061dbb476c5181cccdf79ad9f785d79b69c521a4"
-    "patches/healthy-restart/0016-renderer-failure.patch|01295f13a5d362196caabcfa1bde81ce4f101bad02c4fce30513beb1276e23d8")
+    "patches/healthy-restart/0016-renderer-failure.patch|01295f13a5d362196caabcfa1bde81ce4f101bad02c4fce30513beb1276e23d8"
+    "patches/healthy-restart/0017-restore-test-fixture-friend.patch|814037299bd460f9ce39f46273d836ea39384022a39e80e68f908a202a8cf073"
+    "patches/healthy-restart/0018-enable-authorized-seek.patch|9f98f26d576a5bf78745532ab45903aa81adb2474fe6fbb3bcb8d01cce9f0142")
   string(REPLACE "|" ";" _pair "${_entry}")
   list(GET _pair 0 _relative)
   list(GET _pair 1 _hash)
@@ -206,6 +208,8 @@ _healthy_apply("patches/healthy-restart/0013-arm-test-hooks.patch" "a91339de3b65
 _healthy_apply("patches/healthy-restart/0014-graph-capture-test-friend.patch" "e98019cf81a53a1212a53e2554f87c0bc36d3e1f2263b9b79ca9e5375bc1fd83" FALSE)
 _healthy_apply("patches/healthy-restart/0015-restore-dispatch-authority.patch" "67c46e81bdd69507c95b3bcc061dbb476c5181cccdf79ad9f785d79b69c521a4" FALSE)
 _healthy_apply("patches/healthy-restart/0016-renderer-failure.patch" "01295f13a5d362196caabcfa1bde81ce4f101bad02c4fce30513beb1276e23d8" FALSE)
+_healthy_apply("patches/healthy-restart/0017-restore-test-fixture-friend.patch" "814037299bd460f9ce39f46273d836ea39384022a39e80e68f908a202a8cf073" FALSE)
+_healthy_apply("patches/healthy-restart/0018-enable-authorized-seek.patch" "9f98f26d576a5bf78745532ab45903aa81adb2474fe6fbb3bcb8d01cce9f0142" FALSE)
 
 foreach(_entry IN LISTS _healthy_output_pins)
   string(REPLACE "|" ";" _pair "${_entry}")

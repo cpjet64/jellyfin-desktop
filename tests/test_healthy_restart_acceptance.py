@@ -32,7 +32,9 @@ PATCHES = ('patches/mpvqt/0001-event-ownership.patch',
            'patches/healthy-restart/0013-arm-test-hooks.patch',
            'patches/healthy-restart/0014-graph-capture-test-friend.patch',
            'patches/healthy-restart/0015-restore-dispatch-authority.patch',
-           'patches/healthy-restart/0016-renderer-failure.patch')
+           'patches/healthy-restart/0016-renderer-failure.patch',
+           'patches/healthy-restart/0017-restore-test-fixture-friend.patch',
+           'patches/healthy-restart/0018-enable-authorized-seek.patch')
 
 
 class HealthyRestartAcceptance(unittest.TestCase):
