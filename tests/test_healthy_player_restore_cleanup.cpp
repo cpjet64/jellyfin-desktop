@@ -1,6 +1,6 @@
 #include "player/PlayerComponent.h"
 #include "restore_test_fixture.h"
-#include "fixture_restart/RestartWire.h"
+#include <RestartWire.h>
 #include <QtTest/QtTest>
 #include <QScopeGuard>
 
