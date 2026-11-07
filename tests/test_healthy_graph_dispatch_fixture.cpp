@@ -22,6 +22,9 @@ void TestHealthyGraphDispatch::Fixture::recordCallback(const std::shared_ptr<Liv
 void TestHealthyGraphDispatch::Fixture::installRenderer()
 {
   const auto slot = prepared->slot();
+  const auto state = live;
+  const std::shared_ptr<const std::atomic_bool> revoked(graph->access_, &graph->access_->revoked);
+  DISPATCH_CHECK(slot->bindModuleForTest([state] { return state->module.load(); }, revoked));
   DISPATCH_CHECK(slot->beginCreation() && slot->beforeCreate() && slot->recordCreated(&tokens->rendererContext));
   HealthyRetirement::Operations ops;
   ops.currentIdentity = [] { return Identity{11, 12, 13}; };
