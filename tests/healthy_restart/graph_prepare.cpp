@@ -80,6 +80,7 @@ bool PreparedGraph::beginRestoreFailure(HealthyRestart::FailureCause cause)
   const auto retained = containment_;
   const auto slot = slot_;
   if (!retained || !slot || cause == HealthyRestart::FailureCause::None) return false;
+  if (!recordRestoreFailure(cause)) return false;
   auto* graph = GraphAccessOps::beginCleanup(access, slot->generation());
   if (!graph) return false;
   graph->cancelCapture();
@@ -89,6 +90,17 @@ bool PreparedGraph::beginRestoreFailure(HealthyRestart::FailureCause cause)
   } catch (...) {}
   GraphAccessOps::containCleanup(access);
   return false;
+}
+
+bool PreparedGraph::recordRestoreFailure(HealthyRestart::FailureCause cause)
+{
+  const auto retained = containment_;
+  const auto slot = slot_;
+  const auto access = access_;
+  if (!retained || !slot || cause == HealthyRestart::FailureCause::None) return false;
+  auto* graph = GraphAccessOps::graphOnOwner(access);
+  if (!graph || !graph->slot_ || graph->slot_ != slot) return false;
+  try { return graph->recordRestoreFailure(cause); } catch (...) { return false; }
 }
 
 PreparedGraph::FailureProgress PreparedGraph::pollRestoreFailure()

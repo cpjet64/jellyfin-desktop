@@ -291,7 +291,7 @@ FixtureRestart::RestartChild::Actions FixtureGraph::restoreActions(const QString
   return actions;
 }
 
-bool FixtureGraph::restoreInitialize(const QString& path)
+bool FixtureGraph::restoreInitialize(const QString& path, std::shared_ptr<FixtureRestart::ChildGate>* retainedGate)
 {
   using namespace HealthyModuleIdentity;
   if (!sessionReady(false) || session_) return false;
@@ -307,6 +307,7 @@ bool FixtureGraph::restoreInitialize(const QString& path)
     session_ = std::make_unique<Session>();
     session_->run = launch.run; session_->launch = launchId; session_->digest = digest;
     session_->gate = std::make_shared<FixtureRestart::ChildGate>(grantChannel, normalDeadline_);
+    if (retainedGate) *retainedGate = session_->gate;
     session_->adapter = std::make_unique<FixtureRestartAdapter>(*player_, *session_->gate, freshId(), freshId(),
                                                                 launchId, digest, clock_);
     if (!session_->adapter->bindCleanupGate(session_->gate, deadline_)) { invalidate(); return false; }
@@ -392,12 +393,18 @@ bool FixtureGraph::restoreSeek()
 {
   return sessionReady(false) && session_ && session_->child && captureTargetReady() && session_->child->seek();
 }
+bool FixtureGraph::recordRestoreFailure(HealthyRestart::FailureCause cause)
+{
+  if (cause == HealthyRestart::FailureCause::None || !session_ || !session_->gate) return false;
+  if (session_->firstFailure == HealthyRestart::FailureCause::None) session_->firstFailure = cause;
+  return session_->gate->canceled() || session_->gate->cancel(closeFailedGate, nullptr);
+}
+
 bool FixtureGraph::beginRestoreFailure(HealthyRestart::FailureCause cause)
 {
   if (cause == HealthyRestart::FailureCause::None || !session_ || !session_->gate || !player_ ||
       access_->phase.load() != AccessPhase::CleanupOnly) return false;
-  if (session_->firstFailure == HealthyRestart::FailureCause::None) session_->firstFailure = cause;
-  if (!session_->gate->canceled() && !session_->gate->cancel(closeFailedGate, nullptr)) return false;
+  if (!recordRestoreFailure(cause)) return false;
   const auto claim = std::atomic_load(&access_->intentClaim);
   if (claim != player_->m_healthyStopLease) return false;
   if (!failureCleanupReady()) return false;

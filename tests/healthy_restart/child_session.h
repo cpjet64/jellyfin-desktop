@@ -7,6 +7,7 @@
 #include <memory>
 #include <functional>
 
+namespace FixtureRestart { class ChildGate; }
 namespace HealthyRetirement {
 class PreparedGraph;
 
@@ -93,6 +94,7 @@ private:
   Progress advanceFailureCleanup();
   PreparedGraph* graph_;
   std::shared_ptr<HealthyModuleIdentity::ChildEndpoints> endpoints_;
+  std::shared_ptr<FixtureRestart::ChildGate> restoreGate_;
   const std::uint64_t generation_;
   GrantStage grantStage_ = GrantStage::Header;
   ControlStage controlStage_ = ControlStage::Header;

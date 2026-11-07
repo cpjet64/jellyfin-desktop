@@ -1,9 +1,11 @@
 #include "child_session.h"
 #ifdef _WIN32
 #include "graph.h"
+#include "../fixture_restart/RestartBroker.h"
 #include <QScopedValueRollback>
 
 namespace HealthyRetirement {
+namespace { bool recordGateCancellation(void*) { return true; } }
 void ChildSession::noteFailure(HealthyRestart::FailureCause cause)
 {
   if (firstFailure_ == HealthyRestart::FailureCause::None) firstFailure_ = cause;
@@ -16,6 +18,10 @@ bool ChildSession::fail(HealthyRestart::FailureCause cause)
     failed_ = true;
     if (restoreStarted_) {
       failurePhase_ = FailurePhase::Starting;
+      if (restoreGate_ && !restoreGate_->canceled()) restoreGate_->cancel(recordGateCancellation, nullptr);
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
+      if (graph_) graph_->recordRestoreFailure(firstFailure_);
+#endif
       if (endpoints_) endpoints_->beginContainment();
       bool begun = false;
       try { begun = beginFailureCleanup(); } catch (...) {}

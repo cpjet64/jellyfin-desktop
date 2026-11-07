@@ -4,10 +4,14 @@
 #include "module_channel.h"
 #include "module_gate.h"
 #include "../fixture_restart/RestartWire.h"
+#include "../fixture_restart/RestartBroker.h"
 #include <QtEndian>
 #include <QScopedValueRollback>
 
 namespace HealthyRetirement {
+#ifndef HEALTHY_CHILD_SESSION_HEADLESS
+namespace { bool cancelFailedRestoreGate(void*) { return true; } }
+#endif
 using FixtureRestart::IoProgress;
 using HealthyModuleIdentity::EndpointRole;
 
@@ -51,7 +55,14 @@ bool ChildSession::initialize(const QString& path)
   if (testing_) return test_.initialize && test_.initialize(path);
 #endif
 #ifndef HEALTHY_CHILD_SESSION_HEADLESS
-  return graph_->graphOnGuiThread()->restoreInitialize(path);
+  auto* graph = graph_ ? graph_->graphOnGuiThread() : nullptr;
+  if (!graph) return false;
+  const bool initialized = graph->restoreInitialize(path, &restoreGate_);
+  if (failed_) {
+    if (restoreGate_ && !restoreGate_->canceled()) restoreGate_->cancel(cancelFailedRestoreGate, nullptr);
+    if (graph_) graph_->recordRestoreFailure(firstFailure_);
+  }
+  return initialized && restoreGate_;
 #else
   return false;
 #endif
