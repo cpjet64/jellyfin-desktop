@@ -35,7 +35,7 @@ class TestHealthyGraphArm {
   static constexpr qint64 endpointDeadline = 31000000000LL;
   struct State {
     std::function<void()> revokeInModule, revokeInDispatch;
-    int dispatches = 0;
+    int dispatches = 0, frees = 0;
     std::vector<std::vector<QByteArray>> commands;
     std::vector<quint64> commandIds;
   };
@@ -53,6 +53,7 @@ class TestHealthyGraphArm {
   std::unique_ptr<ChildSession> session_;
   std::unique_ptr<TestCaptureCapability> renderer_;
   int context_ = 0;
+  bool reentryArmed_ = false, reentryFired_ = false;
 
   static bool moduleValid(void* opaque) noexcept
   {
@@ -64,14 +65,24 @@ class TestHealthyGraphArm {
     return true;
   }
 
-  void initialize()
+  void initialize(int reentry = 0)
   {
     bChannelScript = &pipes_; pipes_.grant = encodeGrant(grant_);
     LaunchBinding binding; binding.role = LaunchRole::Restore; binding.run = grant_.run;
     std::memcpy(binding.expectedGrantDigest.data(), digest_.constData(), size_t(digest_.size()));
     auto module = VerifiedModule::forAccessorTest(9, 7, binding, moduleValid, state_.get());
     EndpointInput inputs[] = {{EndpointRole::Grant, 1}, {EndpointRole::Control, 2}, {EndpointRole::Ack, 3}};
-    auto endpoints = ChildEndpoints::createForTest(module, 9, endpointDeadline, EndpointMode::Restore, inputs, bChannelEndpointOperations());
+    auto ops = bChannelEndpointOperations();
+    ops.valid = [this, reentry] {
+      if (reentryArmed_ && reentry && graph_) {
+        const bool hasGate = graph_->session_ && graph_->session_->gate;
+        if (hasGate == (reentry == 2)) {
+          reentryArmed_ = false; reentryFired_ = true; session_->invalidate();
+        }
+      }
+      return pipes_.endpointValid;
+    };
+    auto endpoints = ChildEndpoints::createForTest(module, 9, endpointDeadline, EndpointMode::Restore, inputs, ops);
     CHECK(endpoints && !module); endpoints_ = std::shared_ptr<ChildEndpoints>(std::move(endpoints));
     const auto state = state_;
     prepared_ = FixtureGraph::prepare(9, normal_, overall_, now);
@@ -95,7 +106,9 @@ class TestHealthyGraphArm {
                                              [](std::shared_ptr<RenderJob>) { return false; });
     installRenderer();
     session_ = std::make_unique<ChildSession>(*prepared_, endpoints_, 9);
-    CHECK(session_->beginRestore(QStringLiteral("fixture")));
+    reentryArmed_ = reentry != 0;
+    const bool started = session_->beginRestore(QStringLiteral("fixture"));
+    CHECK(started == (reentry == 0));
   }
 
   void installRenderer()
@@ -109,7 +122,8 @@ class TestHealthyGraphArm {
     ops.currentIdentity = [] { return Identity{11, 12, 13}; };
     ops.unregisterCallback = [](void*) {};
     ops.invalidateQueued = [](std::uint64_t) { return true; };
-    ops.freeContext = [](void*) {};
+    const auto state = state_;
+    ops.freeContext = [state](void*) { ++state->frees; };
     ops.clearPointer = [](void*) { return true; };
     CHECK(slot->install({11, 12, 13}, &context_, ops));
     renderer_ = std::make_unique<TestCaptureCapability>(slot);
@@ -250,19 +264,81 @@ class TestHealthyGraphArm {
   {
     endpoints_->invalidateAdmissionForTest();
   }
+  void checkFailed(const std::shared_ptr<ChildGate>& gate,
+                   const std::shared_ptr<RetirementClaim>& claim, int commands)
+  {
+    CHECK(gate && gate->canceled() && claim && !claim->open() && !claim->eligible());
+    CHECK(graph_->session_->gate == gate);
+    CHECK(graph_->session_->firstFailure == HealthyRestart::FailureCause::OwnershipLost);
+    CHECK(session_->pollFailureCleanup() == ChildSession::Progress::Failed);
+    CHECK(!session_->load() && !session_->seek());
+    CHECK(state_->dispatches == commands && state_->frees == 0);
+    CHECK(pipes_.writes.size() == 1 && !prepared_->closedAck());
+  }
+  void failureOrder(bool containmentFirst)
+  {
+    initialize(); consumePermit();
+    const auto gate = graph_->session_->gate;
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    CHECK(gate && !gate->canceled() && claim && claim->open());
+    if (containmentFirst) endpoints_->beginContainment();
+    session_->invalidate();
+    if (!containmentFirst) endpoints_->beginContainment();
+    checkFailed(gate, claim, 0);
+    session_->invalidate();
+    checkFailed(gate, claim, 0);
+  }
+  void pendingLoadExpires()
+  {
+    initialize(); consumePermit();
+    const auto gate = graph_->session_->gate;
+    const auto claim = std::atomic_load(&graph_->access_->intentClaim);
+    CHECK(graph_->restoreLoad() && state_->dispatches == 1);
+    CHECK(session_->pollPlayback() == ChildSession::Progress::Pending);
+    graph_->clock_ = [this] { return normal_ + 1; };
+    CHECK(session_->pollPlayback() == ChildSession::Progress::Failed);
+    checkFailed(gate, claim, 1);
+  }
+  void reentrantInitialization(int stage)
+  {
+    initialize(stage);
+    CHECK(reentryFired_ && !reentryArmed_);
+    if (graph_->session_ && graph_->session_->gate) {
+      CHECK(graph_->session_->gate->canceled());
+      CHECK(graph_->session_->firstFailure == HealthyRestart::FailureCause::OwnershipLost);
+    } else CHECK(stage == 1);
+    session_->invalidate();
+    CHECK(session_->pollFailureCleanup() == ChildSession::Progress::Failed);
+    CHECK(state_->dispatches == 0 && state_->frees == 0 && pipes_.writes.empty());
+    CHECK(!prepared_->closedAck());
+  }
 public:
   static void run(int mode) { TestHealthyGraphArm test; test.loadCase(mode); }
   static void runSeek(bool lose) { TestHealthyGraphArm test; test.seekCase(lose); }
   static void runAdmitted(bool success) { TestHealthyGraphArm test; test.admittedBeforeLoss(success); }
+  static void runFailureOrder(bool first) { TestHealthyGraphArm test; test.failureOrder(first); }
+  static void runPendingLoadExpires() { TestHealthyGraphArm test; test.pendingLoadExpires(); }
+  static void runReentrant(int stage) { TestHealthyGraphArm test; test.reentrantInitialization(stage); }
 };
 
 int main(int argc, char** argv)
 {
   QCoreApplication app(argc, argv);
-  for (int mode = 0; mode < 4; ++mode) TestHealthyGraphArm::run(mode);
-  TestHealthyGraphArm::runSeek(false);
-  TestHealthyGraphArm::runSeek(true);
-  TestHealthyGraphArm::runAdmitted(false);
-  TestHealthyGraphArm::runAdmitted(true);
+  CHECK(argc == 2);
+  const QByteArray name(argv[1]);
+  if (name == "load-ok") TestHealthyGraphArm::run(0);
+  else if (name == "load-endpoint") TestHealthyGraphArm::run(1);
+  else if (name == "load-module") TestHealthyGraphArm::run(2);
+  else if (name == "load-reentrant") TestHealthyGraphArm::run(3);
+  else if (name == "seek-ok") TestHealthyGraphArm::runSeek(false);
+  else if (name == "seek-endpoint") TestHealthyGraphArm::runSeek(true);
+  else if (name == "admitted-failed") TestHealthyGraphArm::runAdmitted(false);
+  else if (name == "admitted-ok") TestHealthyGraphArm::runAdmitted(true);
+  else if (name == "containment-first") TestHealthyGraphArm::runFailureOrder(true);
+  else if (name == "failure-first") TestHealthyGraphArm::runFailureOrder(false);
+  else if (name == "pending-load-expires") TestHealthyGraphArm::runPendingLoadExpires();
+  else if (name == "reentry-before-gate") TestHealthyGraphArm::runReentrant(1);
+  else if (name == "reentry-after-gate") TestHealthyGraphArm::runReentrant(2);
+  else CHECK(false);
   return 0;
 }
