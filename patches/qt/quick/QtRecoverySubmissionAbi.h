@@ -35,6 +35,9 @@ QT_RECOVERY_QUICK_API const char *qt_recovery_quick_source_id_v1(void);
 QT_RECOVERY_QUICK_API const char *qt_recovery_quick_bound_gui_source_id_v1(void);
 QT_RECOVERY_QUICK_API int qt_recovery_publish_native_frame_v1(const QtRecoveryFrameV1 *, QtRecoverySwapTicketV1 *);
 QT_RECOVERY_QUICK_API int qt_recovery_take_submission_v1(uint64_t, uint64_t, uint64_t, QtRecoverySubmissionV1 *);
+QT_RECOVERY_QUICK_API int qt_recovery_take_unsupported_v1(uint64_t window_lifetime,
+                                                        uint64_t renderer_generation,
+                                                        uint64_t scenegraph_generation);
 QT_RECOVERY_QUICK_API void qt_recovery_revoke_v1(uint64_t);
 #ifdef __cplusplus
 }
