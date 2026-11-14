@@ -20,6 +20,7 @@ class Root:
 
     def __init__(self, code=0, signaled=True, close_error=False):
         self.code, self.signaled, self.close_error = code, signaled, close_error
+        self.close_calls = 0
 
     def wait(self, timeout):
         return self.signaled
@@ -28,6 +29,7 @@ class Root:
         return self.code
 
     def close(self):
+        self.close_calls += 1
         if self.close_error:
             raise OSError("close")
 
@@ -126,6 +128,15 @@ class LifecycleTests(unittest.TestCase):
         result = settle(api, object(), Root(), Pin(), 2.0, clock=clock, pause=clock.pause)
         self.assertEqual(result["result"], "failed")
         self.assertTrue(api.emergency)
+
+    def test_unresolved_root_retains_handle(self):
+        root = Root(signaled=False)
+        api = FakeAPI([(0, 1)])
+        result = run(api, root=root)
+        self.assertEqual(result["result"], "failed")
+        self.assertTrue(result["emergency"])
+        self.assertFalse(result["root"]["closed"])
+        self.assertEqual(root.close_calls, 0)
 
     def test_invalid_identity_or_membership_never_targeted(self):
         for failure in ("identity", "member", "open", "truncated"):

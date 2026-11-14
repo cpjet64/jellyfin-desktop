@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import unittest
@@ -52,15 +53,13 @@ def _exclusive_read(path):
 def _strict_receipt(path, expected_exit):
     data = path.read_text(encoding="ascii")
     fields = data.splitlines()
-    required = ("receipt_version=1", "root_exit=" + str(expected_exit), "timeout=0 active=0",
-                "owned_opened=6 owned_closed=6 close_failed=0", "handles_complete=1",
-                "final_result=" + str(expected_exit), "proof_complete=1")
-    if any(fields.count(field) != 1 for field in required):
-        raise AssertionError("outer helper receipt incomplete")
-    if len(fields) != 9 or sum(line.startswith("root_pid=") for line in fields) != 1:
-        raise AssertionError("unexpected outer helper receipt fields")
-    if sum(line.startswith("handles_before=") for line in fields) != 1:
-        raise AssertionError("missing handle measurement")
+    patterns = (r"receipt_version=1", r"root_pid=[1-9][0-9]*", "root_exit=" + str(expected_exit),
+                r"timeout=0 active=0", r"handles_before=[0-9]+ handles_after=[0-9]+ measured=1",
+                r"owned_opened=6 owned_closed=6 close_failed=0", r"handles_complete=1",
+                "final_result=" + str(expected_exit), r"proof_complete=1")
+    if len(fields) != len(patterns) or any(not re.fullmatch(pattern, field)
+                                           for pattern, field in zip(patterns, fields)):
+        raise AssertionError("outer helper receipt malformed")
 
 
 @unittest.skipUnless(ENABLED, "explicit Windows qualification flag required")
@@ -98,14 +97,19 @@ class NativeQualificationTests(unittest.TestCase):
                 process.kill()
                 process.wait(timeout=10)
                 raise
-        if mode == "rootfail":
-            self.assertNotEqual(code, 0)
-        else:
-            self.assertEqual(code, 0)
+        self.assertEqual(code, 1 if mode == "rootfail" else 0)
         _strict_receipt(strict, code)
         raw = _exclusive_read(build)
         if mode == "rootfail":
-            self.assertEqual(json.loads(raw)["schema"], "build-only-failed-v1")
+            failed = json.loads(raw)
+            self.assertEqual(failed["schema"], "build-only-failed-v1")
+            outcome = failed["evidence"]["outcome"]
+            self.assertEqual(outcome["root"]["exit"], 7)
+            self.assertIs(outcome["root"]["signaled"], True)
+            self.assertIn("root failed", outcome["error"])
+            self.assertIs(outcome["emergency"], True)
+            self.assertEqual(outcome["emergency_final"]["active"], 0)
+            self.assertIs(outcome["root"]["closed"], True)
         else:
             receipt = validate_receipt(raw, expected_source=policy.source_sha256, expected_policy=policy,
                                        observed_exit=code, observed_receipt_closed=True, production=False)

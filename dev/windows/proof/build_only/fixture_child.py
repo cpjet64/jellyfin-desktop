@@ -5,7 +5,7 @@ import time
 
 
 def spawn(mode, output):
-    return subprocess.Popen([sys.executable, __file__, mode, output], close_fds=True,
+    return subprocess.Popen([sys.executable, "-B", __file__, mode, output], close_fds=True,
                             creationflags=subprocess.CREATE_NO_WINDOW)
 
 
