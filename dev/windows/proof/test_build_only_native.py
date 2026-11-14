@@ -15,6 +15,14 @@ ENABLED = sys.platform == "win32" and os.environ.get("BUILD_ONLY_NATIVE_QUALIFY"
 HELPER_SHA = "7ae01dfd262a18bf863c057d570993b2c4dc529fcc03ac1e58d15f0dedb0ebd5"
 
 
+def _selected_cases(selector):
+    if selector is None:
+        return ("natural", "residual", "rootfail")
+    if selector == "residual":
+        return ("residual",)
+    raise ValueError("unknown native diagnostic selector")
+
+
 def _hash(path):
     digest = hashlib.sha256()
     with open(path, "rb") as source:
@@ -130,6 +138,10 @@ class NativeQualificationTests(unittest.TestCase):
 
         root = Path(os.environ["BUILD_ONLY_NATIVE_ROOT"])
         helper = Path(os.environ["BUILD_ONLY_NATIVE_HELPER"])
+        selector = os.environ.get("BUILD_ONLY_NATIVE_DIAGNOSTIC")
+        cases = _selected_cases(selector)
+        if selector is not None:
+            print("DIAGNOSTIC: residual only; not qualification", flush=True)
         if not root.is_absolute() or not helper.is_absolute() or not root.is_dir():
             self.fail("explicit absolute qualification paths required")
         project_deps = Path(__file__).resolve().parents[3] / "deps"
@@ -138,7 +150,7 @@ class NativeQualificationTests(unittest.TestCase):
         if not helper.is_file() or _hash(helper) != HELPER_SHA:
             self.fail("outer helper identity mismatch")
         with quiet_error_ui(root):
-            for mode in ("natural", "residual", "rootfail"):
+            for mode in cases:
                 self._case(root, helper, mode, make_policy, validate_receipt)
 
     def _case(self, root, helper, mode, make_policy, validate_receipt):
