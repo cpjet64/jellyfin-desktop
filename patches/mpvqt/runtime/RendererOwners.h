@@ -63,6 +63,7 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     std::atomic<bool> commandAuthority{true};
     std::atomic<bool> finalizationRequested{false};
     std::atomic<bool> finalizationQueued{false};
+    std::atomic<bool> nativeDestroyed{false};
     std::atomic<bool> faultQuarantined{false};
     std::atomic<unsigned> admittedControl{0};
     std::atomic<unsigned> liveGenerations{0};
@@ -89,7 +90,7 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     void requestQuarantineStop();
     void maybeFinalize();
     static std::shared_ptr<CoreOwner> adoptReserved(quint64 token, mpv_handle *handle,
-        MpvController *controller, QThread *worker, WakeRelay *relay);
+        MpvController *controller, QThread *worker, WakeRelay *relay, QObject *lifecycleDispatcher);
 private:
     friend class NativeLease;
     void blockUnresolvedHook();

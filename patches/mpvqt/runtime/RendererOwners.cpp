@@ -16,6 +16,8 @@ struct FaultSlot {
     QObject *dispatcher = nullptr;
     AdmissionContinuation continuation;
     std::shared_ptr<CoreOwner> active;
+    QThread *joinHelper = nullptr;
+    QObject *lifecycleDispatcher = nullptr;
     std::shared_ptr<CoreOwner> core;
     std::shared_ptr<GenerationOwner> generation;
 };
@@ -82,6 +84,7 @@ void closeAdmissionDispatcher(QObject *dispatcher)
         if (slot.reservation == slot.dispatched) slot.reservation = 0;
         slot.dispatched = 0;
     }
+    if (slot.lifecycleDispatcher == dispatcher) slot.lifecycleDispatcher = nullptr;
 }
 
 NativeLease::NativeLease(std::shared_ptr<CoreOwner> value) : owner(std::move(value)) {}
@@ -108,10 +111,47 @@ static std::vector<std::shared_ptr<CoreOwner>> &pendingCores()
     return *value;
 }
 
-std::shared_ptr<CoreOwner> CoreOwner::adoptReserved(quint64 token, mpv_handle *native, MpvController *control,
-                                                   QThread *thread, WakeRelay *relay)
+static void startConfirmedJoin(const std::shared_ptr<CoreOwner> &owner, QObject *dispatcher)
 {
-    if (!native || !control || !thread || !relay || control->thread() != thread || relay->thread() != thread)
+    auto &slot = faultSlot();
+    std::lock_guard<std::mutex> lock(slot.mutex);
+    if (slot.lifecycleDispatcher != dispatcher || slot.active != owner || slot.core || slot.joinHelper ||
+        !owner->nativeDestroyed.load()) return;
+    auto joined = std::make_shared<std::atomic<bool>>(false);
+    QThread *helper = QThread::create([owner, joined] {
+        joined->store(owner->worker->wait(15000), std::memory_order_release);
+    });
+    slot.joinHelper = helper;
+    QObject::connect(helper, &QThread::finished, dispatcher, [owner, helper, joined] {
+        const bool complete = joined->load(std::memory_order_acquire);
+        {
+            auto &state = faultSlot();
+            std::lock_guard<std::mutex> guard(state.mutex);
+            if (state.joinHelper == helper) state.joinHelper = nullptr;
+            if (complete && !state.core && state.active == owner) {
+                state.active.reset();
+                deliverWaiterLocked(state, AdmissionStatus::Reserved);
+            } else if (!complete && state.active == owner) {
+                deliverWaiterLocked(state, AdmissionStatus::Busy);
+            }
+        }
+        if (complete && !owner->faultQuarantined.load()) {
+            owner->worker->deleteLater();
+            std::lock_guard<std::mutex> guard(pendingMutex());
+            auto &pending = pendingCores();
+            pending.erase(std::remove(pending.begin(), pending.end(), owner), pending.end());
+        }
+        helper->deleteLater();
+    }, Qt::QueuedConnection);
+    helper->start();
+}
+
+std::shared_ptr<CoreOwner> CoreOwner::adoptReserved(quint64 token, mpv_handle *native, MpvController *control,
+                                                   QThread *thread, WakeRelay *relay, QObject *lifecycleDispatcher)
+{
+    if (!native || !control || !thread || !relay || !lifecycleDispatcher ||
+        lifecycleDispatcher->thread() != QThread::currentThread() ||
+        control->thread() != thread || relay->thread() != thread)
         return {};
     auto &slot = faultSlot();
     std::lock_guard<std::mutex> lock(slot.mutex);
@@ -122,6 +162,10 @@ std::shared_ptr<CoreOwner> CoreOwner::adoptReserved(quint64 token, mpv_handle *n
     owner->worker = thread;
     owner->wakeRelay = relay;
     slot.active = owner;
+    slot.lifecycleDispatcher = lifecycleDispatcher;
+    QObject::connect(thread, &QThread::finished, lifecycleDispatcher, [owner, lifecycleDispatcher] {
+        startConfirmedJoin(owner, lifecycleDispatcher);
+    }, Qt::QueuedConnection);
     slot.reservation = 0;
     slot.dispatched = 0;
     return owner;
@@ -300,23 +344,10 @@ void CoreOwner::maybeFinalize()
                 std::lock_guard<std::mutex> lock(owner->wakeRegistrationMutex);
                 mpv_terminate_destroy(owner->handle);
                 owner->handle = nullptr;
+                owner->nativeDestroyed.store(true, std::memory_order_release);
             }
             owner->wakeRelay->deleteLater();
             owner->controller->deleteLater();
-            QObject::connect(owner->worker, &QThread::finished, owner->worker, &QObject::deleteLater);
-            QObject::connect(owner->worker, &QThread::finished, [owner] {
-                {
-                    auto &slot = faultSlot();
-                    std::lock_guard<std::mutex> lock(slot.mutex);
-                    if (!slot.core && slot.active == owner) {
-                        slot.active.reset();
-                        deliverWaiterLocked(slot, AdmissionStatus::Reserved);
-                    }
-                }
-                std::lock_guard<std::mutex> lock(pendingMutex());
-                auto &pending = pendingCores();
-                pending.erase(std::remove(pending.begin(), pending.end(), owner), pending.end());
-            });
             owner->worker->quit();
         }, Qt::QueuedConnection);
         if (!posted) owner->finalizationQueued.store(false);
