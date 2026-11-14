@@ -46,13 +46,26 @@ quarantined core and renderer generation, revoke its authority, request an
 owned stop where possible, and refuse competing playback or further replacement.
 Quarantine is containment, not restored playback or a fix for full context loss.
 
+An established accepted item may also qualify for one reopen after 30 seconds
+of attributed buffering or media-read stall while the user requests playing.
+Only fresh native observations for the current entry and event epoch establish
+the interval; missing, stale, or repeated old observations do not prove no
+progress. Reset on meaningful attributed position or source-frame progress.
+User pause, EOF, deliberate stop, known permanent authentication or media
+errors, and a changed user intent do not qualify. Preserve native errors as
+observed; do not rename a generic failure as a network timeout. This reopen
+uses the same paused-first restoration, single 15-second recovery budget and
+one attempt per user-created session as the other supported classes. Thirty
+seconds is an initial threshold requiring runtime validation.
+
 Before hands-on acceptance, record the exact package version, source identity,
 artifact hash, machine, GPU, driver, display and server configuration. Generate
 a local clip with moving recognizable content and audio; retain its generation
 recipe and hash. Inject each fault through the actual adapter and renderer path,
 not a direct recovery call or synthetic frame. Require five consecutive
 successful recoveries for each selected deterministic timeout and moving-video
-stall fault class, plus paused, Stop, new-item, cancellation, and failed or
+stall fault class, and the qualified buffering/read-stall class once included,
+plus paused, Stop, new-item, cancellation, and failed or
 repeated-fault cases. Use the normally enabled controller; no manual minimize,
 wake, or restore action may cause recovery. Record each trigger, observed sequence, timing,
 outcome and teardown. Playing acceptance requires recognizably different

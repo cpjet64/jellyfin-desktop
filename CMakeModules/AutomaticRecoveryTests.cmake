@@ -54,3 +54,12 @@ target_compile_features(test_automatic_recovery_frame_gate PRIVATE cxx_std_17)
 target_link_libraries(test_automatic_recovery_frame_gate PRIVATE Qt6::Core)
 add_test(NAME test_automatic_recovery_frame_gate COMMAND test_automatic_recovery_frame_gate)
 set_tests_properties(test_automatic_recovery_frame_gate PROPERTIES TIMEOUT 60)
+
+add_executable(test_automatic_recovery_read_stall
+  "${CMAKE_SOURCE_DIR}/tests/test_automatic_recovery_read_stall.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/AutomaticRecoveryReadStall.cpp")
+target_include_directories(test_automatic_recovery_read_stall PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_compile_features(test_automatic_recovery_read_stall PRIVATE cxx_std_17)
+target_link_libraries(test_automatic_recovery_read_stall PRIVATE Qt6::Core)
+add_test(NAME test_automatic_recovery_read_stall COMMAND test_automatic_recovery_read_stall)
+set_tests_properties(test_automatic_recovery_read_stall PROPERTIES TIMEOUT 60)
