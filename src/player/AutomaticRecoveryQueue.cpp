@@ -80,6 +80,8 @@ bool AutomaticRecoveryQueue::position(Key key, std::int64_t entry, std::int64_t 
 { return observeTime(nowMs) && active_.position(key, entry, positionMs); }
 bool AutomaticRecoveryQueue::snapshot(Key current, Snapshot& output) const
 { return active_.snapshot(current, output); }
+bool AutomaticRecoveryQueue::reviseActive(Key previous, Key current, bool paused)
+{ return active_.revise(previous, current, paused); }
 bool AutomaticRecoveryQueue::poll(std::int64_t nowMs) { return observeTime(nowMs); }
 bool AutomaticRecoveryQueue::takeExpired(Expired& output)
 {

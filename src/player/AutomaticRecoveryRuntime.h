@@ -22,11 +22,14 @@ public:
   // The caller must supply only a completed, epoch-bracketed native observation.
   bool recordPosition(Key key, std::int64_t entry, std::int64_t positionMs, std::int64_t nowMs);
   bool snapshot(Key current, AutomaticRecoverySession::Snapshot& output) const;
+  bool reviseActive(Key previous, Key current, bool paused);
+  std::uint64_t reserveSequence();
   bool takeTimeout(Key current, std::int64_t nowMs, std::uint64_t& sequence);
   void invalidate();
 private:
   void advanceEpoch();
   AutomaticRecoveryQueue queue_;
+  Key revoked_;
   std::uint64_t sequence_ = 0, generation_ = 0;
   std::uint64_t eventEpoch_ = 1;
 };

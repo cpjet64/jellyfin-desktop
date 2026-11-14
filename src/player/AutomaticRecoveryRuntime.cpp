@@ -60,16 +60,38 @@ void AutomaticRecoveryRuntime::invalidate()
 {
   queue_.clear(); generation_ = 0; advanceEpoch();
 }
-void AutomaticRecoveryRuntime::userIntentChanged() { advanceEpoch(); }
+void AutomaticRecoveryRuntime::userIntentChanged()
+{
+  revoked_ = queue_.activeKey();
+  advanceEpoch();
+}
 void AutomaticRecoveryRuntime::advanceEpoch()
 {
   if (eventEpoch_ == std::numeric_limits<std::uint64_t>::max()) eventEpoch_ = 0;
   else if (eventEpoch_) ++eventEpoch_;
 }
 bool AutomaticRecoveryRuntime::recordPosition(Key key, std::int64_t entry, std::int64_t positionMs, std::int64_t nowMs)
-{ return queue_.position(key, entry, positionMs, nowMs); }
+{
+  if (key.session == revoked_.session && key.revision == revoked_.revision &&
+      key.generation == revoked_.generation) return false;
+  return queue_.position(key, entry, positionMs, nowMs);
+}
 bool AutomaticRecoveryRuntime::snapshot(Key current, AutomaticRecoverySession::Snapshot& output) const
-{ return queue_.snapshot(current, output); }
+{
+  if (current.session == revoked_.session && current.revision == revoked_.revision &&
+      current.generation == revoked_.generation) return false;
+  return queue_.snapshot(current, output);
+}
+bool AutomaticRecoveryRuntime::reviseActive(Key previous, Key current, bool paused)
+{
+  if (!queue_.reviseActive(previous, current, paused)) return false;
+  return true;
+}
+std::uint64_t AutomaticRecoveryRuntime::reserveSequence()
+{
+  if (sequence_ >= AutomaticRecoveryLoad::MaxSequence) return 0;
+  return ++sequence_;
+}
 bool AutomaticRecoveryRuntime::takeTimeout(Key current, std::int64_t nowMs, std::uint64_t& sequence)
 {
   if (!current.session || !current.revision || !current.generation || current.generation != generation_ ||

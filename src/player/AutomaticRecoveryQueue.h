@@ -17,6 +17,7 @@ public:
   void end(std::int64_t entry, std::int64_t nowMs);
   bool position(Key key, std::int64_t entry, std::int64_t positionMs, std::int64_t nowMs);
   bool snapshot(Key current, Snapshot& output) const;
+  bool reviseActive(Key previous, Key current, bool paused);
   bool poll(std::int64_t nowMs);
   bool takeExpired(Expired& output);
   Key activeKey() const { return active_.key(); }
