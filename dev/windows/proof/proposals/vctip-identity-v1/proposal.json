@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "status": "SOURCE PROPOSAL ONLY; NO IDENTITY QUERY ALLOCATED OR EXECUTED",
+  "target": {
+    "path": "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/vctip.exe",
+    "sha256": "d591358c6aee4b673562ca3b3a15c250e612708394fe3b44a7a7eda2470570a5",
+    "bytes": 335288,
+    "previous_file_version_metadata": "14.44.35229.0",
+    "version_note": "Historical file-version metadata bound to pinned bytes; the client does not query the version resource."
+  },
+  "fixed_client": {
+    "path": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/dev/windows/proof/proposals/vctip-identity-v1/client.py",
+    "sha256": "6b42585aba038b0fdfd301dc9e52545913d50a01023c0520b3ce19fcef7f0235",
+    "arguments": [],
+    "operation": "Open and pin the fixed file through the existing FilePin API, read volume/file index metadata, close all owned handles, and emit only target identity and close counts. Never execute the target."
+  },
+  "controller": {
+    "path": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/dev/windows/proof/proposals/vctip-identity-v1/controller.ps1",
+    "sha256": "d2e2c5b39c1367c0b516cd603572ee3702c069da2f5ea7c5cc55a4c032427fab",
+    "source_commit": "Supplied and verified separately at review time to avoid a self-hash cycle.",
+    "environment": "No private compiler environment is read; native qualification variables and Python path overrides are absent.",
+    "launcher": "Pinned production helper; hidden ProcessStartInfo with exact ArgumentList, exclusive logs, asynchronous drains and strict ordered nine-field outer receipt.",
+    "helper_timeout_ms": 180000,
+    "controller_helper_wait_ms": 200000,
+    "controller_budget_ms": 210000,
+    "cleanup_reserve_ms": 10000
+  },
+  "implementation_source": {
+    "path": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114",
+    "sha": "d0bb016df169b663567e88fd5586ab7c008e9554",
+    "internal_nine_sha256": "80b842ae0d7ad4c3384b9eacfb9c492962febebae449c90a2b18d6b1e4f25915",
+    "external_21_sha256": "42016ce3f5972c5cbcf19e7c1b0b86fcbea879dcf834e42add85670b8fa73e77",
+    "manifest_sha256": "dbe55eb7c529d11386700a60dab96f56ab12bc7b3c74e6b0e55277fe6ca4b7e0"
+  },
+  "python": {
+    "path": "C:/Python314/python.exe",
+    "sha256": "7ca24f26d6e3f463419ee4f537ddd3acd312c38fe45e678cce08572f26a8bd1a",
+    "bytes": 106328
+  },
+  "helper": {
+    "path": "E:/CursorAI/JellyfinDesktop/deps/worktrees/integration/deps/w1214-proof/job_launch_prod.exe",
+    "sha256": "7ae01dfd262a18bf863c057d570993b2c4dc529fcc03ac1e58d15f0dedb0ebd5"
+  },
+  "evidence_root": "E:/CursorAI/JellyfinDesktop/deps/reconcile-20261113/meta-vctip-01",
+  "pre_post": "Verify exact proposal commit and raw tracked blobs, candidate source and all 21 raw tracked blobs, package manifest, Python and helper before and after; fail closed on uncertainty.",
+  "remaining": "Actual volume serial and file index are intentionally absent until separately authorized observation succeeds. Output is metadata only, not an executable, compiler, or application qualification.",
+  "storage_failure": "Stop dependent writes and preserve evidence; do not retry, relocate, or clean."
+}
