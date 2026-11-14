@@ -54,7 +54,7 @@ Action Policy::observe(const Sample& sample)
   const bool stalled = !suppressed && sample.outstanding && sample.positionMs > baselinePosition_ &&
       sample.nowMs - baselineTime_ >= 5000 && sample.nowMs >= lastAdvanceTime_ &&
       sample.nowMs - lastAdvanceTime_ <= 1500;
-  if (!sample.rendererFault && (suppressed || (!sample.operationTimedOut && !stalled))) return Action::None;
+  if (!sample.operationTimedOut && !sample.rendererFault && !stalled) return Action::None;
   if (sample.nowMs > std::numeric_limits<std::int64_t>::max() - 15000) { fail(); return Action::Blocked; }
   attempted_ = true; revision_ = sample.revision; generation_ = sample.generation;
   replacement_ = 0; deadline_ = sample.nowMs + 15000; lastAttemptTime_ = sample.nowMs; wasPaused_ = sample.desiredPaused;
