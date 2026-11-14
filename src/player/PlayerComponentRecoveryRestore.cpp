@@ -49,6 +49,8 @@ bool PlayerComponentRecovery::preparePreload(const QString& hookToken)
   } else {
     const AutomaticRecoverySession::Key current{0, hookRevision_, hookBinding_};
     if (runtime_.selections(hookEntry_, current, player_->m_currentAudioStream, player_->m_currentSubtitleStream)) return true;
+    if (ordinarySelection_.select(hookRevision_, hookBinding_, hookEntry_, hookStart_, false,
+                                  player_->m_currentAudioStream, player_->m_currentSubtitleStream)) return true;
   }
   deferredEntry_ = hookEntry_; deferredStart_ = hookStart_; deferredRevision_ = hookRevision_;
   deferredBinding_ = hookBinding_; deferredAttempt_ = hookAttempt_;
@@ -58,6 +60,7 @@ bool PlayerComponentRecovery::preparePreload(const QString& hookToken)
 void PlayerComponentRecovery::finishPreload()
 {
   if (hookAttempt_ && hookAttempt_ == attempt_) recoveryTracksApplied_ = true;
+  if (!hookAttempt_) ordinarySelection_.revoke();
   deferredEntry_ = 0;
 }
 
@@ -69,12 +72,15 @@ void PlayerComponentRecovery::applyDeferredTracks()
     if (!restoring_ || deferredAttempt_ != attempt_ || !recoveryLoaded_ || !prepareRecoveryPreload()) return;
   } else {
     const AutomaticRecoverySession::Key current{0, deferredRevision_, deferredBinding_};
-    if (runtime_.activeEntry() != deferredEntry_ ||
-        !runtime_.selections(deferredEntry_, current, player_->m_currentAudioStream, player_->m_currentSubtitleStream)) return;
+    const bool recoveryRecipe = runtime_.activeEntry() == deferredEntry_ &&
+        runtime_.selections(deferredEntry_, current, player_->m_currentAudioStream, player_->m_currentSubtitleStream);
+    if (!recoveryRecipe && !ordinarySelection_.select(deferredRevision_, deferredBinding_, deferredEntry_, deferredStart_, true,
+                                                       player_->m_currentAudioStream, player_->m_currentSubtitleStream)) return;
   }
   player_->reselectStream(player_->m_currentSubtitleStream, PlayerComponent::MediaType::Subtitle);
   player_->reselectStream(player_->m_currentAudioStream, PlayerComponent::MediaType::Audio);
   if (deferredAttempt_) recoveryTracksApplied_ = true;
+  else ordinarySelection_.revoke();
   deferredEntry_ = 0;
 }
 

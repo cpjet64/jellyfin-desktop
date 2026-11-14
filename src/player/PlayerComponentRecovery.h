@@ -7,6 +7,7 @@
 #include "AutomaticRecoveryPolicy.h"
 #include "AutomaticRecoveryReadStall.h"
 #include "AutomaticRecoveryRuntime.h"
+#include "OrdinaryLoadSelection.h"
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -72,6 +73,11 @@ private:
   void seekSubmission(const AutomaticRecoveryOwnedSeek::Submission& submission, std::int64_t now);
   void seekQtSubmission(std::uint64_t generation, const QtRecoverySubmissionV1& submission, std::uint64_t operationId);
   void beginSeekRecovery(AutomaticRecoveryOwnedSeek::State reason, std::int64_t now);
+  void ordinaryEvent(const mpv_event* event, std::int64_t now);
+  bool beginOrdinaryLoad(const QStringList& command, const QString& url, const QVariantMap& options,
+                         const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle,
+                         AutomaticRecoverySession::Key key);
+  bool flushOrdinaryLoad(bool allowSelection);
   static std::int64_t nowMs();
   PlayerComponent* player_;
   QPointer<MpvVideoItem> item_;
@@ -83,6 +89,23 @@ private:
   AutomaticRecovery::Policy policy_;
   AutomaticRecoveryReadStall readStall_;
   AutomaticRecoveryOwnedSeek ownedSeek_;
+  OrdinaryLoadSelection ordinarySelection_;
+  struct DeferredOrdinaryLoad {
+    AutomaticRecoverySession::Key key;
+    QStringList command;
+    QString url;
+    QVariantMap options, metadata;
+    QVariant audio, subtitle;
+    std::uint64_t queryId = 0, beforeStart = 0;
+    std::int64_t deadlineMs = 0;
+    bool pending = false;
+  } ordinaryLoad_;
+  QSet<std::int64_t> ordinaryBeforeEntries_;
+  QString ordinaryExpectedUrl_;
+  std::uint64_t ordinaryAfterId_ = 0, ordinaryAfterStart_ = 0, ordinaryAfterRevision_ = 0, ordinaryAfterBinding_ = 0;
+  std::int64_t ordinaryAfterEntry_ = 0;
+  std::uint64_t ordinaryUnresolvedStarts_ = 0;
+  bool ordinaryCounterValid_ = true;
   AutomaticRecoverySession::Snapshot seekCheckpoint_;
   AutomaticRecoveryObservation::Result lastObservation_;
   AutomaticRecoveryObservation::Result seekPriorObservation_;

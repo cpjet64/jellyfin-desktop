@@ -63,7 +63,6 @@ void PlayerComponentRecovery::shutdown()
   timer_.stop(); userChanged(true);
   if (!core_) return;
   if (core_->wakeRelay) disconnect(core_->wakeRelay, nullptr, this, nullptr);
-  core_->closeExternalWakeup();
   if (bound_) core_->unbindExternalConsumer();
   bound_ = false; lifetimeLease_ = {}; core_.reset(); item_.clear();
 }
@@ -72,16 +71,16 @@ bool PlayerComponentRecovery::queue(const QStringList& command, const QString& u
 {
   if (!bound_ || !item_ || !core_ ||
       session_ == std::numeric_limits<std::uint64_t>::max()) return false;
-  auto lease = core_->acquireNative();
-  if (!lease.get()) return false;
   const auto intent = player_->m_playbackIntent.snapshot();
   const AutomaticRecoverySession::Key key{++session_, intent.revision, player_->m_mpvGeneration};
-  return runtime_.submitUserLoad([&lease](std::uint64_t id, const char** args) {
-    return mpv_command_async(lease.get(), id, args);
-  }, key, command, url, options, metadata, audio, subtitle, !options.value("autoplay").toBool(), nowMs());
+  return beginOrdinaryLoad(command, url, options, metadata, audio, subtitle, key);
 }
 bool PlayerComponentRecovery::userChanged(bool clear)
 {
+  if (ordinaryLoad_.pending) {
+    if (clear) ordinaryLoad_ = {}; else flushOrdinaryLoad(false);
+  }
+  ordinarySelection_.revoke(); ordinaryAfterId_ = 0;
   const bool cancelled = cancelOwnedSeek();
 #ifdef MPVQT_OWNED_SEEK_API
   if (item_) item_->refreshRecoveryBootstrap();

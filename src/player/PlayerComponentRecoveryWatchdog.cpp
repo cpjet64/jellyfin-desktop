@@ -58,6 +58,9 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
   if (native && native->event_id == MPV_EVENT_END_FILE && native->data &&
       static_cast<const mpv_event_end_file*>(native->data)->playlist_entry_id == replacedEntry_) replacedEntry_ = 0;
   if (restoring_) {
+    if (native && (native->event_id == MPV_EVENT_QUEUE_OVERFLOW || native->event_id == MPV_EVENT_SHUTDOWN)) {
+      ordinaryCounterValid_ = false; ordinarySelection_.revoke(); ordinaryAfterId_ = 0;
+    }
     runtime_.internalEvent(native);
     restoreEvent(native, now);
     if (!restoring_ || !observationPending_ || !core_) return;
@@ -68,6 +71,7 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
     observation_.observe(native, saved_.key, runtime_.eventEpoch(), now, dispatch);
     return;
   }
+  ordinaryEvent(native, now);
   const auto intent = player_->m_playbackIntent.snapshot();
   seekReply(native, now);
   const auto active = runtime_.activeKey();
@@ -86,6 +90,7 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
 void PlayerComponentRecovery::tick()
 {
   const auto now = nowMs();
+  if (ordinaryLoad_.pending && now >= ordinaryLoad_.deadlineMs) flushOrdinaryLoad(false);
   checkOwnedSeek(now);
   if (replacementTransition_ && now >= transitionDeadline_) {
     replacementTransition_ = false; player_->updatePlaybackState();
