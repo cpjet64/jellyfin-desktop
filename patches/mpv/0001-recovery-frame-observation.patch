@@ -218,10 +218,10 @@ index 558a1de1..39e8ec3b 100644
      MP_STATS(ctx, "glcb-reportflip");
 diff --git a/include/mpv/recovery_frame_observation.h b/include/mpv/recovery_frame_observation.h
 new file mode 100644
-index 00000000..38affe58
+index 00000000..3fe6163b
 --- /dev/null
 +++ b/include/mpv/recovery_frame_observation.h
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,41 @@
 +/* SPDX-License-Identifier: LGPL-2.1-or-later */
 +#ifndef MPV_RECOVERY_FRAME_OBSERVATION_H
 +#define MPV_RECOVERY_FRAME_OBSERVATION_H
@@ -229,6 +229,12 @@ index 00000000..38affe58
 +#include <stdint.h>
 +#include "render.h"
 +
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#ifndef JELLYFIN_RECOVERY_FRAME_OBSERVATION_H
++#define JELLYFIN_RECOVERY_FRAME_OBSERVATION_H
 +#define RECOVERY_FRAME_OBSERVATION_VERSION 1u
 +
 +typedef struct RecoveryFrameObservationV1 {
@@ -243,8 +249,17 @@ index 00000000..38affe58
 +    double media_pts;
 +} RecoveryFrameObservationV1;
 +
++typedef int (*RecoveryRenderV1)(struct mpv_render_context *,
++                                struct mpv_render_param *,
++                                RecoveryFrameObservationV1 *);
++#endif
++
 +MPV_EXPORT int mpv_render_context_render_recovery_v1(
 +    mpv_render_context *ctx, mpv_render_param *params,
 +    RecoveryFrameObservationV1 *observation);
++
++#ifdef __cplusplus
++}
++#endif
 +
 +#endif
