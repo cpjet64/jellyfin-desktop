@@ -1,9 +1,12 @@
 # Offline MPV producer source checkpoint
 
 This checkpoint is **not an executable build producer**. It records the ordered
-phases, fixed source and Rust identities, and path layout. No configure,
+phases, fixed source and Rust identities, path layout, fixed CMake configure and
+build commands, guarded invocation and raw SDK staging proposal. No configure,
 extraction, toolchain installation, build, test, or import of this code was
-performed. Owned-process supervision remains to be implemented and qualified.
+performed. Invocation is hard disabled in source. Owned-process supervision
+remains to be implemented and qualified; the required interface is described in
+`invoke.py` and does not itself establish a cgroup or network isolation.
 
 The intended native Linux VM flow is: validate a separately approved complete
 lock and prestaged input inventory, verify the actual Git objects and all
@@ -25,6 +28,12 @@ reviewed staging contract. Meson must use `--wrap-mode=nodownload` and Cargo
 must use `--locked --offline`; no update, bootstrap, rustup, branch resolution,
 or network access is allowed. Any unrecognized fetch or dependency is a stop.
 The selected checkout contains only the first of the three required bridge
-patches, and no complete lock or adapter is present. Accordingly there is no
-entry point which could configure or build. An authorized future VM run needs
-separate review and authorization after these gaps are closed.
+patches, and no complete lock or adapter is present. The staging paths and
+provider CMake options are proposals that require validation against the fixed
+adapter. `CARGO_NET_OFFLINE` and `MESON_WRAP_MODE` alone do not prove that every
+nested invocation uses `--locked --offline` and `--wrap-mode=nodownload`; the
+adapter and offline supervisor must enforce those requirements. Tool hashes
+must originate in the separately approved lock, not caller assertions. The
+current `prerequisites_verified` placeholder is not a validation mechanism and
+must be replaced by direct identity checks before enabling invocation. An
+authorized future VM run needs separate review after these gaps are closed.
