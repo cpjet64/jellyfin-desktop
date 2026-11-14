@@ -26,6 +26,8 @@ static_assert(offsetof(RecoveryFrameObservationV1, source_frame_serial) == 32, "
 static_assert(offsetof(RecoveryFrameObservationV1, render_serial) == 40, "unexpected render offset");
 static_assert(offsetof(RecoveryFrameObservationV1, media_pts) == 48, "unexpected PTS offset");
 static_assert(sizeof(uint64_t) == 8 && sizeof(double) == 8, "unexpected recovery ABI widths");
+static_assert(sizeof(RecoveryFrameObservationV2) == 64, "unexpected V2 ABI size");
+static_assert(offsetof(RecoveryFrameObservationV2, operation_id) == 56, "unexpected operation offset");
 
 namespace RecoveryFrameBridge {
 namespace {
@@ -84,6 +86,29 @@ RecoveryRenderV1 resolveRecovery(void *&lease)
 }
 #endif
 
+void *resolveAdditional(void *lease, const char *name)
+{
+#if defined(_WIN32)
+    (void)lease;
+    const auto standard = reinterpret_cast<FARPROC>(&mpv_render_context_render);
+    const HMODULE module = moduleForAddress(standard);
+    if (!module || GetProcAddress(module, standardName) != standard)
+        return nullptr;
+    const FARPROC found = GetProcAddress(module, name);
+    return found && moduleForAddress(found) == module ? reinterpret_cast<void *>(found) : nullptr;
+#elif (defined(__unix__) || defined(__APPLE__)) && defined(RTLD_NOLOAD)
+    if (!lease)
+        return nullptr;
+    void *found = dlsym(lease, name);
+    Dl_info standardInfo{}, foundInfo{};
+    return found && dladdr(reinterpret_cast<void *>(&mpv_render_context_render), &standardInfo) &&
+           dladdr(found, &foundInfo) && standardInfo.dli_fbase == foundInfo.dli_fbase ? found : nullptr;
+#else
+    (void)lease; (void)name;
+    return nullptr;
+#endif
+}
+
 RecoveryFrameObservationV1 emptyObservation()
 {
     RecoveryFrameObservationV1 observation{};
@@ -123,6 +148,51 @@ bool skipRequested(const mpv_render_param *params)
 Resolver::Resolver()
 {
     recoveryRender_ = resolveRecovery(moduleLease_);
+    recoveryRenderV2_ = reinterpret_cast<RecoveryRenderV2>(resolveAdditional(moduleLease_, "mpv_render_context_render_recovery_v2"));
+    recoverySeek_ = reinterpret_cast<RecoverySeekAsyncV1>(resolveAdditional(moduleLease_, "mpv_recovery_seek_async_v1"));
+    recoveryCancel_ = reinterpret_cast<RecoverySeekCancelV1>(resolveAdditional(moduleLease_, "mpv_recovery_seek_cancel_v1"));
+}
+
+bool Resolver::ownedSeekAvailable() const noexcept
+{
+    return recoveryRenderV2_ && recoverySeek_ && recoveryCancel_;
+}
+
+int Resolver::seekAsync(mpv_handle *handle, uint64_t replyUserdata, uint64_t operationId,
+                        uint64_t expectedEntryId, int64_t targetMs) const
+{
+    return ownedSeekAvailable() ? recoverySeek_(handle, replyUserdata, operationId,
+                                               expectedEntryId, targetMs) : MPV_ERROR_UNSUPPORTED;
+}
+
+int Resolver::cancelSeek(mpv_handle *handle) const
+{
+    return ownedSeekAvailable() ? recoveryCancel_(handle) : MPV_ERROR_UNSUPPORTED;
+}
+
+RenderResultV2 Resolver::renderV2(mpv_render_context *context, mpv_render_param *params) const
+{
+    RenderResultV2 result{};
+    result.capabilityAvailable = ownedSeekAvailable();
+    result.observation.size = sizeof(result.observation);
+    result.observation.version = RECOVERY_FRAME_OBSERVATION_VERSION_2;
+    result.error = result.capabilityAvailable ? recoveryRenderV2_(context, params, &result.observation)
+                                              : mpv_render_context_render(context, params);
+    RecoveryFrameObservationV1 v1{};
+    v1.size = sizeof(v1); v1.version = RECOVERY_FRAME_OBSERVATION_VERSION;
+    v1.valid = result.observation.valid; v1.reserved = result.observation.reserved;
+    v1.playlist_entry_id = result.observation.playlist_entry_id;
+    v1.discontinuity_id = result.observation.discontinuity_id;
+    v1.source_frame_serial = result.observation.source_frame_serial;
+    v1.render_serial = result.observation.render_serial; v1.media_pts = result.observation.media_pts;
+    if (result.error < 0 || skipRequested(params) ||
+        result.observation.size != sizeof(result.observation) ||
+        result.observation.version != RECOVERY_FRAME_OBSERVATION_VERSION_2 || !validObservation(v1)) {
+        result.observation = {};
+        result.observation.size = sizeof(result.observation);
+        result.observation.version = RECOVERY_FRAME_OBSERVATION_VERSION_2;
+    }
+    return result;
 }
 
 Resolver::~Resolver()

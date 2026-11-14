@@ -33,4 +33,19 @@ typedef int (*RecoveryRenderV1)(struct mpv_render_context *,
                                 struct mpv_render_param *,
                                 RecoveryFrameObservationV1 *);
 
+#define RECOVERY_FRAME_OBSERVATION_VERSION_2 2u
+typedef struct RecoveryFrameObservationV2 {
+    uint32_t size, version, valid, reserved;
+    uint64_t playlist_entry_id, discontinuity_id, source_frame_serial, render_serial;
+    double media_pts;
+    uint64_t operation_id;
+} RecoveryFrameObservationV2;
+
+struct mpv_handle;
+typedef int (*RecoveryRenderV2)(struct mpv_render_context *, struct mpv_render_param *,
+                                RecoveryFrameObservationV2 *);
+typedef int (*RecoverySeekAsyncV1)(struct mpv_handle *, uint64_t, uint64_t,
+                                   uint64_t, int64_t);
+typedef int (*RecoverySeekCancelV1)(struct mpv_handle *);
+
 #endif

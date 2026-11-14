@@ -1,0 +1,354 @@
+diff --git a/include/mpv/recovery_frame_observation.h b/include/mpv/recovery_frame_observation.h
+index 3fe6163..a421ff4 100644
+--- a/include/mpv/recovery_frame_observation.h
++++ b/include/mpv/recovery_frame_observation.h
+@@ -28,11 +28,24 @@ typedef struct RecoveryFrameObservationV1 {
+ typedef int (*RecoveryRenderV1)(struct mpv_render_context *,
+                                 struct mpv_render_param *,
+                                 RecoveryFrameObservationV1 *);
++
++#define RECOVERY_FRAME_OBSERVATION_VERSION_2 2u
++typedef struct RecoveryFrameObservationV2 {
++    uint32_t size, version, valid, reserved;
++    uint64_t playlist_entry_id, discontinuity_id, source_frame_serial, render_serial;
++    double media_pts;
++    uint64_t operation_id;
++} RecoveryFrameObservationV2;
+ #endif
+ 
+ MPV_EXPORT int mpv_render_context_render_recovery_v1(
+     mpv_render_context *ctx, mpv_render_param *params,
+     RecoveryFrameObservationV1 *observation);
++MPV_EXPORT int mpv_render_context_render_recovery_v2(
++    mpv_render_context *, mpv_render_param *, RecoveryFrameObservationV2 *);
++MPV_EXPORT int mpv_recovery_seek_async_v1(mpv_handle *, uint64_t, uint64_t,
++                                          uint64_t, int64_t);
++MPV_EXPORT int mpv_recovery_seek_cancel_v1(mpv_handle *);
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/player/client.c b/player/client.c
+index 61c998d..e85351c 100644
+--- a/player/client.c
++++ b/player/client.c
+@@ -46,6 +46,8 @@
+ #include "command.h"
+ #include "core.h"
+ #include "client.h"
++#include "common/playlist.h"
++#include "include/mpv/recovery_frame_observation.h"
+ 
+ /*
+  * Locking hierarchy:
+@@ -178,6 +180,7 @@ static void prop_unref(struct observe_property *prop)
+ 
+ void mp_clients_init(struct MPContext *mpctx)
+ {
++    atomic_init(&mpctx->recovery_seek_epoch, 0);
+     mpctx->clients = talloc_ptrtype(NULL, mpctx->clients);
+     *mpctx->clients = (struct mp_client_api) {
+         .mpctx = mpctx,
+@@ -1082,6 +1085,65 @@ static int run_async(mpv_handle *ctx, void (*fn)(void *fn_data), void *fn_data)
+     return 0;
+ }
+ 
++bool mp_client_recovery_epoch_matches(struct mp_client_api *api, uint64_t epoch)
++{
++    return epoch && atomic_load(&api->mpctx->recovery_seek_epoch) == (epoch | 1);
++}
++
++struct recovery_seek_request {
++    struct MPContext *mpctx;
++    mpv_handle *reply_ctx;
++    uint64_t userdata, epoch, operation, entry;
++    int64_t target_ms;
++};
++
++static void recovery_seek_fn(void *data)
++{
++    struct recovery_seek_request *req = data;
++    struct MPContext *mpctx = req->mpctx;
++    bool accepted = atomic_load(&mpctx->recovery_seek_epoch) == req->epoch &&
++        mpctx->playing && mpctx->playing->id == req->entry &&
++        mpctx->stop_play == KEEP_PLAYING && mpctx->demuxer;
++    if (accepted) {
++        mpctx->recovery_owned_queue = true;
++        queue_seek(mpctx, MPSEEK_ABSOLUTE, req->target_ms / 1000.0, MPSEEK_EXACT, 0);
++        mpctx->recovery_owned_queue = false;
++        mpctx->recovery_pending_epoch = req->epoch;
++        mpctx->recovery_pending_entry = req->entry;
++        mpctx->recovery_pending_operation = req->operation;
++    }
++    struct mpv_event_command *result = talloc_zero(NULL, struct mpv_event_command);
++    struct mpv_event reply = { .event_id = MPV_EVENT_COMMAND_REPLY, .data = result,
++        .error = accepted ? 0 : MPV_ERROR_COMMAND };
++    send_reply(req->reply_ctx, req->userdata, &reply);
++    talloc_free(req);
++}
++
++int mpv_recovery_seek_async_v1(mpv_handle *ctx, uint64_t userdata,
++                               uint64_t operation, uint64_t entry, int64_t target_ms)
++{
++    if (!ctx || !operation || !entry || entry > INT64_MAX || target_ms < 0)
++        return MPV_ERROR_INVALID_PARAMETER;
++    if (!ctx->mpctx->initialized)
++        return MPV_ERROR_UNINITIALIZED;
++    int error = reserve_reply(ctx);
++    if (error < 0)
++        return error;
++    uint64_t epoch = recovery_next_epoch(ctx->mpctx);
++    struct recovery_seek_request *req = talloc_ptrtype(NULL, req);
++    *req = (struct recovery_seek_request){ctx->mpctx, ctx, userdata, epoch,
++                                         operation, entry, target_ms};
++    mp_dispatch_enqueue(ctx->mpctx->dispatch, recovery_seek_fn, req);
++    return 0;
++}
++
++int mpv_recovery_seek_cancel_v1(mpv_handle *ctx)
++{
++    if (!ctx)
++        return MPV_ERROR_INVALID_PARAMETER;
++    return recovery_next_epoch(ctx->mpctx) ? 0 : MPV_ERROR_GENERIC;
++}
++
+ struct cmd_request {
+     struct MPContext *mpctx;
+     struct mp_cmd *cmd;
+diff --git a/player/client.h b/player/client.h
+index eed1a1c..fb90da1 100644
+--- a/player/client.h
++++ b/player/client.h
+@@ -10,6 +10,7 @@
+ struct MPContext;
+ struct mpv_handle;
+ struct mp_client_api;
++bool mp_client_recovery_epoch_matches(struct mp_client_api *api, uint64_t epoch);
+ struct mp_log;
+ struct mpv_global;
+ 
+diff --git a/player/core.h b/player/core.h
+index 3ae30e4..bb2b4b4 100644
+--- a/player/core.h
++++ b/player/core.h
+@@ -287,6 +287,11 @@ typedef struct MPContext {
+     struct playlist_entry *playing; // currently playing file
+     uint64_t recovery_discontinuity;
+     uint64_t recovery_source_serial;
++    atomic_uint_fast64_t recovery_seek_epoch;
++    uint64_t recovery_pending_epoch, recovery_pending_entry, recovery_pending_operation;
++    uint64_t recovery_applied_epoch, recovery_applied_operation;
++    bool recovery_owned_queue;
++    bool recovery_applying;
+     char *filename; // immutable copy of playing->filename (or NULL)
+     char *stream_open_filename;
+     char **playlist_paths; // used strictly for playlist validation
+@@ -487,6 +492,20 @@ typedef struct MPContext {
+     struct mp_als *als_state; // lazily initialized on first use
+ } MPContext;
+ 
++/* Even values are pending epochs; odd values have claimed application. */
++static inline uint64_t recovery_next_epoch(struct MPContext *mpctx)
++{
++    uint_fast64_t old = atomic_load(&mpctx->recovery_seek_epoch);
++    for (;;) {
++        if (old == UINT64_MAX)
++            return 0;
++        uint_fast64_t next = old >= UINT64_MAX - 2 ? UINT64_MAX :
++            (old & ~(uint_fast64_t)1) + 2;
++        if (atomic_compare_exchange_weak(&mpctx->recovery_seek_epoch, &old, next))
++            return next == UINT64_MAX ? 0 : next;
++    }
++}
++
+ // Contains information about an asynchronous work item, how it can be aborted,
+ // and when. All fields are protected by MPContext.abort_lock.
+ struct mp_abort_entry {
+diff --git a/player/playloop.c b/player/playloop.c
+index e35b2e8..b6e23e2 100644
+--- a/player/playloop.c
++++ b/player/playloop.c
+@@ -292,6 +292,11 @@ void reset_playback_state(struct MPContext *mpctx)
+ 
+     update_internal_pause_state(mpctx);
+     update_core_idle_state(mpctx);
++    if (mpctx->recovery_applying &&
++        atomic_load(&mpctx->recovery_seek_epoch) == (mpctx->recovery_pending_epoch | 1)) {
++        mpctx->recovery_applied_epoch = mpctx->recovery_pending_epoch;
++        mpctx->recovery_applied_operation = mpctx->recovery_pending_operation;
++    }
+ }
+ 
+ static double calculate_framestep_pts(MPContext *mpctx, double current_time,
+@@ -471,6 +476,12 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
+ void queue_seek(struct MPContext *mpctx, enum seek_type type, double amount,
+                 enum seek_precision exact, int flags)
+ {
++    if (!mpctx->recovery_owned_queue) {
++        recovery_next_epoch(mpctx);
++        mpctx->recovery_pending_epoch = 0;
++        mpctx->recovery_applied_epoch = 0;
++        mpctx->recovery_applied_operation = 0;
++    }
+     struct seek_params *seek = &mpctx->seek;
+ 
+     mp_wakeup_core(mpctx);
+@@ -511,6 +522,24 @@ void queue_seek(struct MPContext *mpctx, enum seek_type type, double amount,
+     MP_ASSERT_UNREACHABLE();
+ }
+ 
++/* Claim the owned request before entering a potentially blocking demux seek. */
++static bool recovery_claim_queued_seek(struct MPContext *mpctx)
++{
++    if (!mpctx->recovery_pending_epoch)
++        return true;
++    uint_fast64_t expected = mpctx->recovery_pending_epoch;
++    bool valid = mpctx->playing &&
++        mpctx->playing->id == mpctx->recovery_pending_entry &&
++        mpctx->stop_play == KEEP_PLAYING &&
++        atomic_compare_exchange_strong(&mpctx->recovery_seek_epoch,
++                                       &expected, expected | 1);
++    if (valid)
++        mpctx->recovery_applying = true;
++    else
++        mpctx->recovery_pending_epoch = 0;
++    return valid;
++}
++
+ void execute_queued_seek(struct MPContext *mpctx)
+ {
+     if (mpctx->seek.type) {
+@@ -534,7 +563,10 @@ void execute_queued_seek(struct MPContext *mpctx)
+                 mpctx->ao_chain && !mpctx->restart_complete)
+                 return;
+         }
+-        mp_seek(mpctx, mpctx->seek);
++        if (recovery_claim_queued_seek(mpctx))
++            mp_seek(mpctx, mpctx->seek);
++        mpctx->recovery_applying = false;
++        mpctx->recovery_pending_epoch = 0;
+         mpctx->seek = (struct seek_params){0};
+     }
+ }
+@@ -974,6 +1006,7 @@ static void handle_loop_file(struct MPContext *mpctx)
+ 
+ void seek_to_last_frame(struct MPContext *mpctx)
+ {
++    recovery_next_epoch(mpctx);
+     if (!mpctx->vo_chain)
+         return;
+     if (mpctx->hrseek_lastframe) // exit if we already tried this
+diff --git a/player/video.c b/player/video.c
+index 5189554..bacbcfc 100644
+--- a/player/video.c
++++ b/player/video.c
+@@ -99,6 +99,10 @@ static void vo_chain_reset_state(struct vo_chain *vo_c)
+ 
+ void reset_video_state(struct MPContext *mpctx)
+ {
++    if (!mpctx->recovery_applying)
++        recovery_next_epoch(mpctx);
++    mpctx->recovery_applied_epoch = 0;
++    mpctx->recovery_applied_operation = 0;
+     if (mpctx->recovery_discontinuity < INT64_MAX)
+         mpctx->recovery_discontinuity++;
+     if (mpctx->vo_chain) {
+@@ -1057,6 +1061,8 @@ static void recovery_queue_frame(struct MPContext *mpctx, struct vo *vo,
+         frame->recovery_discontinuity = mpctx->recovery_discontinuity;
+         frame->recovery_source_serial = ++mpctx->recovery_source_serial;
+         frame->recovery_media_pts = frame->current->pts;
++        frame->recovery_seek_epoch = mpctx->recovery_applied_epoch;
++        frame->recovery_operation_id = mpctx->recovery_applied_operation;
+     }
+     vo_queue_frame(vo, frame);
+ }
+diff --git a/video/out/vo.h b/video/out/vo.h
+index e64c102..f42d688 100644
+--- a/video/out/vo.h
++++ b/video/out/vo.h
+@@ -233,6 +233,8 @@ struct vo_frame {
+     uint64_t recovery_discontinuity;
+     uint64_t recovery_source_serial;
+     double recovery_media_pts;
++    uint64_t recovery_seek_epoch;
++    uint64_t recovery_operation_id;
+     // If > 0, realtime when frame should be shown, in mp_time_ns() units.
+     // If 0, present immediately.
+     int64_t pts;
+diff --git a/video/out/vo_libmpv.c b/video/out/vo_libmpv.c
+index 78e33ef..2528c1e 100644
+--- a/video/out/vo_libmpv.c
++++ b/video/out/vo_libmpv.c
+@@ -376,8 +376,26 @@ static void observe_rendered_frame(mpv_render_context *ctx, struct vo_frame *fra
+     observation->media_pts = frame->recovery_media_pts;
+ }
+ 
++static void observe_selected_v2(mpv_render_context *ctx, struct vo_frame *frame,
++                                RecoveryFrameObservationV2 *observation)
++{
++    RecoveryFrameObservationV1 v1 = {0};
++    observe_rendered_frame(ctx, frame, &v1);
++    if (!v1.valid)
++        return;
++    observation->valid = 1;
++    observation->playlist_entry_id = v1.playlist_entry_id;
++    observation->discontinuity_id = v1.discontinuity_id;
++    observation->source_frame_serial = v1.source_frame_serial;
++    observation->render_serial = v1.render_serial;
++    observation->media_pts = v1.media_pts;
++    if (mp_client_recovery_epoch_matches(ctx->client_api, frame->recovery_seek_epoch))
++        observation->operation_id = frame->recovery_operation_id;
++}
++
+ static int render_with_recovery(mpv_render_context *ctx, mpv_render_param *params,
+-                                RecoveryFrameObservationV1 *observation)
++                                RecoveryFrameObservationV1 *observation,
++                                RecoveryFrameObservationV2 *observation_v2)
+ {
+     mp_mutex_lock(&ctx->lock);
+     int do_render =
+@@ -433,8 +451,12 @@ static int render_with_recovery(mpv_render_context *ctx, mpv_render_param *param
+     if (do_render)
+         err = ctx->renderer->fns->render(ctx->renderer, params, frame);
+ 
+-    if (do_render && err >= 0 && frame != &dummy)
+-        observe_rendered_frame(ctx, frame, observation);
++    if (do_render && err >= 0 && frame != &dummy) {
++        if (observation_v2)
++            observe_selected_v2(ctx, frame, observation_v2);
++        else
++            observe_rendered_frame(ctx, frame, observation);
++    }
+ 
+     if (frame != &dummy)
+         talloc_free(frame);
+@@ -453,7 +475,7 @@ static int render_with_recovery(mpv_render_context *ctx, mpv_render_param *param
+ 
+ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
+ {
+-    return render_with_recovery(ctx, params, NULL);
++    return render_with_recovery(ctx, params, NULL, NULL);
+ }
+ 
+ int mpv_render_context_render_recovery_v1(mpv_render_context *ctx,
+@@ -466,7 +488,20 @@ int mpv_render_context_render_recovery_v1(mpv_render_context *ctx,
+     *observation = (RecoveryFrameObservationV1){
+         .size = sizeof(*observation), .version = RECOVERY_FRAME_OBSERVATION_VERSION,
+     };
+-    return render_with_recovery(ctx, params, observation);
++    return render_with_recovery(ctx, params, observation, NULL);
++}
++
++int mpv_render_context_render_recovery_v2(mpv_render_context *ctx,
++                                          mpv_render_param *params,
++                                          RecoveryFrameObservationV2 *observation)
++{
++    if (!ctx || !observation || observation->size != sizeof(*observation) ||
++        observation->version != RECOVERY_FRAME_OBSERVATION_VERSION_2)
++        return MPV_ERROR_INVALID_PARAMETER;
++    *observation = (RecoveryFrameObservationV2){
++        .size = sizeof(*observation), .version = RECOVERY_FRAME_OBSERVATION_VERSION_2,
++    };
++    return render_with_recovery(ctx, params, NULL, observation);
+ }
+ 
+ void mpv_render_context_report_swap(mpv_render_context *ctx)
