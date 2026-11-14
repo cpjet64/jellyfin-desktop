@@ -73,6 +73,7 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
   const auto active = runtime_.activeKey();
   const AutomaticRecoverySession::Key current{active.session, intent.revision, player_->m_mpvGeneration};
   runtime_.observe(native, current, now);
+  acceptBootstrapSubmission();
   applyDeferredTracks();
   if (!observationPending_ || !core_) return;
   const auto dispatch = [this](std::uint64_t id, const char* name, mpv_format format) {
@@ -102,6 +103,8 @@ void PlayerComponentRecovery::tick()
   const auto entry = runtime_.activeEntry();
   if (!key.session || key.revision != intent.revision || key.generation != player_->m_mpvGeneration || entry <= 0 ||
       intent.desired == PlaybackIntent::Desired::Stopped || intent.desired == PlaybackIntent::Desired::Exiting) { readStall_.reset(); return; }
+  if (intent.desired == PlaybackIntent::Desired::Paused &&
+      (bootstrapEntry_ != static_cast<std::uint64_t>(entry) || bootstrapEpoch_ != runtime_.eventEpoch())) item_->update();
   if (observationPending_ && (observation_.failed() || now - observationStarted_ >= 2000)) {
     observation_.invalidate(); observationPending_ = false;
     policy_.suspendBaseline(); readStall_.reset();
