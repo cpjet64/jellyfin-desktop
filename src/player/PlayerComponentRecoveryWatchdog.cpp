@@ -85,7 +85,7 @@ void PlayerComponentRecovery::tick()
   }
   if ((restoring_ || awaitingUsability_) && now >= policy_.deadlineMs()) { failRestore(); return; }
   if (!bound_ || !item_ || !core_ || !item_->recoveryFrameObservationAvailable()) {
-    policy_.suspendBaseline();
+    policy_.suspendBaseline(); readStall_.reset();
     if (restoring_ || awaitingUsability_) failRestore();
     return;
   }
@@ -97,44 +97,18 @@ void PlayerComponentRecovery::tick()
   const auto key = runtime_.activeKey();
   const auto entry = runtime_.activeEntry();
   if (!key.session || key.revision != intent.revision || key.generation != player_->m_mpvGeneration || entry <= 0 ||
-      intent.desired == PlaybackIntent::Desired::Stopped || intent.desired == PlaybackIntent::Desired::Exiting) return;
+      intent.desired == PlaybackIntent::Desired::Stopped || intent.desired == PlaybackIntent::Desired::Exiting) { readStall_.reset(); return; }
   if (observationPending_ && (observation_.failed() || now - observationStarted_ >= 2000)) {
     observation_.invalidate(); observationPending_ = false;
-    policy_.suspendBaseline();
+    policy_.suspendBaseline(); readStall_.reset();
   }
-  if (!observationPending_) { beginObservation(key, entry, now); if (!observationPending_) policy_.suspendBaseline(); return; }
+  if (!observationPending_) { beginObservation(key, entry, now); if (!observationPending_) { policy_.suspendBaseline(); readStall_.reset(); } return; }
   if (!observation_.ready()) return;
   AutomaticRecoveryObservation::Result result;
   observationPending_ = false;
   if (!observation_.take(key, runtime_.eventEpoch(), now, result) || result.entry != entry ||
-      !runtime_.recordPosition(key, entry, result.positionMs, now)) { policy_.suspendBaseline(); return; }
-  AutomaticRecoverySession::Snapshot snapshot;
-  if (!runtime_.snapshot(key, snapshot)) return;
-  AutomaticRecovery::Sample sample;
-  sample.nowMs = now; sample.positionMs = result.positionMs; sample.session = key.session;
-  sample.revision = key.revision; sample.generation = key.generation; sample.frameSerial = lastSource_;
-  sample.seekable = true; sample.video = true; sample.nativePaused = result.nativePaused;
-  sample.desiredPaused = intent.desired == PlaybackIntent::Desired::Paused;
-  sample.loading = !player_->m_inPlayback; sample.seeking = false; sample.buffering = player_->m_state == PlayerComponent::State::buffering;
-  sample.visible = player_->m_window && player_->m_window->isVisible() && player_->m_windowVisible;
-  sample.exposed = player_->m_window && player_->m_window->isExposed();
-  sample.eof = player_->m_state == PlayerComponent::State::finished;
-  sample.movingVideo = sourceEntry_ == static_cast<std::uint64_t>(entry) && sourceEpoch_ == runtime_.eventEpoch() &&
-      sourceGeneration_ == item_->recoveryRendererGeneration() &&
-      sourceFirst_ && lastSource_ > sourceFirst_ && player_->m_mediaFrameRate >= 1.0f;
-  sample.outstanding = sample.movingVideo;
-  std::uint64_t expired = 0;
-  sample.operationTimedOut = runtime_.takeTimeout(key, now, expired);
-  sample.rendererFault = WebClientFaultGuard::instance().rendererLost();
-  const auto action = policy_.observe(sample);
-  if (action == AutomaticRecovery::Action::Blocked || action == AutomaticRecovery::Action::Cancel) {
-    awaitingUsability_ = false; frameGate_.invalidate(); return;
-  }
-  if (action != AutomaticRecovery::Action::Reload) return;
-  if (request_ == std::numeric_limits<std::uint64_t>::max()) { policy_.fail(); return; }
-  saved_ = snapshot; rendererGeneration_ = item_->recoveryRendererGeneration();
-  if (!rendererGeneration_) { policy_.fail(); return; }
-  awaitingUsability_ = true;
-  item_->requestRendererUsability(rendererGeneration_, ++request_, policy_.deadlineMs());
+      !result.seekable || result.seeking || !result.video ||
+      !runtime_.recordPosition(key, entry, result.positionMs, now)) { policy_.suspendBaseline(); readStall_.reset(); return; }
+  watchdogObservation(key, result, now);
 }
 #endif

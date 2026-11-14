@@ -160,7 +160,7 @@ void PlayerComponentRecovery::recoveryTick(std::int64_t now)
   if (observationPending_ && observation_.ready()) {
     observationPending_ = false;
     AutomaticRecoveryObservation::Result result;
-    if (!observation_.take(saved_.key, frameEpoch_, now, result) ||
+    if (!observation_.take(saved_.key, frameEpoch_, now, result) || !result.seekable || result.seeking || result.buffering || !result.video ||
         !frameGate_.position(saved_.key, attempt_, result.entry, result.positionMs, result.nativePaused, frameEpoch_, now)) {
       failRestore(); return;
     }

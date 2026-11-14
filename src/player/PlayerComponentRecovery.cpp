@@ -74,6 +74,7 @@ void PlayerComponentRecovery::userChanged(bool clear)
 {
   const auto previous = runtime_.activeKey();
   runtime_.userIntentChanged(); observation_.invalidate(); observationPending_ = awaitingUsability_ = false;
+  readStall_.reset();
   if (restoring_ && recoveryLoad_.startedEntry() > 0) cancelledRecoveryEntry_ = recoveryLoad_.startedEntry();
   frameGate_.invalidate(); recoveryLoad_.invalidate(); policy_.fail();
   frameGateActive_ = positionReady_ = recoveryLoaded_ = false;

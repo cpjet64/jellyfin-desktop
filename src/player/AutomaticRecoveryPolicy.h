@@ -9,7 +9,7 @@ struct Sample {
   std::uint64_t session = 0, revision = 0, generation = 0, frameSerial = 0;
   bool seekable = false, video = false, movingVideo = false, loading = false, seeking = false, buffering = false;
   bool visible = false, exposed = false, eof = false, outstanding = false, operationTimedOut = false;
-  bool rendererFault = false, desiredPaused = false, nativePaused = false;
+  bool rendererFault = false, desiredPaused = false, nativePaused = false, readStalled = false;
 };
 
 class Policy {

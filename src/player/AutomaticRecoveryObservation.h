@@ -9,7 +9,11 @@ class AutomaticRecoveryObservation {
 public:
   using Key = AutomaticRecoverySession::Key;
   using Dispatch = std::function<int(std::uint64_t, const char*, mpv_format)>;
-  struct Result { std::int64_t entry = 0, positionMs = -1; bool nativePaused = false; };
+  struct Result {
+    std::int64_t entry = 0, positionMs = -1, observedMs = -1;
+    std::uint64_t batchSequence = 0;
+    bool seekable = false, seeking = false, buffering = false, nativePaused = false, video = false;
+  };
   bool begin(Key key, std::int64_t entry, std::uint64_t eventEpoch, std::int64_t nowMs, const Dispatch& dispatch);
   void observe(const mpv_event* event, Key current, std::uint64_t eventEpoch, std::int64_t nowMs,
                const Dispatch& dispatch);

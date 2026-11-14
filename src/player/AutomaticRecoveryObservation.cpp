@@ -48,11 +48,16 @@ bool AutomaticRecoveryObservation::consumePayload(unsigned slot, const mpv_event
     if (property.format != MPV_FORMAT_FLAG) return false;
     const int value = *static_cast<const int*>(property.data);
     if (value != 0 && value != 1) return false;
-    if ((slot == 1 && !value) || ((slot == 2 || slot == 3) && value)) return false;
+    if (slot == 1) result_.seekable = value != 0;
+    if (slot == 2) result_.seeking = value != 0;
+    if (slot == 3) result_.buffering = value != 0;
     if (slot == 4) result_.nativePaused = value != 0;
     return true;
   }
-  if (slot == 6) return property.format == MPV_FORMAT_INT64 && *static_cast<const std::int64_t*>(property.data) > 0;
+  if (slot == 6) {
+    if (property.format != MPV_FORMAT_INT64) return false;
+    result_.video = *static_cast<const std::int64_t*>(property.data) > 0; return true;
+  }
   if (slot != 5 || property.format != MPV_FORMAT_DOUBLE) return false;
   const double value = *static_cast<const double*>(property.data) * 1000.0;
   if (!std::isfinite(value) || value < 0 || value > double(std::numeric_limits<std::int64_t>::max() / 2)) return false;
@@ -76,7 +81,7 @@ void AutomaticRecoveryObservation::observe(const mpv_event* event, Key key, std:
         AutomaticRecoveryNative::playingEntry(*static_cast<const mpv_node*>(property.data)) != result_.entry) {
       invalidate(); return;
     }
-    if (phase_ == Phase::After) { phase_ = Phase::Ready; return; }
+    if (phase_ == Phase::After) { result_.observedMs = now; result_.batchSequence = sequence_; phase_ = Phase::Ready; return; }
     phase_ = Phase::Payload;
     if (!requestPayload(dispatch)) invalidate();
     return;

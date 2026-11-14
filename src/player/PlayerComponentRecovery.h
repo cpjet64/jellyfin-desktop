@@ -4,6 +4,7 @@
 #include "AutomaticRecoveryLoad.h"
 #include "AutomaticRecoveryObservation.h"
 #include "AutomaticRecoveryPolicy.h"
+#include "AutomaticRecoveryReadStall.h"
 #include "AutomaticRecoveryRuntime.h"
 #include <QObject>
 #include <QPointer>
@@ -53,6 +54,10 @@ private:
   void restoreEvent(const mpv_event* event, std::int64_t now);
   void dispatchReload(std::int64_t now);
   void recoveryTick(std::int64_t now);
+  void watchdogObservation(AutomaticRecoverySession::Key key, const AutomaticRecoveryObservation::Result& result,
+                           std::int64_t now);
+  bool qualifiedReadStall(AutomaticRecoverySession::Key key, const AutomaticRecoveryObservation::Result& result,
+                          std::int64_t now, bool movingVideo);
   void recordSourceFrame(std::uint64_t generation, const RecoveryFrameObservationV1& frame);
   static std::int64_t nowMs();
   PlayerComponent* player_;
@@ -63,6 +68,7 @@ private:
   AutomaticRecoveryRuntime runtime_;
   AutomaticRecoveryObservation observation_;
   AutomaticRecovery::Policy policy_;
+  AutomaticRecoveryReadStall readStall_;
   AutomaticRecoverySession::Snapshot saved_;
   AutomaticRecoveryLoad recoveryLoad_;
   AutomaticRecoveryFrameGate frameGate_;
