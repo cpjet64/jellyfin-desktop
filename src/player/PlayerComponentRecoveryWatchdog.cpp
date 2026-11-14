@@ -34,7 +34,10 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
 {
   if (native && native->event_id == MPV_EVENT_START_FILE && native->data) {
     lastStartedEntry_ = static_cast<const mpv_event_start_file*>(native->data)->playlist_entry_id;
-    ++startSerial_;
+    normalCurrentEntry_ = lastStartedEntry_;
+    if (startSerial_ == std::numeric_limits<std::uint64_t>::max()) {
+      startSerialExhausted_ = true; ordinaryLedger_.failClosed(); ordinarySelection_.revoke(); ordinaryReplacement_.revoke();
+    } else if (!startSerialExhausted_) ++startSerial_;
   }
   bool hookEvent = false;
   hookTokenValid_ = false;
@@ -56,10 +59,12 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
     hookRevision_ = player_->m_playbackIntent.snapshot().revision; hookAttempt_ = restoring_ ? attempt_ : 0;
   }
   if (native && native->event_id == MPV_EVENT_END_FILE && native->data &&
-      static_cast<const mpv_event_end_file*>(native->data)->playlist_entry_id == replacedEntry_) replacedEntry_ = 0;
+      static_cast<const mpv_event_end_file*>(native->data)->playlist_entry_id == normalCurrentEntry_) normalCurrentEntry_ = 0;
   if (restoring_) {
+    if (native && native->event_id == MPV_EVENT_COMMAND_REPLY)
+      ordinaryLedger_.reply(native->reply_userdata, native->error >= 0);
     if (native && (native->event_id == MPV_EVENT_QUEUE_OVERFLOW || native->event_id == MPV_EVENT_SHUTDOWN)) {
-      ordinaryCounterValid_ = false; ordinarySelection_.revoke(); ordinaryAfterId_ = 0;
+      ordinaryLedger_.failClosed(); ordinarySelection_.revoke(); ordinaryAfterId_ = 0;
     }
     runtime_.internalEvent(native);
     restoreEvent(native, now);

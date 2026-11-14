@@ -56,15 +56,14 @@ bool PlayerComponentRecovery::flushOrdinaryLoad(bool allowSelection)
     player_->m_playbackIntent.dispatch(load.key.revision, PlaybackIntent::Dispatch::Unavailable); return false;
   }
   const auto current = player_->m_playbackIntent.snapshot();
-  const bool qualified = allowSelection && ordinaryCounterValid_ && !ordinaryUnresolvedStarts_ &&
+  const bool qualified = allowSelection && !startSerialExhausted_ && ordinaryLedger_.available() &&
       load.beforeStart == startSerial_ && current.revision == load.key.revision && player_->m_mpvGeneration == load.key.generation;
   ordinaryExpectedUrl_ = load.command.value(1);
   const bool accepted = runtime_.submitUserLoad([&](std::uint64_t id, const char** args) {
     const int result = mpv_command_async(lease.get(), id, args);
     if (result >= 0) {
-      if (ordinaryUnresolvedStarts_ == std::numeric_limits<std::uint64_t>::max()) ordinaryCounterValid_ = false;
-      else ++ordinaryUnresolvedStarts_;
-      if (qualified) ordinarySelection_.begin(id, load.key.revision, load.key.generation, load.beforeStart,
+      const bool tracked = ordinaryLedger_.admitted(id);
+      if (qualified && tracked) ordinarySelection_.begin(id, load.key.revision, load.key.generation, load.beforeStart,
                                               ordinaryBeforeEntries_, load.audio, load.subtitle);
     }
     return result;
@@ -93,17 +92,19 @@ void PlayerComponentRecovery::ordinaryEvent(const mpv_event* event, std::int64_t
                              OrdinaryPlaylist::currentMatches(*playlist, ordinaryAfterEntry_, ordinaryExpectedUrl_));
     ordinaryAfterId_ = 0; return;
   }
-  if (event->event_id == MPV_EVENT_COMMAND_REPLY) ordinarySelection_.reply(event->reply_userdata, entrylessSuccess(event));
+  if (event->event_id == MPV_EVENT_COMMAND_REPLY) {
+    ordinaryLedger_.reply(event->reply_userdata, event->error >= 0);
+    ordinarySelection_.reply(event->reply_userdata, entrylessSuccess(event));
+  }
   if (event->event_id == MPV_EVENT_END_FILE) {
     const auto* end = static_cast<const mpv_event_end_file*>(event->data);
     ordinarySelection_.ended(end ? end->playlist_entry_id : 0);
   } else if (event->event_id == MPV_EVENT_FILE_LOADED) {
     ordinarySelection_.loaded(lastStartedEntry_, startSerial_);
   } else if (event->event_id == MPV_EVENT_QUEUE_OVERFLOW || event->event_id == MPV_EVENT_SHUTDOWN) {
-    ordinarySelection_.revoke(); ordinaryCounterValid_ = false; ordinaryAfterId_ = 0;
+    ordinarySelection_.revoke(); ordinaryLedger_.failClosed(); ordinaryAfterId_ = 0;
   } else if (event->event_id == MPV_EVENT_START_FILE) {
-    if (ordinaryUnresolvedStarts_) --ordinaryUnresolvedStarts_;
-    else ordinarySelection_.revoke();
+    if (!ordinaryLedger_.started()) ordinarySelection_.revoke();
     ordinarySelection_.started(lastStartedEntry_, startSerial_);
     if (!ordinarySelection_.active() || !core_) return;
     ordinaryAfterId_ = nextPlaylistQuery(); ordinaryAfterEntry_ = lastStartedEntry_; ordinaryAfterStart_ = startSerial_;

@@ -8,6 +8,8 @@
 #include "AutomaticRecoveryReadStall.h"
 #include "AutomaticRecoveryRuntime.h"
 #include "OrdinaryLoadSelection.h"
+#include "OrdinaryLoadLedger.h"
+#include "OrdinaryReplacementEnd.h"
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -30,14 +32,14 @@ public:
   bool queue(const QStringList& command, const QString& url, const QVariantMap& options,
              const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle);
   bool userChanged(bool clear);
-  bool ownsEnd(const mpv_event* event) const;
+  bool ownsEnd(const mpv_event* event);
   bool restoring() const { return restoring_; }
   bool recoveryPreloadAllowed() const;
   bool prepareRecoveryPreload();
   bool preparePreload(const QString& hookToken);
   void finishPreload();
   void applyDeferredTracks();
-  void beginUserReplacement() { replacedEntry_ = runtime_.activeEntry(); }
+  void beginUserReplacement();
   RendererRuntime::NativeLease acquireNative() const;
   std::shared_ptr<RendererRuntime::CoreOwner> coreOwner() const { return core_; }
   void prepareOwnedSeek(std::int64_t targetMs);
@@ -90,6 +92,8 @@ private:
   AutomaticRecoveryReadStall readStall_;
   AutomaticRecoveryOwnedSeek ownedSeek_;
   OrdinaryLoadSelection ordinarySelection_;
+  OrdinaryLoadLedger ordinaryLedger_;
+  OrdinaryReplacementEnd ordinaryReplacement_;
   struct DeferredOrdinaryLoad {
     AutomaticRecoverySession::Key key;
     QStringList command;
@@ -104,8 +108,6 @@ private:
   QString ordinaryExpectedUrl_;
   std::uint64_t ordinaryAfterId_ = 0, ordinaryAfterStart_ = 0, ordinaryAfterRevision_ = 0, ordinaryAfterBinding_ = 0;
   std::int64_t ordinaryAfterEntry_ = 0;
-  std::uint64_t ordinaryUnresolvedStarts_ = 0;
-  bool ordinaryCounterValid_ = true;
   AutomaticRecoverySession::Snapshot seekCheckpoint_;
   AutomaticRecoveryObservation::Result lastObservation_;
   AutomaticRecoveryObservation::Result seekPriorObservation_;
@@ -121,7 +123,10 @@ private:
   std::uint64_t pauseId_ = 0;
   std::uint64_t verifiedSource_ = 0;
   std::int64_t recoveryEntry_ = 0, observationStarted_ = 0;
-  std::int64_t replacedEntry_ = 0;
+  std::int64_t normalCurrentEntry_ = 0, replacementOldEntry_ = 0;
+  std::uint64_t replacementBeforeStart_ = 0;
+  bool replacementArming_ = false;
+  bool startSerialExhausted_ = false;
   std::int64_t lastStartedEntry_ = 0;
   std::int64_t transitionDeadline_ = 0;
   std::uint64_t lastSource_ = 0;
