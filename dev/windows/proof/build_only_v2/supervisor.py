@@ -40,15 +40,23 @@ def _run_owned(profile, environment, receipt_path):
     and parents before this interpreter imports any project code. It must also
     use a fresh private bytecode-cache location and verify fixed source origin.
     """
+    from .lifecycle import CleanupHandoff
+    handoff = CleanupHandoff()
+    try:
+        return _run_owned_impl(profile, environment, receipt_path, handoff)
+    except BaseException as error:
+        error.cleanup_handoff = handoff
+        raise
+
+
+def _run_owned_impl(profile, environment, receipt_path, handoff):
     old, winapi = _checked_runtime()
     from .profile import validate_environment, validate_profile
-    from .lifecycle import CleanupHandoff
     validate_profile(profile)
     validate_environment(profile, environment)
     api = winapi.WinAPI()
     if not api.in_any_job():
         raise RuntimeError('outer helper job required')
-    handoff = CleanupHandoff()
     state = {'reason': None, 'errors': [], 'outcome': None, 'outputs': []}
     start = []
     with old._receipt(receipt_path) as receipt:
@@ -65,14 +73,23 @@ def _run_owned(profile, environment, receipt_path):
             failure = RuntimeError('owned handles did not close')
             state['reason'] = repr(failure)
         if failure is None:
-            record = assemble(profile, state['outcome'], start[0], state['outputs'], owned)
-        else:
+            try:
+                record = assemble(profile, state['outcome'], start[0], state['outputs'], owned)
+            except BaseException as exc:
+                failure = exc
+                state['reason'] = repr(exc)[:1024]
+        if failure is not None:
             record = {'schema': 'build-only-failed-v2', 'result': 'failed',
                       'evidence': state, 'owned': owned}
-        receipt.write(json.dumps(record, separators=(',', ':')).encode('utf-8'))
-        receipt.flush()
-    if failure is not None:
-        raise RuntimeError('v2 supervision failed') from failure
+        try:
+            receipt.write(json.dumps(record, separators=(',', ':')).encode('utf-8'))
+            receipt.flush()
+        except BaseException as error:
+            if failure is not None:
+                raise error from failure
+            raise
+        if failure is not None:
+            raise RuntimeError('v2 supervision failed') from failure
     return record
 
 
@@ -136,8 +153,10 @@ def assemble(profile, outcome, started, outputs, owned):
         if (observed['sha256'].lower() != expected['sha256'] or observed['size'] != expected['size']
                 or observed_id != expected['file_id']):
             raise ValueError('residual identity differs from role pin')
-        identity = {'creation_time': observed['creation_time'], **{k: expected[k] for k in
-                    ('path', 'sha256', 'size', 'version', 'file_id')}}
+        identity = {'creation_time': observed['creation_time'], 'process_path': observed['path'],
+                    'retained_final_path': observed['retained_final_path'],
+                    'sha256': observed['sha256'].lower(), 'size': observed['size'],
+                    'file_id': observed_id, 'expected_version': expected['version']}
         residuals.append({'pid': item['pid'], 'role': item['role'], 'identity': identity,
                           'member': item['member'], 'action': 'terminate' if item['action'] == 'terminated' else item['action'],
                           'signaled': item['signaled'], 'closed': item['closed']})
