@@ -1,0 +1,31 @@
+{
+  "status": "partial source inputs; not an offline or complete transitive lock",
+  "repository": "https://github.com/afishhh/subrandr",
+  "candidate_commit": "fe13c58e178431ec469c556a91bc080096738dc7",
+  "selection": "provider master at cutoff; selected candidate requires compatibility and final graph review",
+  "cargo_lock": {
+    "provider_path": "Cargo.lock",
+    "git_blob": "122ee42aa44d29bf836864238839bb62494648ac",
+    "sha256": "03cef7de9f939c8e24ebada9bdc6d4efbe1a77055f98a96618f3d73b4d2840a4",
+    "preserved_copy": "subrandr-Cargo.lock",
+    "lock_format": 4,
+    "registry_packages": 255,
+    "registry_packages_missing_checksum": 0,
+    "git_packages": 0,
+    "local_workspace_packages": 9
+  },
+  "inspected_sources": [
+    {"path":"Cargo.toml", "git_blob":"22b7b30986c389f88f1b9588ccaca503fa070360", "sha256":"0fc01bec30c8c4ff3fac46ef8caf5af3685b2a3a9e3590a0d6075bd4ee3c0f9b"},
+    {"path":"xtask/Cargo.toml", "git_blob":"37b258987e911e3d5d69ded95d7f5e058f02da7e", "sha256":"adafb8b3e16c01736da7ca8fad278bd1df45b5bf5db47a1c565e3ee1c3dc3674"},
+    {"path":"xtask/src/build.rs", "git_blob":"75687bc4ff63ad7bf0ff27746020a73039c3f2a3", "sha256":"d5c0b98ec17b1fcb69bb276b6e1373a8ed9f9d81859673869f8e937b53307234"},
+    {"path":"xtask/src/command_context.rs", "git_blob":"3ef08c2290d9100c7a9576972c884c5b6175aaa4", "sha256":"7927d83f4225b116b6c023ea995280aaef4c85615a689e0c4c589594624b42cd"},
+    {"path":"xtask/src/lfs.rs", "git_blob":"e1cd7c40f06193d3f83025cb671dc748c2c28f07", "sha256":"ca42965570f3b712d644e77fedc7ec7c4283098c1ef9705d917de8a1fe7018c1"},
+    {"path":".cargo/config.toml", "git_blob":"c878589b230dd2c5bc43228615dc18033eda7e42", "sha256":"040f010c899d97dabe3d0352f524fca202201f781461389d200b746914c4eeba"}
+  ],
+  "unresolved": [
+    "Whether the selected build requires any Git LFS objects, their exact object identities and offline source.",
+    "Registry source provenance and availability for every locked checksum in a workspace-local offline cache.",
+    "Provider's cargo xtask and its nested cargo rustc calls do not themselves establish locked offline execution; adaptation and enforcement remain unimplemented.",
+    "Other Cargo workspaces, build scripts, generated data and transitive downloads across the selected feature graph remain unverified."
+  ]
+}

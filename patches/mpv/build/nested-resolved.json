@@ -1,0 +1,18 @@
+{
+  "status": "partial nested source identities; not a complete transitive lock",
+  "entries": [
+    {
+      "parent": "nghttp3",
+      "parent_repository": "https://github.com/ngtcp2/nghttp3",
+      "parent_commit": "d29ceea176cebc1f41c9d818c3b1825143d3f813",
+      "provider_recipe": "packages/nghttp3.cmake",
+      "provider_selection": "GIT_SUBMODULES lib/sfparse",
+      "gitmodules_blob": "fa6eebaa9707ca1c5a96e22885abe39c7d8369ae",
+      "path": "lib/sfparse",
+      "repository": "https://github.com/ngtcp2/sfparse",
+      "gitlink_commit": "4b313cfd2e1b389ae632b36dcd50402307289af2",
+      "gitlink_committer_time": "2026-06-04T12:05:29Z",
+      "evidence": "Pinned parent .gitmodules URL and tree gitlink, with direct GitHub commit metadata lookup; child transitive inputs remain unverified."
+    }
+  ]
+}

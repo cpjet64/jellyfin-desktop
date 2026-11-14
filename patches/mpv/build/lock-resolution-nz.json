@@ -1,0 +1,53 @@
+{
+  "status": "PARTIAL: candidates only; transitive closure and compatibility unverified",
+  "cutoff": "2026-10-18T23:59:59Z",
+  "recipe_catalog": "provider-input-catalog.json",
+  "provider_commit": "1f8d2e76255abc48f0456d9be99b4cab9c6566e6",
+  "evidence": "Floating GitHub candidates are from GET https://api.github.com/repos/{repository}/commits?sha={requested}&until=2026-10-18T23:59:59Z&per_page=1. Reset and archive values are from the complete source_lines and pinned_source_url in the provider catalog. The pinned vendored provider helper shared_internal_commands.cmake sets an omitted git_tag to master; candidates use master rather than a repository's current default branch. Each of the three reset objects was separately confirmed by GET https://api.github.com/repos/{repository}/commits/{reset}: xz 2025-12-17T11:36:42Z, vapoursynth 2025-05-26T20:39:56Z, openssl 2026-07-18T12:53:09Z. Reset application semantics and nested closure still require source-aware verification. No checkout or archive was downloaded.",
+  "github_candidates": [
+    ["xz", "tukaani-project/xz", "reset", "3d078b52adbff566ccfc51067dfbf742ecf3ef86"],
+    ["rubberband", "breakfastquay/rubberband", "default", "e4296ac80b1170018a110bc326fd0d45a0eb27d6"],
+    ["zlib", "zlib-ng/zlib-ng", "develop", "1727258b764262c73149014cdf6a39bd551b3bd5"],
+    ["zstd", "facebook/zstd", "dev", "e47dfb3f1b0863770dbe7defbcdfd4dcec2dff82"],
+    ["ogg", "xiph/ogg", "master", "be05b13e98b048f0b5a0f5fa8ce514d56db5f822"],
+    ["vorbis", "xiph/vorbis", "master", "c2aa86b05e981c96bf381fc6aa11cdd03eccc2fb"],
+    ["opus", "xiph/opus", "main", "5f74436ddd50a5e42907b403216284b941fa021e"],
+    ["speex", "xiph/speex", "master", "05895229896dc942d453446eba6f9f5ddcf95422"],
+    ["x265", "Multicorewareinc/x265", "master", "0900b28e7057ec0f4492237963aa92b0f6469a76"],
+    ["subrandr", "afishhh/subrandr", "master", "fe13c58e178431ec469c556a91bc080096738dc7"],
+    ["nvcodec-headers", "FFmpeg/nv-codec-headers", "master", "71acc268a541f7d7f33cf0387229e3015cfb4977"],
+    ["xxhash", "Cyan4973/xxHash", "dev", "dbe9f3e30ba562ef04bafae54510c23009ebb309"],
+    ["vapoursynth", "vapoursynth/vapoursynth", "master; reset", "e46204429041e95a881b61eedddd46c08f9a307c"],
+    ["openssl", "openssl/openssl", "master; reset", "d8bf6cdd4849925c30e4f1911c7acb49cb34b702"],
+    ["uavs3d", "uavs3/uavs3d", "master", "0e20d2c291853f196c68922a264bcd8471d75b68"],
+    ["spirv-headers", "KhronosGroup/SPIRV-Headers", "main", "86f980c731e62ae4eaf383d320449d71687936bf"],
+    ["spirv-tools", "KhronosGroup/SPIRV-Tools", "main", "71f287f18ed78d496e724fbfb1c3feae3a2af75a"],
+    ["spirv-cross", "KhronosGroup/SPIRV-Cross", "main", "d8f6641eaa6902ba6905eb8fafa2240c8cd8b725"],
+    ["vulkan-header", "KhronosGroup/Vulkan-Headers", "main", "acbb9391c0a597272800cd3f4363661c00a27c77"],
+    ["vulkan", "KhronosGroup/Vulkan-Loader", "main", "3aba6aeb8786f8369e10e4640f3139f336541c07"],
+    ["openal-soft", "kcat/openal-soft", "master", "6026c3c7393aaed5c31855e6e0dbabc1cc44a95c"],
+    ["shaderc", "google/shaderc", "main", "ba3e587dbc13d423c713e964ac08e094731a034d"],
+    ["ngtcp2", "ngtcp2/ngtcp2", "main", "48228939787d4b5bea94c7795b8c7fe0781d918e"],
+    ["nghttp3", "ngtcp2/nghttp3", "main", "d29ceea176cebc1f41c9d818c3b1825143d3f813"],
+    ["nghttp2", "nghttp2/nghttp2", "master", "7e10fcf3c58e692902939bab8f898bdd9ec9cff7"],
+    ["opusfile", "xiph/opusfile", "master", "3ecc22aa0a4430f61c2403d57370a089536d197a"],
+    ["opus-tools", "xiph/opus-tools", "master", "df7b70356b3fcff3d4e31ccbe13f3ffdeaacf775"]
+  ],
+  "archives": [
+    ["opus-dnn", "https://media.xiph.org/opus/models/opus_data-8a07d57c4fce6fb30f23b3e0d264004e04f1d7b421f5392ef61543d021a439af.tar.gz", "SHA256", "8a07d57c4fce6fb30f23b3e0d264004e04f1d7b421f5392ef61543d021a439af"],
+    ["xvidcore", "https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.bz2", "SHA256", "aeeaae952d4db395249839a3bd03841d6844843f5a4f84c271ff88f7aa1acff7"],
+    ["termcap", "https://ftp.gnu.org/gnu/termcap/termcap-1.3.1.tar.gz", "SHA256", "91a0e22e5387ca4467b5bcb18edf1c51b930262fd466d5fda396dd9d26719100"],
+    ["sqlite", "https://www.sqlite.org/2020/sqlite-autoconf-3330000.tar.gz", "SHA3_256", "6e94e9453cedf8f2023e3923f856741d1e28a2271e9f93d24d95fa48870edaad"]
+  ],
+  "blockers": [
+    ["uchardet", "https://gitlab.freedesktop.org/uchardet/uchardet.git", "master", "unresolved non-GitHub source"],
+    ["x264", "https://code.videolan.org/videolan/x264.git", "master", "unresolved non-GitHub source"],
+    ["nettle", "https://gitlab.com/shinchiro/nettle.git", "master", "unresolved non-GitHub source"],
+    ["svtav1", "https://gitlab.com/AOMediaCodec/SVT-AV1.git", "master", "unresolved non-GitHub source"],
+    ["readline", "https://git.sailfishos.org/mirror/readline.git", "master", "unresolved non-GitHub source"],
+    ["nghttp3", "lib/sfparse", "pinned submodule", "gitlink and nested source unresolved"],
+    ["subrandr", "Cargo dependencies", "Cargo.lock", "nested downloads unresolved"],
+    ["shaderc", "upstream transitive dependencies", "upstream revision", "nested downloads unresolved"],
+    ["all", "source trees and patches", "selected candidates", "submodules, nested fetches, patches and graph closure have not been exhaustively inspected"]
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "status": "PARTIAL: candidates only, transitive closure unverified",
+  "cutoff": "2026-10-18T23:59:59Z",
+  "branch": "master (provider helper default for omitted GIT_TAG)",
+  "candidates": [
+    {"package":"x264","repository":"https://code.videolan.org/videolan/x264.git","endpoint":"https://code.videolan.org/api/v4/projects/videolan%2Fx264/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1","commit":"0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee","committed_date":"2025-09-10T09:40:56.000+08:00"},
+    {"package":"nettle","repository":"https://gitlab.com/shinchiro/nettle.git","endpoint":"https://gitlab.com/api/v4/projects/shinchiro%2Fnettle/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1","commit":"cf01e9d2741339cf01a90a0986b82e732b00ea59","committed_date":"2026-10-16T17:11:45.000+02:00"},
+    {"package":"svtav1","repository":"https://gitlab.com/AOMediaCodec/SVT-AV1.git","endpoint":"https://gitlab.com/api/v4/projects/AOMediaCodec%2FSVT-AV1/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1","commit":"1d4844d893d45a425a3714ec50e9f306af6f7448","committed_date":"2026-10-18T16:24:35.000+03:00"}
+  ],
+  "unresolved": [
+    {"package":"uchardet","repository":"https://gitlab.freedesktop.org/uchardet/uchardet.git","endpoint":"https://gitlab.freedesktop.org/api/v4/projects/uchardet%2Fuchardet/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1","result":"HTTP 200 text/html anti-bot challenge, not commit metadata"},
+    {"package":"readline","repository":"https://git.sailfishos.org/mirror/readline.git","endpoint":"https://git.sailfishos.org/api/v4/projects/mirror%2Freadline/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1","result":"HTTP 200 text/html Sailfish OS GitHub page, not commit metadata; no repository identity equivalence established"}
+  ]
+}

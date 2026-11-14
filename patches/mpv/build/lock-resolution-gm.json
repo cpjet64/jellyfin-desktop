@@ -1,0 +1,774 @@
+{
+  "status": "CANDIDATES ONLY; dependency closure unresolved",
+  "provider_commit": "1f8d2e76255abc48f0456d9be99b4cab9c6566e6",
+  "cutoff": "2026-10-18T23:59:59Z",
+  "selection_note": "The pinned provider shared_internal_commands.cmake sets git_tag to master when unset. Explicit GIT_TAG is honored; GIT_RESET overrides branch selection. Candidate only; nested closure unresolved.",
+  "candidates": [
+    {
+      "package": "gmp",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/gmp.cmake",
+      "recipe_sha256": "52b11e76175215ed4973f9da8a12b463a254c8e97b1fc0c2a76bca338339c40b",
+      "source": "https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": "SHA256=a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898",
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": []
+    },
+    {
+      "package": "lzo",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/lzo.cmake",
+      "recipe_sha256": "dbdb89326b8a02674195a34fff54a2d98f640f178fe62211fb7e2a6675cf3aa4",
+      "source": "https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": "SHA1=4924676a9bae5db58ef129dc1cebce3baa3c4b5d",
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": []
+    },
+    {
+      "package": "libsamplerate",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libsamplerate.cmake",
+      "recipe_sha256": "aec154ae791c215ef7669c30718bbc0dec7f6b727ea90145892b2ed664875b65",
+      "source": "https://github.com/libsndfile/libsamplerate.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "0844c208f683527c08ea8a80acc13b398aa9c8bf",
+      "evidence": "GET https://api.github.com/repos/libsndfile/libsamplerate/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-08-13T02:47:19Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libjpeg",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libjpeg.cmake",
+      "recipe_sha256": "8ab2b1835ec12a5db8152146b8a814b7944b69f0b8ec0d477d79cd731a7c5019",
+      "source": "https://github.com/libjpeg-turbo/libjpeg-turbo.git",
+      "requested_git_tag": "main",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "2fa570c514a4b0e70342ef8b32ce1cda21b85710",
+      "evidence": "GET https://api.github.com/repos/libjpeg-turbo/libjpeg-turbo/commits?sha=main&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-13T23:28:30Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "main"
+    },
+    {
+      "package": "lcms2",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/lcms2.cmake",
+      "recipe_sha256": "78ac60adc47be993cf59f7f1d318d78558a2850755a8b4b5181f68434245edbe",
+      "source": "https://github.com/mm2/Little-CMS.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "b0f840f0e602549433c45047edaab970edb1d32f",
+      "evidence": "GET https://api.github.com/repos/mm2/Little-CMS/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-18T16:48:37Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "lame",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/lame.cmake",
+      "recipe_sha256": "2fc016fa58c3d768c9f872ca715309c7b94cf815a4c3352d325f4d25650c2fa3",
+      "source": "https://gitlab.com/shinchiro/lame.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim",
+        "Patch inputs and transformations require separate exact identification"
+      ]
+    },
+    {
+      "package": "libmodplug",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libmodplug.cmake",
+      "recipe_sha256": "5c41503e29f825753f204d0e98bc2560e5d67ffbb14f4a194d8d4a0a593cf0b0",
+      "source": "https://github.com/Konstanty/libmodplug.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "1f0c3f3d540daea4b53043ce310b4806f59d0cea",
+      "evidence": "GET https://api.github.com/repos/Konstanty/libmodplug/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-08-31T23:40:26Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libvpx",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libvpx.cmake",
+      "recipe_sha256": "728c41fd3b6613fb0df4025b65c2ea8bb66781441cba23569c94cb36e9342164",
+      "source": "https://chromium.googlesource.com/webm/libvpx.git",
+      "requested_git_tag": "main",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "game-music-emu",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/game-music-emu.cmake",
+      "recipe_sha256": "c023ad08da8c0c7e6ad9bf0511e0acd5dabf53591cd15492e9385d677a5b3dbc",
+      "source": "https://bitbucket.org/mpyne/game-music-emu.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "libpng",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libpng.cmake",
+      "recipe_sha256": "b6d7aa5b712c87b0d023e1506fefe0190eeab6849c3e63eeba9f329d65657720",
+      "source": "https://github.com/glennrp/libpng.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "33d015040f5dbc3d678413360ff9df35d152eefc",
+      "evidence": "GET https://api.github.com/repos/glennrp/libpng/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-12T13:59:12Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libdvdcss",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libdvdcss.cmake",
+      "recipe_sha256": "d04294b88d2ff8444ac8ce40227b34970903d72c855d4561db902d2b304825eb",
+      "source": "https://code.videolan.org/videolan/libdvdcss.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "libdvdread",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libdvdread.cmake",
+      "recipe_sha256": "bc494f70ffccbc75e021def2c2f21d913161bdf2912a33d9efccd99516041676",
+      "source": "https://code.videolan.org/videolan/libdvdread.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "libdvdnav",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libdvdnav.cmake",
+      "recipe_sha256": "e1295fb2df314fca53d7a92247ee11b6592c62b49cd28dd4a79224225a1e9619",
+      "source": "https://code.videolan.org/videolan/libdvdnav.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "libiconv",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libiconv.cmake",
+      "recipe_sha256": "4ef38914020072ff0a3ea21415809cbfae6c095ad9b7ff03e82c04df3da4a20a",
+      "source": "https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": "SHA256=3B08F5F4F9B4EB82F151A7040BFD6FE6C6FB922EFE4B1659C66EA933276965E8",
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": []
+    },
+    {
+      "package": "luajit",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/luajit.cmake",
+      "recipe_sha256": "75ffc396d502c453d4606238430fc70171aebfa3e26410a4f5b65405c7c49022",
+      "source": "https://github.com/openresty/luajit2.git",
+      "requested_git_tag": "v2.1-agentzh",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "dd3b24369ddfaa83c78cd6fdd91d157c8968ec8d",
+      "evidence": "GET https://api.github.com/repos/openresty/luajit2/commits?sha=v2.1-agentzh&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-18T18:50:34Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim",
+        "Patch inputs and transformations require separate exact identification"
+      ],
+      "requested_branch_interpretation": "v2.1-agentzh"
+    },
+    {
+      "package": "mbedtls",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/mbedtls.cmake",
+      "recipe_sha256": "c43469d77f50652718044e792b10f7db4ee378cb81949cdd3020e78b414083d6",
+      "source": "https://github.com/Mbed-TLS/mbedtls.git",
+      "requested_git_tag": "master",
+      "requested_git_reset": "1ec69067fa1351427f904362c1221b31538c8b57 # v3.5.0",
+      "archive_hash": null,
+      "selected_commit": "1ec69067fa1351427f904362c1221b31538c8b57",
+      "evidence": "Provider recipe GIT_RESET override; GET https://api.github.com/repos/Mbed-TLS/mbedtls/commits/1ec69067fa1351427f904362c1221b31538c8b57 confirms commit 1ec69067fa1351427f904362c1221b31538c8b57; committer date 2023-10-04T22:47:01Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim",
+        "Patch inputs and transformations require separate exact identification"
+      ]
+    },
+    {
+      "package": "libxml2",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libxml2.cmake",
+      "recipe_sha256": "49de5caa0199c4291564408254f830539073721286aa3c715650d2fb791706fd",
+      "source": "https://github.com/GNOME/libxml2.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "c79c9612fcc77b06b0d16f35fd363d938bdbbf5e",
+      "evidence": "GET https://api.github.com/repos/GNOME/libxml2/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-17T11:51:17Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libudfread",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libudfread.cmake",
+      "recipe_sha256": "0607b8034ca0feaebb4caff99cfca1ed1be8108c8c35b29b85a58ec0d872112a",
+      "source": "https://code.videolan.org/videolan/libudfread.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "libbluray",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libbluray.cmake",
+      "recipe_sha256": "0a5d301070c3239a673a1b7f360d6a14cf4f3c9b366c8a29a09bb463208ca71b",
+      "source": "https://code.videolan.org/videolan/libbluray.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "harfbuzz",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/harfbuzz.cmake",
+      "recipe_sha256": "9b8a2f9f2b7dfb440ff7f6c925489ae1cee64b3119f5556f6c103c786f653f4b",
+      "source": "https://github.com/harfbuzz/harfbuzz.git",
+      "requested_git_tag": "main",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "54d71be60501e3a4e294aca8b5845a4aacc11db8",
+      "evidence": "GET https://api.github.com/repos/harfbuzz/harfbuzz/commits?sha=main&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-18T21:26:44Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "main"
+    },
+    {
+      "package": "libsoxr",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libsoxr.cmake",
+      "recipe_sha256": "cec59d2ed74e2de1d3984eee656d475df047a2331d4b68219677d3a363bde38e",
+      "source": "https://gitlab.com/shinchiro/soxr.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "graphengine",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/graphengine.cmake",
+      "recipe_sha256": "acfd98328265bee49b86a7ce64d6dd3e8c9201952385f3911625840a9a01869b",
+      "source": "https://github.com/sekrit-twc/graphengine.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "91c6af4c795c5396d8b974f24b4d2e2ecca04e2d",
+      "evidence": "GET https://api.github.com/repos/sekrit-twc/graphengine/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-08-01T19:15:23Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libzimg",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libzimg.cmake",
+      "recipe_sha256": "918aac808ae4d526a9148c16735a615c6e7467ccda623afca07d34aee4b87c06",
+      "source": "https://github.com/sekrit-twc/zimg.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "67e0603271c080e22c8429856dd4a8a56587e61e",
+      "evidence": "GET https://api.github.com/repos/sekrit-twc/zimg/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-09-04T03:27:08Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim",
+        "Patch inputs and transformations require separate exact identification"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libunibreak",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libunibreak.cmake",
+      "recipe_sha256": "049156f79446ae26709c711abc0321c38ed723f5e45815de7cd5d2a11a74c00a",
+      "source": "https://github.com/adah1972/libunibreak.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "f8172fe771ef620112247cadfb876aecaa4f769e",
+      "evidence": "GET https://api.github.com/repos/adah1972/libunibreak/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-07T03:59:37Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libass",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libass.cmake",
+      "recipe_sha256": "41ec0c08160e4d0a31b2d9dc214985056ad9b61d77530c526ee77b0acc9c84b6",
+      "source": "https://github.com/libass/libass.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "f61db567e6593df3470e91594bcd4ad2d0473aff",
+      "evidence": "GET https://api.github.com/repos/libass/libass/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-09-17T00:00:00Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libvpl",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libvpl.cmake",
+      "recipe_sha256": "f590f3290564e30bb17237ba2ea77e1e434a0e30dea524fbecd8bdbea8031527",
+      "source": "https://github.com/intel/libvpl.git",
+      "requested_git_tag": "main",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "674d015bcb294bc39fa276e99a652ea045423e82",
+      "evidence": "GET https://api.github.com/repos/intel/libvpl/commits?sha=main&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-07-13T18:45:22Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim",
+        "Patch inputs and transformations require separate exact identification"
+      ],
+      "requested_branch_interpretation": "main"
+    },
+    {
+      "package": "libmysofa",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libmysofa.cmake",
+      "recipe_sha256": "f36dca3dece42a06f1d201d2fec621dcb37e978ef7617231787a223cb2eeb532",
+      "source": "https://github.com/hoene/libmysofa.git",
+      "requested_git_tag": "main",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "648eed03472e6720a1ea45d1a1f86c4efb569ff9",
+      "evidence": "GET https://api.github.com/repos/hoene/libmysofa/commits?sha=main&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-09-08T07:19:38Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "main"
+    },
+    {
+      "package": "libwebp",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libwebp.cmake",
+      "recipe_sha256": "390d3b131e2dfa8a4fa093b7d05b2d3e6967962240057f0c183d4201f045aa45",
+      "source": "https://chromium.googlesource.com/webm/libwebp.git",
+      "requested_git_tag": "main",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "libbs2b",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libbs2b.cmake",
+      "recipe_sha256": "95c5f9d08215685a2cc367e302d6f248cfb66040d2d27f972f2e17f612a10ac9",
+      "source": "https://github.com/alexmarsev/libbs2b.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "5ca2d59888df047f1e4b028e3a2fd5be8b5a7277",
+      "evidence": "GET https://api.github.com/repos/alexmarsev/libbs2b/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2014-10-17T08:09:04Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim",
+        "Patch inputs and transformations require separate exact identification"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libssh",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libssh.cmake",
+      "recipe_sha256": "31a497f6b79da6d518f3422456fdbaca58d354455a3ebf8832bc0f0bd2f568d6",
+      "source": "https://gitlab.com/libssh/libssh-mirror.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "libsrt",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libsrt.cmake",
+      "recipe_sha256": "ab11608addcf34fac0f738a5abe3c35ead91e9bf1802373b2e5a94c6312b22b7",
+      "source": "https://github.com/Haivision/srt.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "9f2390232a8256ed4c72a5418c2b2777c49ad737",
+      "evidence": "GET https://api.github.com/repos/Haivision/srt/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-15T12:35:38Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libarchive",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libarchive.cmake",
+      "recipe_sha256": "4f5dd14180a11f34159bb652ab536ffb3118f867fe76b2a7d312d0624491ed61",
+      "source": "https://github.com/libarchive/libarchive.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "ebe83fcf971278d27821653fd6825b5098b980c8",
+      "evidence": "GET https://api.github.com/repos/libarchive/libarchive/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-18T23:56:10Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "highway",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/highway.cmake",
+      "recipe_sha256": "26b46bc1f08f35d7fda6f2bab349224e39a3972942ccad7aca3b8b768954fa87",
+      "source": "https://github.com/google/highway.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "100c82c1d09599125e0054870dcf81c3fac7139f",
+      "evidence": "GET https://api.github.com/repos/google/highway/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-18T21:34:39Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libjxl",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libjxl.cmake",
+      "recipe_sha256": "ac5b42e265fd2949fb2ed9429ca8ce96a1784fe2e4bf908cdfdec1e7fb9e4bd7",
+      "source": "https://github.com/libjxl/libjxl.git",
+      "requested_git_tag": "main",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "ef67fde2ec16d52e644c5a0969230b9a85e3eb31",
+      "evidence": "GET https://api.github.com/repos/libjxl/libjxl/commits?sha=main&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-06T16:02:32Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "main"
+    },
+    {
+      "package": "mujs",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/mujs.cmake",
+      "recipe_sha256": "226d428b98e53dd5a1dea6609f0a273293a56951f53012408e4ee57b3a28fce4",
+      "source": "https://codeberg.org/ccxvii/mujs.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Non-GitHub source requires authoritative cutoff resolution",
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim",
+        "Patch inputs and transformations require separate exact identification"
+      ]
+    },
+    {
+      "package": "glslang",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/glslang.cmake",
+      "recipe_sha256": "164f4cef085f0224eb9b98eb7b4093880e5ad2ea4dba60bb00131f33f94a5d13",
+      "source": "https://github.com/KhronosGroup/glslang.git",
+      "requested_git_tag": "main",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "5cf91e73b01ce835d281a9c3b3d9158f7f74ff86",
+      "evidence": "GET https://api.github.com/repos/KhronosGroup/glslang/commits?sha=main&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-16T18:21:10Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "main"
+    },
+    {
+      "package": "libsdl2",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libsdl2.cmake",
+      "recipe_sha256": "e323098f27a92e23b406698ff1de547ca64c2d53c026fadd56a3e8d1e8732473",
+      "source": "https://github.com/libsdl-org/SDL.git",
+      "requested_git_tag": "SDL2",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "8acf7cfc0f88717e5c036f60f0314bfcafe39189",
+      "evidence": "GET https://api.github.com/repos/libsdl-org/SDL/commits?sha=SDL2&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-12T20:16:12Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "SDL2"
+    },
+    {
+      "package": "libopenmpt",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libopenmpt.cmake",
+      "recipe_sha256": "0d5c354daa9e076768405bb2fc2aae75e8ad49800a305dfd2a2709eac61c400d",
+      "source": "https://lib.openmpt.org/files/libopenmpt/src/libopenmpt-0.7.12+release.autotools.tar.gz",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": "SHA256=79AB3CE3672601E525B5CC944F026C80C03032F37D39CAA84C8CA3FDD75E0C98",
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": []
+    },
+    {
+      "package": "glad",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/glad.cmake",
+      "recipe_sha256": "ee80b01e4fce4561f1d9dfa9f51474cc4b48ef7ef739227db6099aed36016468",
+      "source": "https://github.com/Dav1dde/glad.git",
+      "requested_git_tag": "glad2",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "0a7cf1af9e25e02821587bd4095807fc90b6426a",
+      "evidence": "GET https://api.github.com/repos/Dav1dde/glad/commits?sha=glad2&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-09-28T08:07:03Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "glad2"
+    },
+    {
+      "package": "libplacebo",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libplacebo.cmake",
+      "recipe_sha256": "64c407a343a43bfe8b372b12d5dac4621d1362f094239cfb2c215e6ce213332f",
+      "source": "https://github.com/haasn/libplacebo.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "ccb74c6c13b1676e3af368cbe9281bfe649c17c6",
+      "evidence": "GET https://api.github.com/repos/haasn/libplacebo/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-18T00:04:10Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libva",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libva.cmake",
+      "recipe_sha256": "93ec04ce9d24844d548c69d20cc077c7c1a187901886d3956e021ed1b9aeb718",
+      "source": "https://github.com/intel/libva.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "f3fefceb192ca28abf588aadf2392350aebf46ce",
+      "evidence": "GET https://api.github.com/repos/intel/libva/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-09-23T07:59:24Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim",
+        "Patch inputs and transformations require separate exact identification"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libzvbi",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libzvbi.cmake",
+      "recipe_sha256": "a647dbfaf97d65e6cc60a0ed0c19cca2a5316f1d3ec9fadd45e368d4f66bb2e9",
+      "source": "https://github.com/zapping-vbi/zvbi.git",
+      "requested_git_tag": "main",
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "d3a5ee9f2b047bf16cd1ee5ccf6ec05ee75409d0",
+      "evidence": "GET https://api.github.com/repos/zapping-vbi/zvbi/commits?sha=main&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-08-12T14:49:11Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "main"
+    },
+    {
+      "package": "libaribcaption",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libaribcaption.cmake",
+      "recipe_sha256": "5a51204655ceaba4341b39d043c00c39bd5884bf4a6f0a70358df1f0a05e128b",
+      "source": "https://github.com/xqq/libaribcaption.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "37dde0f32652c32aa98bf92278944d1cfb2e7354",
+      "evidence": "GET https://api.github.com/repos/xqq/libaribcaption/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-13T15:27:53Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libsixel",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libsixel.cmake",
+      "recipe_sha256": "999c757d24a44da84b37b00cc7227750f86fb10302f0179af87a59f880b1ee77",
+      "source": "https://github.com/saitoha/libsixel.git",
+      "requested_git_tag": null,
+      "requested_git_reset": "af12e5bc6f3f69ad83479da85ddb371420da9b17",
+      "archive_hash": null,
+      "selected_commit": "af12e5bc6f3f69ad83479da85ddb371420da9b17",
+      "evidence": "Provider recipe GIT_RESET override; GET https://api.github.com/repos/saitoha/libsixel/commits/af12e5bc6f3f69ad83479da85ddb371420da9b17 confirms commit af12e5bc6f3f69ad83479da85ddb371420da9b17; committer date 2026-04-14T08:57:20Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "libpsl",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libpsl.cmake",
+      "recipe_sha256": "de81de4a2791976cc1d52c114f3861ceae2154f825b3dcb0e609e09163d8b56f",
+      "source": "https://github.com/rockdaboot/libpsl.git",
+      "requested_git_tag": null,
+      "requested_git_reset": "aa3a80e18f25caf3916636c8668dcc0fff7c016d",
+      "archive_hash": null,
+      "selected_commit": "aa3a80e18f25caf3916636c8668dcc0fff7c016d",
+      "evidence": "Provider recipe GIT_RESET override; GET https://api.github.com/repos/rockdaboot/libpsl/commits/aa3a80e18f25caf3916636c8668dcc0fff7c016d confirms commit aa3a80e18f25caf3916636c8668dcc0fff7c016d; committer date 2026-08-01T20:26:19Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "mpv",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/mpv.cmake",
+      "recipe_sha256": "cfb9b0fbaaf6013069fe3eeda7e9e9644546f09cd772dbd549f8eb7fa21c7122",
+      "source": "https://github.com/mpv-player/mpv.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "01e2533f3143b8940857ca419b0b367f583e05ca",
+      "evidence": "Allocation section 5 explicit reviewed mpv pin; bridge patches remain separately required.",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ]
+    },
+    {
+      "package": "mpv-release",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/mpv-release.cmake",
+      "recipe_sha256": "b9d03ca2a8dcf744cc2840817b69a5eee8230bf6d87b314b90b55d71116d8415",
+      "source": "${LINK}",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": [
+        "Dynamic or unhashed archive source requires resolution"
+      ]
+    },
+    {
+      "package": "mpv-packaging",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/mpv-packaging.cmake",
+      "recipe_sha256": "301bedf93ba5c4533d01b76139e9fc89e73085ab5050c2c3b493df93b7b8538a",
+      "source": "https://github.com/shinchiro/mpv-packaging.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "1c534ce8c21fab0be2a394ad73decc15e015693e",
+      "evidence": "GET https://api.github.com/repos/shinchiro/mpv-packaging/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2023-12-23T13:43:06Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libopusenc",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libopusenc.cmake",
+      "recipe_sha256": "e70974b3415938988a9e3f3ca7a2d96e47f087a6ef8a23b52cdbb92e342a0d7f",
+      "source": "https://github.com/xiph/libopusenc.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "3c65f440baff6220872ec11b0cbde37ef7a48f78",
+      "evidence": "GET https://api.github.com/repos/xiph/libopusenc/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-02-28T22:50:19Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim"
+      ],
+      "requested_branch_interpretation": "master"
+    },
+    {
+      "package": "libuv",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libuv.cmake",
+      "recipe_sha256": "b642900b8d211433b8db448c8c0ac8222dd8c50e82f70bdcd4fdf7562d4f9fa2",
+      "source": "https://github.com/libuv/libuv/archive/v1.40.0.tar.gz",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": "SHA256=70fe1c9ba4f2c509e8166c0ca2351000237da573bb6c82092339207a9715ba6b",
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": []
+    },
+    {
+      "package": "libsodium",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libsodium.cmake",
+      "recipe_sha256": "b191cc2d6e647864d6f1efb1c658102371e6e14b773e52df883e7b0021dd9a40",
+      "source": "https://github.com/jedisct1/libsodium/archive/1.0.18.tar.gz",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": "SHA256=d59323c6b712a1519a5daf710b68f5e7fde57040845ffec53850911f10a5d4f4",
+      "selected_commit": null,
+      "evidence": null,
+      "blockers": []
+    },
+    {
+      "package": "megasdk",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/megasdk.cmake",
+      "recipe_sha256": "adb98cc2bedddb6e23826977ff00821a71e4465f4aa5d47a1f570871d950cd51",
+      "source": "https://github.com/meganz/sdk.git",
+      "requested_git_tag": null,
+      "requested_git_reset": null,
+      "archive_hash": null,
+      "selected_commit": "7e4519cc1d8c42312444482766b761c899894e6f",
+      "evidence": "GET https://api.github.com/repos/meganz/sdk/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&per_page=1 ; committer date 2026-10-12T10:24:48Z",
+      "blockers": [
+        "Nested fetches, submodules, and lockfiles not yet resolved; no closure claim",
+        "Patch inputs and transformations require separate exact identification"
+      ],
+      "requested_branch_interpretation": "master"
+    }
+  ]
+}

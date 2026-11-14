@@ -1,0 +1,778 @@
+{
+  "status": "UNRESOLVED static graph; not a configured closure or lock",
+  "root": "mpv",
+  "profile": "provider mpv libmpv feature recipe; x86_64 baseline and proposed v3",
+  "conditional_source": "x86-conditional-resolution.json",
+  "nodes": {
+    "amf-headers": {
+      "recipe_path": "packages/amf-headers.cmake",
+      "recipe_sha256": "bb0628f31bfd4e6db57ef3c5381f10e8bf8fb666acb62394558e71e34b339dca",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "angle-headers": {
+      "recipe_path": "packages/angle-headers.cmake",
+      "recipe_sha256": "7e4f4c7d2914f3129ed285d85b9de4a2b040bfb5233983611704fe107f2bd4de",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "aom": {
+      "recipe_path": "packages/aom.cmake",
+      "recipe_sha256": "73c4f6335a5be0a8fb8639cea1936faa61c861f4cdb5c129e5384e3f04441eee",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "avisynth-headers": {
+      "recipe_path": "packages/avisynth-headers.cmake",
+      "recipe_sha256": "4cd756ff326b00256d03d03e4f86e1554a8b1a57f7d014368b99057149ca6685",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "brotli": {
+      "recipe_path": "packages/brotli.cmake",
+      "recipe_sha256": "b8554a6c7028bd3b0f1dd9361c0b7c6c6312e87d3793f3ce3dbf7f89d9fb9bc1",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "bzip2": {
+      "recipe_path": "packages/bzip2.cmake",
+      "recipe_sha256": "22c06023a62280f46de2b3dd73daac92eff15e6c6ad48be32c5a101bf911d0ec",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "c-ares": {
+      "recipe_path": "packages/c-ares.cmake",
+      "recipe_sha256": "ff158ffb4add510160a78eef6473625d965ebf4bd57b0fc1e23275fcb48c6013",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "curl": {
+      "recipe_path": "packages/curl.cmake",
+      "recipe_sha256": "6d62968ba70a837e3dd760d2cdbee3706e88aec47a685e25b989b63fc13d001a",
+      "candidate_dependencies": [
+        "brotli",
+        "c-ares",
+        "libpsl",
+        "libssh",
+        "nghttp2",
+        "nghttp3",
+        "ngtcp2",
+        "openssl",
+        "zlib",
+        "zstd"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "dav1d": {
+      "recipe_path": "packages/dav1d.cmake",
+      "recipe_sha256": "c64418c6e46a296d414a4345eb8e7f61f68ae63490c573f6bcb7988e8b3782dc",
+      "candidate_dependencies": [
+        "xxhash"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "davs2": {
+      "recipe_path": "packages/davs2.cmake",
+      "recipe_sha256": "0a8183fbcb5eb2c9ed6eec17ffd3e47d33663c484f5834b5a32e235ae3d772a2",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "fast_float": {
+      "recipe_path": "packages/fast_float.cmake",
+      "recipe_sha256": "3781c52eb992b862eed0df9ea3b03884e9d7330b39cbe5be24858b732b85c2aa",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "ffmpeg": {
+      "recipe_path": "packages/ffmpeg.cmake",
+      "recipe_sha256": "359c9c7da360f57d3a438e6fe117af6169cbd9aa3672751fd2bfc31e02be8fff",
+      "candidate_dependencies": [
+        "amf-headers",
+        "aom",
+        "avisynth-headers",
+        "bzip2",
+        "dav1d",
+        "davs2",
+        "fontconfig",
+        "harfbuzz",
+        "lame",
+        "lcms2",
+        "libaribcaption",
+        "libass",
+        "libbluray",
+        "libbs2b",
+        "libdvdnav",
+        "libdvdread",
+        "libjxl",
+        "libmodplug",
+        "libmysofa",
+        "libopenmpt",
+        "libplacebo",
+        "libpng",
+        "libsoxr",
+        "libsrt",
+        "libssh",
+        "libva",
+        "libvpl",
+        "libvpx",
+        "libwebp",
+        "libxml2",
+        "libzimg",
+        "libzvbi",
+        "nvcodec-headers",
+        "openal-soft",
+        "openssl",
+        "opus",
+        "rubberband",
+        "speex",
+        "svtav1",
+        "uavs3d",
+        "vapoursynth",
+        "vorbis",
+        "x264",
+        "x265-8+10bit"
+      ],
+      "unresolved_dependency_edges": [
+        {
+          "line": 2,
+          "expression": "${ffmpeg_davs2}"
+        },
+        {
+          "line": 2,
+          "expression": "${ffmpeg_uavs3d}"
+        },
+        {
+          "line": 2,
+          "expression": "${ffmpeg_x265}"
+        }
+      ]
+    },
+    "fontconfig": {
+      "recipe_path": "packages/fontconfig.cmake",
+      "recipe_sha256": "c20c10d75476bf1f99818e5dda7644c94ae157372b9fd396c09f1b2122b006aa",
+      "candidate_dependencies": [
+        "freetype2",
+        "libiconv",
+        "libxml2",
+        "zlib"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "freetype2": {
+      "recipe_path": "packages/freetype2.cmake",
+      "recipe_sha256": "eed687f636ec335af2e341537e089857f75a659e69d02da5176715628bf3b035",
+      "candidate_dependencies": [
+        "brotli",
+        "libpng",
+        "zlib"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "fribidi": {
+      "recipe_path": "packages/fribidi.cmake",
+      "recipe_sha256": "9a220a21c07099ebc6391d828a677697c4f147a781fcb54f86e038dbbf620321",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "glad": {
+      "recipe_path": "packages/glad.cmake",
+      "recipe_sha256": "ee80b01e4fce4561f1d9dfa9f51474cc4b48ef7ef739227db6099aed36016468",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "glslang": {
+      "recipe_path": "packages/glslang.cmake",
+      "recipe_sha256": "164f4cef085f0224eb9b98eb7b4093880e5ad2ea4dba60bb00131f33f94a5d13",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "graphengine": {
+      "recipe_path": "packages/graphengine.cmake",
+      "recipe_sha256": "acfd98328265bee49b86a7ce64d6dd3e8c9201952385f3911625840a9a01869b",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "harfbuzz": {
+      "recipe_path": "packages/harfbuzz.cmake",
+      "recipe_sha256": "9b8a2f9f2b7dfb440ff7f6c925489ae1cee64b3119f5556f6c103c786f653f4b",
+      "candidate_dependencies": [
+        "freetype2",
+        "libpng"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "highway": {
+      "recipe_path": "packages/highway.cmake",
+      "recipe_sha256": "26b46bc1f08f35d7fda6f2bab349224e39a3972942ccad7aca3b8b768954fa87",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "lame": {
+      "recipe_path": "packages/lame.cmake",
+      "recipe_sha256": "2fc016fa58c3d768c9f872ca715309c7b94cf815a4c3352d325f4d25650c2fa3",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "lcms2": {
+      "recipe_path": "packages/lcms2.cmake",
+      "recipe_sha256": "78ac60adc47be993cf59f7f1d318d78558a2850755a8b4b5181f68434245edbe",
+      "candidate_dependencies": [
+        "libjpeg",
+        "zlib"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libarchive": {
+      "recipe_path": "packages/libarchive.cmake",
+      "recipe_sha256": "4f5dd14180a11f34159bb652ab536ffb3118f867fe76b2a7d312d0624491ed61",
+      "candidate_dependencies": [
+        "bzip2",
+        "libxml2",
+        "lzo",
+        "openssl",
+        "xz",
+        "zlib",
+        "zstd"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libaribcaption": {
+      "recipe_path": "packages/libaribcaption.cmake",
+      "recipe_sha256": "5a51204655ceaba4341b39d043c00c39bd5884bf4a6f0a70358df1f0a05e128b",
+      "candidate_dependencies": [
+        "fontconfig",
+        "freetype2"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libass": {
+      "recipe_path": "packages/libass.cmake",
+      "recipe_sha256": "41ec0c08160e4d0a31b2d9dc214985056ad9b61d77530c526ee77b0acc9c84b6",
+      "candidate_dependencies": [
+        "fontconfig",
+        "freetype2",
+        "fribidi",
+        "harfbuzz",
+        "libiconv",
+        "libunibreak"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libbluray": {
+      "recipe_path": "packages/libbluray.cmake",
+      "recipe_sha256": "0a5d301070c3239a673a1b7f360d6a14cf4f3c9b366c8a29a09bb463208ca71b",
+      "candidate_dependencies": [
+        "freetype2",
+        "libudfread",
+        "libxml2"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libbs2b": {
+      "recipe_path": "packages/libbs2b.cmake",
+      "recipe_sha256": "95c5f9d08215685a2cc367e302d6f248cfb66040d2d27f972f2e17f612a10ac9",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libdvdcss": {
+      "recipe_path": "packages/libdvdcss.cmake",
+      "recipe_sha256": "d04294b88d2ff8444ac8ce40227b34970903d72c855d4561db902d2b304825eb",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libdvdnav": {
+      "recipe_path": "packages/libdvdnav.cmake",
+      "recipe_sha256": "e1295fb2df314fca53d7a92247ee11b6592c62b49cd28dd4a79224225a1e9619",
+      "candidate_dependencies": [
+        "libdvdread"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libdvdread": {
+      "recipe_path": "packages/libdvdread.cmake",
+      "recipe_sha256": "bc494f70ffccbc75e021def2c2f21d913161bdf2912a33d9efccd99516041676",
+      "candidate_dependencies": [
+        "libdvdcss"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libiconv": {
+      "recipe_path": "packages/libiconv.cmake",
+      "recipe_sha256": "4ef38914020072ff0a3ea21415809cbfae6c095ad9b7ff03e82c04df3da4a20a",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libjpeg": {
+      "recipe_path": "packages/libjpeg.cmake",
+      "recipe_sha256": "8ab2b1835ec12a5db8152146b8a814b7944b69f0b8ec0d477d79cd731a7c5019",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libjxl": {
+      "recipe_path": "packages/libjxl.cmake",
+      "recipe_sha256": "ac5b42e265fd2949fb2ed9429ca8ce96a1784fe2e4bf908cdfdec1e7fb9e4bd7",
+      "candidate_dependencies": [
+        "brotli",
+        "highway",
+        "lcms2",
+        "libjpeg",
+        "libpng",
+        "zlib"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libmodplug": {
+      "recipe_path": "packages/libmodplug.cmake",
+      "recipe_sha256": "5c41503e29f825753f204d0e98bc2560e5d67ffbb14f4a194d8d4a0a593cf0b0",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libmysofa": {
+      "recipe_path": "packages/libmysofa.cmake",
+      "recipe_sha256": "f36dca3dece42a06f1d201d2fec621dcb37e978ef7617231787a223cb2eeb532",
+      "candidate_dependencies": [
+        "zlib"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libopenmpt": {
+      "recipe_path": "packages/libopenmpt.cmake",
+      "recipe_sha256": "0d5c354daa9e076768405bb2fc2aae75e8ad49800a305dfd2a2709eac61c400d",
+      "candidate_dependencies": [
+        "libsdl2",
+        "ogg",
+        "vorbis",
+        "zlib"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libplacebo": {
+      "recipe_path": "packages/libplacebo.cmake",
+      "recipe_sha256": "64c407a343a43bfe8b372b12d5dac4621d1362f094239cfb2c215e6ce213332f",
+      "candidate_dependencies": [
+        "fast_float",
+        "glad",
+        "lcms2",
+        "shaderc",
+        "spirv-cross",
+        "vulkan",
+        "xxhash"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libpng": {
+      "recipe_path": "packages/libpng.cmake",
+      "recipe_sha256": "b6d7aa5b712c87b0d023e1506fefe0190eeab6849c3e63eeba9f329d65657720",
+      "candidate_dependencies": [
+        "zlib"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libpsl": {
+      "recipe_path": "packages/libpsl.cmake",
+      "recipe_sha256": "de81de4a2791976cc1d52c114f3861ceae2154f825b3dcb0e609e09163d8b56f",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libsamplerate": {
+      "recipe_path": "packages/libsamplerate.cmake",
+      "recipe_sha256": "aec154ae791c215ef7669c30718bbc0dec7f6b727ea90145892b2ed664875b65",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libsdl2": {
+      "recipe_path": "packages/libsdl2.cmake",
+      "recipe_sha256": "e323098f27a92e23b406698ff1de547ca64c2d53c026fadd56a3e8d1e8732473",
+      "candidate_dependencies": [
+        "libiconv",
+        "vulkan"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libsixel": {
+      "recipe_path": "packages/libsixel.cmake",
+      "recipe_sha256": "999c757d24a44da84b37b00cc7227750f86fb10302f0179af87a59f880b1ee77",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libsoxr": {
+      "recipe_path": "packages/libsoxr.cmake",
+      "recipe_sha256": "cec59d2ed74e2de1d3984eee656d475df047a2331d4b68219677d3a363bde38e",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libsrt": {
+      "recipe_path": "packages/libsrt.cmake",
+      "recipe_sha256": "ab11608addcf34fac0f738a5abe3c35ead91e9bf1802373b2e5a94c6312b22b7",
+      "candidate_dependencies": [
+        "openssl"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libssh": {
+      "recipe_path": "packages/libssh.cmake",
+      "recipe_sha256": "31a497f6b79da6d518f3422456fdbaca58d354455a3ebf8832bc0f0bd2f568d6",
+      "candidate_dependencies": [
+        "openssl",
+        "zlib"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libudfread": {
+      "recipe_path": "packages/libudfread.cmake",
+      "recipe_sha256": "0607b8034ca0feaebb4caff99cfca1ed1be8108c8c35b29b85a58ec0d872112a",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libunibreak": {
+      "recipe_path": "packages/libunibreak.cmake",
+      "recipe_sha256": "049156f79446ae26709c711abc0321c38ed723f5e45815de7cd5d2a11a74c00a",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libva": {
+      "recipe_path": "packages/libva.cmake",
+      "recipe_sha256": "93ec04ce9d24844d548c69d20cc077c7c1a187901886d3956e021ed1b9aeb718",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libvpl": {
+      "recipe_path": "packages/libvpl.cmake",
+      "recipe_sha256": "f590f3290564e30bb17237ba2ea77e1e434a0e30dea524fbecd8bdbea8031527",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libvpx": {
+      "recipe_path": "packages/libvpx.cmake",
+      "recipe_sha256": "728c41fd3b6613fb0df4025b65c2ea8bb66781441cba23569c94cb36e9342164",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "libwebp": {
+      "recipe_path": "packages/libwebp.cmake",
+      "recipe_sha256": "390d3b131e2dfa8a4fa093b7d05b2d3e6967962240057f0c183d4201f045aa45",
+      "candidate_dependencies": [
+        "libjpeg",
+        "libpng",
+        "zlib"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libxml2": {
+      "recipe_path": "packages/libxml2.cmake",
+      "recipe_sha256": "49de5caa0199c4291564408254f830539073721286aa3c715650d2fb791706fd",
+      "candidate_dependencies": [
+        "libiconv",
+        "zlib"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libzimg": {
+      "recipe_path": "packages/libzimg.cmake",
+      "recipe_sha256": "918aac808ae4d526a9148c16735a615c6e7467ccda623afca07d34aee4b87c06",
+      "candidate_dependencies": [
+        "graphengine"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "libzvbi": {
+      "recipe_path": "packages/libzvbi.cmake",
+      "recipe_sha256": "a647dbfaf97d65e6cc60a0ed0c19cca2a5316f1d3ec9fadd45e368d4f66bb2e9",
+      "candidate_dependencies": [
+        "libiconv",
+        "libpng"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "luajit": {
+      "recipe_path": "packages/luajit.cmake",
+      "recipe_sha256": "75ffc396d502c453d4606238430fc70171aebfa3e26410a4f5b65405c7c49022",
+      "candidate_dependencies": [
+        "libiconv"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "lzo": {
+      "recipe_path": "packages/lzo.cmake",
+      "recipe_sha256": "dbdb89326b8a02674195a34fff54a2d98f640f178fe62211fb7e2a6675cf3aa4",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "mpv": {
+      "recipe_path": "packages/mpv.cmake",
+      "recipe_sha256": "cfb9b0fbaaf6013069fe3eeda7e9e9644546f09cd772dbd549f8eb7fa21c7122",
+      "candidate_dependencies": [
+        "angle-headers",
+        "curl",
+        "ffmpeg",
+        "fribidi",
+        "lcms2",
+        "libarchive",
+        "libass",
+        "libdvdnav",
+        "libdvdread",
+        "libiconv",
+        "libjpeg",
+        "libplacebo",
+        "libpng",
+        "libsdl2",
+        "libsixel",
+        "luajit",
+        "mujs",
+        "openal-soft",
+        "rubberband",
+        "shaderc",
+        "spirv-cross",
+        "subrandr",
+        "uchardet",
+        "vapoursynth",
+        "vulkan"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "mujs": {
+      "recipe_path": "packages/mujs.cmake",
+      "recipe_sha256": "226d428b98e53dd5a1dea6609f0a273293a56951f53012408e4ee57b3a28fce4",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "nghttp2": {
+      "recipe_path": "packages/nghttp2.cmake",
+      "recipe_sha256": "d0d670835d662475e66d5083e745469f252458c0596b99c7cd34a2ba667ee872",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "nghttp3": {
+      "recipe_path": "packages/nghttp3.cmake",
+      "recipe_sha256": "190be5c09681097f68656ccac9b40b6de639ef861ce1c304601abd62a2ec1f54",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "ngtcp2": {
+      "recipe_path": "packages/ngtcp2.cmake",
+      "recipe_sha256": "fcf6d10a3544073065b35eb8ff9d8e9efc788de979f5dedbbc6c522e87abec54",
+      "candidate_dependencies": [
+        "openssl"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "nvcodec-headers": {
+      "recipe_path": "packages/nvcodec-headers.cmake",
+      "recipe_sha256": "ada268ec2e56867a085e66f491e4bdce80bc2ccf84e591ecef75030ee04cab9f",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "ogg": {
+      "recipe_path": "packages/ogg.cmake",
+      "recipe_sha256": "434cc5dd65190191772ffd44c68d10cffdb063eee3ea78f4b562b42be762bc2f",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "openal-soft": {
+      "recipe_path": "packages/openal-soft.cmake",
+      "recipe_sha256": "7dfbca2848cbba0ff98d87b3fe4b29931ed9dddef59ccc8eb531c22aea00f5ab",
+      "candidate_dependencies": [
+        "libsdl2"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "openssl": {
+      "recipe_path": "packages/openssl.cmake",
+      "recipe_sha256": "79cd848d11ebb59ccc55db4fa237e94d600428bbd9ae255c9abeb613ca4be8fc",
+      "candidate_dependencies": [
+        "brotli",
+        "zlib",
+        "zstd"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "opus": {
+      "recipe_path": "packages/opus.cmake",
+      "recipe_sha256": "2762c05c3e2cabf4f3959fdf60ea88bca522151be5940bd454cc5d3a106aa428",
+      "candidate_dependencies": [
+        "opus-dnn"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "opus-dnn": {
+      "recipe_path": "packages/opus-dnn.cmake",
+      "recipe_sha256": "6d0290f20a218b724317b260eace7e69da8529c644a7cbc0e4ae533c0d2adbed",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "rubberband": {
+      "recipe_path": "packages/rubberband.cmake",
+      "recipe_sha256": "988619a42e100de14d5c05cd65fd80b49b13334324726eb6634f56b7c4b05da0",
+      "candidate_dependencies": [
+        "libsamplerate"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "shaderc": {
+      "recipe_path": "packages/shaderc.cmake",
+      "recipe_sha256": "d96198710bb6747e4386c706ceedc9c542d7f6a8c368b8c4623db7ee98233daa",
+      "candidate_dependencies": [
+        "glslang",
+        "spirv-headers",
+        "spirv-tools"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "speex": {
+      "recipe_path": "packages/speex.cmake",
+      "recipe_sha256": "75a53b5a46f60bb1c09805c712fc8522e9ddeea55c02bdc033f07795d0541038",
+      "candidate_dependencies": [
+        "ogg"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "spirv-cross": {
+      "recipe_path": "packages/spirv-cross.cmake",
+      "recipe_sha256": "a101e31511fed851006a88ecd8df71acd5fe498d9adc800d7bd455baf1e7a56c",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "spirv-headers": {
+      "recipe_path": "packages/spirv-headers.cmake",
+      "recipe_sha256": "55f35846e4bac576a88351eba0d4e141b6786e0988004a3b1fdff111ac0ca173",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "spirv-tools": {
+      "recipe_path": "packages/spirv-tools.cmake",
+      "recipe_sha256": "3feb4110baa93cabded6564caba08bdce883fba93797fa40860bd3713271bfc8",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "subrandr": {
+      "recipe_path": "packages/subrandr.cmake",
+      "recipe_sha256": "cbf83815bc10a86c38151633826e413d34167410bc9569ee22c045c53a01f477",
+      "candidate_dependencies": [
+        "fontconfig",
+        "freetype2",
+        "harfbuzz"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "svtav1": {
+      "recipe_path": "packages/svtav1.cmake",
+      "recipe_sha256": "4649b91fa340471263d52ef23fcd5dd0ff520dc60e91df564ce1059c4be27c9e",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "uavs3d": {
+      "recipe_path": "packages/uavs3d.cmake",
+      "recipe_sha256": "d3d8b5282f9b0a82041cb702415eabdb1e762d1fae36d0203609c08546cc3714",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "uchardet": {
+      "recipe_path": "packages/uchardet.cmake",
+      "recipe_sha256": "8f47694c5e80817a39e78d60710b2d16a2e462b237af9a5a662e289060f104f8",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "vapoursynth": {
+      "recipe_path": "packages/vapoursynth.cmake",
+      "recipe_sha256": "af684ecd93f7c8a7b33d65e727c6de42c5dcd8492e558d0d8b6cedcc8fbc0dc6",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "vorbis": {
+      "recipe_path": "packages/vorbis.cmake",
+      "recipe_sha256": "398d8290d23fbf27eedee4a39d435c061a5fe51b20a1d67cc22e063ace9a057d",
+      "candidate_dependencies": [
+        "ogg"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "vulkan": {
+      "recipe_path": "packages/vulkan.cmake",
+      "recipe_sha256": "d904d9ffb4a86d14849824f34a932fadf0b18c9fe58619c83392a339943a0bef",
+      "candidate_dependencies": [
+        "vulkan-header"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "vulkan-header": {
+      "recipe_path": "packages/vulkan-header.cmake",
+      "recipe_sha256": "b8a40525e3c781c51663ed3dadd3bf837035b94cfac1c1c2589679b21567fe36",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "x264": {
+      "recipe_path": "packages/x264.cmake",
+      "recipe_sha256": "bc49bd473b91620a8a71f9b88bd28b85a3cc8f680cb283a6f8e1808f5f737ec7",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "x265": {
+      "recipe_path": "packages/x265.cmake",
+      "recipe_sha256": "1e85d352aeda1b77378f00e691b2dc8cd3c350f8f33968f6b147c062043a142a",
+      "candidate_dependencies": [
+        "x265"
+      ],
+      "unresolved_dependency_edges": [
+        {
+          "line": 110,
+          "unmatched_token": "x265-10bit-lib"
+        },
+        {
+          "line": 140,
+          "unmatched_token": "x265-12bit-lib"
+        },
+        {
+          "line": 140,
+          "unmatched_token": "x265-10bit-lib"
+        }
+      ]
+    },
+    "x265-10bit-lib": {
+      "recipe_path": "packages/x265.cmake",
+      "recipe_sha256": "1e85d352aeda1b77378f00e691b2dc8cd3c350f8f33968f6b147c062043a142a",
+      "candidate_dependencies": [
+        "x265"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "x265-8+10bit": {
+      "recipe_path": "packages/x265.cmake",
+      "recipe_sha256": "1e85d352aeda1b77378f00e691b2dc8cd3c350f8f33968f6b147c062043a142a",
+      "candidate_dependencies": [
+        "x265",
+        "x265-10bit-lib"
+      ],
+      "unresolved_dependency_edges": []
+    },
+    "xxhash": {
+      "recipe_path": "packages/xxhash.cmake",
+      "recipe_sha256": "0e732aa5a163749cc3876e34309f48cea3fb60464f5d6c229b4ce03e5eb647bb",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "xz": {
+      "recipe_path": "packages/xz.cmake",
+      "recipe_sha256": "d7c809cfae2f7bb73bd3b216ee412dc8155f9fef481ea367fc87e87da3ce71b7",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "zlib": {
+      "recipe_path": "packages/zlib.cmake",
+      "recipe_sha256": "1946f0b75dcb229abe0323644e9453c0868fef1264c28a64f2f02fb4b0f0369d",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    },
+    "zstd": {
+      "recipe_path": "packages/zstd.cmake",
+      "recipe_sha256": "84c3e98c148ab52579c99106ac5f1256e842d3dd51369ad222c1d9f71fb716cb",
+      "candidate_dependencies": [],
+      "unresolved_dependency_edges": []
+    }
+  },
+  "limitations": [
+    "Named dependencies are lexical and include unevaluated conditions.",
+    "Only three FFmpeg x86 conditional edges and their selected x265 helper edges are expanded.",
+    "Implicit downloads, submodules, archive internals, toolchain and host bootstrap remain separate.",
+    "Feature compatibility, source object selection and an offline build have not been established."
+  ]
+}
