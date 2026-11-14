@@ -51,7 +51,7 @@ index cdae6fbe..47b8b86f 100644
 +        n->recoveryTextureGeneration = qtRecoveryIdentity();
 +#endif
 diff --git a/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp b/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
-index e0ca7c6d..2d20d15b 100644
+index e0ca7c6d..1a79033f 100644
 --- a/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
 +++ b/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
 @@ -6,0 +7,4 @@
@@ -98,12 +98,13 @@ index e0ca7c6d..2d20d15b 100644
 @@ -3144 +3176 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 -        if (!e->srb->create())
 +        if (!e->srb->create()) {
-@@ -3145,0 +3178,4 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3145,0 +3178,5 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
-+            e->recoveryBoundTexture = e->recoveryBoundRhiTexture = nullptr;
++            e->recoveryBoundTexture = nullptr;
++            e->recoveryBoundRhiTexture = nullptr;
 +#endif
 +        }
-@@ -3366,0 +3403,7 @@ void Renderer::renderMergedBatch(PreparedRenderBatch *renderBatch, bool depthPos
+@@ -3366,0 +3404,7 @@ void Renderer::renderMergedBatch(PreparedRenderBatch *renderBatch, bool depthPos
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +        if (draw.indexCount > 0 && !draw.recoveryOverflow) {
 +            for (quint64 node : draw.recoveryNodes)
@@ -111,12 +112,12 @@ index e0ca7c6d..2d20d15b 100644
 +                                   !depthPostPass && m_renderMode != QSGRendererInterface::RenderMode3D);
 +        }
 +#endif
-@@ -3579,0 +3623,4 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
+@@ -3579,0 +3624,4 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +                qtRecoveryMarkDraw(qtRecoveryNodeIdentity(e->node), reinterpret_cast<uintptr_t>(renderTarget().rt), e->recoveryBoundTexture, e->recoveryBoundRhiTexture,
 +                                   !depthPostPass && m_renderMode != QSGRendererInterface::RenderMode3D);
 +#endif
-@@ -3583,0 +3631,5 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
+@@ -3583,0 +3632,5 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +            if (g->vertexCount() > 0)
 +                qtRecoveryMarkDraw(qtRecoveryNodeIdentity(e->node), reinterpret_cast<uintptr_t>(renderTarget().rt), e->recoveryBoundTexture, e->recoveryBoundRhiTexture,

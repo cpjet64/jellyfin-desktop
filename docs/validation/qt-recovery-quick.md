@@ -44,3 +44,15 @@ with synthetic identities, including zero-attempt readiness, failed swaps and
 retained-frame reuse. A separate source test exercises the batch renderer's
 draw-set membership storage and overflow. The actual renderer draw and
 material-binding integration remain untested; integration review remains open.
+
+The publication boundary rejects out-of-range identity and timestamp values
+before retaining a native frame. The added negative source cases have not been
+run. The binding collector remains in the upstream renderer function: moving
+it out safely requires transferring the existing sampler factory and private
+shader, texture, cache and renderer state together, and needs separate review.
+In the retrieved source, `uploadBatch` grows from 248 to 255 physical lines
+(216 to 224 nonblank lines excluding line comments), while
+`updateMaterialDynamicData` shrinks from 202 to 144 physical lines (144 to 109
+by the same proxy). These counts are not logical-line measurements. Both
+functions remain oversized; the added upload hook increases an existing
+violation and is an unresolved source-policy blocker.

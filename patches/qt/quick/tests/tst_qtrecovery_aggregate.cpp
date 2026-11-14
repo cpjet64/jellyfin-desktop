@@ -4,6 +4,7 @@
 #include <QtQuick/QSGTexture>
 #include <cassert>
 #include <cstdlib>
+#include <limits>
 
 #undef assert
 #define assert(x) do { if (!(x)) std::abort(); } while (false)
@@ -104,8 +105,35 @@ static void invalidFboAndResolve()
     f.draw(); f.swap(); qtRecoveryFinish(true, false); assert(!f.take());
 }
 
+static void rejectsFrame(Fixture &f, const QtRecoveryFrameV1 &bad)
+{
+    QtRecoverySwapTicketV1 active{};
+    f.begin(); qtRecoveryFboBegin(f.frame.actual_render_fbo, f.life);
+    assert(!qt_recovery_publish_native_frame_v1(&bad, &active));
+    f.draw(); f.swap(); qtRecoveryFinish(true, false); assert(!f.take());
+}
+
+static void invalidNativeFrame()
+{
+    Fixture f;
+    auto bad = f.frame; bad.discontinuity_id = 0; rejectsFrame(f, bad);
+    bad = f.frame; bad.media_pts = -1.0; rejectsFrame(f, bad);
+    bad.media_pts = -std::numeric_limits<double>::max(); rejectsFrame(f, bad);
+    bad.media_pts = std::numeric_limits<double>::quiet_NaN(); rejectsFrame(f, bad);
+    bad.media_pts = std::numeric_limits<double>::infinity(); rejectsFrame(f, bad);
+    bad.media_pts = double(std::numeric_limits<int64_t>::max() / 2000) + 1.0; rejectsFrame(f, bad);
+    const uint64_t over = uint64_t(std::numeric_limits<int64_t>::max()) + 1;
+    bad = f.frame; bad.attempt = over; rejectsFrame(f, bad);
+    bad = f.frame; bad.renderer_generation = over; rejectsFrame(f, bad);
+    bad = f.frame; bad.entry_id = over; rejectsFrame(f, bad);
+    bad = f.frame; bad.discontinuity_id = over; rejectsFrame(f, bad);
+    bad = f.frame; bad.source_frame_serial = over; rejectsFrame(f, bad);
+    bad = f.frame; bad.render_serial = over; rejectsFrame(f, bad);
+}
+
 int main()
 {
     successAndReuse(); zeroAttemptReadiness(); swapFailures(); badDraws(); revocationAndReuse();
     invalidFboAndResolve();
+    invalidNativeFrame();
 }

@@ -33,6 +33,20 @@ NodeRegistration *findNode(uint64_t lifetime)
     }
     return nullptr;
 }
+
+bool validFrame(const QtRecoveryFrameV1 &frame)
+{
+    const auto limit = uint64_t(std::numeric_limits<int64_t>::max());
+    return frame.size == sizeof(frame) && frame.version == QT_RECOVERY_SUBMISSION_ABI_VERSION
+            && !frame.reserved && frame.attempt <= limit
+            && frame.renderer_generation && frame.renderer_generation <= limit
+            && frame.entry_id && frame.entry_id <= limit
+            && frame.discontinuity_id && frame.discontinuity_id <= limit
+            && frame.source_frame_serial && frame.source_frame_serial <= limit
+            && frame.render_serial && frame.render_serial <= limit
+            && std::isfinite(frame.media_pts) && frame.media_pts >= 0.0
+            && frame.media_pts <= double(std::numeric_limits<int64_t>::max() / 2000);
+}
 }
 
 void qtRecoveryRegisterNode(const void *node, uint64_t lifetime)
@@ -205,9 +219,7 @@ extern "C" int qt_recovery_publish_native_frame_v1(const QtRecoveryFrameV1 *fram
                                                     QtRecoverySwapTicketV1 *ticket)
 {
     if (!frame || !ticket || !state.active || !state.inFbo || state.published
-        || frame->size != sizeof(*frame) || frame->version != QT_RECOVERY_SUBMISSION_ABI_VERSION
-        || frame->reserved || !frame->renderer_generation || !frame->entry_id
-        || !frame->source_frame_serial || !frame->render_serial || !std::isfinite(frame->media_pts)
+        || !validFrame(*frame)
         || frame->actual_render_fbo != state.renderFbo) {
         qtRecoveryFboAbort();
         return 0;
