@@ -10,6 +10,7 @@
 #include "PlayerComponentRecovery.h"
 #include <atomic>
 #include <memory>
+#include <mutex>
 #endif
 
 #ifdef MPVQT_RECOVERY_RUNTIME
@@ -21,28 +22,48 @@ namespace {
 class PendingHook final : public std::enable_shared_from_this<PendingHook> {
 public:
   using Operation = std::function<int(mpv_handle*)>;
+  enum class Status { Reserved, Posted, Continued, PostFailed, NativeRejected };
   PendingHook(std::shared_ptr<RendererRuntime::CoreOwner> core, RendererRuntime::NativeLease lease, Operation operation)
       : core_(std::move(core)), lease_(std::move(lease)), operation_(std::move(operation)) {}
-  ~PendingHook() {
-    // No native cancellation acknowledgement exists on a discarded callback.
-    // Retain the admitted operation until process exit rather than finalize it.
-    if (lease_.get()) (void)new RendererRuntime::NativeLease(std::move(lease_));
+  static void dispose(PendingHook* pending) {
+    if (pending->containUnresolved()) { delete pending; return; }
+    // Unexpected owner-invariant failure: retain one existing operation, not
+    // one allocation per hook. Its lease fences the same revoked core.
+    static std::mutex mutex;
+    static PendingHook* retained = nullptr;
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!retained) { retained = pending; return; }
+    if (retained->core_ == pending->core_) { delete pending; return; }
+    qFatal("Two distinct cores violated the unresolved-hook ownership invariant");
   }
   void setQuitConnection(const QMetaObject::Connection& connection) { quitConnection_ = connection; }
   void dispatch() {
     if (dispatched_.exchange(true)) return;
     auto self = shared_from_this();
     QObject::disconnect(quitConnection_);
+    status_.store(Status::Posted);
     if (!core_->controller || !QMetaObject::invokeMethod(core_->controller, [self] {
       const int result = self->operation_(self->lease_.get());
-      if (result >= 0) self->lease_ = {};
-    }, Qt::QueuedConnection)) return;
+      if (result >= 0) { self->status_.store(Status::Continued); self->lease_ = {}; }
+      else { self->status_.store(Status::NativeRejected); qWarning() << "Native hook continuation rejected:" << result; self->containUnresolved(); }
+    }, Qt::QueuedConnection)) {
+      status_.store(Status::PostFailed); qWarning() << "Native hook continuation could not be posted";
+      containUnresolved();
+    }
   }
 private:
+  bool containUnresolved() {
+    if (!lease_.get()) return true;
+    if (core_->blockUnresolvedHook()) { core_->revokeControl(); lease_ = {}; return true; }
+    core_->revokeControl();
+    qCritical() << "Unresolved hook could not enter the bounded core quarantine";
+    return false;
+  }
   std::shared_ptr<RendererRuntime::CoreOwner> core_;
   RendererRuntime::NativeLease lease_;
   Operation operation_;
   std::atomic<bool> dispatched_{false};
+  std::atomic<Status> status_{Status::Reserved};
   QMetaObject::Connection quitConnection_;
 };
 
@@ -52,7 +73,7 @@ std::shared_ptr<PendingHook> reserveHook(const std::shared_ptr<RendererRuntime::
   if (!owner || !operation) return {};
   auto lease = owner->acquireNative();
   if (!lease.get()) return {};
-  auto pending = std::make_shared<PendingHook>(owner, std::move(lease), std::move(operation));
+  auto pending = std::shared_ptr<PendingHook>(new PendingHook(owner, std::move(lease), std::move(operation)), PendingHook::dispose);
   if (auto* app = QCoreApplication::instance())
     pending->setQuitConnection(QObject::connect(app, &QCoreApplication::aboutToQuit, app,
       [pending] { pending->dispatch(); }, Qt::DirectConnection));
