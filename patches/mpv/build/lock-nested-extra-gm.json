@@ -1,0 +1,66 @@
+{
+  "status": "CANDIDATE TREE METADATA ONLY; nested sources and closure unresolved",
+  "selection": "G-M selected GitHub commits absent from lock-nested-gm.json",
+  "sources": [
+    {
+      "package": "mbedtls",
+      "repository": "https://github.com/Mbed-TLS/mbedtls.git",
+      "commit": "1ec69067fa1351427f904362c1221b31538c8b57",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/mbedtls.cmake",
+      "recipe_submodule_directives": [],
+      "commit_metadata_endpoint": "https://api.github.com/repos/Mbed-TLS/mbedtls/git/commits/1ec69067fa1351427f904362c1221b31538c8b57",
+      "tree_endpoint": "https://api.github.com/repos/Mbed-TLS/mbedtls/git/trees/1ec69067fa1351427f904362c1221b31538c8b57?recursive=1",
+      "tree_sha": "cfa5a9f04758b87e4d3b6c63367d2fe8b03f9b4e",
+      "endpoint_echo_sha": "1ec69067fa1351427f904362c1221b31538c8b57",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "errors": []
+    },
+    {
+      "package": "mpv-packaging",
+      "repository": "https://github.com/shinchiro/mpv-packaging.git",
+      "commit": "1c534ce8c21fab0be2a394ad73decc15e015693e",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/mpv-packaging.cmake",
+      "recipe_submodule_directives": [],
+      "commit_metadata_endpoint": "https://api.github.com/repos/shinchiro/mpv-packaging/git/commits/1c534ce8c21fab0be2a394ad73decc15e015693e",
+      "tree_endpoint": "https://api.github.com/repos/shinchiro/mpv-packaging/git/trees/1c534ce8c21fab0be2a394ad73decc15e015693e?recursive=1",
+      "tree_sha": "ed2e4b01162ee3e6b0078ddb32c62e6c8a85e6cc",
+      "endpoint_echo_sha": "1c534ce8c21fab0be2a394ad73decc15e015693e",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "errors": []
+    },
+    {
+      "package": "libopusenc",
+      "repository": "https://github.com/xiph/libopusenc.git",
+      "commit": "3c65f440baff6220872ec11b0cbde37ef7a48f78",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libopusenc.cmake",
+      "recipe_submodule_directives": [],
+      "commit_metadata_endpoint": "https://api.github.com/repos/xiph/libopusenc/git/commits/3c65f440baff6220872ec11b0cbde37ef7a48f78",
+      "tree_endpoint": "https://api.github.com/repos/xiph/libopusenc/git/trees/3c65f440baff6220872ec11b0cbde37ef7a48f78?recursive=1",
+      "tree_sha": "c8801d52e46dbed8c09b5e1a01a62aaea701c1df",
+      "endpoint_echo_sha": "3c65f440baff6220872ec11b0cbde37ef7a48f78",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "errors": []
+    },
+    {
+      "package": "megasdk",
+      "repository": "https://github.com/meganz/sdk.git",
+      "commit": "7e4519cc1d8c42312444482766b761c899894e6f",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/megasdk.cmake",
+      "recipe_submodule_directives": [],
+      "commit_metadata_endpoint": "https://api.github.com/repos/meganz/sdk/git/commits/7e4519cc1d8c42312444482766b761c899894e6f",
+      "tree_endpoint": "https://api.github.com/repos/meganz/sdk/git/trees/7e4519cc1d8c42312444482766b761c899894e6f?recursive=1",
+      "tree_sha": "b602c52fab665ee288f94cf53e0916aa62d40f1e",
+      "endpoint_echo_sha": "7e4519cc1d8c42312444482766b761c899894e6f",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "errors": []
+    }
+  ]
+}

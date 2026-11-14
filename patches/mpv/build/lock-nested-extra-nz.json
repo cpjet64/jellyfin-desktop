@@ -1,0 +1,11 @@
+{
+  "status": "PARTIAL tree metadata; nested dependencies and full closure unverified",
+  "scope": "N-Z GitHub candidates in lock-resolution-nz.json not covered by lock-nested-nz.json",
+  "evidence": "GET repos/{repository}/git/commits/{commit} provides root_tree; GET repos/{repository}/git/trees/{commit}?recursive=1 provides entries and truncation. Repository and commit are in lock-resolution-nz.json. Both trees reported truncated=false; no gitlinks or matching Cargo.lock, DEPS, or .gitmodules paths were found. No GIT_SUBMODULES directive occurs in either provider recipe. Tree metadata does not establish nested dependency closure.",
+  "records": [
+    {"package":"opusfile","repository":"https://github.com/xiph/opusfile.git","commit":"3ecc22aa0a4430f61c2403d57370a089536d197a","root_tree":"df4706704b7da65b396a4c94089a576ebdf20692","truncated":false,"entries":[]},
+    {"package":"opus-tools","repository":"https://github.com/xiph/opus-tools.git","commit":"df7b70356b3fcff3d4e31ccbe13f3ffdeaacf775","root_tree":"d456334b0254754b1f47b91d74c528788ba76a88","truncated":false,"entries":[]}
+  ],
+  "errors": [],
+  "limitations": ["Non-GitHub repositories and archive candidates are outside this GitHub-only inspection.","No checkout, archive, build, or configured dependency closure was inspected."]
+}

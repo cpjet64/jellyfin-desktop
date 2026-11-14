@@ -1,0 +1,32 @@
+{
+  "entries": [
+    {
+      "recipe_submodules": "not specified in recipe",
+      "endpoint": "https://api.github.com/repos/libexpat/libexpat/git/trees/628f49ba13f789b2f94e678367c8d5da474c12bc?recursive=1",
+      "package": "expat",
+      "references": [],
+      "commit": "628f49ba13f789b2f94e678367c8d5da474c12bc",
+      "truncated": false,
+      "commit_endpoint": "https://api.github.com/repos/libexpat/libexpat/git/commits/628f49ba13f789b2f94e678367c8d5da474c12bc",
+      "root_tree_error": null,
+      "tree_sha": "78a3147e1ed8dd379d5b00324c6780815926472b"
+    },
+    {
+      "recipe_submodules": "not specified in recipe",
+      "endpoint": "https://api.github.com/repos/xiph/flac/git/trees/e94ff9f68b8e7dbd3e9f8b1ac18a8eca1914f181?recursive=1",
+      "package": "flac",
+      "references": [],
+      "commit": "e94ff9f68b8e7dbd3e9f8b1ac18a8eca1914f181",
+      "truncated": false,
+      "commit_endpoint": "https://api.github.com/repos/xiph/flac/git/commits/e94ff9f68b8e7dbd3e9f8b1ac18a8eca1914f181",
+      "root_tree_error": null,
+      "tree_sha": "21ad10e5bbfd1ac8444da9c8bd2d725cb7b42bcf"
+    }
+  ],
+  "limitations": [
+    "Tree entries do not establish whether nested fetches execute; blob contents not inspected.",
+    "Archive and non-GitHub sources excluded from this GitHub-only inventory.",
+    "Truncated responses require further enumeration."
+  ],
+  "status": "Additional GitHub metadata inventory only; nested closure unverified"
+}
