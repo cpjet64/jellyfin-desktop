@@ -31,7 +31,7 @@ authorized return to playing. A failed retirement or restoration cannot be
 acknowledged as successful. Preserve authenticated loads without putting
 credentials or authenticated URLs into logs or persistent evidence.
 
-The working interpretation, pending product-owner confirmation before
+The working interpretation, pending technical review before
 execution, allows an operation-timeout reload to retain a usable renderer
 generation. It still requires a newly attributable accepted load and a newer
 post-seek frame. A renderer retirement and recreation requires a new renderer
