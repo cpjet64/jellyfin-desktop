@@ -8,7 +8,6 @@ class SettlementError(RuntimeError):
 
 
 def _milliseconds(end, clock):
-    # Millisecond truncation can conservatively reject the final fractional millisecond.
     remaining = end - clock()
     if remaining <= 0:
         raise SettlementError('deadline exceeded')
@@ -89,8 +88,12 @@ def _cleanup(api, job, pin, end, clock, evidence):
     _milliseconds(end, clock)
     final = _account(api, job)
     evidence['final'] = final
+    observed = clock()
+    if observed >= end:
+        raise SettlementError('cleanup deadline exceeded after final accounting')
     if final['active'] != 0 or final['total'] != baseline['total']:
         raise SettlementError('job did not settle or association changed')
+    evidence['settled_at'] = observed
     evidence['result'] = 'telemetry_cleanup' if processes else 'natural'
 
 
@@ -149,8 +152,8 @@ def settle(api, job, root, pin, deadline, *, grace_seconds=1.0, clock=monotonic,
         cleanup_end = evidence['cleanup_start'] + 10.0
         evidence['cleanup_deadline'] = cleanup_end
         _cleanup(api, job, pin, cleanup_end, clock, evidence)
-        evidence['settled_at'] = clock()
     except BaseException as exc:
+        evidence['result'] = 'failed'
         evidence['error'] = repr(exc)
         if cleanup_end is None:
             cleanup_end = clock() + 10.0

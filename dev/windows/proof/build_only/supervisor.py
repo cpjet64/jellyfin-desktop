@@ -149,7 +149,11 @@ def _assemble(policy, state, api, start):
 
 def _close_launch_failure(api, job, failure):
     errors = []
-    deadline = monotonic() + 10.0
+    deadline = failure.cleanup_deadline
+    if deadline is None:
+        return ['missing cleanup deadline; outer helper settlement required']
+    if monotonic() >= deadline:
+        return ['cleanup deadline exceeded; outer helper settlement required']
     try:
         api.terminate_job(job, 1)
     except BaseException as exc:
@@ -157,9 +161,14 @@ def _close_launch_failure(api, job, failure):
     if failure.root is not None:
         root_signaled = False
         try:
+            if monotonic() >= deadline:
+                raise TimeoutError('cleanup deadline exceeded')
             if not api.wait(failure.root.process, 0):
                 api.terminate(failure.root.process, 1)
-            root_signaled = failure.root.wait(max(0, int((deadline - monotonic()) * 1000)))
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise TimeoutError('cleanup deadline exceeded')
+            root_signaled = failure.root.wait(max(1, int(remaining * 1000)))
             if not root_signaled:
                 errors.append('root did not signal')
         except BaseException as exc:
@@ -202,6 +211,10 @@ def _run_job(api, policy, env, started, receipt):
         observed_id = ':'.join(str(part) for part in telemetry.file_id)
         if observed_id != policy.telemetry_file_id:
             raise ValueError('telemetry file identity mismatch')
+        if policy.kind == 'fixture' and (telemetry.file_id != executable.file_id or
+                telemetry.final_path != executable.final_path or telemetry.sha256 != executable.sha256 or
+                telemetry.size != executable.size):
+            raise ValueError('fixture telemetry is not pinned Python')
         protected_ids = {item.file_id for item in (*sources, executable, response, telemetry)}
         # Version is policy metadata bound to these pinned bytes, not an observed resource.
         receipt['pin'] = {'path': policy.telemetry_path, 'sha256': telemetry.sha256.lower(),
@@ -227,7 +240,8 @@ def _run_job(api, policy, env, started, receipt):
             outcome = settle(api, job, root, telemetry, started[0] + policy.deadline_ms / 1000,
                              grace_seconds=policy.grace_ms / 1000)
         except BaseException:
-            receipt['errors'].extend(_close_launch_failure(api, job, LaunchFailure('interrupted', root, (), True)))
+            failure = LaunchFailure('interrupted', root, (), True, cleanup_deadline=monotonic() + 10.0)
+            receipt['errors'].extend(_close_launch_failure(api, job, failure))
             raise
         receipt['outcome'] = outcome
         if outcome['result'] == 'failed':
@@ -250,14 +264,14 @@ def _supervise(policy, receipt_path):
     api = WinAPI()
     if not api.in_any_job():
         raise RuntimeError('qualified outer helper job is required')
-    state = {'errors': [], 'outcome': None, 'outputs': []}
+    state = {'reason': None, 'errors': [], 'outcome': None, 'outputs': [], 'owned': None}
     started = []
     with _receipt(receipt_path) as receipt:
         failure = None
         try:
             _run_job(api, policy, env, started, state)
         except RetainedHandlesError as exc:
-            state['errors'].append(repr(exc))
+            state['reason'] = repr(exc)
             for handle in exc.retained_handles:
                 try:
                     handle.close()
@@ -265,15 +279,16 @@ def _supervise(policy, receipt_path):
                     state['errors'].append(repr(close_error))
             failure = exc
         except BaseException as exc:
-            state['errors'].append(repr(exc))
+            state['reason'] = repr(exc)
             failure = exc
+        state['owned'] = {'opened': api.opened, 'closed': api.closed, 'failed': api.close_failed}
         try:
             record = (_assemble(policy, state, api, started[0]) if failure is None else
                       {'schema': 'build-only-failed-v1', 'policy': policy_hash(policy),
                        'result': 'failed', 'evidence': state})
         except BaseException as exc:
             failure = exc
-            state['errors'].append(repr(exc))
+            state['reason'] = repr(exc)
             record = {'schema': 'build-only-failed-v1', 'policy': policy_hash(policy),
                       'result': 'failed', 'evidence': state}
         receipt.write(json.dumps(record, separators=(',', ':')).encode('utf-8'))
@@ -293,6 +308,8 @@ def production(policy_name, receipt_path):
 def _validate_fixture(policy):
     if policy.kind != 'fixture' or policy.command_form != 'fixture':
         raise ValueError('fixture policy required')
+    if policy.deadline_ms != 4000 or policy.grace_ms != 100 or policy.telemetry_version != 'fixture-python':
+        raise ValueError('fixture timing or telemetry metadata mismatch')
     directory = Path(__file__).resolve(strict=True).parent
     project_deps = directory.parents[3] / 'deps'
     command = policy.command
@@ -306,7 +323,8 @@ def _validate_fixture(policy):
     child = str((directory / 'fixture_child.py').resolve(strict=True))
     output = str(target / 'result.bin')
     modes = ('natural', 'residual', 'transientchild', 'spawnlate', 'rootfail', 'timeout')
-    if (command.executable != executable or command.response_path != child or
+    if (policy.telemetry_path != executable or policy.telemetry_sha256 != command.executable_sha256 or
+            policy.telemetry_size != command.executable_size or command.executable != executable or command.response_path != child or
             len(command.args) != 4 or command.args[:2] != ('-B', child) or
             command.args[2] not in modes or command.args[3] != output or
             command.outputs != (output,) or command.cwd != str(target) or
