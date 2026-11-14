@@ -35,6 +35,7 @@ private:
   std::uint64_t loadAttempt_ = 0, restoreFrameSerial_ = 0;
   std::int64_t baselineTime_ = 0, baselinePosition_ = -1, deadline_ = 0;
   std::int64_t lastPosition_ = -1, lastAdvanceTime_ = 0;
+  std::int64_t lastSampleTime_ = 0;
   std::int64_t lastAttemptTime_ = 0;
   bool attempted_ = false, baseline_ = false, baselineOutstanding_ = false, wasPaused_ = false;
 };
