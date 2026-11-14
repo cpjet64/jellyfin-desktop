@@ -1,2 +1,5 @@
 /build_only_v2/** text eol=lf
 /proposals/cl-service-v2/** text eol=lf
+/test_build_only_v2_profile.py text eol=lf
+/test_build_only_v2_receipt.py text eol=lf
+/tests/test_v2_lifecycle_contract.py text eol=lf
