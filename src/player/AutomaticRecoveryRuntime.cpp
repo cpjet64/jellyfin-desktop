@@ -29,24 +29,34 @@ bool AutomaticRecoveryRuntime::submitUserLoad(mpv_handle* core, Key key, const Q
 void AutomaticRecoveryRuntime::observe(const mpv_event* event, Key current, std::int64_t nowMs)
 {
   if (!event) return;
+  if (event->event_id == MPV_EVENT_START_FILE) activeSession_.invalidate();
+  if (event->event_id == MPV_EVENT_END_FILE) {
+    const auto* end = static_cast<const mpv_event_end_file*>(event->data);
+    if (!end || end->playlist_entry_id == activeSession_.entry()) activeSession_.invalidate();
+  }
+  if (event->event_id == MPV_EVENT_QUEUE_OVERFLOW || event->event_id == MPV_EVENT_SHUTDOWN)
+    activeSession_.invalidate();
   if (!installed_ && (nowMs < 0 || nowMs >= deadline_)) { discardQueued(); return; }
+  if (current.session != key_.session || current.revision != key_.revision || current.generation != key_.generation) {
+    discardQueued(); return;
+  }
   const auto state = load_.poll({current.session, current.revision, current.generation}, nowMs);
   if (state != AutomaticRecoveryLoad::State::Pending && state != AutomaticRecoveryLoad::State::Accepted) {
-    discardQueued(); return;
+    if (installed_) invalidate();
+    else discardQueued();
+    return;
   }
   if (event->event_id == MPV_EVENT_COMMAND_REPLY && event->reply_userdata == load_.userdata()) {
     const auto entry = AutomaticRecoveryNative::loadEntry(event, load_.userdata());
     load_.reply(event->reply_userdata, entry > 0, entry, nowMs);
   } else if (event->event_id == MPV_EVENT_START_FILE) {
     if (startedEntry_) { invalidate(); return; }
-    activeSession_.invalidate();
     startedEntry_ = event->data ? static_cast<const mpv_event_start_file*>(event->data)->playlist_entry_id : 0;
     load_.started(startedEntry_, nowMs);
   } else if (event->event_id == MPV_EVENT_FILE_LOADED) {
     if (!startedEntry_ || loaded_) { discardQueued(); return; }
     loaded_ = true;
   } else if (event->event_id == MPV_EVENT_END_FILE) {
-    activeSession_.invalidate();
     if (startedEntry_) { discardQueued(); return; }
   } else if (event->event_id == MPV_EVENT_QUEUE_OVERFLOW ||
              event->event_id == MPV_EVENT_SHUTDOWN) {

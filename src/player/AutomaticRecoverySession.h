@@ -23,6 +23,7 @@ public:
   bool position(Key key, std::int64_t entry, std::int64_t positionMs);
   bool revise(Key previous, Key current, bool paused);
   void invalidate();
+  std::int64_t entry() const { return accepted_ && loaded_ ? candidate_.entry : 0; }
   bool snapshot(Key current, Snapshot& result) const;
 private:
   static bool same(Key a, Key b);
