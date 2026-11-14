@@ -31,6 +31,12 @@ authorized return to playing. A failed retirement or restoration cannot be
 acknowledged as successful. Preserve authenticated loads without putting
 credentials or authenticated URLs into logs or persistent evidence.
 
+The working interpretation, pending product-owner confirmation before
+execution, allows an operation-timeout reload to retain a usable renderer
+generation. It still requires a newly attributable accepted load and a newer
+post-seek frame. A renderer retirement and recreation requires a new renderer
+generation; do not invent one for a same-renderer reload.
+
 Before hands-on acceptance, record the exact package version, source identity,
 artifact hash, machine, GPU, driver, display and server configuration. Generate
 a local clip with moving recognizable content and audio; retain its generation

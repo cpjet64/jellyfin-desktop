@@ -120,7 +120,7 @@ static void cancellationAndStaleCompletion()
     if (change == 2) ++s.generation;
     CHECK(policy.observe(s) == Action::Cancel);
     CHECK(!policy.retired(1, 2, 100));
-    CHECK(!policy.frameObserved(2, 200));
+    CHECK(!policy.frameObserved(2, 42, 11, 200));
     CHECK(!policy.mayUnpause(s));
   }
 }
@@ -132,9 +132,9 @@ static void restorationRequiresFreshReplacementFrame()
   s.rendererFault = true;
   CHECK(policy.observe(s) == Action::Retire);
   CHECK(policy.retired(1, 2, 100));
-  CHECK(policy.restoreStarted(200));
+  CHECK(policy.restoreStarted(42, 10, 200));
   CHECK(!policy.mayUnpause(s));
-  CHECK(policy.frameObserved(2, 400));
+  CHECK(policy.frameObserved(2, 42, 11, 400));
   s.generation = 2;
   s.rendererFault = false;
   s.nowMs = 400;
@@ -151,8 +151,8 @@ static void pausedRestorationAndDeadlineFailClosed()
   s.rendererFault = true;
   CHECK(policy.observe(s) == Action::Retire);
   CHECK(policy.retired(1, 2, 100));
-  CHECK(policy.restoreStarted(200));
-  CHECK(policy.frameObserved(2, 300));
+  CHECK(policy.restoreStarted(42, 10, 200));
+  CHECK(policy.frameObserved(2, 42, 11, 300));
   s.generation = 2;
   s.nowMs = 300;
   CHECK(!policy.mayUnpause(s));
@@ -162,8 +162,8 @@ static void pausedRestorationAndDeadlineFailClosed()
   s.rendererFault = true;
   CHECK(expired.observe(s) == Action::Retire);
   CHECK(!expired.retired(1, 2, 15000));
-  CHECK(!expired.restoreStarted(15000));
-  CHECK(!expired.frameObserved(2, 15000));
+  CHECK(!expired.restoreStarted(42, 10, 15000));
+  CHECK(!expired.frameObserved(2, 42, 11, 15000));
   CHECK(!expired.mayUnpause(s));
 }
 
@@ -176,13 +176,13 @@ static void failureNeverAcknowledgesRetirementOrRestore()
     CHECK(policy.observe(s) == Action::Retire);
     if (stage == 1) {
       CHECK(policy.retired(1, 2, 100));
-      CHECK(policy.restoreStarted(200));
+      CHECK(policy.restoreStarted(42, 10, 200));
     }
     policy.fail();
     CHECK(policy.phase() == Phase::Failed);
     CHECK(!policy.retired(1, 2, 300));
-    CHECK(!policy.restoreStarted(300));
-    CHECK(!policy.frameObserved(2, 300));
+    CHECK(!policy.restoreStarted(42, 10, 300));
+    CHECK(!policy.frameObserved(2, 42, 11, 300));
     CHECK(!policy.mayUnpause(s));
     CHECK(policy.observe(s) != Action::Retire);
   }
@@ -195,8 +195,8 @@ static void staleFrameCannotCompleteReplacement()
   s.rendererFault = true;
   CHECK(policy.observe(s) == Action::Retire);
   CHECK(policy.retired(1, 2, 100));
-  CHECK(policy.restoreStarted(200));
-  CHECK(!policy.frameObserved(1, 300));
+  CHECK(policy.restoreStarted(42, 10, 200));
+  CHECK(!policy.frameObserved(1, 42, 11, 300));
   CHECK(!policy.mayUnpause(s));
   CHECK(policy.phase() == Phase::Failed);
 }
@@ -227,6 +227,68 @@ static void pausedTimeoutCannotAuthorizePlaying()
   CHECK(!policy.mayUnpause(s));
 }
 
+static void reloadRequiresNewAttributableFrame()
+{
+  Policy policy;
+  auto s = sample();
+  s.operationTimedOut = true;
+  CHECK(policy.observe(s) == Action::Reload);
+  // The caller supplies a newly accepted load after its post-seek state.
+  CHECK(policy.restoreStarted(42, 10, 100));
+  CHECK(!policy.mayUnpause(s));
+  CHECK(policy.frameObserved(1, 42, 11, 200));
+  s.nowMs = 200;
+  s.operationTimedOut = false;
+  CHECK(policy.mayUnpause(s));
+}
+
+static void reloadRejectsOldFrameOrWrongAttempt()
+{
+  for (int variant = 0; variant != 3; ++variant) {
+    Policy policy;
+    auto s = sample();
+    s.operationTimedOut = true;
+    CHECK(policy.observe(s) == Action::Reload);
+    CHECK(policy.restoreStarted(42, 10, 100));
+    const auto attempt = variant == 0 ? 41 : 42;
+    const auto serial = variant == 1 ? 10 : variant == 2 ? 9 : 11;
+    CHECK(!policy.frameObserved(1, attempt, serial, 200));
+    CHECK(policy.phase() == Phase::Failed);
+    CHECK(!policy.mayUnpause(s));
+  }
+}
+
+static void invalidRevisionAndRetrogradeTimeFailClosed()
+{
+  Policy invalid;
+  auto s = sample();
+  s.revision = 0;
+  s.rendererFault = true;
+  CHECK(invalid.observe(s) == Action::Cancel);
+  CHECK(!invalid.attempted());
+
+  for (int stage = 0; stage != 3; ++stage) {
+    Policy policy;
+    s = sample();
+    s.nowMs = 100;
+    s.rendererFault = true;
+    CHECK(policy.observe(s) == Action::Retire);
+    if (stage == 0) {
+      CHECK(!policy.retired(1, 2, 99));
+    } else {
+      CHECK(policy.retired(1, 2, 200));
+      if (stage == 1) {
+        CHECK(!policy.restoreStarted(42, 10, 199));
+      } else {
+        CHECK(policy.restoreStarted(42, 10, 300));
+        CHECK(!policy.frameObserved(2, 42, 11, 299));
+      }
+    }
+    CHECK(policy.phase() == Phase::Failed);
+    CHECK(!policy.mayUnpause(s));
+  }
+}
+
 int main()
 {
   stallRequiresFullEligibleInterval();
@@ -240,4 +302,7 @@ int main()
   staleFrameCannotCompleteReplacement();
   newFrameAndFrozenClockSuppressStall();
   pausedTimeoutCannotAuthorizePlaying();
+  reloadRequiresNewAttributableFrame();
+  reloadRejectsOldFrameOrWrongAttempt();
+  invalidRevisionAndRetrogradeTimeFailClosed();
 }
