@@ -125,6 +125,8 @@ class WinAPI:
             'GetFileInformationByHandle': ([HANDLE, C.POINTER(FILE_INFO)], W.BOOL),
             'GetFinalPathNameByHandleW': ([HANDLE, W.LPWSTR, DWORD, DWORD], DWORD),
             'ReadFile': ([HANDLE, p, DWORD, C.POINTER(DWORD), p], W.BOOL),
+            'WriteFile': ([HANDLE, p, DWORD, C.POINTER(DWORD), p], W.BOOL),
+            'FlushFileBuffers': ([HANDLE], W.BOOL),
             'DuplicateHandle': ([HANDLE, HANDLE, HANDLE, C.POINTER(HANDLE), DWORD, W.BOOL, DWORD], W.BOOL),
             'InitializeProcThreadAttributeList': ([p, DWORD, DWORD, C.POINTER(SIZE_T)], W.BOOL),
             'UpdateProcThreadAttribute': ([p, DWORD, SIZE_T, p, SIZE_T, p, p], W.BOOL),
