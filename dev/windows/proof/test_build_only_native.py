@@ -126,7 +126,7 @@ class NativeQualificationTests(unittest.TestCase):
     def test_private_job_cases(self):
         from build_only.fixture_policy import make_policy
         from build_only.receipt import validate_receipt
-        from build_only.qualification_startup import quiet_error_ui
+        from qualification_startup import quiet_error_ui
 
         root = Path(os.environ["BUILD_ONLY_NATIVE_ROOT"])
         helper = Path(os.environ["BUILD_ONLY_NATIVE_HELPER"])
