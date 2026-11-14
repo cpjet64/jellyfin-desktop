@@ -62,6 +62,49 @@ def _strict_receipt(path, expected_exit):
         raise AssertionError("outer helper receipt malformed")
 
 
+def _unique(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate failure evidence field")
+        result[key] = value
+    return result
+
+
+def _failure(raw, policy, case):
+    from build_only.policy import policy_hash
+    failed = json.loads(raw, object_pairs_hook=_unique)
+    if tuple(failed) != ("schema", "policy", "result", "evidence"):
+        raise AssertionError("unexpected failure envelope")
+    if (failed["schema"] != "build-only-failed-v1" or failed["policy"] != policy_hash(policy)
+            or failed["result"] != "failed"):
+        raise AssertionError("failure identity mismatch")
+    evidence = failed["evidence"]
+    if tuple(evidence) != ("reason", "errors", "outcome", "outputs", "owned", "pin"):
+        raise AssertionError("unexpected failure evidence")
+    if evidence["reason"] != "RuntimeError('private job settlement failed')" or evidence["errors"] != []:
+        raise AssertionError("unexpected primary or secondary failure")
+    owned = evidence["owned"]
+    if (tuple(owned) != ("opened", "closed", "failed") or type(owned["opened"]) is not int
+            or owned["opened"] <= 0 or owned["opened"] != owned["closed"] or owned["failed"] != 0):
+        raise AssertionError("failure handles not closed")
+    outcome = evidence["outcome"]
+    root = outcome["root"]
+    expected_outcome = {"result", "root", "root_deadline", "grace", "baseline", "before_intervention",
+                        "final", "residuals", "residual_handles_closed", "emergency", "emergency_errors",
+                        "error", "cleanup_deadline", "emergency_final"}
+    if set(outcome) != expected_outcome or set(root) != {"pid", "creation_time", "signaled", "exit",
+                                                       "observed_at", "closed", "emergency_signaled"}:
+        raise AssertionError("unexpected lifecycle failure fields")
+    if (root["exit"] != 7 or type(root["exit"]) is not int or root["signaled"] is not True
+            or root["closed"] is not True or root["observed_at"] >= outcome["root_deadline"]
+            or outcome["error"] != "SettlementError('root failed or exceeded deadline')"
+            or outcome["emergency"] is not True or outcome["emergency_final"]["active"] != 0
+            or outcome["emergency_errors"] != [] or evidence["outputs"] != []
+            or (case / "result.bin").exists()):
+        raise AssertionError("unexpected root failure evidence")
+
+
 @unittest.skipUnless(ENABLED, "explicit Windows qualification flag required")
 class NativeQualificationTests(unittest.TestCase):
     def test_private_job_cases(self):
@@ -100,16 +143,12 @@ class NativeQualificationTests(unittest.TestCase):
         _strict_receipt(strict, code)
         raw = _exclusive_read(build)
         if mode == "rootfail":
-            failed = json.loads(raw)
-            self.assertEqual(failed["schema"], "build-only-failed-v1")
-            outcome = failed["evidence"]["outcome"]
-            self.assertEqual(outcome["root"]["exit"], 7)
-            self.assertIs(outcome["root"]["signaled"], True)
-            self.assertIn("root failed", outcome["error"])
-            self.assertIs(outcome["emergency"], True)
-            self.assertEqual(outcome["emergency_final"]["active"], 0)
-            self.assertIs(outcome["root"]["closed"], True)
+            _failure(raw, policy, case)
         else:
             receipt = validate_receipt(raw, expected_source=policy.source_sha256, expected_policy=policy,
                                        observed_exit=code, observed_receipt_closed=True, production=False)
             self.assertEqual(receipt["result"], "natural" if mode == "natural" else "telemetry_cleanup")
+            output = _exclusive_read(case / "result.bin")
+            self.assertEqual(output, b"fixture\n")
+            self.assertEqual(receipt["outputs"][0]["size"], len(output))
+            self.assertEqual(receipt["outputs"][0]["sha256"], hashlib.sha256(output).hexdigest())
