@@ -68,7 +68,27 @@ static void matchingBracketsAndTypedPayload()
   Observation::Result result;
   CHECK(h.observation.take(key, 1, 17, result));
   CHECK(result.entry == 7 && result.positionMs == 12500 && result.nativePaused);
+  CHECK(result.seekable && !result.seeking && !result.buffering && result.video);
+  CHECK(result.observedMs == 16 && result.batchSequence != 0);
   CHECK(!h.observation.take(key, 1, 18, result));
+}
+
+static void typedIneligibleStateIsReportedRatherThanFabricated()
+{
+  Harness h; Playlist list(7); int yes = 1, no = 0; double position = 12.5; std::int64_t video = 0;
+  CHECK(h.observation.begin(key, 7, 1, 0, h.dispatch));
+  h.respond(0, MPV_FORMAT_NODE, &list.node, 1);
+  h.respond(1, MPV_FORMAT_FLAG, &no, 10);  // Not seekable.
+  h.respond(2, MPV_FORMAT_FLAG, &yes, 11); // Seeking.
+  h.respond(3, MPV_FORMAT_FLAG, &yes, 12); // Buffering.
+  h.respond(4, MPV_FORMAT_FLAG, &no, 13);  // Native playing.
+  h.respond(5, MPV_FORMAT_DOUBLE, &position, 14);
+  h.respond(6, MPV_FORMAT_INT64, &video, 15);
+  h.respond(7, MPV_FORMAT_NODE, &list.node, 16);
+  Observation::Result result;
+  CHECK(h.observation.take(key, 1, 17, result));
+  CHECK(!result.seekable && result.seeking && result.buffering && !result.nativePaused && !result.video);
+  CHECK(result.entry == 7 && result.observedMs == 16 && result.batchSequence != 0);
 }
 
 static void wrongEntryEpochOrTypeFailClosed()
@@ -129,6 +149,7 @@ static void ambiguousPlayingEntriesAreRejected()
 int main()
 {
   matchingBracketsAndTypedPayload();
+  typedIneligibleStateIsReportedRatherThanFabricated();
   wrongEntryEpochOrTypeFailClosed();
   staleOrDuplicateRepliesDoNotAuthorize();
   laterPlaylistMustStillSelectSameUniqueEntry();

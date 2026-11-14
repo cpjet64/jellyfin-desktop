@@ -86,7 +86,7 @@ static void invalidIdentityOrEpochCannotBridgeIntervals()
 
 static void pauseEofErrorsAndUnknownAreExcluded()
 {
-  for (int exclusion = 0; exclusion != 9; ++exclusion) {
+  for (int exclusion = 0; exclusion != 10; ++exclusion) {
     Watchdog watchdog; auto s = sample();
     if (exclusion == 0) s.desiredPaused = true;
     if (exclusion == 1) s.nativePaused = true;
@@ -97,10 +97,26 @@ static void pauseEofErrorsAndUnknownAreExcluded()
     if (exclusion == 6) s.key.session = 0; // No current user playback.
     if (exclusion == 7) s.entry = 0;
     if (exclusion == 8) s.seeking = true;
+    if (exclusion == 9) s.loading = true;
     CHECK(watchdog.observe(s) == Result::None);
     for (int time = 1000; time <= 31000; time += 1000)
       CHECK(next(watchdog, s, time) == Result::None);
   }
+}
+
+static void resetDoesNotReauthorizeOldBatchSequences()
+{
+  Watchdog watchdog; auto s = sample();
+  s.batchSequence = 100;
+  CHECK(watchdog.observe(s) == Result::None);
+  watchdog.reset();
+  ++s.key.session;
+  s.batchSequence = 1;
+  CHECK(watchdog.observe(s) == Result::None);
+  for (int time = 1000; time <= 31000; time += 1000)
+    CHECK(next(watchdog, s, time) == Result::None);
+  s.batchSequence = 101;
+  CHECK(next(watchdog, s, 32000) == Result::None);
 }
 
 int main()
@@ -110,4 +126,5 @@ int main()
   oldBatchAndMissingObservationsCannotAccumulateTime();
   invalidIdentityOrEpochCannotBridgeIntervals();
   pauseEofErrorsAndUnknownAreExcluded();
+  resetDoesNotReauthorizeOldBatchSequences();
 }
