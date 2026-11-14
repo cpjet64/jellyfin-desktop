@@ -55,7 +55,8 @@ draw-set membership storage and overflow. The actual renderer draw and
 material-binding integration remain untested; integration review remains open.
 `qt_recovery_quick_bound_gui_source_id_v1` exposes the linked Gui bridge identity
 for consumer verification. `qt_recovery_take_unsupported_v1` consumes a
-scoped unsupported-sampling record; it is distinct from a missing submission.
+sampling record matched by window lifetime, renderer generation and scene graph
+generation; it is distinct from a missing submission or recovery attempt.
 
 The publication boundary rejects out-of-range identity and timestamp values
 before retaining a native frame. The added negative source cases have not been

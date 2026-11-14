@@ -183,7 +183,8 @@ void qtRecoveryFinish(bool endSucceeded, bool skipPresent)
         completed.fbo_content_serial = state.content;
         completed.display_texture = state.displayTexture;
         if (unsupported.ticket.window_lifetime == completed.ticket.window_lifetime
-            && unsupported.frame.renderer_generation == completed.frame.renderer_generation)
+            && unsupported.frame.renderer_generation == completed.frame.renderer_generation
+            && unsupported.ticket.scenegraph_generation == completed.ticket.scenegraph_generation)
             unsupported = {};
     }
     state = {};
@@ -278,10 +279,10 @@ extern "C" int qt_recovery_take_submission_v1(uint64_t window, uint64_t renderer
     return 1;
 }
 
-extern "C" int qt_recovery_take_unsupported_v1(uint64_t window, uint64_t renderer, uint64_t attempt)
+extern "C" int qt_recovery_take_unsupported_v1(uint64_t window, uint64_t renderer, uint64_t scene)
 {
-    if (!window || !renderer || unsupported.ticket.window_lifetime != window
-        || unsupported.frame.renderer_generation != renderer || unsupported.frame.attempt != attempt)
+    if (!window || !renderer || !scene || unsupported.ticket.window_lifetime != window
+        || unsupported.frame.renderer_generation != renderer || unsupported.ticket.scenegraph_generation != scene)
         return 0;
     unsupported = {};
     return 1;

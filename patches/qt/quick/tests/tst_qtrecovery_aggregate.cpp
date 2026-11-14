@@ -145,15 +145,37 @@ static void unsupportedSamplingIsScoped()
     qtRecoveryMarkDraw(f.life, f.ticket.render_target, &f.texture, f.texture.rhiTexture(), 4, true);
     f.swap(); qtRecoveryFinish(true, false);
     assert(!f.take());
-    assert(!qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation + 1, f.frame.attempt));
-    assert(qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation, f.frame.attempt));
-    assert(!qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation, f.frame.attempt));
+    assert(!qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation + 1, f.ticket.scenegraph_generation));
+    assert(!qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation, f.ticket.scenegraph_generation + 1));
+    assert(qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation, f.ticket.scenegraph_generation));
+    assert(!qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation, f.ticket.scenegraph_generation));
     ++f.ticket.frame_serial; f.begin();
     qtRecoveryFboBegin(f.frame.actual_render_fbo, f.life);
     QtRecoverySwapTicketV1 active{};
     assert(qt_recovery_publish_native_frame_v1(&f.frame, &active));
     qtRecoveryFboUnsupported(); f.swap(); qtRecoveryFinish(true, false);
-    assert(qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation, f.frame.attempt));
+    assert(qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation, f.ticket.scenegraph_generation));
+}
+
+static void cachedReadinessStillWithdraws()
+{
+    Fixture f; f.frame.attempt = 0;
+    f.begin(); f.publish(); f.draw(); f.swap(); qtRecoveryFinish(true, false); assert(f.take(0));
+    // A recovery attempt may now be current without a newly rendered frame.
+    ++f.ticket.frame_serial; f.begin();
+    qtRecoveryMarkDraw(f.life, f.ticket.render_target, &f.texture, f.texture.rhiTexture(), 4, true);
+    f.swap(); qtRecoveryFinish(true, false);
+    assert(!qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation,
+                                            f.ticket.scenegraph_generation + 1));
+    assert(qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation,
+                                           f.ticket.scenegraph_generation));
+    ++f.ticket.frame_serial; f.begin();
+    qtRecoveryMarkDraw(f.life, f.ticket.render_target, &f.texture, f.texture.rhiTexture(), 4, true);
+    f.swap(); qtRecoveryFinish(true, false);
+    ++f.ticket.frame_serial; f.begin(); f.draw(); f.swap(); qtRecoveryFinish(true, false);
+    assert(f.take(0));
+    assert(!qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation,
+                                            f.ticket.scenegraph_generation));
 }
 
 int main()
@@ -163,4 +185,5 @@ int main()
     invalidFboAndResolve();
     invalidNativeFrame();
     unsupportedSamplingIsScoped();
+    cachedReadinessStillWithdraws();
 }
