@@ -4,6 +4,7 @@ import hashlib
 import os
 import shutil
 from pathlib import Path
+import recipe_edits
 
 PROVIDER = "1f8d2e76255abc48f0456d9be99b4cab9c6566e6"
 ORIGINALS = {
@@ -96,6 +97,9 @@ def plan(provider_root, prestage_root, lock, overlay_root):
         if sha256_bytes(replacement) != OVERLAY_SHA256[overlay]:
             raise ValueError("overlay bytes differ: " + overlay)
         replacements[original] = replacement
+    for original in (*recipe_edits.MESON, "packages/subrandr.cmake"):
+        payload = checked_path(provider_root, original).read_bytes()
+        replacements[original] = recipe_edits.edit(original, payload)
     return replacements
 
 
@@ -124,7 +128,8 @@ def apply(provider_root, prestage_root, lock, overlay_root, destination):
     shutil.copytree(source, destination, symlinks=False)
     for relative, payload in replacements.items():
         target = checked_path(destination, relative)
-        if sha256_bytes(target.read_bytes()) != ORIGINALS[relative]:
+        expected = ORIGINALS.get(relative, recipe_edits.MESON.get(relative, recipe_edits.SUBRANDR))
+        if sha256_bytes(target.read_bytes()) != expected:
             raise ValueError("copied provider source changed: " + relative)
         target.write_bytes(payload)
         if target.read_bytes() != payload:

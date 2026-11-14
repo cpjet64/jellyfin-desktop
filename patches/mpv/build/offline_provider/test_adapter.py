@@ -4,8 +4,10 @@ import hashlib
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import adapter
+import recipe_edits
 
 
 class VerifierTests(unittest.TestCase):
@@ -32,6 +34,18 @@ class VerifierTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             adapter.plan(".", ".", {"provider": adapter.PROVIDER,
                          "rust": "nightly-2026-10-11", "components": {}, "extra": 1}, ".")
+
+    def test_recipe_edit_checks_identity_and_exactly_one_site(self):
+        path = "packages/mpv.cmake"
+        source = b"CONFIGURE_COMMAND meson setup <BINARY_DIR> <SOURCE_DIR>\n"
+        digest = hashlib.sha256(source).hexdigest()
+        with mock.patch.dict(recipe_edits.MESON, {path: digest}):
+            edited = recipe_edits.edit(path, source)
+            self.assertIn(b"meson setup --wrap-mode=nodownload", edited)
+            with self.assertRaises(ValueError):
+                recipe_edits.edit(path, source + source)
+        with self.assertRaises(ValueError):
+            recipe_edits.edit("packages/unknown.cmake", source)
 
 
 if __name__ == "__main__":
