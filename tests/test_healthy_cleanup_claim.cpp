@@ -146,6 +146,77 @@ class TestRetirementClaim {
       CHECK(claim.admitCleanupStop(9) == RetirementClaim::Admission::Rejected && !claim.claim(9));
     }
   }
+  static std::shared_ptr<GraphAccess> access_fixture(FixtureGraph* graph) {
+    auto access = std::make_shared<GraphAccess>();
+    access->guiThread = std::this_thread::get_id(); access->guiQtThread = QThread::currentThread();
+    access->graph.store(graph);
+    std::atomic_store(&access->intentClaim, std::make_shared<RetirementClaim>(9));
+    return access;
+  }
+  static void cleanup_rejects_wrong_thread() {
+    auto* graph = reinterpret_cast<FixtureGraph*>(static_cast<std::uintptr_t>(1));
+    auto access = access_fixture(graph);
+    std::atomic<bool> beginRejected{false};
+    std::thread worker([&] { beginRejected = !GraphAccessOps::beginCleanupForTest(access, 9); });
+    worker.join(); CHECK(beginRejected.load());
+    CHECK(GraphAccessOps::beginCleanupForTest(access, 9) == graph);
+    std::atomic<bool> graphRejected{false}, containRejected{false};
+    std::thread cleanupWorker([&] {
+      graphRejected = !GraphAccessOps::cleanupGraphForTest(access);
+      containRejected = !GraphAccessOps::containCleanupForTest(access);
+    });
+    cleanupWorker.join(); CHECK(graphRejected.load()); CHECK(containRejected.load());
+    CHECK(GraphAccessOps::cleanupGraphForTest(access) == graph);
+    CHECK(GraphAccessOps::containCleanupForTest(access));
+  }
+  static void repeated_cleanup_preserves_access() {
+    auto* graph = reinterpret_cast<FixtureGraph*>(static_cast<std::uintptr_t>(1));
+    auto access = access_fixture(graph);
+    auto capability = GraphAccessOps::capabilityForTest(access, [](std::uint64_t g) { return g == 9; });
+    CHECK(GraphAccessOps::beginCleanupForTest(access, 9) == graph);
+    CHECK(GraphAccessOps::beginCleanupForTest(access, 9) == graph);
+    CHECK(!GraphAccessOps::graphOnGuiForTest(access) && GraphAccessOps::cleanupGraphForTest(access) == graph);
+    CHECK(capability(9) && !capability(10) && std::atomic_load(&access->intentClaim)->eligible());
+  }
+  static void explicit_containment_is_terminal() {
+    auto* graph = reinterpret_cast<FixtureGraph*>(static_cast<std::uintptr_t>(1));
+    auto access = access_fixture(graph);
+    auto claim = std::atomic_load(&access->intentClaim);
+    auto capability = GraphAccessOps::capabilityForTest(access, [](std::uint64_t g) { return g == 9; });
+    CHECK(GraphAccessOps::beginCleanupForTest(access, 9) == graph);
+    CHECK(GraphAccessOps::containCleanupForTest(access));
+    CHECK(claim->contained() && !claim->eligible() && !capability(9));
+    CHECK(!GraphAccessOps::graphOnGuiForTest(access) && !GraphAccessOps::cleanupGraphForTest(access));
+    CHECK(!GraphAccessOps::beginCleanupForTest(access, 9) && !GraphAccessOps::containCleanupForTest(access));
+  }
+  static void recursive_invalidation_calls_once() {
+    auto* graph = reinterpret_cast<FixtureGraph*>(static_cast<std::uintptr_t>(1));
+    auto access = access_fixture(graph);
+    auto claim = std::atomic_load(&access->intentClaim);
+    auto capability = GraphAccessOps::capabilityForTest(access, [](std::uint64_t g) { return g == 9; });
+    CHECK(GraphAccessOps::beginCleanupForTest(access, 9) == graph);
+    int callbacks = 0;
+    access->guiInvalidate = [&](FixtureGraph* value) {
+      ++callbacks; CHECK(value == graph && !GraphAccessOps::graphOnGuiForTest(access));
+      CHECK(!GraphAccessOps::cleanupGraphForTest(access) && !GraphAccessOps::beginCleanupForTest(access, 9));
+      GraphAccessOps::invalidateForTest(access);
+    };
+    GraphAccessOps::invalidateForTest(access);
+    CHECK(callbacks == 1 && claim->contained() && !claim->eligible() && !capability(9));
+  }
+  static void graph_disappears_during_cleanup() {
+    auto* graph = reinterpret_cast<FixtureGraph*>(static_cast<std::uintptr_t>(1));
+    auto access = access_fixture(graph);
+    auto claim = std::atomic_load(&access->intentClaim);
+    auto capability = GraphAccessOps::capabilityForTest(access, [](std::uint64_t g) { return g == 9; });
+    CHECK(GraphAccessOps::beginCleanupForTest(access, 9) == graph);
+    access->graph.store(nullptr);
+    CHECK(!GraphAccessOps::cleanupGraphForTest(access));
+    CHECK(GraphAccessOps::containCleanupForTest(access));
+    CHECK(claim->contained() && !claim->eligible() && !capability(9));
+    CHECK(!GraphAccessOps::graphOnGuiForTest(access) && !GraphAccessOps::beginCleanupForTest(access, 9));
+    CHECK(!GraphAccessOps::containCleanupForTest(access));
+  }
 public:
   static void run() {
     stop_settlement_orders(); actual_access_transition(); recognize_revoked_cleanup();
@@ -153,6 +224,8 @@ public:
     render_order(true); render_order(false);
     renderer_first_then_internal_failure();
     concurrent_admission_and_containment();
+    cleanup_rejects_wrong_thread(); repeated_cleanup_preserves_access(); explicit_containment_is_terminal();
+    recursive_invalidation_calls_once(); graph_disappears_during_cleanup();
   }
 };
 int main(int argc, char** argv) { QCoreApplication app(argc, argv); TestRetirementClaim::run(); }
