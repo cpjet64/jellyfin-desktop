@@ -8,6 +8,7 @@ class SettlementError(RuntimeError):
 
 
 def _milliseconds(end, clock):
+    # Millisecond truncation can conservatively reject the final fractional millisecond.
     remaining = end - clock()
     if remaining <= 0:
         raise SettlementError('deadline exceeded')
@@ -106,11 +107,14 @@ def _emergency(api, job, root, end, clock, pause, evidence):
     except BaseException as exc:
         errors.append('root_wait: ' + repr(exc))
     try:
-        if not evidence['root']['closed']:
+        if not evidence['root']['closed'] and evidence['root'].get('emergency_signaled') is True:
             root.close()
             evidence['root']['closed'] = True
     except BaseException as exc:
         errors.append('root_close: ' + repr(exc))
+    if not evidence['root']['closed']:
+        evidence['root']['unresolved'] = True
+        evidence['root']['outer_settlement_required'] = True
     try:
         while True:
             evidence['emergency_final'] = _account(api, job)

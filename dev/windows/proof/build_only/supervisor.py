@@ -1,4 +1,8 @@
-"""Production and fixture entry points for the private build-only job."""
+"""Private build-only supervision under the unchanged qualified outer helper.
+
+An independently pinned outer-helper receipt must prove all inherited
+descendants settled; inner job membership alone does not identify that helper.
+"""
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict
 import hashlib
@@ -16,6 +20,12 @@ from .receipt_file import ReceiptFile, ReceiptCloseError
 
 SOURCE_FILES = ('__init__.py', 'identity.py', 'lifecycle.py', 'policy.py', 'receipt.py',
                 'receipt_file.py', 'spawn.py', 'supervisor.py', 'winapi.py')
+
+
+class UnsettledRootError(RuntimeError):
+    def __init__(self, root):
+        super().__init__('root unresolved; outer helper settlement required')
+        self.root = root
 
 
 def _hash(path):
@@ -220,6 +230,8 @@ def _run_job(api, policy, env, started, receipt):
             raise
         receipt['outcome'] = outcome
         if outcome['result'] == 'failed':
+            if outcome['root'].get('unresolved'):
+                raise UnsettledRootError(root)
             raise RuntimeError('private job settlement failed')
         executable.assert_path_unchanged()
         response.assert_path_unchanged()
@@ -235,6 +247,8 @@ def _supervise(policy, receipt_path):
     env = _environment(policy.command)
     inspect_command_inputs(policy, env)
     api = WinAPI()
+    if not api.in_any_job():
+        raise RuntimeError('qualified outer helper job is required')
     state = {'errors': [], 'outcome': None, 'outputs': []}
     started = []
     with _receipt(receipt_path) as receipt:
