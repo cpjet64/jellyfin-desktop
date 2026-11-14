@@ -24,6 +24,13 @@ bool AutomaticRecoverySession::position(Key key, std::int64_t entry, std::int64_
   if (!accepted_ || !same(candidate_.key, key) || entry != candidate_.entry || positionMs < 0) return false;
   candidate_.positionMs = positionMs; return true;
 }
+bool AutomaticRecoverySession::revise(Key previous, Key current, bool paused)
+{
+  if (!same(candidate_.key, previous) || current.session != previous.session ||
+      current.generation != previous.generation || current.revision <= previous.revision) return false;
+  candidate_.key = current; candidate_.paused = paused; candidate_.positionMs = -1;
+  return true;
+}
 void AutomaticRecoverySession::invalidate()
 {
   candidate_ = Snapshot{}; accepted_ = false;

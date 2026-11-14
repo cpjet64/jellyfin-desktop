@@ -20,6 +20,7 @@ public:
              const QVariant& audio, const QVariant& subtitle, bool paused);
   bool accept(Key key, std::int64_t entry);
   bool position(Key key, std::int64_t entry, std::int64_t positionMs);
+  bool revise(Key previous, Key current, bool paused);
   void invalidate();
   bool snapshot(Key current, Snapshot& result) const;
 private:
