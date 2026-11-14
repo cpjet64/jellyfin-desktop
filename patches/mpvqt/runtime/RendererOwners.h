@@ -54,6 +54,7 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     std::atomic<bool> commandAuthority{true};
     std::atomic<bool> finalizationRequested{false};
     std::atomic<bool> finalizationQueued{false};
+    std::atomic<bool> faultQuarantined{false};
     std::atomic<unsigned> admittedControl{0};
     std::atomic<unsigned> liveGenerations{0};
     std::atomic<unsigned> externalConsumers{0};
@@ -77,6 +78,7 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     void closeExternalWakeup();
     bool requestFinalization();
     void requestQuarantineStop();
+    bool blockUnresolvedHook();
     void maybeFinalize();
     static std::shared_ptr<CoreOwner> adopt(mpv_handle *handle, MpvController *controller,
                                             QThread *worker, WakeRelay *relay);

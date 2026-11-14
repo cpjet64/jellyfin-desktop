@@ -6,7 +6,13 @@
 
 namespace RendererRuntime {
 
-static std::shared_ptr<GenerationOwner> &quarantined();
+struct FaultSlot {
+    std::mutex mutex;
+    std::weak_ptr<CoreOwner> active;
+    std::shared_ptr<CoreOwner> core;
+    std::shared_ptr<GenerationOwner> generation;
+};
+static FaultSlot &faultSlot() { static auto *slot = new FaultSlot; return *slot; }
 
 NativeLease::NativeLease(std::shared_ptr<CoreOwner> value) : owner(std::move(value)) {}
 NativeLease::NativeLease(NativeLease &&other) noexcept : owner(std::move(other.owner)) {}
@@ -33,12 +39,33 @@ std::shared_ptr<CoreOwner> CoreOwner::adopt(mpv_handle *native, MpvController *c
 {
     if (!native || !control || !thread || !relay || control->thread() != thread || relay->thread() != thread)
         return {};
+    auto &slot = faultSlot();
+    std::lock_guard<std::mutex> lock(slot.mutex);
+    if (slot.core || !slot.active.expired()) return {};
     auto owner = std::make_shared<CoreOwner>();
     owner->handle = native;
     owner->controller = control;
     owner->worker = thread;
     owner->wakeRelay = relay;
+    slot.active = owner;
     return owner;
+}
+
+bool CoreOwner::blockUnresolvedHook()
+{
+    auto owner = shared_from_this();
+    auto &slot = faultSlot();
+    {
+        std::lock_guard<std::mutex> lock(slot.mutex);
+        if (slot.core) return slot.core == owner;
+        if (slot.active.lock() != owner) return false;
+        faultQuarantined.store(true, std::memory_order_release);
+        slot.core = owner;
+    }
+    requestQuarantineStop();
+    revokeControl();
+    closeExternalWakeup();
+    return true;
 }
 
 static void wakeCore(void *opaque)
@@ -60,7 +87,7 @@ static void wakeCore(void *opaque)
 bool CoreOwner::enterControl()
 {
     admittedControl.fetch_add(1);
-    if (commandAuthority.load()) return true;
+    if (commandAuthority.load() && !faultQuarantined.load(std::memory_order_acquire)) return true;
     leaveControl();
     return false;
 }
@@ -114,7 +141,8 @@ void CoreOwner::requestQuarantineStop()
     if (!quarantineStopStarted.compare_exchange_strong(expected, true)) return;
     auto owner = shared_from_this();
     std::unique_lock<std::mutex> lock(postingMutex);
-    const bool admitted = controller && enterControl();
+    const bool admitted = controller && commandAuthority.load();
+    if (admitted) admittedControl.fetch_add(1);
     bool queued = false;
     if (admitted) {
         queued = QMetaObject::invokeMethod(controller, [owner] {
@@ -175,7 +203,8 @@ bool CoreOwner::requestFinalization()
 
 void CoreOwner::maybeFinalize()
 {
-    if (!finalizationRequested.load(std::memory_order_acquire) || commandAuthority.load()) return;
+    if (!finalizationRequested.load(std::memory_order_acquire) || commandAuthority.load() ||
+        faultQuarantined.load(std::memory_order_acquire)) return;
     if (!wakeClosed.load(std::memory_order_acquire) || admittedControl.load() != 0 ||
         liveGenerations.load(std::memory_order_acquire) != 0 || externalConsumers.load() != 0 ||
         wakeCallbacks.load(std::memory_order_acquire) != 0)
@@ -186,7 +215,8 @@ void CoreOwner::maybeFinalize()
     auto owner = shared_from_this();
     const bool queued = QMetaObject::invokeMethod(wakeRelay, [owner] {
         const bool posted = QMetaObject::invokeMethod(owner->controller, [owner] {
-            if (owner->admittedControl.load() || owner->liveGenerations.load() || owner->externalConsumers.load()) {
+            if (owner->faultQuarantined.load() || owner->admittedControl.load() ||
+                owner->liveGenerations.load() || owner->externalConsumers.load()) {
                 owner->finalizationQueued.store(false);
                 owner->maybeFinalize();
                 return;
@@ -221,7 +251,7 @@ std::shared_ptr<GenerationOwner> GenerationOwner::create(quint64 id, const std::
 {
     if (!id || !core) return {};
     std::lock_guard<std::mutex> lock(core->postingMutex);
-    if (!core->commandAuthority.load() || core->finalizationRequested.load()) return {};
+    if (!core->commandAuthority.load() || core->finalizationRequested.load() || core->faultQuarantined.load()) return {};
     return std::shared_ptr<GenerationOwner>(new GenerationOwner(id, core));
 }
 
@@ -286,7 +316,7 @@ bool GenerationOwner::retireOnOriginalContext()
 bool RetirementCoordinator::retain(const std::shared_ptr<GenerationOwner> &owner)
 {
     std::lock_guard<std::mutex> lock(mutex);
-    if (!owner || !owner->core || !owner->generation || retained || quarantined()) return false;
+    if (!owner || !owner->core || !owner->generation || retained || hasQuarantine()) return false;
     retained = owner;
     return true;
 }
@@ -299,30 +329,32 @@ bool RetirementCoordinator::releaseRetired(const std::shared_ptr<GenerationOwner
     return true;
 }
 
-static std::shared_ptr<GenerationOwner> &quarantined()
-{
-    static auto *slot = new std::shared_ptr<GenerationOwner>();
-    return *slot;
-}
-
 bool RetirementCoordinator::quarantine(const std::shared_ptr<GenerationOwner> &owner)
 {
     std::lock_guard<std::mutex> lock(mutex);
-    if (!owner || retained != owner || quarantined()) return false;
+    if (!owner || retained != owner) return false;
+    auto &slot = faultSlot();
+    {
+        std::lock_guard<std::mutex> faultLock(slot.mutex);
+        if ((slot.core && slot.core != owner->core) || slot.active.lock() != owner->core) return false;
+        owner->core->faultQuarantined.store(true, std::memory_order_release);
+        slot.core = owner->core;
+        slot.generation = owner;
+    }
     owner->revoke();
     owner->core->requestQuarantineStop();
     owner->core->revokeControl();
     owner->core->closeExternalWakeup();
     owner->blocked.store(true, std::memory_order_release);
-    quarantined() = owner;
     retained.reset();
     return true;
 }
 
 bool RetirementCoordinator::hasQuarantine() const
 {
-    std::lock_guard<std::mutex> lock(mutex);
-    return static_cast<bool>(quarantined());
+    auto &slot = faultSlot();
+    std::lock_guard<std::mutex> lock(slot.mutex);
+    return static_cast<bool>(slot.core);
 }
 
 RetirementCoordinator &coordinator()
