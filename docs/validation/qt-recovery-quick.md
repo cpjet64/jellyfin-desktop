@@ -13,7 +13,16 @@ identify the individual unmodified source files retrieved from that commit.
 | `src/quick/scenegraph/coreapi/qsgbatchrenderer_p.h` | `e45f68c55591f2f5365424cbd0b2b947ba2cb59cc4ad228d9e4ac7f4590c9d4c` |
 
 This is a source identity record, not evidence that a patched Qt was built or
-installed. The source implementation and its negative tests remain outstanding.
+installed. The first source slice adds ticket and FBO hooks, but draw-use proof
+and its negative tests remain outstanding. Submission consumption always fails
+closed in this slice; the presence of these files does not establish capability.
+
+Apply `patches/qt/quick/qtdeclarative-6.9.3-ticket-fbo.patch` with
+`git apply --unidiff-zero` at the pinned
+Qt Declarative root, then place the three adjacent `QtRecovery*.{h,cpp}` files
+in `src/quick/recovery/`. The patched Qt Base private bridge must be built and
+installed as part of the same compatible kit. The source-only test is not yet
+integrated into the upstream Qt test build and has not been executed.
 
 The threaded loop begins the frame before synchronization and calls `endFrame`
 after rendering. A failed begin can still emit `afterFrameEnd`; a failed end can

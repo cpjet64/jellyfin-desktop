@@ -1,0 +1,86 @@
+diff --git a/src/quick/CMakeLists.txt b/src/quick/CMakeLists.txt
+index d3d9087a..fdc39c2d 100644
+--- a/src/quick/CMakeLists.txt
++++ b/src/quick/CMakeLists.txt
+@@ -610,0 +611,6 @@ qt_internal_extend_target(Quick CONDITION QT_FEATURE_opengl OR QT_FEATURE_opengl
++qt_internal_extend_target(Quick CONDITION WIN32 AND QT_FEATURE_opengl
++    SOURCES
++        recovery/QtRecoveryQuick.cpp recovery/QtRecoveryQuick_p.h
++        recovery/QtRecoverySubmissionAbi.h
++)
++
+diff --git a/src/quick/items/qquickframebufferobject.cpp b/src/quick/items/qquickframebufferobject.cpp
+index cdae6fbe..e02c0e30 100644
+--- a/src/quick/items/qquickframebufferobject.cpp
++++ b/src/quick/items/qquickframebufferobject.cpp
+@@ -15,0 +16,3 @@
++#ifdef Q_OS_WIN
++#include "../recovery/QtRecoveryQuick_p.h"
++#endif
+@@ -176,0 +180,3 @@ public:
++#ifdef Q_OS_WIN
++        recoveryNodeLifetime = qtRecoveryIdentity();
++#endif
+@@ -209,0 +216,3 @@ public Q_SLOTS:
++#ifdef Q_OS_WIN
++            qtRecoveryFboBegin(fbo->handle(), recoveryNodeLifetime);
++#endif
+@@ -214,0 +224,4 @@ public Q_SLOTS:
++#ifdef Q_OS_WIN
++            qtRecoveryFboEnd(msDisplayFbo ? msDisplayFbo->texture() : fbo->texture(),
++                             recoveryTextureGeneration);
++#endif
+@@ -241,0 +255,4 @@ public:
++#ifdef Q_OS_WIN
++    uint64_t recoveryNodeLifetime = 0;
++    uint64_t recoveryTextureGeneration = 0;
++#endif
+@@ -302,0 +320,3 @@ QSGNode *QQuickFramebufferObject::updatePaintNode(QSGNode *node, UpdatePaintNode
++#ifdef Q_OS_WIN
++        n->recoveryTextureGeneration = qtRecoveryIdentity();
++#endif
+diff --git a/src/quick/scenegraph/qsgthreadedrenderloop.cpp b/src/quick/scenegraph/qsgthreadedrenderloop.cpp
+index 6a0286db..58e01f98 100644
+--- a/src/quick/scenegraph/qsgthreadedrenderloop.cpp
++++ b/src/quick/scenegraph/qsgthreadedrenderloop.cpp
+@@ -14,0 +15,4 @@
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++#include <QtGui/QOpenGLContext>
++#include "../recovery/QtRecoveryQuick_p.h"
++#endif
+@@ -314,0 +319,4 @@ public:
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++    const uint64_t recoveryWindowLifetime = qtRecoveryIdentity();
++    uint64_t recoverySceneGeneration = qtRecoveryIdentity();
++#endif
+@@ -593,0 +602,4 @@ void QSGRenderThread::teardownGraphics()
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++    qt_recovery_revoke_v1(recoveryWindowLifetime);
++    recoverySceneGeneration = qtRecoveryIdentity();
++#endif
+@@ -728,0 +741,17 @@ void QSGRenderThread::syncAndRender()
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++        if (rhi->backend() == QRhi::OpenGLES2) {
++            QOpenGLContext *context = QOpenGLContext::currentContext();
++            QtRecoverySwapTicketV1 ticket{};
++            ticket.size = sizeof(ticket);
++            ticket.version = QT_RECOVERY_SWAP_ABI_VERSION;
++            ticket.window_lifetime = recoveryWindowLifetime;
++            ticket.scenegraph_generation = recoverySceneGeneration;
++            ticket.frame_serial = qtRecoveryIdentity();
++            ticket.render_thread = reinterpret_cast<uintptr_t>(QThread::currentThread());
++            ticket.swapchain = reinterpret_cast<uintptr_t>(cd->swapchain);
++            ticket.render_target = reinterpret_cast<uintptr_t>(cd->swapchain->currentFrameRenderTarget());
++            ticket.surface = reinterpret_cast<uintptr_t>(static_cast<QSurface *>(window));
++            ticket.platform_context = reinterpret_cast<uintptr_t>(context ? context->handle() : nullptr);
++            qtRecoveryBegin(ticket);
++        }
++#endif
+@@ -788,0 +818,3 @@ void QSGRenderThread::syncAndRender()
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++        qtRecoveryFinish(frameResult == QRhi::FrameOpSuccess, false);
++#endif
+@@ -810,0 +843,3 @@ void QSGRenderThread::syncAndRender()
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++        qtRecoveryFinish(false, true);
++#endif
