@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "status": "SOURCE PROPOSAL ONLY; PREFLIGHT NOT YET REVIEWED OR EXECUTED",
+  "basis": "One compile-only discovery command from 745f5903; no link, test, application, CI, Ninja or vcvars execution",
+  "reviewed_command_proposal_sha256": "02d8d582436ffb18c621efa0556c5f3225a6fcf0cc13c9795a854a40f3488f07",
+  "response_sha256": "15d4a13278b38de63943cc4fc8776cbec79d44e4759a968d927ceb65f77de347",
+  "client": {
+    "path": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/dev/windows/proof/proposals/cl-cleanup-claim-v1/preflight.py",
+    "sha256": "f9bea7525027ddd27dc298d92d8748391fb0d77589c9271b7c957eb585de2f91",
+    "arguments": [],
+    "scope": "Read-only fixed metadata observations; never execute any observed tool or inspect ambient environment values"
+  },
+  "controller": {
+    "path": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/dev/windows/proof/proposals/cl-cleanup-claim-v1/preflight-controller.ps1",
+    "sha256": "c8f8f91d6687a59f9333c302ce3df67850ea4dd0eba9235e932c6b77d79069fe",
+    "source_commit": "Supplied and verified separately at review time to avoid self-reference",
+    "helper_timeout_ms": 180000,
+    "controller_wait_ms": 200000,
+    "controller_total_budget_ms": 210000,
+    "profile": "Hidden, no shell, fixed ArgumentList, fresh exclusive logs, checked outer receipt and retained helper handle"
+  },
+  "qualified_supervisor_source": {
+    "sha": "d0bb016df169b663567e88fd5586ab7c008e9554",
+    "internal_nine_sha256": "80b842ae0d7ad4c3384b9eacfb9c492962febebae449c90a2b18d6b1e4f25915",
+    "external_21_sha256": "42016ce3f5972c5cbcf19e7c1b0b86fcbea879dcf834e42add85670b8fa73e77",
+    "manifest_sha256": "dbe55eb7c529d11386700a60dab96f56ab12bc7b3c74e6b0e55277fe6ca4b7e0"
+  },
+  "private_environment": {
+    "snapshot_sha256": "1daa8974e1d37694f1067c92ab9839bab22d2f8a1d3fa844e0b2b58ea0c4512a",
+    "overlay": ["TEMP", "TMP", "APPDATA", "LOCALAPPDATA"],
+    "injection_check": ["CL", "_CL_", "LINK", "_LINK_"],
+    "output": "Final digest and disposition only; no environment values"
+  },
+  "unobserved": ["VCTIP volume serial and file index", "final post-overlay environment digest"],
+  "support_tools": ["c1xx.dll", "mspdb140.dll", "mspdbcore.dll", "mspdbsrv.exe", "mspdbst.dll", "mspft140.dll"],
+  "generated_include": "Observed historical directory, unqualified; no full SDK or generated-tree scan",
+  "output_root": "E:/CursorAI/JellyfinDesktop/deps/reconcile-20261113/meta-claim-01",
+  "compile_root": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/deps/enrollment-cl-claim-20261114-01",
+  "next_review": "After a separately allocated successful preflight, use actual observed VCTIP file ID and final environment digest to prepare one literal fixed-policy driver and outer binding for separate review. No dynamic policy-file input or placeholder identity is authorized.",
+  "storage_failure": "Stop dependent writes and preserve evidence; do not retry, relocate or clean."
+}
