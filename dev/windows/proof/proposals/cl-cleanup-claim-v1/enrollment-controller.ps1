@@ -91,6 +91,25 @@ function Assert-ScratchParent {
     $parent = $parent.Parent
   }
 }
+function Ensure-TaskParent {
+  $expected = [IO.Path]::GetFullPath('E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/deps')
+  $parentPath = [IO.Path]::GetFullPath([IO.Path]::GetDirectoryName($root))
+  if ($parentPath -ine $expected -or [IO.Path]::GetFullPath((Join-Path $policyRepo 'deps')) -ine $expected) {
+    throw 'Unexpected task parent'
+  }
+  $ancestor = [IO.DirectoryInfo]::new([IO.Path]::GetFullPath($policyRepo))
+  while ($null -ne $ancestor) {
+    if (!$ancestor.Exists -or ($ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unsafe task parent ancestor' }
+    $ancestor = $ancestor.Parent
+  }
+  if (!(Test-Path -LiteralPath $expected -ErrorAction Stop)) {
+    New-Item -ItemType Directory -Path $expected -ErrorAction Stop | Out-Null
+    $script:audit.parentCreated = $true
+  } else { throw 'Existing task parent ownership unestablished' }
+  $item = Get-Item -LiteralPath $expected -Force -ErrorAction Stop
+  if (!$item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unsafe task parent' }
+  Assert-ScratchParent
+}
 function Get-FailurePostchecks($pins) {
   $state = [ordered]@{pins='unavailable';source='unknown';private_acl='unknown';outer_receipt='unavailable'}
   if ($null -ne $pins) {
@@ -245,13 +264,14 @@ function Read-DiscoveryResult($pins, $run, $postrun, $receipt, $postreceipt) {
     outer_receipt=$receipt;postcheck_helper_pid=$postrun.pid;postcheck_helper_exit=$postrun.exit;
     postcheck_argv=$postrun.argv;postcheck_elapsed_ms=$postrun.elapsed;
     postcheck_receipt=$postreceipt;validated_receipt=$validated;files=$inventory;postcompile_dependency_identities=$dependencies;
+    task_parent_created=$script:audit.parentCreated;
     limitations='Discovery only; generated include tree, implicit CWD behavior and dependency closure remain unqualified'}
 }
 function Initialize-Scratch {
   Check-Sources; Assert-PrivateAcl
   if ((Get-PSDrive E).Free -lt 20GB) { throw 'Insufficient storage; stop' }
   if (Test-Path -LiteralPath $root) { throw 'Output root is not fresh' }
-  Assert-ScratchParent
+  Ensure-TaskParent
   New-Item -ItemType Directory -Path $root | Out-Null
   $script:audit.rootCreated = $true
   $scratch = Join-Path $root 'host-temp'
@@ -304,7 +324,7 @@ function Restore-ControllerEnvironment {
   }
   catch { Add-CleanupError 'TMP restore' $_ }
 }
-$script:audit = @{stage='preflight';started=$false;rootCreated=$false;envSaved=$false;
+$script:audit = @{stage='preflight';started=$false;rootCreated=$false;parentCreated=$false;envSaved=$false;
   temp=$null;tmp=$null;suppress=$false;secondary=[Collections.Generic.List[string]]::new()}
 $pins = $null; $primary = $null; $postchecks = $null; $record = $null
 try {
@@ -333,7 +353,8 @@ if ($null -ne $primary -or $script:audit.secondary.Count) {
   if ($null -eq $primary) { $reason = 'Cleanup failed after task work' } else { $reason = $primary.ToString() }
   $settlement = if ($script:audit.started) { 'helper started; settlement requires strict receipt' } else { 'helper not started; compiler not started' }
   $failure = [ordered]@{schema='cleanup-claim-discovery-failed-v1';source=$ReviewedSourceSHA;stage=$script:audit.stage;
-    reason=$reason;secondary=@($script:audit.secondary);postchecks=$postchecks;settlement=$settlement}
+    reason=$reason;secondary=@($script:audit.secondary);postchecks=$postchecks;settlement=$settlement;
+    task_parent_created=$script:audit.parentCreated}
   if ($script:audit.rootCreated -and !$script:audit.suppress) {
     try { Write-Record "$root/failure.json" $failure } catch { Add-CleanupError 'failure evidence write' $_ }
   }
