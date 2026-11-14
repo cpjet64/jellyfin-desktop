@@ -1,0 +1,33 @@
+{
+  "status": "PARTIAL tree metadata; nested dependencies and closure unverified",
+  "scope": "GitHub candidates in lock-resolution-nz.json whose names occur in feature-graph-candidate.json nodes",
+  "evidence": "GET repos/{repository}/git/commits/{commit} supplies root_tree; GET repos/{repository}/git/trees/{commit}?recursive=1 supplies entries and truncation. Repository and commit are in lock-resolution-nz.json. All 25 responses reported truncated=false. Entries list mode:path:object; omitted entries means no gitlinks or matching Cargo.lock, DEPS, or .gitmodules paths found in that recursive response. Matching was case-insensitive and includes an additional lowercase deps path. Tree metadata does not establish whether these inputs are consumed or resolve nested fetches.",
+  "records": [
+    {"package":"xz","root_tree":"50bad945e54464df078ef657274e4bc237a8492d"},
+    {"package":"rubberband","root_tree":"48f0407e6bf3b95adcaa4c2cfb807dbccc24a36b"},
+    {"package":"zlib","root_tree":"25fc1d60a1db540f6aa2d8d0e9c10fd69a74c696"},
+    {"package":"zstd","root_tree":"fdb8300669e35d8bac97c6bb99d9d12411a054cb"},
+    {"package":"ogg","root_tree":"75dba213d02446d830468c75a23a53625982acc8"},
+    {"package":"vorbis","root_tree":"e07bf5bac5f960312533de65bff79e00497b359f"},
+    {"package":"opus","root_tree":"35db717a5cf36ae6535a1cd973b4e5e28a1b92f8","entries":["100644:.gitmodules:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"]},
+    {"package":"speex","root_tree":"67cdfa5ca5f7c34e6ed38cc5d1691182fc326861"},
+    {"package":"x265","root_tree":"acae0e2b57856ce9c7ff534e6c8003fd9d819669"},
+    {"package":"subrandr","root_tree":"c9670d211e6ee57debcf182a10e159a921f147eb","entries":["100644:Cargo.lock:122ee42aa44d29bf836864238839bb62494648ac","100644:text-sys/Cargo.lock:0633d087adcf994b310e4617722df004feec24dd"]},
+    {"package":"nvcodec-headers","root_tree":"0ac9c2d0d7d38c5aea448c5df02e144ca4d5e1f2"},
+    {"package":"xxhash","root_tree":"e44f623443e6de0c8f47ba2fdfdd5a953ebcae11","entries":["100644:cli/.tipi/deps:653dbe10812e03bde108c5fab55d2e6537aec3ff"]},
+    {"package":"vapoursynth","root_tree":"273c97221d525f2d4189edf2969ca0df6365de06"},
+    {"package":"openssl","root_tree":"f016c433818f0be3620b2d3f2c4dca79bd6b9a7a","recipe_submodules":"GIT_SUBMODULES empty","entries":["100644:.gitmodules:b4c756a67b1796613312e4b547dfabd53e5eb2c6","160000:cloudflare-quiche:7ab6a55cfe471267d61e4d28ba43d41defcd87e0","160000:fuzz/corpora:e79bbce6dc62e794eab651d4be29b3d499d6df5c","160000:gost-engine:74b1f4fddbc2d6de969815b1992ddc1ae7c643fe","160000:krb5:784c38f50e70a739400cdd3f2620bac2e2788e6c","160000:oqs-provider:c5fb439e4ffd947f24c139232fb04fd71fe3c29e","160000:pkcs11-provider:5dcc876263c083d44944d84e6425497529f8ff54","160000:pyca-cryptography:0e855f952693c8b730abb2fc5a84dfc69562f210","160000:python-ecdsa:4096fa01715929e08b97e73f3173aee9d57f2a3f","160000:tlsfuzzer:61f45d9701294fd87ef92d2a7e3dfb076653a562","160000:tlslite-ng:77ef321dde1a9e6bcf94d73c80f8789a770d8031","160000:wycheproof:aca47066256c167f0ce04d611d718cc85654341e"]},
+    {"package":"uavs3d","root_tree":"aa6cee1e57df51de8efaa22cd101021736429b36"},
+    {"package":"spirv-headers","root_tree":"c014f18278c129e86fcd24f7073b3cb8be2f458d"},
+    {"package":"spirv-tools","root_tree":"7604bfc379674929a160bed739f9e80c95548a85","entries":["100644:DEPS:2125f79ec23167e43f4c6e6d9c0d557e705a27ef"]},
+    {"package":"spirv-cross","root_tree":"776936d05e67436abadabe8bf9248b9b299be0a0"},
+    {"package":"vulkan-header","root_tree":"320f7506f35dd47410e8616c3dd210351bb5729f"},
+    {"package":"vulkan","root_tree":"07ebee81dd2c0c5ffaaf519bbb690ee7bc94a7b7","entries":["100644:scripts/gn/DEPS:8cf931a8282bba1d7dbdb454035ab8bcb9a22e2a"]},
+    {"package":"openal-soft","root_tree":"350272eb51e9b8208f2378b3c3316cdd1ef7ae04"},
+    {"package":"shaderc","root_tree":"4a2674fa0285fcd0fcc0a7094372d56e86be67ed","entries":["100644:DEPS:6a5963f2c67d036e1319145fd77b222ea5aa32a4"]},
+    {"package":"ngtcp2","root_tree":"8daa5b9d8a546684e3943ab9c46c6dc5ab64e087","recipe_submodules":"GIT_SUBMODULES empty","entries":["100644:.gitmodules:efaf0c4d788a5451c6a15a60c7cead05eaa52cfe","160000:tests/munit:cb04288a5225645be005a521c537b83c51934ef6","160000:third-party/urlparse:c8168839c89fc5c5917c375e1bd6ffeddf3f7f88"]},
+    {"package":"nghttp3","root_tree":"add6a58aa6469d2e8da623e8f6e174b59ed1b401","recipe_submodules":"GIT_SUBMODULES lib/sfparse","entries":["100644:.gitmodules:fa6eebaa9707ca1c5a96e22885abe39c7d8369ae","160000:lib/sfparse:4b313cfd2e1b389ae632b36dcd50402307289af2","160000:tests/munit:11e8e3466b2d6a8bdfd4b05a3d1ee7805c5d3442"]},
+    {"package":"nghttp2","root_tree":"d107ddf439a650d7ac3a6dc60fd0f7a7cfd61305","recipe_submodules":"GIT_SUBMODULES empty","entries":["100644:.gitmodules:fe54086329990e6ee65097c18734d7e8055716e7","160000:tests/munit:cb04288a5225645be005a521c537b83c51934ef6","160000:third-party/mruby:831da26b9021de0369d17b71b5667e2941a1a32d","160000:third-party/neverbleed:c9515906909cbc33251d3fc2a140d43feae89680","160000:third-party/urlparse:59b068a7618a256c6823b0b9801b61d1d04677a3"]}
+  ],
+  "limitations": ["No submodule URLs or nested content inspected; gitlinks do not resolve their repositories.","No downloaded source, archives, build or configured dependency closure.","Non-GitHub and archive candidates are outside this GitHub tree inspection."]
+}

@@ -89,6 +89,7 @@ include(QtConfiguration)
 include(VersionConfiguration)
 include(NameConfiguration)
 include(PlayerConfiguration)
+include(VerifiedRecoveryKit)
 include(InputConfiguration)
 include(ClangTidy)
 

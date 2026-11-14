@@ -1,0 +1,581 @@
+{
+  "status": "CANDIDATE TREE METADATA ONLY; nested sources and closure unresolved",
+  "nodes_source": "patches/mpv/build/feature-graph-candidate.json",
+  "sources": [
+    {
+      "package": "libsamplerate",
+      "repository": "https://github.com/libsndfile/libsamplerate.git",
+      "commit": "0844c208f683527c08ea8a80acc13b398aa9c8bf",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libsamplerate.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/libsndfile/libsamplerate/git/trees/0844c208f683527c08ea8a80acc13b398aa9c8bf?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "0844c208f683527c08ea8a80acc13b398aa9c8bf",
+      "commit_metadata_endpoint": "https://api.github.com/repos/libsndfile/libsamplerate/git/commits/0844c208f683527c08ea8a80acc13b398aa9c8bf",
+      "tree_sha": "aaeafa8675eca452a6b38dfa1918290e0e495137"
+    },
+    {
+      "package": "libjpeg",
+      "repository": "https://github.com/libjpeg-turbo/libjpeg-turbo.git",
+      "commit": "2fa570c514a4b0e70342ef8b32ce1cda21b85710",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libjpeg.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/libjpeg-turbo/libjpeg-turbo/git/trees/2fa570c514a4b0e70342ef8b32ce1cda21b85710?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "2fa570c514a4b0e70342ef8b32ce1cda21b85710",
+      "commit_metadata_endpoint": "https://api.github.com/repos/libjpeg-turbo/libjpeg-turbo/git/commits/2fa570c514a4b0e70342ef8b32ce1cda21b85710",
+      "tree_sha": "713ac6dc815f66dca7b384188273796a8ad4daa5"
+    },
+    {
+      "package": "lcms2",
+      "repository": "https://github.com/mm2/Little-CMS.git",
+      "commit": "b0f840f0e602549433c45047edaab970edb1d32f",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/lcms2.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/mm2/Little-CMS/git/trees/b0f840f0e602549433c45047edaab970edb1d32f?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "b0f840f0e602549433c45047edaab970edb1d32f",
+      "commit_metadata_endpoint": "https://api.github.com/repos/mm2/Little-CMS/git/commits/b0f840f0e602549433c45047edaab970edb1d32f",
+      "tree_sha": "06cbbaf40375c91e60f5b0c3c05b0931cd1d44b5"
+    },
+    {
+      "package": "libmodplug",
+      "repository": "https://github.com/Konstanty/libmodplug.git",
+      "commit": "1f0c3f3d540daea4b53043ce310b4806f59d0cea",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libmodplug.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/Konstanty/libmodplug/git/trees/1f0c3f3d540daea4b53043ce310b4806f59d0cea?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "1f0c3f3d540daea4b53043ce310b4806f59d0cea",
+      "commit_metadata_endpoint": "https://api.github.com/repos/Konstanty/libmodplug/git/commits/1f0c3f3d540daea4b53043ce310b4806f59d0cea",
+      "tree_sha": "070bfc7fb933332cf4297eb723fb855bf66eedb1"
+    },
+    {
+      "package": "libpng",
+      "repository": "https://github.com/glennrp/libpng.git",
+      "commit": "33d015040f5dbc3d678413360ff9df35d152eefc",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libpng.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/glennrp/libpng/git/trees/33d015040f5dbc3d678413360ff9df35d152eefc?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "33d015040f5dbc3d678413360ff9df35d152eefc",
+      "commit_metadata_endpoint": "https://api.github.com/repos/glennrp/libpng/git/commits/33d015040f5dbc3d678413360ff9df35d152eefc",
+      "tree_sha": "b0319f097cac0829983f764cd347bec33414b724"
+    },
+    {
+      "package": "luajit",
+      "repository": "https://github.com/openresty/luajit2.git",
+      "commit": "dd3b24369ddfaa83c78cd6fdd91d157c8968ec8d",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/luajit.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/openresty/luajit2/git/trees/dd3b24369ddfaa83c78cd6fdd91d157c8968ec8d?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "dd3b24369ddfaa83c78cd6fdd91d157c8968ec8d",
+      "commit_metadata_endpoint": "https://api.github.com/repos/openresty/luajit2/git/commits/dd3b24369ddfaa83c78cd6fdd91d157c8968ec8d",
+      "tree_sha": "aeffcd9a0dcef35a2b15eb8b255512f0a14901a8"
+    },
+    {
+      "package": "libxml2",
+      "repository": "https://github.com/GNOME/libxml2.git",
+      "commit": "c79c9612fcc77b06b0d16f35fd363d938bdbbf5e",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libxml2.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/GNOME/libxml2/git/trees/c79c9612fcc77b06b0d16f35fd363d938bdbbf5e?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "c79c9612fcc77b06b0d16f35fd363d938bdbbf5e",
+      "commit_metadata_endpoint": "https://api.github.com/repos/GNOME/libxml2/git/commits/c79c9612fcc77b06b0d16f35fd363d938bdbbf5e",
+      "tree_sha": "8d2e6bd9802f37d2a2de4f317ab9119078a60b36"
+    },
+    {
+      "package": "harfbuzz",
+      "repository": "https://github.com/harfbuzz/harfbuzz.git",
+      "commit": "54d71be60501e3a4e294aca8b5845a4aacc11db8",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/harfbuzz.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/harfbuzz/harfbuzz/git/trees/54d71be60501e3a4e294aca8b5845a4aacc11db8?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "54d71be60501e3a4e294aca8b5845a4aacc11db8",
+      "commit_metadata_endpoint": "https://api.github.com/repos/harfbuzz/harfbuzz/git/commits/54d71be60501e3a4e294aca8b5845a4aacc11db8",
+      "tree_sha": "b616b59aa3a224e5fbe903afb6b03570181d0d8c"
+    },
+    {
+      "package": "graphengine",
+      "repository": "https://github.com/sekrit-twc/graphengine.git",
+      "commit": "91c6af4c795c5396d8b974f24b4d2e2ecca04e2d",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/graphengine.cmake",
+      "recipe_submodule_directives": [
+        "GIT_SUBMODULES \"\""
+      ],
+      "endpoint": "https://api.github.com/repos/sekrit-twc/graphengine/git/trees/91c6af4c795c5396d8b974f24b4d2e2ecca04e2d?recursive=1",
+      "truncated": false,
+      "gitlinks": [
+        {
+          "path": "test/googletest",
+          "sha": "e2239ee6043f73722e7aa812a459f54a28552929"
+        }
+      ],
+      "dependency_files": [
+        {
+          "path": ".gitmodules",
+          "sha": "701763e876c291c9f389840359cd930e0758863a",
+          "type": "blob"
+        }
+      ],
+      "error": null,
+      "endpoint_echo_sha": "91c6af4c795c5396d8b974f24b4d2e2ecca04e2d",
+      "commit_metadata_endpoint": "https://api.github.com/repos/sekrit-twc/graphengine/git/commits/91c6af4c795c5396d8b974f24b4d2e2ecca04e2d",
+      "tree_sha": "cf175c08a43aa19a7d5c1fcca7510cd9886f3b25"
+    },
+    {
+      "package": "libzimg",
+      "repository": "https://github.com/sekrit-twc/zimg.git",
+      "commit": "67e0603271c080e22c8429856dd4a8a56587e61e",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libzimg.cmake",
+      "recipe_submodule_directives": [
+        "GIT_SUBMODULES \"\""
+      ],
+      "endpoint": "https://api.github.com/repos/sekrit-twc/zimg/git/trees/67e0603271c080e22c8429856dd4a8a56587e61e?recursive=1",
+      "truncated": false,
+      "gitlinks": [
+        {
+          "path": "graphengine",
+          "sha": "cb5b2ce13384ec2491f0c37256ea210034799f69"
+        },
+        {
+          "path": "test/extra/googletest",
+          "sha": "6910c9d9165801d8827d628cb72eb7ea9dd538c5"
+        }
+      ],
+      "dependency_files": [
+        {
+          "path": ".gitmodules",
+          "sha": "e06f260ca8d7dedc5b9dea6b7e6ae6a80e0dec8c",
+          "type": "blob"
+        }
+      ],
+      "error": null,
+      "endpoint_echo_sha": "67e0603271c080e22c8429856dd4a8a56587e61e",
+      "commit_metadata_endpoint": "https://api.github.com/repos/sekrit-twc/zimg/git/commits/67e0603271c080e22c8429856dd4a8a56587e61e",
+      "tree_sha": "85508e42a22501af46e469d6f98e094a678a09dd"
+    },
+    {
+      "package": "libunibreak",
+      "repository": "https://github.com/adah1972/libunibreak.git",
+      "commit": "f8172fe771ef620112247cadfb876aecaa4f769e",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libunibreak.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/adah1972/libunibreak/git/trees/f8172fe771ef620112247cadfb876aecaa4f769e?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "f8172fe771ef620112247cadfb876aecaa4f769e",
+      "commit_metadata_endpoint": "https://api.github.com/repos/adah1972/libunibreak/git/commits/f8172fe771ef620112247cadfb876aecaa4f769e",
+      "tree_sha": "6bf31d76ef01a84b5e5ee8d7efece938da746e01"
+    },
+    {
+      "package": "libass",
+      "repository": "https://github.com/libass/libass.git",
+      "commit": "f61db567e6593df3470e91594bcd4ad2d0473aff",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libass.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/libass/libass/git/trees/f61db567e6593df3470e91594bcd4ad2d0473aff?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "f61db567e6593df3470e91594bcd4ad2d0473aff",
+      "commit_metadata_endpoint": "https://api.github.com/repos/libass/libass/git/commits/f61db567e6593df3470e91594bcd4ad2d0473aff",
+      "tree_sha": "d0fa5db9a09f9cb6196f8bc0a602e2d955342223"
+    },
+    {
+      "package": "libvpl",
+      "repository": "https://github.com/intel/libvpl.git",
+      "commit": "674d015bcb294bc39fa276e99a652ea045423e82",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libvpl.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/intel/libvpl/git/trees/674d015bcb294bc39fa276e99a652ea045423e82?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "674d015bcb294bc39fa276e99a652ea045423e82",
+      "commit_metadata_endpoint": "https://api.github.com/repos/intel/libvpl/git/commits/674d015bcb294bc39fa276e99a652ea045423e82",
+      "tree_sha": "7f4e8143a3960b3dfd2f525842a69953c1ff5ca5"
+    },
+    {
+      "package": "libmysofa",
+      "repository": "https://github.com/hoene/libmysofa.git",
+      "commit": "648eed03472e6720a1ea45d1a1f86c4efb569ff9",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libmysofa.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/hoene/libmysofa/git/trees/648eed03472e6720a1ea45d1a1f86c4efb569ff9?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "648eed03472e6720a1ea45d1a1f86c4efb569ff9",
+      "commit_metadata_endpoint": "https://api.github.com/repos/hoene/libmysofa/git/commits/648eed03472e6720a1ea45d1a1f86c4efb569ff9",
+      "tree_sha": "0d748e38a048b5afea6a87ce762f1ce616f784a0"
+    },
+    {
+      "package": "libbs2b",
+      "repository": "https://github.com/alexmarsev/libbs2b.git",
+      "commit": "5ca2d59888df047f1e4b028e3a2fd5be8b5a7277",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libbs2b.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/alexmarsev/libbs2b/git/trees/5ca2d59888df047f1e4b028e3a2fd5be8b5a7277?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "5ca2d59888df047f1e4b028e3a2fd5be8b5a7277",
+      "commit_metadata_endpoint": "https://api.github.com/repos/alexmarsev/libbs2b/git/commits/5ca2d59888df047f1e4b028e3a2fd5be8b5a7277",
+      "tree_sha": "1c416b1ab64e6a6cdf4ffedd1fd20ce5eecfcb25"
+    },
+    {
+      "package": "libsrt",
+      "repository": "https://github.com/Haivision/srt.git",
+      "commit": "9f2390232a8256ed4c72a5418c2b2777c49ad737",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libsrt.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/Haivision/srt/git/trees/9f2390232a8256ed4c72a5418c2b2777c49ad737?recursive=1",
+      "truncated": false,
+      "gitlinks": [
+        {
+          "path": "submodules/abi-compliance-checker",
+          "sha": "7c175c45a8ba9ac41b8e47d8ebbab557b623b18e"
+        }
+      ],
+      "dependency_files": [
+        {
+          "path": ".gitmodules",
+          "sha": "0c81e9233a7decab1658201c282e08db3bdce22b",
+          "type": "blob"
+        }
+      ],
+      "error": null,
+      "endpoint_echo_sha": "9f2390232a8256ed4c72a5418c2b2777c49ad737",
+      "commit_metadata_endpoint": "https://api.github.com/repos/Haivision/srt/git/commits/9f2390232a8256ed4c72a5418c2b2777c49ad737",
+      "tree_sha": "9f7cf06b3b3238ca4d2c5177ce698774a1a8988a"
+    },
+    {
+      "package": "libarchive",
+      "repository": "https://github.com/libarchive/libarchive.git",
+      "commit": "ebe83fcf971278d27821653fd6825b5098b980c8",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libarchive.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/libarchive/libarchive/git/trees/ebe83fcf971278d27821653fd6825b5098b980c8?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "ebe83fcf971278d27821653fd6825b5098b980c8",
+      "commit_metadata_endpoint": "https://api.github.com/repos/libarchive/libarchive/git/commits/ebe83fcf971278d27821653fd6825b5098b980c8",
+      "tree_sha": "21d7d571994ebed694faa004aef18b5589475b5e"
+    },
+    {
+      "package": "highway",
+      "repository": "https://github.com/google/highway.git",
+      "commit": "100c82c1d09599125e0054870dcf81c3fac7139f",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/highway.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/google/highway/git/trees/100c82c1d09599125e0054870dcf81c3fac7139f?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "100c82c1d09599125e0054870dcf81c3fac7139f",
+      "commit_metadata_endpoint": "https://api.github.com/repos/google/highway/git/commits/100c82c1d09599125e0054870dcf81c3fac7139f",
+      "tree_sha": "86c1f3e2bff697f66ca26ff43a853afc7eaf99fc"
+    },
+    {
+      "package": "libjxl",
+      "repository": "https://github.com/libjxl/libjxl.git",
+      "commit": "ef67fde2ec16d52e644c5a0969230b9a85e3eb31",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libjxl.cmake",
+      "recipe_submodule_directives": [
+        "GIT_SUBMODULES \"\""
+      ],
+      "endpoint": "https://api.github.com/repos/libjxl/libjxl/git/trees/ef67fde2ec16d52e644c5a0969230b9a85e3eb31?recursive=1",
+      "truncated": false,
+      "gitlinks": [
+        {
+          "path": "testdata",
+          "sha": "73695d303670c90e4d506ea89d9901b081385089"
+        },
+        {
+          "path": "third_party/brotli",
+          "sha": "028fb5a23661f123017c060daa546b55cf4bde29"
+        },
+        {
+          "path": "third_party/googletest",
+          "sha": "6910c9d9165801d8827d628cb72eb7ea9dd538c5"
+        },
+        {
+          "path": "third_party/highway",
+          "sha": "457c891775a7397bdb0376bb1031e6e027af1c48"
+        },
+        {
+          "path": "third_party/lcms",
+          "sha": "5176347635785e53ee5cee92328f76fda766ecc6"
+        },
+        {
+          "path": "third_party/libjpeg-turbo",
+          "sha": "8ecba3647edb6dd940463fedf38ca33a8e2a73d1"
+        },
+        {
+          "path": "third_party/libpng",
+          "sha": "872555f4ba910252783af1507f9e7fe1653be252"
+        },
+        {
+          "path": "third_party/sjpeg",
+          "sha": "94e0df6d0f8b44228de5be0ff35efb9f946a13c9"
+        },
+        {
+          "path": "third_party/skcms",
+          "sha": "96d9171c94b937a1b5f0293de7309ac16311b722"
+        },
+        {
+          "path": "third_party/zlib",
+          "sha": "51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf"
+        }
+      ],
+      "dependency_files": [
+        {
+          "path": ".gitmodules",
+          "sha": "3069caaf3a1fa89751dec82076f265c2d43b021f",
+          "type": "blob"
+        }
+      ],
+      "error": null,
+      "endpoint_echo_sha": "ef67fde2ec16d52e644c5a0969230b9a85e3eb31",
+      "commit_metadata_endpoint": "https://api.github.com/repos/libjxl/libjxl/git/commits/ef67fde2ec16d52e644c5a0969230b9a85e3eb31",
+      "tree_sha": "9f261d8a9476d40e4922f07d93a8ad013b132441"
+    },
+    {
+      "package": "glslang",
+      "repository": "https://github.com/KhronosGroup/glslang.git",
+      "commit": "5cf91e73b01ce835d281a9c3b3d9158f7f74ff86",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/glslang.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/KhronosGroup/glslang/git/trees/5cf91e73b01ce835d281a9c3b3d9158f7f74ff86?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [
+        {
+          "path": "DEPS",
+          "sha": "31d06264fcbc90772bf23d567fb08bdafe1c13c3",
+          "type": "blob"
+        }
+      ],
+      "error": null,
+      "endpoint_echo_sha": "5cf91e73b01ce835d281a9c3b3d9158f7f74ff86",
+      "commit_metadata_endpoint": "https://api.github.com/repos/KhronosGroup/glslang/git/commits/5cf91e73b01ce835d281a9c3b3d9158f7f74ff86",
+      "tree_sha": "3c223e73cf63284f2644ea812a67d0d7a9199936"
+    },
+    {
+      "package": "libsdl2",
+      "repository": "https://github.com/libsdl-org/SDL.git",
+      "commit": "8acf7cfc0f88717e5c036f60f0314bfcafe39189",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libsdl2.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/libsdl-org/SDL/git/trees/8acf7cfc0f88717e5c036f60f0314bfcafe39189?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "8acf7cfc0f88717e5c036f60f0314bfcafe39189",
+      "commit_metadata_endpoint": "https://api.github.com/repos/libsdl-org/SDL/git/commits/8acf7cfc0f88717e5c036f60f0314bfcafe39189",
+      "tree_sha": "1e7572b88f065b16214bf1e86ee0a79466d6b239"
+    },
+    {
+      "package": "glad",
+      "repository": "https://github.com/Dav1dde/glad.git",
+      "commit": "0a7cf1af9e25e02821587bd4095807fc90b6426a",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/glad.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/Dav1dde/glad/git/trees/0a7cf1af9e25e02821587bd4095807fc90b6426a?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "0a7cf1af9e25e02821587bd4095807fc90b6426a",
+      "commit_metadata_endpoint": "https://api.github.com/repos/Dav1dde/glad/git/commits/0a7cf1af9e25e02821587bd4095807fc90b6426a",
+      "tree_sha": "33aa34cbd5bc7c884d484d15a3cb16fbafeea9e2"
+    },
+    {
+      "package": "libplacebo",
+      "repository": "https://github.com/haasn/libplacebo.git",
+      "commit": "ccb74c6c13b1676e3af368cbe9281bfe649c17c6",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libplacebo.cmake",
+      "recipe_submodule_directives": [
+        "GIT_SUBMODULES \"\""
+      ],
+      "endpoint": "https://api.github.com/repos/haasn/libplacebo/git/trees/ccb74c6c13b1676e3af368cbe9281bfe649c17c6?recursive=1",
+      "truncated": false,
+      "gitlinks": [
+        {
+          "path": "3rdparty/Vulkan-Headers",
+          "sha": "74d8a6cb930c68ef617b202c3ff3c59d919e086b"
+        },
+        {
+          "path": "3rdparty/fast_float",
+          "sha": "97b54ca9e75f5303507699d27c6b4f4efe4641a1"
+        },
+        {
+          "path": "3rdparty/glad",
+          "sha": "73db193f853e2ee079bf3ca8a64aa2eaf6459043"
+        },
+        {
+          "path": "3rdparty/jinja",
+          "sha": "15206881c006c79667fe5154fe80c01c65410679"
+        },
+        {
+          "path": "3rdparty/markupsafe",
+          "sha": "297fc8e356e6836a62087949245d09a28e9f1b13"
+        },
+        {
+          "path": "demos/3rdparty/nuklear",
+          "sha": "242f35efa067a46c595645eeda7b1771ea1f83b1"
+        }
+      ],
+      "dependency_files": [
+        {
+          "path": ".gitmodules",
+          "sha": "3245c2120aa6339799e1eb5cabdd2885ecbbbf1c",
+          "type": "blob"
+        }
+      ],
+      "error": null,
+      "endpoint_echo_sha": "ccb74c6c13b1676e3af368cbe9281bfe649c17c6",
+      "commit_metadata_endpoint": "https://api.github.com/repos/haasn/libplacebo/git/commits/ccb74c6c13b1676e3af368cbe9281bfe649c17c6",
+      "tree_sha": "58840caace72543f2a7eb6fb2534e4189413b9cf"
+    },
+    {
+      "package": "libva",
+      "repository": "https://github.com/intel/libva.git",
+      "commit": "f3fefceb192ca28abf588aadf2392350aebf46ce",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libva.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/intel/libva/git/trees/f3fefceb192ca28abf588aadf2392350aebf46ce?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "f3fefceb192ca28abf588aadf2392350aebf46ce",
+      "commit_metadata_endpoint": "https://api.github.com/repos/intel/libva/git/commits/f3fefceb192ca28abf588aadf2392350aebf46ce",
+      "tree_sha": "2f8eaef73f49f6af2256091635205d18ea0a19ed"
+    },
+    {
+      "package": "libzvbi",
+      "repository": "https://github.com/zapping-vbi/zvbi.git",
+      "commit": "d3a5ee9f2b047bf16cd1ee5ccf6ec05ee75409d0",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libzvbi.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/zapping-vbi/zvbi/git/trees/d3a5ee9f2b047bf16cd1ee5ccf6ec05ee75409d0?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "d3a5ee9f2b047bf16cd1ee5ccf6ec05ee75409d0",
+      "commit_metadata_endpoint": "https://api.github.com/repos/zapping-vbi/zvbi/git/commits/d3a5ee9f2b047bf16cd1ee5ccf6ec05ee75409d0",
+      "tree_sha": "61adc2fda2f7d2f29e8937471a3ad656b89b6747"
+    },
+    {
+      "package": "libaribcaption",
+      "repository": "https://github.com/xqq/libaribcaption.git",
+      "commit": "37dde0f32652c32aa98bf92278944d1cfb2e7354",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libaribcaption.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/xqq/libaribcaption/git/trees/37dde0f32652c32aa98bf92278944d1cfb2e7354?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "37dde0f32652c32aa98bf92278944d1cfb2e7354",
+      "commit_metadata_endpoint": "https://api.github.com/repos/xqq/libaribcaption/git/commits/37dde0f32652c32aa98bf92278944d1cfb2e7354",
+      "tree_sha": "3d283669c7c8bb8dd7ab6b8a87a01558130675f7"
+    },
+    {
+      "package": "libsixel",
+      "repository": "https://github.com/saitoha/libsixel.git",
+      "commit": "af12e5bc6f3f69ad83479da85ddb371420da9b17",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libsixel.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/saitoha/libsixel/git/trees/af12e5bc6f3f69ad83479da85ddb371420da9b17?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "af12e5bc6f3f69ad83479da85ddb371420da9b17",
+      "commit_metadata_endpoint": "https://api.github.com/repos/saitoha/libsixel/git/commits/af12e5bc6f3f69ad83479da85ddb371420da9b17",
+      "tree_sha": "b31a52ffda630ac6be7d2fccc12fccfb5ba39c64"
+    },
+    {
+      "package": "libpsl",
+      "repository": "https://github.com/rockdaboot/libpsl.git",
+      "commit": "aa3a80e18f25caf3916636c8668dcc0fff7c016d",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libpsl.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/rockdaboot/libpsl/git/trees/aa3a80e18f25caf3916636c8668dcc0fff7c016d?recursive=1",
+      "truncated": false,
+      "gitlinks": [
+        {
+          "path": "list",
+          "sha": "e1b8015c3b2f0f4f8c18659c2480fc1a22c07b20"
+        }
+      ],
+      "dependency_files": [
+        {
+          "path": ".gitmodules",
+          "sha": "d74114da8a844275a0c817b33857d661cfa3539d",
+          "type": "blob"
+        }
+      ],
+      "error": null,
+      "endpoint_echo_sha": "aa3a80e18f25caf3916636c8668dcc0fff7c016d",
+      "commit_metadata_endpoint": "https://api.github.com/repos/rockdaboot/libpsl/git/commits/aa3a80e18f25caf3916636c8668dcc0fff7c016d",
+      "tree_sha": "4d719389ad3126fb1a4986255b1398beb7490af6"
+    },
+    {
+      "package": "mpv",
+      "repository": "https://github.com/mpv-player/mpv.git",
+      "commit": "01e2533f3143b8940857ca419b0b367f583e05ca",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/mpv.cmake",
+      "recipe_submodule_directives": [],
+      "endpoint": "https://api.github.com/repos/mpv-player/mpv/git/trees/01e2533f3143b8940857ca419b0b367f583e05ca?recursive=1",
+      "truncated": false,
+      "gitlinks": [],
+      "dependency_files": [],
+      "error": null,
+      "endpoint_echo_sha": "01e2533f3143b8940857ca419b0b367f583e05ca",
+      "commit_metadata_endpoint": "https://api.github.com/repos/mpv-player/mpv/git/commits/01e2533f3143b8940857ca419b0b367f583e05ca",
+      "tree_sha": "fde41fa9d1626edd9b37becf8f8f941b98a1fd50"
+    }
+  ]
+}

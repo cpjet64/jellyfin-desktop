@@ -1,0 +1,161 @@
+{
+  "status": "CANDIDATES ONLY; nested closure unresolved",
+  "cutoff": "2026-10-18T23:59:59Z",
+  "provider_default_branch": "master",
+  "sources": [
+    {
+      "package": "lame",
+      "source": "https://gitlab.com/shinchiro/lame.git",
+      "branch": "master",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/lame.cmake",
+      "endpoints": [
+        "https://gitlab.com/api/v4/projects/shinchiro%2Flame/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1"
+      ],
+      "commit": "9a5b35c430a2e6d150d65a96c7d7acdd64962a8f",
+      "committer_timestamp": "2022-09-28T10:45:07.000+02:00",
+      "error": null
+    },
+    {
+      "package": "libvpx",
+      "source": "https://chromium.googlesource.com/webm/libvpx.git",
+      "branch": "main",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libvpx.cmake",
+      "endpoints": [
+        "https://chromium.googlesource.com/webm/libvpx/+log/refs/heads/main?format=JSON&n=100"
+      ],
+      "commit": "6cf3e2bea2c087025aa38736dfeade970b4085e3",
+      "committer_timestamp": "2026-10-18T05:10:18+00:00",
+      "error": null
+    },
+    {
+      "package": "game-music-emu",
+      "source": "https://bitbucket.org/mpyne/game-music-emu.git",
+      "branch": "master",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/game-music-emu.cmake",
+      "endpoints": [
+        "https://api.bitbucket.org/2.0/repositories/mpyne/game-music-emu/commits/master?pagelen=100"
+      ],
+      "commit": "a5216b1dafe476b6de36a316a151c64df575197a",
+      "committer_timestamp": "2023-11-09T00:57:43+00:00",
+      "error": null
+    },
+    {
+      "package": "libdvdcss",
+      "source": "https://code.videolan.org/videolan/libdvdcss.git",
+      "branch": "master",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libdvdcss.cmake",
+      "endpoints": [
+        "https://code.videolan.org/api/v4/projects/videolan%2Flibdvdcss/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1"
+      ],
+      "commit": "811ce97a1d4d1c9d936f4b2707f533a9ef768251",
+      "committer_timestamp": "2026-07-28T13:46:11.000+02:00",
+      "error": null
+    },
+    {
+      "package": "libdvdread",
+      "source": "https://code.videolan.org/videolan/libdvdread.git",
+      "branch": "master",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libdvdread.cmake",
+      "endpoints": [
+        "https://code.videolan.org/api/v4/projects/videolan%2Flibdvdread/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1"
+      ],
+      "commit": "0f30df53125b564ef45903714403ce0a1e6c5e9e",
+      "committer_timestamp": "2026-08-21T21:50:20.000+02:00",
+      "error": null
+    },
+    {
+      "package": "libdvdnav",
+      "source": "https://code.videolan.org/videolan/libdvdnav.git",
+      "branch": "master",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libdvdnav.cmake",
+      "endpoints": [
+        "https://code.videolan.org/api/v4/projects/videolan%2Flibdvdnav/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1"
+      ],
+      "commit": "8147ccd35e5aae4afdd21171cf7b6b4d8f179d28",
+      "committer_timestamp": "2026-08-21T19:39:58.000+02:00",
+      "error": null
+    },
+    {
+      "package": "libudfread",
+      "source": "https://code.videolan.org/videolan/libudfread.git",
+      "branch": "master",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libudfread.cmake",
+      "endpoints": [
+        "https://code.videolan.org/api/v4/projects/videolan%2Flibudfread/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1"
+      ],
+      "commit": "b0bc6957e7e07d5f35391f210596d9eb71cffdd9",
+      "committer_timestamp": "2026-08-30T18:04:13.000+03:00",
+      "error": null
+    },
+    {
+      "package": "libbluray",
+      "source": "https://code.videolan.org/videolan/libbluray.git",
+      "branch": "master",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libbluray.cmake",
+      "endpoints": [
+        "https://code.videolan.org/api/v4/projects/videolan%2Flibbluray/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1"
+      ],
+      "commit": "448f896091634ab84776a3d062f0e1826e13ac6c",
+      "committer_timestamp": "2026-10-09T17:34:53.000-04:00",
+      "error": null
+    },
+    {
+      "package": "libsoxr",
+      "source": "https://gitlab.com/shinchiro/soxr.git",
+      "branch": "master",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libsoxr.cmake",
+      "endpoints": [
+        "https://gitlab.com/api/v4/projects/shinchiro%2Fsoxr/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1"
+      ],
+      "commit": "945b592b70470e29f917f4de89b4281fbbd540c0",
+      "committer_timestamp": "2018-02-24T10:53:13.000+00:00",
+      "error": null
+    },
+    {
+      "package": "libwebp",
+      "source": "https://chromium.googlesource.com/webm/libwebp.git",
+      "branch": "main",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libwebp.cmake",
+      "endpoints": [
+        "https://chromium.googlesource.com/webm/libwebp/+log/refs/heads/main?format=JSON&n=100"
+      ],
+      "commit": "7790cde178c1c33d83f1d7474d41d3b44bf9b315",
+      "committer_timestamp": "2026-10-18T23:28:49+00:00",
+      "error": null
+    },
+    {
+      "package": "libssh",
+      "source": "https://gitlab.com/libssh/libssh-mirror.git",
+      "branch": "master",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libssh.cmake",
+      "endpoints": [
+        "https://gitlab.com/api/v4/projects/libssh%2Flibssh-mirror/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1"
+      ],
+      "commit": "de42e7e7d8c01baa67761b2d6225294bda8dd742",
+      "committer_timestamp": "2026-10-07T10:40:01.000+02:00",
+      "error": null
+    },
+    {
+      "package": "mujs",
+      "source": "https://codeberg.org/ccxvii/mujs.git",
+      "branch": "master",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/mujs.cmake",
+      "endpoints": [
+        "https://codeberg.org/api/v1/repos/ccxvii/mujs/commits?sha=master&until=2026-10-18T23%3A59%3A59Z&limit=1"
+      ],
+      "commit": "21768ba7c0b7d82633c987a3f02c7e97eeec7919",
+      "committer_timestamp": "2026-11-10T22:41:00+01:00",
+      "error": null
+    },
+    {
+      "package": "mpv-release",
+      "source": "${LINK}",
+      "branch": "master",
+      "recipe": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/mpv-release.cmake",
+      "endpoints": [],
+      "commit": null,
+      "committer_timestamp": null,
+      "error": "Dynamic source URL; not a forge repository"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "status": "cutoff selections from official source history; not a complete transitive lock",
+  "cutoff_utc": "2026-10-18T23:59:59Z",
+  "sources": [
+    {
+      "package": "fontconfig",
+      "repository": "https://gitlab.freedesktop.org/fontconfig/fontconfig.git",
+      "branch": "main",
+      "api_result": "official GitLab API returned Anubis HTML rather than commit metadata",
+      "history_method": "official Git protocol, blob-filtered shallow history since 2026-10-01, no checkout; git log -1 --before cutoff",
+      "fetched_head": "548591665a8e0dcf5c49cc34fb59ad34c503fa1a",
+      "fetched_commits": 36,
+      "selected_commit": "ebec29cb759cca828c3ffc043033f470e0af8367",
+      "selected_committer_time": "2026-10-16T14:47:16Z",
+      "limitations": "Shallow history and current branch reachability do not prove historical branch state if upstream rewrote history; nested dependencies and patches remain to be audited."
+    },
+    {
+      "package": "uchardet",
+      "repository": "https://gitlab.freedesktop.org/uchardet/uchardet.git",
+      "branch": "master",
+      "api_result": "official GitLab API returned Anubis HTML rather than commit metadata",
+      "history_method": "official Git protocol, blob-filtered depth 100, no checkout; git log -1 --before cutoff",
+      "fetched_head": "06029ec3340cdf6bf9a6a537dafb3f39eda0560e",
+      "fetched_commits": 100,
+      "selected_commit": "06029ec3340cdf6bf9a6a537dafb3f39eda0560e",
+      "selected_committer_time": "2025-08-08T11:40:10+02:00",
+      "limitations": "Shallow history and current branch reachability do not prove historical branch state if upstream rewrote history; nested dependencies remain to be audited."
+    },
+    {
+      "package": "readline",
+      "repository": "https://git.sailfishos.org/mirror/readline.git",
+      "branch": "master",
+      "api_result": "original GitLab-like API returned HTML rather than commit metadata",
+      "history_method": "official Git ls-remote explicitly redirected to https://github.com/sailfishos-mirror/readline.git; GitHub GET commits endpoint queried redirected repository master at cutoff",
+      "redirected_master_at_observation": "f95e81428a77b37d83e56c0c7099956e8a7adfc8",
+      "selected_commit": "f95e81428a77b37d83e56c0c7099956e8a7adfc8",
+      "selected_committer_time": "2026-09-15T14:31:20Z",
+      "limitations": "Readline was not reached in the lexical libmpv candidate graph; source-selection and nested inputs still require final graph review."
+    }
+  ]
+}

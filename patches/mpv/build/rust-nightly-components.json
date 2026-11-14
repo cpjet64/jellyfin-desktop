@@ -1,0 +1,13 @@
+{
+  "status": "selected official component identities; not downloaded or built",
+  "channel": "nightly-2026-10-11",
+  "official_manifest": "https://static.rust-lang.org/dist/2026-10-11/channel-rust-nightly.toml",
+  "manifest_sha256": "b14ac4f9ad835f082cdffd0dc4797c202ae70094a09fa0a6a8100a56e2e17ed3",
+  "components": [
+    {"name":"rustc", "target":"x86_64-unknown-linux-gnu", "version":"1.101.0-nightly (6f5da406b 2026-10-10)", "url":"https://static.rust-lang.org/dist/2026-10-11/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz", "sha256":"572aaee68b7f1ca435e61bae5b240576b82a3aa28d1fb1b6f8c2b5017bdc0751"},
+    {"name":"cargo", "target":"x86_64-unknown-linux-gnu", "version":"0.102.0-nightly (29c5daa1a 2026-10-07)", "url":"https://static.rust-lang.org/dist/2026-10-11/cargo-nightly-x86_64-unknown-linux-gnu.tar.xz", "sha256":"c05795b27e83486e6e5ef9a34cb9818789d114cf4432fbfe74d0601084030d9a"},
+    {"name":"rust-std", "target":"x86_64-unknown-linux-gnu", "version":"1.101.0-nightly (6f5da406b 2026-10-10)", "url":"https://static.rust-lang.org/dist/2026-10-11/rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz", "sha256":"5fdb55067ee33558d32ac7848227a7c10549b93a6c6edb796ebe83e3b8941956"},
+    {"name":"rust-std", "target":"x86_64-pc-windows-gnu", "version":"1.101.0-nightly (6f5da406b 2026-10-10)", "url":"https://static.rust-lang.org/dist/2026-10-11/rust-std-nightly-x86_64-pc-windows-gnu.tar.xz", "sha256":"834cdde42333e0a114fb659b15dd1fce1b0a791ad4e60c135019069d1e344f0e"}
+  ],
+  "unresolved": ["Cargo dependency graph and crate checksums for each selected package", "host bootstrap and lock-specific installation script", "offline compatibility and actual component availability at build time"]
+}

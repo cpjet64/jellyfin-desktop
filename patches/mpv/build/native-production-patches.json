@@ -1,0 +1,11 @@
+{
+  "status": "approved committed patch identities; assembled source still must match",
+  "source_commit": "4640fe1e125e4f5664e6afcd1d712fa5eb6c8c2f",
+  "patches": [
+    {"name":"0001-recovery-frame-observation.patch", "git_blob":"e36fa6b34f97e7ec2a11e4bab69405222be12a42", "sha256":"1b44233c501f7cbab66e64269f2d83f0f57b7bc5aceca8975cb218ce36b52edc"},
+    {"name":"0002-recovery-seek-identity.patch", "git_blob":"26880cada9a438d798bfa9ade1aa12709e37551e", "sha256":"97150ebc3f75adad6c1a4591c0a1c1a168a82d7190cd5d59b03150bf17d292a7"},
+    {"name":"0003-recovery-seek-epoch-tests.patch", "git_blob":"10057a5215133ce0e73ccfe23bd0f38d169eb1c4", "sha256":"6f6221c6aa1a23d8991324d7cad5748a1a0768ad8f318bffb360ca36f8975e7d"}
+  ],
+  "required_private_exports": ["mpv_render_context_render_recovery_v1", "mpv_render_context_render_recovery_v2", "mpv_recovery_seek_async_v1", "mpv_recovery_seek_cancel_v1"],
+  "note": "Identities were computed from committed Git blobs, not another worktree's working files."
+}

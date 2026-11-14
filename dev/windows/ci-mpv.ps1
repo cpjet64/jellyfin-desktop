@@ -42,6 +42,11 @@ function Get-MpvArchive {
 
 function Install-Mpv {
     param([string]$Architecture, [string]$Destination, [string]$SevenZip, [string]$Workspace, [string]$Version, [string]$ExpectedHash)
+    if ($env:JELLYFIN_RECOVERY_ARTIFACT_REQUIRED) {
+        if ($env:JELLYFIN_RECOVERY_ARTIFACT_REQUIRED -cne '1') { throw 'Invalid recovery artifact mode' }
+        & "$PSScriptRoot/verify-recovery-kit.ps1" -SdkRoot (Split-Path -Parent $Destination) -QtRoot $env:JELLYFIN_RECOVERY_QT_ROOT
+        return
+    }
     $archive = Join-Path $Workspace "mpv-$Architecture.7z"
     $extract = Join-Path $Workspace "extract-$Architecture"
     Get-MpvArchive $Architecture $Version $archive $ExpectedHash

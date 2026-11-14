@@ -1,0 +1,11 @@
+{
+  "status": "PARTIAL CANDIDATES; transitive closure unverified",
+  "cutoff_utc": "2026-10-18T23:59:59Z",
+  "entries": [
+    {"package":"aom","repository":"https://aomedia.googlesource.com/aom","branch":"main","endpoint":"https://aomedia.googlesource.com/aom/+log/refs/heads/main?format=JSON&n=1000","commit":"7d61ce8d764648a443363f3dbbc20dcf111a85f0","committer_time":"Fri Oct 16 16:54:58 2026 -0700","method":"First entry in returned branch log with committer time at or before cutoff, filtered locally. The forge ignored an until query parameter; historical branch rewrites and topology require further review."},
+    {"package":"bzip2","repository":"https://gitlab.com/bzip2/bzip2.git","branch":"master (provider default)","endpoint":"https://gitlab.com/api/v4/projects/bzip2%2Fbzip2/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1","commit":"66c46b8c9436613fd81bc5d03f63a61933a4dcc3","committer_time":"2023-05-31T17:09:48.000-07:00"},
+    {"package":"dav1d","repository":"https://code.videolan.org/videolan/dav1d.git","branch":"master (provider default)","endpoint":"https://code.videolan.org/api/v4/projects/videolan%2Fdav1d/repository/commits?ref_name=master&until=2026-10-18T23%3A59%3A59Z&per_page=1","commit":"d7a83f6e0f9360188a38ceae0883f3d132d87b47","committer_time":"2026-10-17T18:07:40.000+02:00"},
+    {"package":"fontconfig","repository":"https://gitlab.freedesktop.org/fontconfig/fontconfig.git","branch":"main","endpoint":"https://gitlab.freedesktop.org/api/v4/projects/fontconfig%2Ffontconfig/repository/commits?ref_name=main&until=2026-10-18T23%3A59%3A59Z&per_page=1","commit":null,"error":"Endpoint returned HTML Anubis anti-bot challenge rather than JSON; cutoff commit unresolved."}
+  ],
+  "limitations": "Candidates do not establish transitive fetch, submodule, patch, or dependency closure. Timestamp selection does not establish branch state at cutoff if history was rewritten."
+}

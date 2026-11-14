@@ -5,6 +5,15 @@ REM Run once to install all build dependencies
 setlocal EnableDelayedExpansion
 call "%~dp0common.bat"
 
+if defined JELLYFIN_RECOVERY_ARTIFACT_REQUIRED (
+    if not "!JELLYFIN_RECOVERY_ARTIFACT_REQUIRED!"=="1" (
+        echo ERROR: JELLYFIN_RECOVERY_ARTIFACT_REQUIRED must be 1 when set.
+        exit /b 1
+    )
+    "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -File "!PROJECT_ROOT!\dev\windows\verify-recovery-kit.ps1" -SdkRoot "!DEPS_DIR!" -QtRoot "!JELLYFIN_RECOVERY_QT_ROOT!"
+    if errorlevel 1 exit /b 1
+)
+
 set "SEVENZIP=C:\Program Files\7-Zip\7z.exe"
 if not exist "!SEVENZIP!" (
     for /f "delims=" %%i in ('where 7z.exe 2^>nul') do (
@@ -59,6 +68,7 @@ if not exist "!DEPS_DIR!\qt\!QT_VERSION!\msvc2022_64" (
     echo Qt already installed, skipping
 )
 
+if defined JELLYFIN_RECOVERY_ARTIFACT_REQUIRED goto :skip_stock_mpv
 echo [9/14] Downloading libmpv AVX2...
 if not exist "!DEPS_DIR!\mpv\libmpv-2.dll" (
     echo Downloading libmpv...
@@ -137,6 +147,7 @@ if not exist "!DEPS_DIR!\mpv-fallback\libmpv-2.dll" (
     echo libmpv fallback already installed, skipping
 )
 
+:skip_stock_mpv
 echo [11/14] Downloading VCRedist and WiX tools...
 if not exist "!DEPS_DIR!\vc_redist.x64.exe" (
     echo Downloading vc_redist.x64.exe...

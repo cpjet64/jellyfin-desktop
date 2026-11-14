@@ -1,0 +1,28 @@
+{
+  "status": "PARTIAL CANDIDATES; dependency closure and transitive fetches unverified",
+  "provider_commit": "1f8d2e76255abc48f0456d9be99b4cab9c6566e6",
+  "cutoff_utc": "2026-10-18T23:59:59Z",
+  "method": "Full recipe source_lines in provider-input-catalog.json. The provider vendored shared_internal_commands.cmake supplies master when GIT_TAG is omitted; GitHub commits GET with sha=branch, until=cutoff and per_page=1 selected candidate. Recipe reset and archive hash retained. All candidates require transitive source and submodule audit.",
+  "github_evidence_template": "https://api.github.com/repos/{owner}/{repo}/commits?sha={branch}&until=2026-10-18T23%3A59%3A59Z&per_page=1",
+  "candidates": [
+    {"package":"amf-headers","url":"https://github.com/GPUOpen-LibrariesAndSDKs/AMF.git","requested":"provider default master","commit":"57ee0cfb0e1a08d9041f77435653794c1b012be0","committer_date":"2026-10-16T19:22:05Z"},
+    {"package":"angle-headers","url":"https://github.com/google/angle.git","requested":"main; GIT_SUBMODULES empty","commit":"b82a564646a26535ccedfa7a69134c0fd6654ac2","committer_date":"2026-10-18T00:28:18Z"},
+    {"package":"aom","url":"https://aomedia.googlesource.com/aom","requested":"main","blocker":"Non-GitHub source; cutoff object unresolved."},
+    {"package":"avisynth-headers","url":"https://github.com/AviSynth/AviSynthPlus.git","requested":"GIT_RESET 21fdc997f9724b994896ba5520ddf64d677976b3; GIT_SUBMODULES empty","commit":"21fdc997f9724b994896ba5520ddf64d677976b3","evidence":"provider recipe GIT_RESET; verified GET https://api.github.com/repos/AviSynth/AviSynthPlus/commits/21fdc997f9724b994896ba5520ddf64d677976b3, committer date 2025-01-29T08:14:16Z; transitive inputs unverified"},
+    {"package":"brotli","url":"https://github.com/google/brotli.git","requested":"provider default master","commit":"86ee1f65f62d6272345dee751d49e7d1f01c2b11","committer_date":"2026-10-12T17:43:48Z"},
+    {"package":"bzip2","url":"https://gitlab.com/bzip2/bzip2.git","requested":"provider default master","blocker":"Non-GitHub source; default branch and cutoff object unresolved."},
+    {"package":"c-ares","url":"https://github.com/c-ares/c-ares.git","requested":"main","commit":"eb1c63f7197c2b9c04e5f55b585663eb2e89db50","committer_date":"2026-10-18T22:54:34Z"},
+    {"package":"cryptopp","url":"https://github.com/weidai11/cryptopp/archive/CRYPTOPP_8_2_0.tar.gz","requested":"archive CRYPTOPP_8_2_0","archive_sha256":"e3bcd48a62739ad179ad8064b523346abb53767bcbefc01fe37303412292343e","evidence":"provider recipe URL_HASH; archive not downloaded"},
+    {"package":"curl","url":"https://github.com/curl/curl.git","requested":"provider default master","commit":"9ef1a3a130450d603abd029772422abd40cfcde0","committer_date":"2026-10-18T22:11:02Z","blocker":"Recipe applies curl-*.patch; exact patch inventory and hashes not resolved here."},
+    {"package":"dav1d","url":"https://code.videolan.org/videolan/dav1d.git","requested":"provider default master","blocker":"Non-GitHub source; default branch and cutoff object unresolved."},
+    {"package":"davs2","url":"https://github.com/saindriches/davs2.git","requested":"provider default master","commit":"f50435051b72c168c2b566c544e27fcff71ba61a","committer_date":"2023-09-28T04:17:15Z"},
+    {"package":"expat","url":"https://github.com/libexpat/libexpat.git","requested":"provider default master","commit":"628f49ba13f789b2f94e678367c8d5da474c12bc","committer_date":"2026-10-15T11:03:39Z"},
+    {"package":"fast_float","url":"https://github.com/fastfloat/fast_float.git","requested":"main","commit":"0de7a21da582b6c84b0546772a96549882905d2b","committer_date":"2026-10-17T12:55:50Z"},
+    {"package":"ffmpeg","url":"https://github.com/FFmpeg/FFmpeg.git","requested":"provider default master","commit":"3c5ad12adfbc794bbba1f666e46822c212287495","committer_date":"2026-10-18T23:26:41Z"},
+    {"package":"flac","url":"https://github.com/xiph/flac.git","requested":"provider default master","commit":"e94ff9f68b8e7dbd3e9f8b1ac18a8eca1914f181","committer_date":"2026-07-19T09:32:44Z"},
+    {"package":"fontconfig","url":"https://gitlab.freedesktop.org/fontconfig/fontconfig.git","requested":"main","blocker":"Non-GitHub source; cutoff object unresolved. Recipe applies fontconfig-*.patch; patch inventory and hashes unresolved."},
+    {"package":"freetype2","url":"https://github.com/freetype/freetype.git","requested":"provider default master; GIT_SUBMODULES empty","commit":"a5877f48fff8dd6cf8d53c505ce055499376aee2","committer_date":"2026-10-17T10:29:59Z"},
+    {"package":"fribidi","url":"https://github.com/fribidi/fribidi.git","requested":"provider default master","commit":"d2f3e1f4946e7cef9789e1c3ebdb4a60d4314c7f","committer_date":"2026-10-15T18:31:49Z"}
+  ],
+  "unresolved": ["Selected revisions' nested fetches, submodules, vendored dependencies, lockfiles, and patches have not been audited. Recipe GIT_SUBMODULES empty is recorded where explicitly present and does not establish closure.", "GitHub commit timestamps alone do not prove historical branch reachability at cutoff if history was rewritten.", "Package list is a catalog; reachability from the selected libmpv profile is not established by this file."]
+}
