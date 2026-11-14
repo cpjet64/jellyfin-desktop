@@ -2,6 +2,7 @@
 #include <MpvController>
 #include <QCoreApplication>
 #include <QPointer>
+#include <QSignalSpy>
 #include <QThread>
 #include <QtTest>
 #include <memory>
@@ -18,10 +19,12 @@ private slots:
   void completionBeforeRegistrationAllowsReservation();
   void quarantineWinsAdmission();
   void failedReservationRetiresBeforeReadmission();
+  void internalWakeBeforeBindingIsDrained();
 private:
-  bool adopt(quint64 token);
+  bool adopt(quint64 token, bool internal = false);
   std::shared_ptr<CoreOwner> owner_;
   QPointer<QThread> worker_;
+  QPointer<MpvController> controller_;
   bool quarantined_ = false;
 };
 
@@ -46,15 +49,17 @@ void RendererAdmissionTest::init()
     QVERIFY(owner_);
     return;
   }
-  QVERIFY(adopt(reservation.token));
+  const bool internal = QByteArray(QTest::currentTestFunction()) == "internalWakeBeforeBindingIsDrained";
+  QVERIFY(adopt(reservation.token, internal));
 }
 
-bool RendererAdmissionTest::adopt(quint64 token)
+bool RendererAdmissionTest::adopt(quint64 token, bool internal)
 {
   auto* worker = new QThread;
-  auto* controller = new MpvController(MpvController::EventMode::External);
+  auto* controller = new MpvController(internal ? MpvController::EventMode::Internal : MpvController::EventMode::External);
   auto* relay = new WakeRelay;
   worker_ = worker;
+  controller_ = controller;
   controller->moveToThread(worker);
   relay->moveToThread(worker);
   worker->start();
@@ -163,6 +168,31 @@ void RendererAdmissionTest::failedReservationRetiresBeforeReadmission()
   QVERIFY(old->nativeDestroyed.load());
   QVERIFY(worker_.isNull() || !worker_->isRunning());
   cancelCoreReservation(granted);
+}
+
+void RendererAdmissionTest::internalWakeBeforeBindingIsDrained()
+{
+  QVERIFY(controller_);
+  QSignalSpy changed(controller_, &MpvController::propertyChanged);
+  QVERIFY(changed.isValid());
+  auto lease = owner_->acquireNative();
+  QVERIFY(lease);
+  // The pinned client synchronously registers a pending initial observation.
+  QCOMPARE(mpv_observe_property(lease.get(), 70, "pause", MPV_FORMAT_FLAG), 0);
+  // Initialization queues a real native wake. Unregister before binding so no
+  // later wake can rescue the test; the worker fence drains any queued wake.
+  owner_->closeExternalWakeup();
+  QVERIFY(QMetaObject::invokeMethod(controller_, &MpvController::eventHandler, Qt::BlockingQueuedConnection));
+  QCOMPARE(changed.size(), 0); // Before binding, the queued handler has no lease.
+  auto core = owner_;
+  QVERIFY(QMetaObject::invokeMethod(controller_, [controller = controller_, core] {
+    if (controller) controller->bindRecoveryCore(core);
+  }, Qt::BlockingQueuedConnection));
+  QTRY_VERIFY_WITH_TIMEOUT(!changed.isEmpty(), 15000);
+  bool sawPause = false;
+  for (const auto& args : changed) if (args.at(0).toString() == QStringLiteral("pause")) sawPause = true;
+  QVERIFY(sawPause);
+  lease = {};
 }
 
 QTEST_GUILESS_MAIN(RendererAdmissionTest)
