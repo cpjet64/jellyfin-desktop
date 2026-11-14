@@ -320,7 +320,8 @@ def headless_checks(mode="system"):
                  "renderer_admission_cancelledWaiterIsNotCalled",
                  "renderer_admission_completionBeforeRegistrationAllowsReservation",
                  "renderer_admission_quarantineWinsAdmission",
-                 "renderer_admission_failedReservationRetiresBeforeReadmission") if mode == "static" else ()
+                 "renderer_admission_failedReservationRetiresBeforeReadmission",
+                 "renderer_admission_internalWakeBeforeBindingIsDrained") if mode == "static" else ()
     required = HEADLESS_TESTS + admission
     expression = "^(" + "|".join(required) + ")$"
     report_path = RESULTS / "headless-ctest.xml"
