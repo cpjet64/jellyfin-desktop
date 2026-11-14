@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 from time import monotonic
 
 from .identity import FilePin, ObservedFile, RetainedHandlesError
@@ -289,7 +290,30 @@ def production(policy_name, receipt_path):
     return _supervise(policy, receipt_path)
 
 
-def fixture(policy, receipt_path):
-    if policy.kind != 'fixture':
+def _validate_fixture(policy):
+    if policy.kind != 'fixture' or policy.command_form != 'fixture':
         raise ValueError('fixture policy required')
+    directory = Path(__file__).resolve(strict=True).parent
+    project_deps = directory.parents[3] / 'deps'
+    command = policy.command
+    target = Path(command.cwd)
+    if not target.is_absolute():
+        raise ValueError('absolute fixture directory required')
+    target = target.resolve(strict=True)
+    if not target.is_dir() or target == project_deps or not target.is_relative_to(project_deps):
+        raise ValueError('fixture directory must be under project deps')
+    executable = str(Path(sys.executable).resolve(strict=True))
+    child = str((directory / 'fixture_child.py').resolve(strict=True))
+    output = str(target / 'result.bin')
+    modes = ('natural', 'residual', 'transientchild', 'spawnlate', 'rootfail', 'timeout')
+    if (command.executable != executable or command.response_path != child or
+            len(command.args) != 4 or command.args[:2] != ('-B', child) or
+            command.args[2] not in modes or command.args[3] != output or
+            command.outputs != (output,) or command.cwd != str(target) or
+            command.stdout != str(target / 'stdout.log') or command.stderr != str(target / 'stderr.log')):
+        raise ValueError('fixture command differs from reviewed fixture')
+
+
+def fixture(policy, receipt_path):
+    _validate_fixture(policy)
     return _supervise(policy, receipt_path)
