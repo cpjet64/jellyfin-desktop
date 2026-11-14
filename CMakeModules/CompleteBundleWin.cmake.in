@@ -2,15 +2,26 @@ set(PROJECT_SOURCE_DIR "@PROJECT_SOURCE_DIR@")
 set(QTROOT "@QTROOT@")
 include("@CMAKE_BINARY_DIR@/ValidateWindowsRuntime.cmake")
 
-if(DEFINED ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED} AND NOT "$ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED}" STREQUAL "")
+if("@JELLYFIN_VERIFIED_RECOVERY_KIT@" STREQUAL "ON")
   if(NOT "$ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED}" STREQUAL "1")
-    message(FATAL_ERROR "Invalid recovery artifact mode")
+    message(FATAL_ERROR "A verified recovery build requires recovery artifact verification during packaging")
   endif()
-  find_program(RECOVERY_PY_LAUNCHER NAMES py.exe REQUIRED)
+  if(NOT "$ENV{JELLYFIN_RECOVERY_LOCK_SHA256}" STREQUAL "@JELLYFIN_RECOVERY_LOCK_SHA256@" OR
+     NOT "$ENV{JELLYFIN_RECOVERY_MANIFEST_SHA256}" STREQUAL "@JELLYFIN_RECOVERY_MANIFEST_SHA256@")
+    message(FATAL_ERROR "Packaging lock or manifest identity differs from configure time")
+  endif()
+  set(_recovery_python "@Python3_EXECUTABLE@")
+  if(NOT IS_ABSOLUTE "${_recovery_python}" OR NOT EXISTS "${_recovery_python}" OR IS_DIRECTORY "${_recovery_python}")
+    message(FATAL_ERROR "Configured recovery Python executable is unavailable")
+  endif()
+  file(SHA256 "${_recovery_python}" _recovery_python_hash)
+  if(NOT "${_recovery_python_hash}" STREQUAL "@JELLYFIN_RECOVERY_PYTHON_SHA256@")
+    message(FATAL_ERROR "Configured recovery Python executable changed after configure")
+  endif()
   get_filename_component(_recovery_mpv_dir "@BUNDLE_MPV_LIBRARY@" DIRECTORY)
   get_filename_component(_recovery_mpv_root "${_recovery_mpv_dir}/.." ABSOLUTE)
   execute_process(
-    COMMAND "${RECOVERY_PY_LAUNCHER}" -3 "${PROJECT_SOURCE_DIR}/patches/mpv/build/recovery_artifacts.py" verify
+    COMMAND "${_recovery_python}" -I -B "${PROJECT_SOURCE_DIR}/patches/mpv/build/recovery_artifacts.py" verify
       --lock "$ENV{JELLYFIN_RECOVERY_LOCK}" --approved-lock-sha256 "$ENV{JELLYFIN_RECOVERY_LOCK_SHA256}"
       --root "${_recovery_mpv_root}" --qt-root "@QTROOT@" --manifest "$ENV{JELLYFIN_RECOVERY_MANIFEST}"
       --approved-manifest-sha256 "$ENV{JELLYFIN_RECOVERY_MANIFEST_SHA256}" --dumpbin "$ENV{JELLYFIN_RECOVERY_DUMPBIN}"
@@ -19,6 +30,8 @@ if(DEFINED ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED} AND NOT "$ENV{JELLYFIN_RECOV
   if(NOT "${_recovery_mpv_result}" STREQUAL "0")
     message(FATAL_ERROR "Custom recovery mpv artifact verification failed")
   endif()
+elseif(DEFINED ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED} AND NOT "$ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED}" STREQUAL "")
+  message(FATAL_ERROR "Recovery packaging requires a verified recovery configure")
 endif()
 
 message(STATUS "Running windeployqt from: ${QTROOT}/bin/windeployqt.exe")
@@ -61,9 +74,9 @@ if(EXISTS "${MPV_FALLBACK_DIR}/libmpv-2.dll")
   message(STATUS "Installed fallback libmpv")
 endif()
 
-if(DEFINED ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED} AND "$ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED}" STREQUAL "1")
+if("@JELLYFIN_VERIFIED_RECOVERY_KIT@" STREQUAL "ON")
   execute_process(
-    COMMAND "${RECOVERY_PY_LAUNCHER}" -3 "${PROJECT_SOURCE_DIR}/patches/mpv/build/recovery_artifacts.py" verify
+    COMMAND "${_recovery_python}" -I -B "${PROJECT_SOURCE_DIR}/patches/mpv/build/recovery_artifacts.py" verify
       --lock "$ENV{JELLYFIN_RECOVERY_LOCK}" --approved-lock-sha256 "$ENV{JELLYFIN_RECOVERY_LOCK_SHA256}"
       --root "${_recovery_mpv_root}" --qt-root "@QTROOT@" --manifest "$ENV{JELLYFIN_RECOVERY_MANIFEST}"
       --approved-manifest-sha256 "$ENV{JELLYFIN_RECOVERY_MANIFEST_SHA256}" --dumpbin "$ENV{JELLYFIN_RECOVERY_DUMPBIN}"

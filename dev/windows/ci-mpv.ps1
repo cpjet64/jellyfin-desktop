@@ -44,11 +44,7 @@ function Install-Mpv {
     param([string]$Architecture, [string]$Destination, [string]$SevenZip, [string]$Workspace, [string]$Version, [string]$ExpectedHash)
     if ($env:JELLYFIN_RECOVERY_ARTIFACT_REQUIRED) {
         if ($env:JELLYFIN_RECOVERY_ARTIFACT_REQUIRED -cne '1') { throw 'Invalid recovery artifact mode' }
-        $script = Join-Path $PSScriptRoot '../../patches/mpv/build/recovery_artifacts.py'
-        & py -3 $script verify --lock $env:JELLYFIN_RECOVERY_LOCK --approved-lock-sha256 $env:JELLYFIN_RECOVERY_LOCK_SHA256 `
-            --root (Split-Path -Parent $Destination) --qt-root $env:JELLYFIN_RECOVERY_QT_ROOT --manifest $env:JELLYFIN_RECOVERY_MANIFEST `
-            --approved-manifest-sha256 $env:JELLYFIN_RECOVERY_MANIFEST_SHA256 --dumpbin $env:JELLYFIN_RECOVERY_DUMPBIN
-        if ($LASTEXITCODE -ne 0) { throw 'Custom recovery mpv artifact verification failed' }
+        & "$PSScriptRoot/verify-recovery-kit.ps1" -SdkRoot (Split-Path -Parent $Destination) -QtRoot $env:JELLYFIN_RECOVERY_QT_ROOT
         return
     }
     $archive = Join-Path $Workspace "mpv-$Architecture.7z"

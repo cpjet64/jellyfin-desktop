@@ -10,7 +10,7 @@ if defined JELLYFIN_RECOVERY_ARTIFACT_REQUIRED (
         echo ERROR: JELLYFIN_RECOVERY_ARTIFACT_REQUIRED must be 1 when set.
         exit /b 1
     )
-    py -3 "!PROJECT_ROOT!\patches\mpv\build\recovery_artifacts.py" verify --lock "!JELLYFIN_RECOVERY_LOCK!" --approved-lock-sha256 "!JELLYFIN_RECOVERY_LOCK_SHA256!" --root "!DEPS_DIR!" --qt-root "!JELLYFIN_RECOVERY_QT_ROOT!" --manifest "!JELLYFIN_RECOVERY_MANIFEST!" --approved-manifest-sha256 "!JELLYFIN_RECOVERY_MANIFEST_SHA256!" --dumpbin "!JELLYFIN_RECOVERY_DUMPBIN!"
+    "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -File "!PROJECT_ROOT!\dev\windows\verify-recovery-kit.ps1" -SdkRoot "!DEPS_DIR!" -QtRoot "!JELLYFIN_RECOVERY_QT_ROOT!"
     if errorlevel 1 exit /b 1
 )
 

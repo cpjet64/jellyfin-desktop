@@ -12,6 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from recovery_lock_preflight import parse_object, verify
 
 HEX = re.compile(r"[0-9a-f]{64}\Z")

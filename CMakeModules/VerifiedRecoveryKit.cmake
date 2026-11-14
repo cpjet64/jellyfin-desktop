@@ -13,6 +13,31 @@ function(require_qt_include_inside_kit include_path qt_root)
   endif()
 endfunction()
 
+function(require_reviewed_recovery_python out_hash)
+  if(NOT IS_ABSOLUTE "${Python3_EXECUTABLE}" OR NOT EXISTS "${Python3_EXECUTABLE}" OR
+     IS_DIRECTORY "${Python3_EXECUTABLE}")
+    message(FATAL_ERROR "Verified recovery kit requires an explicitly configured Python3_EXECUTABLE")
+  endif()
+  if(NOT IS_ABSOLUTE "$ENV{JELLYFIN_RECOVERY_PYTHON}" OR NOT EXISTS "$ENV{JELLYFIN_RECOVERY_PYTHON}")
+    message(FATAL_ERROR "A reviewed recovery Python path is required")
+  endif()
+  get_filename_component(_configured "${Python3_EXECUTABLE}" REALPATH)
+  get_filename_component(_approved "$ENV{JELLYFIN_RECOVERY_PYTHON}" REALPATH)
+  if(NOT "${_configured}" STREQUAL "${_approved}")
+    message(FATAL_ERROR "Configured Python path differs from the reviewed recovery Python path")
+  endif()
+  string(TOLOWER "$ENV{JELLYFIN_RECOVERY_PYTHON_SHA256}" _expected)
+  string(LENGTH "${_expected}" _length)
+  if(NOT _length EQUAL 64 OR NOT _expected MATCHES "^[0-9a-f]+$")
+    message(FATAL_ERROR "A reviewed Python SHA-256 is required")
+  endif()
+  file(SHA256 "${Python3_EXECUTABLE}" _actual)
+  if(NOT "${_actual}" STREQUAL "${_expected}")
+    message(FATAL_ERROR "Configured Python executable differs from its reviewed identity")
+  endif()
+  set(${out_hash} "${_expected}" PARENT_SCOPE)
+endfunction()
+
 function(verify_recovery_kit)
   if(NOT DEFINED ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED} OR "$ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED}" STREQUAL "")
     return()
@@ -65,9 +90,9 @@ function(verify_recovery_kit)
   foreach(_include IN LISTS Qt6Gui_PRIVATE_INCLUDE_DIRS)
     require_qt_include_inside_kit("${_include}" "${_qt_root}")
   endforeach()
-  find_program(_recovery_py NAMES py.exe REQUIRED)
+  require_reviewed_recovery_python(_expected_python_hash)
   execute_process(
-    COMMAND "${_recovery_py}" -3 "${CMAKE_SOURCE_DIR}/patches/mpv/build/recovery_artifacts.py" verify
+    COMMAND "${Python3_EXECUTABLE}" -I -B "${CMAKE_SOURCE_DIR}/patches/mpv/build/recovery_artifacts.py" verify
       --lock "$ENV{JELLYFIN_RECOVERY_LOCK}" --approved-lock-sha256 "$ENV{JELLYFIN_RECOVERY_LOCK_SHA256}"
       --root "${_mpv_root}" --qt-root "${_qt_root}" --manifest "$ENV{JELLYFIN_RECOVERY_MANIFEST}"
       --approved-manifest-sha256 "$ENV{JELLYFIN_RECOVERY_MANIFEST_SHA256}" --dumpbin "$ENV{JELLYFIN_RECOVERY_DUMPBIN}"
@@ -79,6 +104,9 @@ function(verify_recovery_kit)
     message(FATAL_ERROR "Configured recovery kit verification failed")
   endif()
   set(JELLYFIN_VERIFIED_RECOVERY_KIT ON PARENT_SCOPE)
+  set(JELLYFIN_RECOVERY_PYTHON_SHA256 "${_expected_python_hash}" PARENT_SCOPE)
+  set(JELLYFIN_RECOVERY_LOCK_SHA256 "$ENV{JELLYFIN_RECOVERY_LOCK_SHA256}" PARENT_SCOPE)
+  set(JELLYFIN_RECOVERY_MANIFEST_SHA256 "$ENV{JELLYFIN_RECOVERY_MANIFEST_SHA256}" PARENT_SCOPE)
 endfunction()
 
 verify_recovery_kit()
