@@ -12,7 +12,7 @@ manifest, all five v2 source files, the fixed child scripts, proposal builder,
 response, compiler, and both role files before either Python child begins. It
 binds the reviewed assembled Git SHA and controller SHA supplied at invocation;
 the five v2 sources use compact JSON `[basename,sha256]` in listed controller
-order with SHA-256 `dfe938e1f813d4877184d8b7b9b7403b55432b4796e29498bdd7d3d7469d1886`.
+order with SHA-256 `a2e9fa17f5ed01d9506c4d9c790327ddf66c8ef95001c3538e3f30465ffc745e`.
 These source pins must be refreshed if the assembly changes.
 
 Both children use `-I -S -B -X pycache_prefix=<fresh-private-empty-directory>`

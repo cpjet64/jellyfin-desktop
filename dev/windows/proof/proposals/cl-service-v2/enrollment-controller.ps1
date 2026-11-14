@@ -19,12 +19,12 @@ $driver = "$proposal/enrollment-driver.py"
 $builder = "$proposal/enrollment_profile.py"
 $postcheck = "$proposal/enrollment-postcheck.py"
 $bootstrap = "$proposal/enrollment_bootstrap.py"
-$v2Digest = 'dfe938e1f813d4877184d8b7b9b7403b55432b4796e29498bdd7d3d7469d1886'
-$v2Files = @(@('profile.py','3e9208ed87364901f0c82290aa8abbf7ea8b3f0a22f9b0146d81234f621e9fe4'),
-  @('lifecycle.py','d536bfc45301948c292bccc59a8fa22cc02239308de10a3e8105d35e56c611cc'),
-  @('supervisor.py','2967b14fb5d578f610ddcfa698602581edaa6aeb0efe88db3398a46346580f5d'),
-  @('receipt.py','fd64760ee3888a8f998b82cd50287792aa931e395a6c81d52c19a4f0763b3578'),
-  @('postcheck.py','42f0c11de629b5d8aee258f2bc2ed836078ef6f11d285bd7ebb613cf7826a82d'))
+$v2Digest = 'a2e9fa17f5ed01d9506c4d9c790327ddf66c8ef95001c3538e3f30465ffc745e'
+$v2Files = @(@('profile.py','e905da84c963c6669ceb184027fe72da54e3a48743b8aa85a7f5da57e34887a7'),
+  @('lifecycle.py','04eea626daec5df142caf4ea03acfd4a408aa4947216609be270fab160594140'),
+  @('supervisor.py','1e9ba410ad76691e49bc94efba8a4e467d774b6eeed4bb32b60f7ace0d902fbb'),
+  @('receipt.py','73ad320f401fd30b868500962f3d82660bc5b1ccab6ac0b9547cfb73761fdc0b'),
+  @('postcheck.py','38af20981d2875de16361e8d0978565340fc7ab03070ebc4b661e4088627ac2e'))
 $allocationGuid = [Guid]::Empty
 if ($ReviewedSourceSHA -cnotmatch '^[0-9a-f]{40}$' -or $ControllerSHA256 -cnotmatch '^[0-9a-f]{64}$' -or
     $ReviewedEndpoint -cnotmatch '^jd-[0-9a-f]{32}$' -or $ReviewedAllocation -cnotmatch '^[0-9a-f-]{36}$' -or
@@ -86,7 +86,7 @@ function Pin-Inputs($pins) {
   $observedDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($json))).ToLowerInvariant()
   if ($observedDigest -cne $v2Digest) { throw 'V2 source digest mismatch' }
   $pins.PinFile($driver,'b5b252462228412162586744c80b42321e3822cddcd60d266bd92e5d9747f79c',(Get-Item -LiteralPath $driver).Length,[System.Management.Automation.Language.NullString]::Value)
-  $pins.PinFile($builder,'5e2d790d2ed5ae55ba126d4fbd65f9dbf084f9f0e626a67a2a1fc260ea68b6e8',(Get-Item -LiteralPath $builder).Length,[System.Management.Automation.Language.NullString]::Value)
+  $pins.PinFile($builder,'07e7ab119fab079a0942fe7ed3b345eb276c35c730940865a27ecce9d19d2c70',(Get-Item -LiteralPath $builder).Length,[System.Management.Automation.Language.NullString]::Value)
   $pins.PinFile($postcheck,'97850035a4ea1d55d077ba15c56a231bc15ba3952b6c5f7a89fcf39c77f5c0a5',(Get-Item -LiteralPath $postcheck).Length,[System.Management.Automation.Language.NullString]::Value)
   $pins.PinFile($bootstrap,'c388630c096d6e396db4bbc9a87e60d0841505a51b6238d859f6dd28e6946dce',(Get-Item -LiteralPath $bootstrap).Length,[System.Management.Automation.Language.NullString]::Value)
   foreach ($entry in $v2Files) {
