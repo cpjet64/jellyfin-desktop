@@ -104,7 +104,7 @@ def _read(api, handle, maximum, retain):
 def _outer_exit(raw):
     fields = raw.decode("ascii").splitlines()
     patterns = (r"receipt_version=1", r"root_pid=[1-9][0-9]*", r"root_exit=0",
-                r"timeout=0 active=0", r"handles_before=[0-9]+ handles_after=[0-9]+ measured=[01]",
+                r"timeout=0 active=0", r"handles_before=[0-9]+ handles_after=[0-9]+ measured=1",
                 r"owned_opened=6 owned_closed=6 close_failed=0", r"handles_complete=1",
                 r"final_result=0", r"proof_complete=1")
     if len(fields) != len(patterns) or any(not re.fullmatch(p, v) for p, v in zip(patterns, fields)):

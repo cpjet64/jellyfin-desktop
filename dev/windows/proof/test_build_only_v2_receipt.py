@@ -124,7 +124,7 @@ class ReceiptV2Tests(unittest.TestCase):
                b"handles_before=1 handles_after=1 measured=1\nowned_opened=6 owned_closed=6 close_failed=0\n"
                b"handles_complete=1\nfinal_result=0\nproof_complete=1\n")
         self.assertEqual(postcheck._outer_exit(raw), 0)
-        self.assertEqual(postcheck._outer_exit(raw.replace(b"measured=1", b"measured=0")), 0)
+        with self.assertRaises(ValueError): postcheck._outer_exit(raw.replace(b"measured=1", b"measured=0"))
         with self.assertRaises(ValueError): postcheck._outer_exit(raw.replace(b"root_exit=0", b"root_exit=1"))
 
     def test_handle_identity_alias_and_changed_metadata_rejected(self):
