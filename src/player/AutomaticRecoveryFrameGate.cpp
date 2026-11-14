@@ -13,14 +13,14 @@ bool AutomaticRecoveryFrameGate::nearTarget(std::int64_t value) const
   return value >= target_ ? value - target_ <= PositionToleranceMs : target_ - value <= PositionToleranceMs;
 }
 bool AutomaticRecoveryFrameGate::begin(Key key, std::uint64_t attempt, std::int64_t entry, std::int64_t targetMs,
-                                       std::uint64_t epoch, std::uint64_t discontinuity, std::uint64_t previousSource,
+                                       std::uint64_t epoch, std::uint64_t previousSource,
                                        std::int64_t nowMs, std::int64_t deadlineMs)
 {
   invalidate();
-  if (!key.session || !key.revision || !key.generation || !attempt || !epoch || !discontinuity || entry <= 0 || targetMs < 0 ||
+  if (!key.session || !key.revision || !key.generation || !attempt || !epoch || entry <= 0 || targetMs < 0 ||
       nowMs < 0 || deadlineMs <= nowMs)
     return false;
-  key_ = key; attempt_ = attempt; epoch_ = epoch; entry_ = entry; target_ = targetMs; discontinuity_ = discontinuity; previousSource_ = previousSource;
+  key_ = key; attempt_ = attempt; epoch_ = epoch; entry_ = entry; target_ = targetMs; discontinuity_ = 0; previousSource_ = previousSource;
   lastMs_ = nowMs; deadline_ = deadlineMs; active_ = true; return true;
 }
 bool AutomaticRecoveryFrameGate::rendered(Key key, std::uint64_t attempt, std::uint64_t epoch, const RecoveryFrameObservationV1& frame,
@@ -28,13 +28,15 @@ bool AutomaticRecoveryFrameGate::rendered(Key key, std::uint64_t attempt, std::u
 {
   if (!matches(key, attempt, epoch, now) || frame.size != sizeof(frame) || frame.version != RECOVERY_FRAME_OBSERVATION_VERSION ||
       frame.valid != 1 || frame.reserved || frame.playlist_entry_id != static_cast<std::uint64_t>(entry_) ||
-      frame.discontinuity_id != discontinuity_ || frame.discontinuity_id > std::numeric_limits<std::int64_t>::max() ||
+      !frame.discontinuity_id || (discontinuity_ && frame.discontinuity_id != discontinuity_) ||
+      frame.discontinuity_id > std::numeric_limits<std::int64_t>::max() ||
       !frame.source_frame_serial || frame.source_frame_serial > std::numeric_limits<std::int64_t>::max() ||
       frame.source_frame_serial <= previousSource_ || !frame.render_serial ||
       frame.render_serial > std::numeric_limits<std::int64_t>::max() || !std::isfinite(frame.media_pts) || frame.media_pts < 0 ||
       frame.media_pts > double(std::numeric_limits<std::int64_t>::max() / 2000)) { invalidate(); return false; }
   const auto ptsMs = static_cast<std::int64_t>(frame.media_pts * 1000.0);
   if (!nearTarget(ptsMs)) { invalidate(); return false; }
+  discontinuity_ = frame.discontinuity_id;
   renderSerial_ = frame.render_serial; submitted_ = swapped_ = false; lastMs_ = now; return true;
 }
 bool AutomaticRecoveryFrameGate::submitted(Key key, std::uint64_t attempt, std::uint64_t epoch, std::uint64_t serial, std::int64_t now)

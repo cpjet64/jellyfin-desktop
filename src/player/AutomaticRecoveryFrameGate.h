@@ -9,7 +9,7 @@ public:
   using Key = AutomaticRecoverySession::Key;
   static constexpr std::int64_t PositionToleranceMs = 2000;
   bool begin(Key key, std::uint64_t attempt, std::int64_t entry, std::int64_t targetMs,
-             std::uint64_t epoch, std::uint64_t discontinuity, std::uint64_t previousSourceSerial,
+             std::uint64_t epoch, std::uint64_t previousSourceSerial,
              std::int64_t nowMs, std::int64_t deadlineMs);
   bool rendered(Key key, std::uint64_t attempt, std::uint64_t epoch, const RecoveryFrameObservationV1& frame, std::int64_t nowMs);
   bool submitted(Key key, std::uint64_t attempt, std::uint64_t epoch, std::uint64_t renderSerial, std::int64_t nowMs);
