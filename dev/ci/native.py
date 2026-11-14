@@ -34,7 +34,7 @@ HEADLESS_TESTS = ("test_systemcomponent", "test_log", "test_settings", "test_dis
                   "test_playback_intent_acceptance", "test_playback_checkpoint", "test_player_intent_boundary",
                   "test_automatic_playback_recovery", "test_automatic_recovery_load", "test_automatic_recovery_native",
                   "test_automatic_recovery_events", "test_automatic_recovery_observation", "test_automatic_recovery_frame_gate",
-                  "test_automatic_recovery_read_stall",
+                  "test_automatic_recovery_read_stall", "test_automatic_recovery_owned_seek",
                   "test_recovery_bridge_session", "test_recovery_bridge_host", "test_windows_loader_mode",
                   "test_playback_native_receipts", "test_player_native_receipts", "test_native_observation",
                   "test_player_native_restore", "test_fixture_restart_broker", "test_fixture_frame_acceptance",

@@ -63,3 +63,12 @@ target_compile_features(test_automatic_recovery_read_stall PRIVATE cxx_std_17)
 target_link_libraries(test_automatic_recovery_read_stall PRIVATE Qt6::Core)
 add_test(NAME test_automatic_recovery_read_stall COMMAND test_automatic_recovery_read_stall)
 set_tests_properties(test_automatic_recovery_read_stall PROPERTIES TIMEOUT 60)
+
+add_executable(test_automatic_recovery_owned_seek
+  "${CMAKE_SOURCE_DIR}/tests/test_automatic_recovery_owned_seek.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/AutomaticRecoveryOwnedSeek.cpp")
+target_include_directories(test_automatic_recovery_owned_seek PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_compile_features(test_automatic_recovery_owned_seek PRIVATE cxx_std_17)
+target_link_libraries(test_automatic_recovery_owned_seek PRIVATE Qt6::Core)
+add_test(NAME test_automatic_recovery_owned_seek COMMAND test_automatic_recovery_owned_seek)
+set_tests_properties(test_automatic_recovery_owned_seek PROPERTIES TIMEOUT 60)

@@ -58,6 +58,18 @@ uses the same paused-first restoration, single 15-second recovery budget and
 one attempt per user-created session as the other supported classes. Thirty
 seconds is an initial threshold requiring runtime validation.
 
+The first operation-timeout class is an owned absolute exact seek on an already
+accepted eligible item. Bind its full-width request and reply IDs to the user
+session, intent revision, native entry, renderer and native seek discontinuity.
+The correlated command reply has five seconds and the complete postcondition
+has fifteen seconds, both measured from the same admitted dispatch. A reply
+alone does not prove position or frame submission. Require fresh qualified
+native position within the predeclared tolerance of the requested target and
+an operation-attributed submitted frame. On a recoverable timeout, the one
+paused-first reopen targets the requested seek position; retain the earlier
+checkpoint as evidence rather than substituting it. A newer seek, Stop, new
+item or destruction revokes old authority; a paused seek remains paused.
+
 Before hands-on acceptance, record the exact package version, source identity,
 artifact hash, machine, GPU, driver, display and server configuration. Generate
 a local clip with moving recognizable content and audio; retain its generation
