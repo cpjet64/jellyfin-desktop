@@ -16,6 +16,14 @@ class MpvController;
 namespace RendererRuntime {
 
 struct CoreOwner;
+enum class AdmissionStatus { Reserved, Deferred, Quarantined, Busy };
+struct AdmissionResult { AdmissionStatus status; quint64 token; };
+using AdmissionContinuation = std::function<void(AdmissionStatus, quint64, quint64)>;
+// Dispatcher is GUI-thread owned and must be closed with closeAdmissionDispatcher
+// on that same thread before destruction. Continuation validates receiver/revision.
+AdmissionResult reserveCore(QObject *dispatcher, quint64 revision, AdmissionContinuation continuation);
+void cancelCoreReservation(quint64 token);
+void closeAdmissionDispatcher(QObject *dispatcher);
 class NativeLease {
 public:
     NativeLease() = default;
@@ -25,6 +33,7 @@ public:
     NativeLease &operator=(const NativeLease &) = delete;
     ~NativeLease();
     mpv_handle *get() const;
+    void contain();
     explicit operator bool() const { return static_cast<bool>(owner); }
 private:
     explicit NativeLease(std::shared_ptr<CoreOwner> owner);
@@ -54,6 +63,7 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     std::atomic<bool> commandAuthority{true};
     std::atomic<bool> finalizationRequested{false};
     std::atomic<bool> finalizationQueued{false};
+    std::atomic<bool> nativeDestroyed{false};
     std::atomic<bool> faultQuarantined{false};
     std::atomic<unsigned> admittedControl{0};
     std::atomic<unsigned> liveGenerations{0};
@@ -78,11 +88,12 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     void closeExternalWakeup();
     bool requestFinalization();
     void requestQuarantineStop();
-    bool blockUnresolvedHook();
     void maybeFinalize();
-    static std::shared_ptr<CoreOwner> adopt(mpv_handle *handle, MpvController *controller,
-                                            QThread *worker, WakeRelay *relay);
+    static std::shared_ptr<CoreOwner> adoptReserved(quint64 token, mpv_handle *handle,
+        MpvController *controller, QThread *worker, WakeRelay *relay, QObject *lifecycleDispatcher);
 private:
+    friend class NativeLease;
+    void blockUnresolvedHook();
     CoreOwner() = default;
 };
 
