@@ -2,10 +2,10 @@
 #include <cmath>
 #include <limits>
 
-bool AutomaticRecoveryFrameGate::matches(Key key, std::uint64_t attempt, std::int64_t now) const
+bool AutomaticRecoveryFrameGate::matches(Key key, std::uint64_t attempt, std::uint64_t epoch, std::int64_t now) const
 {
   return active_ && key.session == key_.session && key.revision == key_.revision &&
-      key.generation == key_.generation && attempt == attempt_ && now >= lastMs_ && now < deadline_;
+      key.generation == key_.generation && attempt == attempt_ && epoch && epoch == epoch_ && now >= lastMs_ && now < deadline_;
 }
 bool AutomaticRecoveryFrameGate::nearTarget(std::int64_t value) const
 {
@@ -13,20 +13,20 @@ bool AutomaticRecoveryFrameGate::nearTarget(std::int64_t value) const
   return value >= target_ ? value - target_ <= PositionToleranceMs : target_ - value <= PositionToleranceMs;
 }
 bool AutomaticRecoveryFrameGate::begin(Key key, std::uint64_t attempt, std::int64_t entry, std::int64_t targetMs,
-                                       std::uint64_t discontinuity, std::uint64_t previousSource,
+                                       std::uint64_t epoch, std::uint64_t discontinuity, std::uint64_t previousSource,
                                        std::int64_t nowMs, std::int64_t deadlineMs)
 {
   invalidate();
-  if (!key.session || !key.revision || !key.generation || !attempt || !discontinuity || entry <= 0 || targetMs < 0 ||
+  if (!key.session || !key.revision || !key.generation || !attempt || !epoch || !discontinuity || entry <= 0 || targetMs < 0 ||
       nowMs < 0 || deadlineMs <= nowMs)
     return false;
-  key_ = key; attempt_ = attempt; entry_ = entry; target_ = targetMs; discontinuity_ = discontinuity; previousSource_ = previousSource;
+  key_ = key; attempt_ = attempt; epoch_ = epoch; entry_ = entry; target_ = targetMs; discontinuity_ = discontinuity; previousSource_ = previousSource;
   lastMs_ = nowMs; deadline_ = deadlineMs; active_ = true; return true;
 }
-bool AutomaticRecoveryFrameGate::rendered(Key key, std::uint64_t attempt, const RecoveryFrameObservationV1& frame,
+bool AutomaticRecoveryFrameGate::rendered(Key key, std::uint64_t attempt, std::uint64_t epoch, const RecoveryFrameObservationV1& frame,
                                           std::int64_t now)
 {
-  if (!matches(key, attempt, now) || frame.size != sizeof(frame) || frame.version != RECOVERY_FRAME_OBSERVATION_VERSION ||
+  if (!matches(key, attempt, epoch, now) || frame.size != sizeof(frame) || frame.version != RECOVERY_FRAME_OBSERVATION_VERSION ||
       frame.valid != 1 || frame.reserved || frame.playlist_entry_id != static_cast<std::uint64_t>(entry_) ||
       frame.discontinuity_id != discontinuity_ || frame.discontinuity_id > std::numeric_limits<std::int64_t>::max() ||
       !frame.source_frame_serial || frame.source_frame_serial > std::numeric_limits<std::int64_t>::max() ||
@@ -37,26 +37,26 @@ bool AutomaticRecoveryFrameGate::rendered(Key key, std::uint64_t attempt, const 
   if (!nearTarget(ptsMs)) { invalidate(); return false; }
   renderSerial_ = frame.render_serial; submitted_ = swapped_ = false; lastMs_ = now; return true;
 }
-bool AutomaticRecoveryFrameGate::submitted(Key key, std::uint64_t attempt, std::uint64_t serial, std::int64_t now)
+bool AutomaticRecoveryFrameGate::submitted(Key key, std::uint64_t attempt, std::uint64_t epoch, std::uint64_t serial, std::int64_t now)
 {
-  if (!matches(key, attempt, now) || !renderSerial_ || serial != renderSerial_ || submitted_) { invalidate(); return false; }
+  if (!matches(key, attempt, epoch, now) || !renderSerial_ || serial != renderSerial_ || submitted_) { invalidate(); return false; }
   submitted_ = true; lastMs_ = now; return true;
 }
-bool AutomaticRecoveryFrameGate::swapped(Key key, std::uint64_t attempt, std::uint64_t serial, std::int64_t now)
+bool AutomaticRecoveryFrameGate::swapped(Key key, std::uint64_t attempt, std::uint64_t epoch, std::uint64_t serial, std::int64_t now)
 {
-  if (!matches(key, attempt, now) || !submitted_ || serial != renderSerial_ || swapped_) { invalidate(); return false; }
+  if (!matches(key, attempt, epoch, now) || !submitted_ || serial != renderSerial_ || swapped_) { invalidate(); return false; }
   swapped_ = true; lastMs_ = now; return true;
 }
 bool AutomaticRecoveryFrameGate::position(Key key, std::uint64_t attempt, std::int64_t entry,
-                                          std::int64_t positionMs, bool nativePaused, std::int64_t now)
+                                          std::int64_t positionMs, bool nativePaused, std::uint64_t epoch, std::int64_t now)
 {
-  if (!matches(key, attempt, now) || entry != entry_ || !nativePaused || !nearTarget(positionMs)) {
+  if (!matches(key, attempt, epoch, now) || entry != entry_ || !nativePaused || !nearTarget(positionMs)) {
     invalidate(); return false;
   }
   positioned_ = true; positionMsAt_ = lastMs_ = now; return true;
 }
-bool AutomaticRecoveryFrameGate::ready(Key key, std::uint64_t attempt, std::int64_t now) const
-{ return matches(key, attempt, now) && positioned_ && now - positionMsAt_ < 2000 && submitted_ && swapped_; }
+bool AutomaticRecoveryFrameGate::ready(Key key, std::uint64_t attempt, std::uint64_t epoch, std::int64_t now) const
+{ return matches(key, attempt, epoch, now) && positioned_ && now - positionMsAt_ < 2000 && submitted_ && swapped_; }
 void AutomaticRecoveryFrameGate::invalidate()
 {
   active_ = submitted_ = swapped_ = positioned_ = false; key_ = {}; attempt_ = renderSerial_ = 0;
