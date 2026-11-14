@@ -9257,6 +9257,21 @@
       ]
     },
     {
+      "path": ".gitignore",
+      "git_blob_sha1": "a5eaccf66a093617c5543d290d85d5a65baa5a53",
+      "pinned_source_url": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/.gitignore",
+      "source_sha256": "3d7d79c3ad649cb006fb7510a3d630c952dbc968e77a3520898111f326e01708",
+      "source_lines": [
+        "/release*",
+        "/build*",
+        "/build-*",
+        "/32*",
+        "/64*",
+        "/i686*",
+        "/x86_64*"
+      ]
+    },
+    {
       "path": "CMakeLists.txt",
       "git_blob_sha1": "4d681d2b382c0fd2fe902876a40184dfa792d000",
       "pinned_source_url": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/CMakeLists.txt",
@@ -10483,6 +10498,32 @@
       ]
     },
     {
+      "path": "packages/libmfx.cmake",
+      "git_blob_sha1": "8c7d6bb9d53d0ef889e87688676f1e6e43189d0e",
+      "pinned_source_url": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libmfx.cmake",
+      "source_sha256": "6ff23485271151dcd1d321d4e9d0050c3a5162199f1741d01a180499a0636bf7",
+      "source_lines": [
+        "ExternalProject_Add(libmfx",
+        "    GIT_REPOSITORY https://github.com/lu-zero/mfx_dispatch.git",
+        "    SOURCE_DIR ${SOURCE_LOCATION}",
+        "    GIT_CLONE_FLAGS \"--filter=tree:0\"",
+        "    UPDATE_COMMAND \"\"",
+        "    CONFIGURE_COMMAND ${EXEC} autoreconf -fi && CONF=1 <SOURCE_DIR>/configure",
+        "        --host=${TARGET_ARCH}",
+        "        --prefix=${MINGW_INSTALL_PREFIX}",
+        "        --disable-shared",
+        "        --enable-static",
+        "    BUILD_COMMAND ${MAKE}",
+        "    INSTALL_COMMAND ${MAKE} install",
+        "    BUILD_IN_SOURCE 1",
+        "    LOG_DOWNLOAD 1 LOG_UPDATE 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1",
+        ")",
+        "",
+        "force_rebuild_git(libmfx)",
+        "cleanup(libmfx install)"
+      ]
+    },
+    {
       "path": "packages/libmodplug.pc.in",
       "git_blob_sha1": "bb56e35cf697d475cf56c5b4f4b04cb20b6d5a21",
       "pinned_source_url": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libmodplug.pc.in",
@@ -10561,6 +10602,34 @@
         "-- ",
         "2.17.1",
         ""
+      ]
+    },
+    {
+      "path": "packages/libressl.cmake",
+      "git_blob_sha1": "703c9d19aea8c41d860d5aa6812fab650f090076",
+      "pinned_source_url": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/packages/libressl.cmake",
+      "source_sha256": "08acd52f5b8527d1423bf1bd1540187e42f9f5b13f8aeacd00d28926b97c919e",
+      "source_lines": [
+        "ExternalProject_Add(libressl",
+        "    URL https://cdn.openbsd.org/pub/OpenBSD/LibreSSL/libressl-3.1.5.tar.gz",
+        "    URL_HASH SHA256=2c13ddcec5081c0e7ba7f93d8370a91911173090f1922007e1d90de274500494",
+        "    DOWNLOAD_DIR ${SOURCE_LOCATION}",
+        "    PATCH_COMMAND patch -p1 -i ${CMAKE_CURRENT_SOURCE_DIR}/libressl-0001-remove-postfix-in-libs-name.patch",
+        "    CONFIGURE_COMMAND ${EXEC} CONF=1 cmake -H<SOURCE_DIR> -B<BINARY_DIR>",
+        "        -G Ninja",
+        "        -DCMAKE_BUILD_TYPE=Release",
+        "        -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}",
+        "        -DCMAKE_INSTALL_PREFIX=${MINGW_INSTALL_PREFIX}",
+        "        -DCMAKE_FIND_ROOT_PATH=${MINGW_INSTALL_PREFIX}",
+        "        -DBUILD_SHARED_LIBS=OFF",
+        "        -DLIBRESSL_APPS=OFF",
+        "        -DLIBRESSL_TESTS=OFF",
+        "    BUILD_COMMAND ${EXEC} ninja -C <BINARY_DIR>",
+        "    INSTALL_COMMAND ${EXEC} ninja -C <BINARY_DIR> install",
+        "    LOG_DOWNLOAD 1 LOG_UPDATE 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1",
+        ")",
+        "",
+        "cleanup(libressl install)"
       ]
     },
     {
@@ -12345,6 +12414,51 @@
       ]
     },
     {
+      "path": "toolchain/CMakeLists.txt",
+      "git_blob_sha1": "61a861cfa44240ac7a9a05049aa94145b9becb34",
+      "pinned_source_url": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/toolchain/CMakeLists.txt",
+      "source_sha256": "c0f1312ce4b803fe21daaa215163cab1345e85cffad0fa4c454f173763ac372e",
+      "source_lines": [
+        "set_property(DIRECTORY PROPERTY EP_STEP_TARGETS download)",
+        "include(${PROJECT_SOURCE_DIR}/cmake/toolchain_check.cmake)",
+        "list(APPEND ep",
+        "    gcc-binutils",
+        "    ${llvm_wrapper}",
+        "    ${gcc_wrapper}",
+        "    mingw-w64",
+        "    mingw-w64-headers",
+        "    cppwinrt",
+        "    gcc",
+        "    mingw-w64-crt",
+        "    gendef",
+        "    widl",
+        "    rustup",
+        "    llvm",
+        "    llvm-compiler-rt-builtin",
+        "    llvm-libcxx",
+        "    llvm-compiler-rt",
+        "    llvm-openmp",
+        "    winpthreads",
+        "    llvm-clang",
+        ")",
+        "foreach(package IN LISTS ep)",
+        "    if(NOT ${SINGLE_SOURCE_LOCATION} STREQUAL \"\")",
+        "        set(SOURCE_LOCATION \"${SINGLE_SOURCE_LOCATION}/${package}\")",
+        "    endif()",
+        "    if(package MATCHES \"llvm\")",
+        "        include(${CMAKE_CURRENT_SOURCE_DIR}/llvm/${package}.cmake)",
+        "    elseif(package MATCHES \"gcc\")",
+        "        include(${CMAKE_CURRENT_SOURCE_DIR}/gcc/${package}.cmake)",
+        "    else()",
+        "        include(${CMAKE_CURRENT_SOURCE_DIR}/${package}.cmake)",
+        "    endif()",
+        "    set(SOURCE_LOCATION \"\")",
+        "endforeach()",
+        "list(LENGTH ep ep_length)",
+        "message(STATUS \"Parsing ${ep_length} toolchain packages\")"
+      ]
+    },
+    {
       "path": "toolchain/cppwinrt.cmake",
       "git_blob_sha1": "454ec739160f7edf3038dafae208ea5e0442e1d7",
       "pinned_source_url": "https://github.com/shinchiro/mpv-winbuild-cmake/blob/1f8d2e76255abc48f0456d9be99b4cab9c6566e6/toolchain/cppwinrt.cmake",
@@ -13327,14 +13441,13 @@
     }
   ],
   "gitmodules": "not present in selected provider tree",
-  "binary_tree_entries_not_downloaded": [
+  "verified_binary_inputs": [
     {
       "path": "cmake/CMake-v3.31.6-Modules-ExternalProject.zip",
-      "mode": "100644",
-      "type": "blob",
-      "sha": "6136d2580000d235f1d6024793eb68eb376aaf67",
+      "git_blob_sha1": "6136d2580000d235f1d6024793eb68eb376aaf67",
       "size": 85305,
-      "url": "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/git/blobs/6136d2580000d235f1d6024793eb68eb376aaf67"
+      "sha256": "477d56be98a4f42c1c0bedf602fe12cefb3006c8b2f3d0de5097af68dea6d6c1",
+      "inspection": "archive bytes hashed; not extracted or executed"
     }
   ],
   "candidate_mpv_static_named_reachability": [

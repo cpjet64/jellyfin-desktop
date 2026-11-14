@@ -12,18 +12,30 @@ VARIABLE = re.compile(r"\$\{[^}]+\}|\$<[^>]+>")
 UPPER = re.compile(r"^\s*[A-Z][A-Z0-9_]*(?:\s|$)")
 
 
-def source_identity(root, item):
+def verified_payload(root, item):
     path = root / item["path"]
     payload = path.read_bytes()
     blob = hashlib.sha1(b"blob " + str(len(payload)).encode() + b"\0" + payload).hexdigest()
     if blob != item["sha"] or len(payload) != item["size"]:
         raise ValueError(f"provider blob mismatch: {item['path']}")
+    return payload, blob
+
+
+def source_identity(root, item):
+    payload, blob = verified_payload(root, item)
     return {
         "path": item["path"], "git_blob_sha1": blob,
         "pinned_source_url": f"https://github.com/shinchiro/mpv-winbuild-cmake/blob/{PROVIDER}/{item['path']}",
         "source_sha256": hashlib.sha256(payload).hexdigest(),
         "source_lines": payload.decode("utf-8").splitlines(),
     }
+
+
+def binary_identity(root, item):
+    payload, blob = verified_payload(root, item)
+    return {"path": item["path"], "git_blob_sha1": blob, "size": len(payload),
+            "sha256": hashlib.sha256(payload).hexdigest(),
+            "inspection": "archive bytes hashed; not extracted or executed"}
 
 
 def declared_names(lines):
@@ -116,19 +128,21 @@ def main():
         packages[name] = summarize(source_identity(args.source, item), names)
     support = []
     for path, item in sorted(items.items()):
-        include = path == "CMakeLists.txt" or path == ".gitmodules" or path == "README.md"
+        include = path in ("CMakeLists.txt", ".gitmodules", ".gitignore", "README.md")
         include |= path.startswith(("cmake/", "toolchain/", "scripts/", ".github/workflows/"))
         include |= path.startswith("packages/") and path.endswith((".patch", ".in"))
+        include |= path.startswith("packages/") and path.endswith(".cmake") and Path(path).stem not in names
         include |= path in ("exec.in", "meson_cross.txt.in", "toolchain.cmake.in")
-        if include and (args.source / path).is_file():
+        if include and not path.endswith(".zip") and (args.source / path).is_file():
             support.append(source_identity(args.source, item))
-    missing = [item for item in items.values() if item["path"].endswith(".zip")]
+    binary_inputs = [binary_identity(args.source, item) for item in items.values()
+                     if item["path"].endswith(".zip")]
     result = {
         "status": "UNRESOLVED; source catalog is not an input lock",
         "provider_commit": PROVIDER, "package_count": len(names),
         "package_list_source": index, "packages": packages, "support_files": support,
         "gitmodules": "not present in selected provider tree" if ".gitmodules" not in items else "see support_files",
-        "binary_tree_entries_not_downloaded": missing,
+        "verified_binary_inputs": binary_inputs,
         "candidate_mpv_static_named_reachability": static_closure(packages),
         "closure_limit": "lexical DEPENDS only; conditionals, generated variables, bootstrap and implicit dependencies remain unresolved",
     }

@@ -1,0 +1,56 @@
+{
+  "status": "static conditional resolution only; not a lock, configure result, or historical artifact provenance",
+  "provider_commit": "1f8d2e76255abc48f0456d9be99b4cab9c6566e6",
+  "assumptions": {
+    "host": "Linux; no host tools or configuration were executed",
+    "target_arch": "x86_64-w64-mingw32",
+    "target_cpu": "x86_64, from provider CMakeLists.txt lines 17-18",
+    "compiler_toolchain": "gcc, provider default in CMakeLists.txt line 101",
+    "crt": "ucrt, declared by toolchain/mingw-w64-crt.cmake line 15"
+  },
+  "variants": [
+    {"name":"baseline", "gcc_arch":"x86-64", "basis":"provider CMakeLists.txt lines 28-32 default", "relative_target_change":"none"},
+    {"name":"v3", "gcc_arch":"x86-64-v3", "basis":"proposed explicit override matching .github/workflows/mpv_gcc.yml lines 50-53", "relative_target_change":"GCC_ARCH override only; other toolchain and feature inputs must remain the same"}
+  ],
+  "resolved_for_both_variants": {
+    "predicate": "TARGET_CPU STREQUAL or MATCHES x86_64; independent of x86-64 vs x86-64-v3 GCC_ARCH",
+    "assignments": [
+      {"variable":"ffmpeg_uavs3d", "value":"uavs3d", "source":"cmake/packages_check.cmake:34-44"},
+      {"variable":"ffmpeg_uavs3d_cmd", "value":"--enable-libuavs3d", "source":"cmake/packages_check.cmake:34-44"},
+      {"variable":"ffmpeg_davs2", "value":"davs2", "source":"cmake/packages_check.cmake:34-46"},
+      {"variable":"ffmpeg_davs2_cmd", "value":"--enable-libdavs2", "source":"cmake/packages_check.cmake:34-46"},
+      {"variable":"ffmpeg_x265", "value":"x265-8+10bit", "source":"packages/x265.cmake:1-8"},
+      {"variable":"mpv_gl", "value":"-Dgl=enabled -Degl-angle=enabled", "source":"cmake/packages_check.cmake:34-40"},
+      {"variable":"openssl_target", "value":"mingw64", "source":"cmake/packages_check.cmake:34-38"}
+    ],
+    "effective_conditional_dependency_edges": [
+      {"from":"ffmpeg", "to":"uavs3d", "expression":"${ffmpeg_uavs3d}", "source":"packages/ffmpeg.cmake:42"},
+      {"from":"ffmpeg", "to":"davs2", "expression":"${ffmpeg_davs2}", "source":"packages/ffmpeg.cmake:43"},
+      {"from":"ffmpeg", "to":"x265-8+10bit", "expression":"${ffmpeg_x265}", "source":"packages/ffmpeg.cmake:30"},
+      {"from":"x265-8+10bit", "to":"x265", "source":"packages/x265.cmake:109-112"},
+      {"from":"x265-8+10bit", "to":"x265-10bit-lib", "source":"packages/x265.cmake:109-112"},
+      {"from":"x265-10bit-lib", "to":"x265", "source":"packages/x265.cmake:46-48"}
+    ],
+    "x265_helper_notes": [
+      "The selected x265-8+10bit target enables LINKED_10BIT and combines the main and main10 libraries; packages/x265.cmake lines 109-136.",
+      "x265-8+10+12bit depends on x265, x265-12bit-lib and x265-10bit-lib, but is not the value of ffmpeg_x265 for this predicate; packages/x265.cmake lines 139-159. Other graph paths have not been excluded."
+    ],
+    "declared_feature_options": ["FFmpeg --enable-libx265", "FFmpeg --enable-libuavs3d", "FFmpeg --enable-libdavs2", "mpv -Dgl=enabled", "mpv -Degl-angle=enabled", "OpenSSL mingw64", "mingw-w64 default UCRT"]
+  },
+  "unknown_or_not_established": [
+    "Complete evaluated dependency and toolchain closure, including other paths to x265 helper targets.",
+    "Compiler-probed GCC_ARCH_HAS_AVX and GCC_ARCH_HAS_AVX512 and their downstream conditional effects; CMakeLists.txt lines 115-125 execute a compiler probe that was not run.",
+    "Whether any historical artifact used these default inputs, enabled options or variants.",
+    "Resolved immutable source revisions, nested submodules, archive hashes, host bootstrap versions and dependency compatibility.",
+    "Actual codec, hardware decode, network, TLS, exported-symbol and runtime features of either unbuilt variant.",
+    "The pinned GCC workflow's declared matrix lists x86_64 only; its x86_64_v3 conditional does not prove that v3 ran."
+  ],
+  "source_identities": [
+    {"path":"CMakeLists.txt", "git_blob":"4d681d2b382c0fd2fe902876a40184dfa792d000", "sha256":"57450f1fec3ce390d4579c145943afe13da88e1526f243ecd78d8d7afea6ef65"},
+    {"path":"cmake/packages_check.cmake", "git_blob":"e062242ed8454febb63b54ce6a9e244fabd5481d", "sha256":"3c2f7ecad86e4e6aac9be006a13885ce85482d9dbf77b25b60829ce41f9e098a"},
+    {"path":"packages/ffmpeg.cmake", "git_blob":"b9ab7a3b2590e749fec2039586872337dfcbdf5c", "sha256":"359c9c7da360f57d3a438e6fe117af6169cbd9aa3672751fd2bfc31e02be8fff"},
+    {"path":"packages/x265.cmake", "git_blob":"f13cde2db0bbc43c3dd8cd0fcbae425e9777a32f", "sha256":"1e85d352aeda1b77378f00e691b2dc8cd3c350f8f33968f6b147c062043a142a"},
+    {"path":"toolchain/mingw-w64-crt.cmake", "git_blob":"aa79fde63b434d69ff63c6e4529b7dd3c9ca926a", "sha256":"1310ebb259c4e25157698acd6647129c2f3607141c049a15ec5cc700e91ce9ec"},
+    {"path":".github/workflows/mpv_gcc.yml", "git_blob":"6c4bed94d09d534674216efe53f6224b5332a6aa", "sha256":"440576774202d54a497b743bc720c03c58ea0d6fc4f1d198de36bae5549c1537"}
+  ]
+}
