@@ -293,9 +293,15 @@ function Write-Record($path, $record) {
 }
 function Restore-ControllerEnvironment {
   if (!$script:audit.envSaved) { return }
-  try { [Environment]::SetEnvironmentVariable('TEMP',$script:audit.temp,'Process') }
+  try {
+    [Environment]::SetEnvironmentVariable('TEMP',$script:audit.temp,'Process')
+    if ([Environment]::GetEnvironmentVariable('TEMP','Process') -cne $script:audit.temp) { throw 'TEMP restoration mismatch' }
+  }
   catch { Add-CleanupError 'TEMP restore' $_ }
-  try { [Environment]::SetEnvironmentVariable('TMP',$script:audit.tmp,'Process') }
+  try {
+    [Environment]::SetEnvironmentVariable('TMP',$script:audit.tmp,'Process')
+    if ([Environment]::GetEnvironmentVariable('TMP','Process') -cne $script:audit.tmp) { throw 'TMP restoration mismatch' }
+  }
   catch { Add-CleanupError 'TMP restore' $_ }
 }
 $script:audit = @{stage='preflight';started=$false;rootCreated=$false;envSaved=$false;
