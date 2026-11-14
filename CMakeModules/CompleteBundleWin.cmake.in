@@ -2,6 +2,25 @@ set(PROJECT_SOURCE_DIR "@PROJECT_SOURCE_DIR@")
 set(QTROOT "@QTROOT@")
 include("@CMAKE_BINARY_DIR@/ValidateWindowsRuntime.cmake")
 
+if(DEFINED ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED} AND NOT "$ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED}" STREQUAL "")
+  if(NOT "$ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED}" STREQUAL "1")
+    message(FATAL_ERROR "Invalid recovery artifact mode")
+  endif()
+  find_program(RECOVERY_PY_LAUNCHER NAMES py.exe REQUIRED)
+  get_filename_component(_recovery_mpv_dir "@BUNDLE_MPV_LIBRARY@" DIRECTORY)
+  get_filename_component(_recovery_mpv_root "${_recovery_mpv_dir}/.." ABSOLUTE)
+  execute_process(
+    COMMAND "${RECOVERY_PY_LAUNCHER}" -3 "${PROJECT_SOURCE_DIR}/patches/mpv/build/recovery_artifacts.py" verify
+      --lock "$ENV{JELLYFIN_RECOVERY_LOCK}" --approved-lock-sha256 "$ENV{JELLYFIN_RECOVERY_LOCK_SHA256}"
+      --root "${_recovery_mpv_root}" --qt-root "@QTROOT@" --manifest "$ENV{JELLYFIN_RECOVERY_MANIFEST}"
+      --approved-manifest-sha256 "$ENV{JELLYFIN_RECOVERY_MANIFEST_SHA256}" --dumpbin "$ENV{JELLYFIN_RECOVERY_DUMPBIN}"
+    RESULT_VARIABLE _recovery_mpv_result
+  )
+  if(NOT "${_recovery_mpv_result}" STREQUAL "0")
+    message(FATAL_ERROR "Custom recovery mpv artifact verification failed")
+  endif()
+endif()
+
 message(STATUS "Running windeployqt from: ${QTROOT}/bin/windeployqt.exe")
 message(STATUS "Target: ${CMAKE_INSTALL_PREFIX}/Jellyfin Desktop.exe")
 
@@ -40,6 +59,20 @@ get_filename_component(MPV_FALLBACK_DIR "${MPV_DIR}/../mpv-fallback" ABSOLUTE)
 if(EXISTS "${MPV_FALLBACK_DIR}/libmpv-2.dll")
   file(INSTALL "${MPV_FALLBACK_DIR}/libmpv-2.dll" DESTINATION "${CMAKE_INSTALL_PREFIX}" RENAME "libmpv-fallback.dll")
   message(STATUS "Installed fallback libmpv")
+endif()
+
+if(DEFINED ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED} AND "$ENV{JELLYFIN_RECOVERY_ARTIFACT_REQUIRED}" STREQUAL "1")
+  execute_process(
+    COMMAND "${RECOVERY_PY_LAUNCHER}" -3 "${PROJECT_SOURCE_DIR}/patches/mpv/build/recovery_artifacts.py" verify
+      --lock "$ENV{JELLYFIN_RECOVERY_LOCK}" --approved-lock-sha256 "$ENV{JELLYFIN_RECOVERY_LOCK_SHA256}"
+      --root "${_recovery_mpv_root}" --qt-root "@QTROOT@" --manifest "$ENV{JELLYFIN_RECOVERY_MANIFEST}"
+      --approved-manifest-sha256 "$ENV{JELLYFIN_RECOVERY_MANIFEST_SHA256}" --dumpbin "$ENV{JELLYFIN_RECOVERY_DUMPBIN}"
+      --packaged "${CMAKE_INSTALL_PREFIX}"
+    RESULT_VARIABLE _recovery_packaged_result
+  )
+  if(NOT "${_recovery_packaged_result}" STREQUAL "0")
+    message(FATAL_ERROR "Packaged recovery mpv artifact verification failed")
+  endif()
 endif()
 
 if(@DO_ENABLE_ANGLE_DEP@)

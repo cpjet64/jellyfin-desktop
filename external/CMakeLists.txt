@@ -27,6 +27,9 @@ if(USE_STATIC_MPVQT)
     ${_mpvqt_src}/mpvcontroller.cpp
     ${_mpvqt_wrapper}
   )
+  if(JELLYFIN_VERIFIED_RECOVERY_KIT)
+    target_compile_definitions(MpvQt PRIVATE JELLYFIN_VERIFIED_RECOVERY_KIT=1)
+  endif()
   if(MPVQT_C2_DIAGNOSTIC_ONLY)
     target_sources(MpvQt PRIVATE c2/DiagnosticFailureInjection.cpp)
   endif()
