@@ -115,3 +115,36 @@ class FilePin:
 
     def __exit__(self, *_):
         self.close()
+
+
+class ObservedFile:
+    """Observe a known build output after settlement; this does not qualify an input."""
+    _open_chain = FilePin._open_chain
+    _metadata = FilePin._metadata
+    _hash = FilePin._hash
+    close = FilePin.close
+    __enter__ = FilePin.__enter__
+    __exit__ = FilePin.__exit__
+
+    def __init__(self, api, absolute_path):
+        if os.name != 'nt':
+            raise OSError('Windows is required')
+        if not os.path.isabs(absolute_path):
+            raise ValueError('absolute output path required')
+        self.api, self.path = api, os.path.abspath(absolute_path)
+        self.handles = []
+        try:
+            self._open_chain()
+            self.handle = self.handles[-1]
+            self.final_path, self.file_id, self.size = self._metadata(self.handle)
+            final = self.final_path
+            if final.startswith('\\\\?\\UNC\\'):
+                final = '\\\\' + final[8:]
+            elif final.startswith('\\\\?\\'):
+                final = final[4:]
+            if os.path.normcase(os.path.normpath(final)) != os.path.normcase(self.path):
+                raise OSError('output final path mismatch')
+            self.sha256 = self._hash(self.handle)
+        except BaseException:
+            self.close()
+            raise
