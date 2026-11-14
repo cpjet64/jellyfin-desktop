@@ -296,7 +296,7 @@ void TestHealthyGraphDispatch::restartBeforeSeekReplyCannotQualify()
   fixture.graph->player_->observeNativeReceipt(&restart);
   DISPATCH_CHECK(fixture.graph->pollRestorePlayback() == Progress::Pending);
   mpv_event reply{}; reply.event_id = MPV_EVENT_COMMAND_REPLY;
-  reply.reply_userdata = (quint64{1} << 61) | fixture.graph->session_->attempt;
+  reply.reply_userdata = fixture.graph->player_->m_nativeRestore.seekUserdata;
   fixture.graph->player_->observeNativeReceipt(&reply);
   DISPATCH_CHECK(fixture.graph->pollRestorePlayback() == Progress::Pending);
   DISPATCH_CHECK(!fixture.graph->player_->m_restorePausedProof);
@@ -319,7 +319,8 @@ void TestHealthyGraphDispatch::earlyObservationCannotQualify()
   QByteArray text("NR1|1|42|yes|yes|3.000|yes|no|no");
   mpv_event_command command{}; command.result.format = MPV_FORMAT_STRING; command.result.u.string = text.data();
   mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY;
-  event.reply_userdata = (quint64{1} << 62) | 2; event.data = &command;
+  // No second request was dispatched; this cannot match the previous batch.
+  event.reply_userdata = player.m_nativeObservation.userdata ^ quint64{1}; event.data = &command;
   player.observeNativeReceipt(&event);
   DISPATCH_CHECK(!player.m_nativeObservation.postSeek && !player.m_restorePausedProof);
   DISPATCH_CHECK(fixture.graph->pollRestorePlayback() == Progress::Pending);

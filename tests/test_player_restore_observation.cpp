@@ -46,7 +46,8 @@ void TestPlayerRestoreObservation::reply(PlayerComponent& player, quint64 id, co
   command.result.u.string = const_cast<char*>(value.constData());
   mpv_event event{};
   event.event_id = MPV_EVENT_COMMAND_REPLY;
-  event.reply_userdata = (quint64{1} << 62) | id;
+  event.reply_userdata = id == player.m_nativeObservation.id
+      ? player.m_nativeObservation.userdata : (player.m_nativeObservation.userdata ^ quint64{1});
   event.data = &command;
   player.observeNativeReceipt(&event);
 }
@@ -55,7 +56,7 @@ void TestPlayerRestoreObservation::seekReply(PlayerComponent& player, int error)
 {
   mpv_event event{};
   event.event_id = MPV_EVENT_COMMAND_REPLY;
-  event.reply_userdata = (quint64{1} << 61) | player.m_nativeReceipts.snapshot().key.attempt;
+  event.reply_userdata = player.m_nativeRestore.seekUserdata;
   event.error = error;
   player.observeNativeReceipt(&event);
 }

@@ -169,7 +169,7 @@ void TestPlayerRestoreCleanup::asyncFailureAndReentrancy()
   player.m_restoreDispatch = [](quint64, const char**) { return 0; };
   QVERIFY(fixture.seek());
   mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY;
-  event.reply_userdata = (quint64{1} << 61) | player.m_nativeRestore.key.attempt; event.error = -9;
+  event.reply_userdata = player.m_nativeRestore.seekUserdata; event.error = -9;
   player.observeNativeReceipt(&event);
   QVERIFY(player.m_nativeRestore.failed && !player.m_nativeRestore.seekOk);
   QCOMPARE(player.m_nativeRestore.seekReplyError, -9);
@@ -322,7 +322,7 @@ void TestPlayerRestoreCleanup::pendingLoadSettlesBeforeStop()
   mpv_node_list list{}; list.num = 1; list.keys = fields; list.values = &value;
   mpv_event_command command{}; command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
   mpv_event reply{}; reply.event_id = MPV_EVENT_COMMAND_REPLY;
-  reply.reply_userdata = (quint64{1} << 63) | player.m_nativeRestore.key.attempt; reply.data = &command;
+  reply.reply_userdata = player.m_receiptUserdata; reply.data = &command;
   player.observeNativeReceipt(&reply);
   QCOMPARE(player.pollNativeRestoreCancellation(), PlayerComponent::RestoreCleanupStatus::Pending);
   QCOMPARE(stops, 1);
@@ -367,7 +367,7 @@ void TestPlayerRestoreCleanup::containedPendingLoadContinuesOnlyForCurrentOwner(
     mpv_node_list list{}; list.num = 1; list.keys = fields; list.values = &value;
     mpv_event_command command{}; command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
     mpv_event load{}; load.event_id = MPV_EVENT_COMMAND_REPLY;
-    load.reply_userdata = (quint64{1} << 63) | player.m_nativeRestore.key.attempt; load.data = &command;
+    load.reply_userdata = player.m_receiptUserdata; load.data = &command;
     mpv_event stop{}; stop.event_id = MPV_EVENT_COMMAND_REPLY;
     mpv_event* next = nullptr;
     player.m_healthyStopEventWait = [&]() -> mpv_event* {
