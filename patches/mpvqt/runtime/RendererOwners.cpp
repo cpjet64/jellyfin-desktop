@@ -8,11 +8,80 @@ namespace RendererRuntime {
 
 struct FaultSlot {
     std::mutex mutex;
-    std::weak_ptr<CoreOwner> active;
+    quint64 next = 1;
+    quint64 reservation = 0;
+    quint64 waiter = 0;
+    quint64 dispatched = 0;
+    quint64 revision = 0;
+    QObject *dispatcher = nullptr;
+    AdmissionContinuation continuation;
+    std::shared_ptr<CoreOwner> active;
     std::shared_ptr<CoreOwner> core;
     std::shared_ptr<GenerationOwner> generation;
 };
 static FaultSlot &faultSlot() { static auto *slot = new FaultSlot; return *slot; }
+
+static void deliverWaiterLocked(FaultSlot &slot, AdmissionStatus status)
+{
+    if (!slot.waiter || !slot.dispatcher || !slot.continuation) return;
+    auto callback = std::move(slot.continuation);
+    const auto token = slot.waiter;
+    const auto revision = slot.revision;
+    slot.waiter = 0;
+    slot.dispatched = token;
+    if (status == AdmissionStatus::Reserved) slot.reservation = token;
+    const bool posted = QMetaObject::invokeMethod(slot.dispatcher, [callback, status, token, revision] {
+        callback(status, token, revision);
+    }, Qt::QueuedConnection);
+    if (!posted) {
+        if (slot.reservation == token) slot.reservation = 0;
+        slot.dispatched = 0;
+    }
+}
+
+AdmissionResult reserveCore(QObject *dispatcher, quint64 revision, AdmissionContinuation callback)
+{
+    if (!dispatcher || !callback || dispatcher->thread() != QThread::currentThread())
+        return {AdmissionStatus::Busy, 0};
+    auto &slot = faultSlot();
+    std::lock_guard<std::mutex> lock(slot.mutex);
+    if (slot.core) return {AdmissionStatus::Quarantined, 0};
+    if (slot.waiter) return {AdmissionStatus::Busy, 0};
+    const auto token = slot.next++;
+    if (!token || !slot.next) return {AdmissionStatus::Busy, 0};
+    if (!slot.active && !slot.reservation) {
+        slot.reservation = token;
+        return {AdmissionStatus::Reserved, token};
+    }
+    slot.waiter = token;
+    slot.revision = revision;
+    slot.dispatcher = dispatcher;
+    slot.continuation = std::move(callback);
+    return {AdmissionStatus::Deferred, token};
+}
+
+void cancelCoreReservation(quint64 token)
+{
+    if (!token) return;
+    auto &slot = faultSlot();
+    std::lock_guard<std::mutex> lock(slot.mutex);
+    if (slot.waiter == token) { slot.waiter = 0; slot.continuation = {}; slot.dispatcher = nullptr; }
+    if (slot.dispatched == token) slot.dispatched = 0;
+    if (slot.reservation == token) { slot.reservation = 0; deliverWaiterLocked(slot, AdmissionStatus::Reserved); }
+}
+
+void closeAdmissionDispatcher(QObject *dispatcher)
+{
+    auto &slot = faultSlot();
+    std::lock_guard<std::mutex> lock(slot.mutex);
+    if (slot.dispatcher == dispatcher) {
+        slot.waiter = 0;
+        slot.continuation = {};
+        slot.dispatcher = nullptr;
+        if (slot.reservation == slot.dispatched) slot.reservation = 0;
+        slot.dispatched = 0;
+    }
+}
 
 NativeLease::NativeLease(std::shared_ptr<CoreOwner> value) : owner(std::move(value)) {}
 NativeLease::NativeLease(NativeLease &&other) noexcept : owner(std::move(other.owner)) {}
@@ -26,6 +95,10 @@ NativeLease &NativeLease::operator=(NativeLease &&other) noexcept
 }
 NativeLease::~NativeLease() { if (owner) owner->leaveControl(); }
 mpv_handle *NativeLease::get() const { return owner ? owner->handle : nullptr; }
+void NativeLease::contain()
+{
+    if (owner) owner->blockUnresolvedHook();
+}
 
 static std::mutex &pendingMutex() { static auto *value = new std::mutex; return *value; }
 static std::vector<std::shared_ptr<CoreOwner>> &pendingCores()
@@ -34,38 +107,38 @@ static std::vector<std::shared_ptr<CoreOwner>> &pendingCores()
     return *value;
 }
 
-std::shared_ptr<CoreOwner> CoreOwner::adopt(mpv_handle *native, MpvController *control,
-                                           QThread *thread, WakeRelay *relay)
+std::shared_ptr<CoreOwner> CoreOwner::adoptReserved(quint64 token, mpv_handle *native, MpvController *control,
+                                                   QThread *thread, WakeRelay *relay)
 {
     if (!native || !control || !thread || !relay || control->thread() != thread || relay->thread() != thread)
         return {};
     auto &slot = faultSlot();
     std::lock_guard<std::mutex> lock(slot.mutex);
-    if (slot.core || !slot.active.expired()) return {};
+    if (slot.core || slot.active || !token || slot.reservation != token) return {};
     auto owner = std::shared_ptr<CoreOwner>(new CoreOwner());
     owner->handle = native;
     owner->controller = control;
     owner->worker = thread;
     owner->wakeRelay = relay;
     slot.active = owner;
+    slot.reservation = 0;
+    slot.dispatched = 0;
     return owner;
 }
 
-bool CoreOwner::blockUnresolvedHook()
+void CoreOwner::blockUnresolvedHook()
 {
     auto owner = shared_from_this();
     auto &slot = faultSlot();
     {
         std::lock_guard<std::mutex> lock(slot.mutex);
-        if (slot.core && slot.core != owner) return false;
-        if (!slot.core && slot.active.lock() != owner) return false;
         faultQuarantined.store(true, std::memory_order_release);
         if (!slot.core) slot.core = owner;
+        deliverWaiterLocked(slot, AdmissionStatus::Quarantined);
     }
     requestQuarantineStop();
     revokeControl();
     closeExternalWakeup();
-    return true;
 }
 
 static void wakeCore(void *opaque)
@@ -231,6 +304,14 @@ void CoreOwner::maybeFinalize()
             owner->controller->deleteLater();
             QObject::connect(owner->worker, &QThread::finished, owner->worker, &QObject::deleteLater);
             QObject::connect(owner->worker, &QThread::finished, [owner] {
+                {
+                    auto &slot = faultSlot();
+                    std::lock_guard<std::mutex> lock(slot.mutex);
+                    if (!slot.core && slot.active == owner) {
+                        slot.active.reset();
+                        deliverWaiterLocked(slot, AdmissionStatus::Reserved);
+                    }
+                }
                 std::lock_guard<std::mutex> lock(pendingMutex());
                 auto &pending = pendingCores();
                 pending.erase(std::remove(pending.begin(), pending.end(), owner), pending.end());
@@ -337,10 +418,11 @@ bool RetirementCoordinator::quarantine(const std::shared_ptr<GenerationOwner> &o
     auto &slot = faultSlot();
     {
         std::lock_guard<std::mutex> faultLock(slot.mutex);
-        if ((slot.core && slot.core != owner->core) || slot.active.lock() != owner->core) return false;
+        if ((slot.core && slot.core != owner->core) || slot.active != owner->core) return false;
         owner->core->faultQuarantined.store(true, std::memory_order_release);
         slot.core = owner->core;
         slot.generation = owner;
+        deliverWaiterLocked(slot, AdmissionStatus::Quarantined);
     }
     owner->revoke();
     owner->core->requestQuarantineStop();
