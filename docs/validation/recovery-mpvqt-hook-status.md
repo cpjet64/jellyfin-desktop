@@ -26,9 +26,10 @@ Known blockers:
   bounded, so completions may be missed when the GUI consumer is stalled.
 - Lost-context quarantine currently occurs without an owned stop request and
   acknowledgement, so audio can continue.
-- Adopt-failure fallback queues cleanup on the worker; failed queueing retains
-  the allocation without a completion path. Review containment and owner
-  shutdown with player integration.
+- Controller-init or adoption failure retains the reservation fail-closed;
+  there is no joined reservation-abandon completion path yet. Adopt-failure
+  cleanup that cannot be queued also retains its storage. Review containment
+  and owner shutdown with player integration.
 - Usability requests have no cancellation interface; a nonresponsive render
   thread relies on the controller's deadline.
 

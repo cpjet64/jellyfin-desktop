@@ -17,6 +17,13 @@ MpvVideoItem::MpvVideoItem(QQuickItem *parent)
     });
 
     qDebug() << "MpvVideoItem constructed";
+#ifdef MPVQT_RECOVERY_RUNTIME
+    connect(this, &MpvAbstractItem::recoveryBootstrapReady, this, [this] {
+        applyMpvOptions();
+        initialize();
+    });
+    if (mpvController()) applyMpvOptions();
+#else
     // Critical: Set vo=libmpv for Qt integration
     Q_EMIT setProperty("vo", "libmpv");
 
@@ -25,7 +32,21 @@ MpvVideoItem::MpvVideoItem(QQuickItem *parent)
     Q_EMIT setProperty("gpu-api", "opengl");
     Q_EMIT setProperty("opengl-es", "no");
 #endif
+#endif
 }
+
+#ifdef MPVQT_RECOVERY_RUNTIME
+void MpvVideoItem::applyMpvOptions()
+{
+    if (m_optionsApplied || !mpvController()) return;
+    m_optionsApplied = true;
+    Q_EMIT setProperty("vo", "libmpv");
+#ifdef Q_OS_WIN32
+    Q_EMIT setProperty("gpu-api", "opengl");
+    Q_EMIT setProperty("opengl-es", "no");
+#endif
+}
+#endif
 
 MpvVideoItem::~MpvVideoItem()
 {
@@ -43,8 +64,23 @@ void MpvVideoItem::setPlayerComponent(PlayerComponent* player)
         return;
     }
 #endif
+#ifdef MPVQT_RECOVERY_RUNTIME
+    const bool bindingChanged = m_player != player;
+    if (bindingChanged) disconnect(m_playerDestroyConnection);
+#endif
     qDebug() << "MpvVideoItem::setPlayerComponent called, mpvController():" << mpvController();
     m_player = player;
+#ifdef MPVQT_RECOVERY_RUNTIME
+    if (bindingChanged && player) {
+        m_playerDestroyConnection = connect(player, &QObject::destroyed, this, [this] {
+            if (!mpvController()) suspendRecoveryBootstrap();
+        });
+    }
+    if (bindingChanged && !mpvController()) {
+        if (player) refreshRecoveryBootstrap();
+        else suspendRecoveryBootstrap();
+    }
+#endif
     initialize();
 }
 

@@ -8,6 +8,10 @@
 #include "QtSubmissionBridge.h"
 
 namespace RendererRuntime { struct GenerationOwner; }
+struct RecoverySubmissionRecord {
+    QtRecoverySubmissionV1 submission{};
+    quint64 operationId = 0;
+};
 
 // Shared only between the item and its renderer; all fields are mutex protected.
 struct RecoveryExchange {
@@ -25,6 +29,8 @@ struct RecoveryExchange {
     quint64 readyGeneration = 0;
     bool contextFailurePending = false;
     quint64 contextFailureGeneration = 0;
+    bool capabilityFailurePending = false;
+    quint64 capabilityFailureGeneration = 0;
     bool framePending = false;
     quint64 frameGeneration = 0;
     RecoveryFrameObservationV1 frame{};
@@ -33,9 +39,10 @@ struct RecoveryExchange {
     qint64 attemptDeadlineMs = 0;
     QtRecoverySwapTicketV1 ticket{};
     QtRecoveryFrameV1 ticketFrame{};
+    quint64 ticketOperationId = 0;
     bool ticketPending = false;
     quint64 lastQtFrameSerial = 0;
-    std::deque<QtRecoverySubmissionV1> submissions;
+    std::deque<RecoverySubmissionRecord> submissions;
     QtRecoverySubmissionV1 submission{};
     bool bootstrapSupported = false;
 
@@ -51,12 +58,14 @@ struct RecoveryExchange {
         requestGeneration = requestId = resultGeneration = resultId = 0;
         deadlineMs = 0;
         resultUsable = resultPending = ready = contextFailurePending = framePending = false;
-        readyGeneration = contextFailureGeneration = frameGeneration = 0;
+        readyGeneration = contextFailureGeneration = capabilityFailureGeneration = frameGeneration = 0;
+        capabilityFailurePending = false;
         frame = {};
         sourceFrameSerial = attempt = lastQtFrameSerial = 0;
         attemptDeadlineMs = 0;
         ticket = {};
         ticketFrame = {};
+        ticketOperationId = 0;
         ticketPending = bootstrapSupported = false;
         submissions.clear();
         submission = {};

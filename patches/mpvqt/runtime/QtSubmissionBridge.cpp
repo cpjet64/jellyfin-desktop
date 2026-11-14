@@ -57,10 +57,13 @@ Resolver::Resolver()
 #if defined(_WIN32) || ((defined(__unix__) || defined(__APPLE__)) && defined(RTLD_NOLOAD))
     const auto source = reinterpret_cast<const char *(*)()>(symbol("qt_recovery_quick_source_id_v1"));
     if (!source || !source() || std::strcmp(source(), QT_RECOVERY_QUICK_SOURCE_ID) != 0) return;
+    const auto guiSource = reinterpret_cast<const char *(*)()>(symbol("qt_recovery_quick_bound_gui_source_id_v1"));
+    if (!guiSource || !guiSource() || std::strcmp(guiSource(), QT_RECOVERY_SWAP_SOURCE_ID) != 0) return;
     publish_ = reinterpret_cast<decltype(publish_)>(symbol("qt_recovery_publish_native_frame_v1"));
     take_ = reinterpret_cast<decltype(take_)>(symbol("qt_recovery_take_submission_v1"));
     revoke_ = reinterpret_cast<decltype(revoke_)>(symbol("qt_recovery_revoke_v1"));
-    if (!publish_ || !take_ || !revoke_) publish_ = nullptr;
+    unsupported_ = reinterpret_cast<decltype(unsupported_)>(symbol("qt_recovery_take_unsupported_v1"));
+    if (!publish_ || !take_ || !revoke_ || !unsupported_) publish_ = nullptr;
 #endif
 }
 
@@ -70,7 +73,7 @@ Resolver::~Resolver()
     if (moduleLease_) dlclose(moduleLease_);
 #endif
 }
-bool Resolver::available() const noexcept { return publish_ && take_ && revoke_; }
+bool Resolver::available() const noexcept { return publish_ && take_ && revoke_ && unsupported_; }
 bool Resolver::publish(const QtRecoveryFrameV1 &frame, QtRecoverySwapTicketV1 &ticket) const
 {
     return available() && publish_(&frame, &ticket) == 1;
@@ -80,4 +83,8 @@ bool Resolver::take(uint64_t window, uint64_t generation, uint64_t attempt, QtRe
     return available() && take_(window, generation, attempt, &out) == 1;
 }
 void Resolver::revoke(uint64_t window) const { if (available() && window) revoke_(window); }
+bool Resolver::takeUnsupported(uint64_t window, uint64_t generation, uint64_t sceneGeneration) const
+{
+    return available() && unsupported_(window, generation, sceneGeneration) == 1;
+}
 }
