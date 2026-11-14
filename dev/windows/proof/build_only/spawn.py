@@ -190,9 +190,13 @@ def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, env=No
         unsettled = False
         if root is not None:
             root, unsettled = _emergency_settle(api, job, root)
-        if isinstance(failure, LaunchFailure) and failure.root is not None:
-            root = failure.root
-            unsettled = True
+        if isinstance(failure, LaunchFailure):
+            unsettled = unsettled or failure.job_unsettled
+            if failure.root is not None:
+                root = failure.root
+            for handle in failure.retained_handles:
+                if not any(handle is existing for existing in handles):
+                    handles.append(handle)
         raise LaunchFailure('inherited handle close failed', root, handles, unsettled) from failure
     if failure is not None:
         raise failure
