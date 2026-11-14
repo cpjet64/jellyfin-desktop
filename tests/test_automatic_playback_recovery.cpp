@@ -201,6 +201,32 @@ static void staleFrameCannotCompleteReplacement()
   CHECK(policy.phase() == Phase::Failed);
 }
 
+static void newFrameAndFrozenClockSuppressStall()
+{
+  Policy policy;
+  auto s = sample();
+  CHECK(policy.observe(s) == Action::None);
+  s.nowMs = 4000;
+  s.positionMs = 4000;
+  ++s.frameSerial;
+  CHECK(policy.observe(s) == Action::None);
+  s.nowMs = 9000;
+  CHECK(policy.observe(s) == Action::None);
+  CHECK(!policy.attempted());
+}
+
+static void pausedTimeoutCannotAuthorizePlaying()
+{
+  Policy policy;
+  auto s = sample();
+  s.paused = true;
+  s.operationTimedOut = true;
+  CHECK(policy.observe(s) == Action::Reload);
+  policy.fail();
+  s.nowMs = 200;
+  CHECK(!policy.mayUnpause(s));
+}
+
 int main()
 {
   stallRequiresFullEligibleInterval();
@@ -212,4 +238,6 @@ int main()
   pausedRestorationAndDeadlineFailClosed();
   failureNeverAcknowledgesRetirementOrRestore();
   staleFrameCannotCompleteReplacement();
+  newFrameAndFrozenClockSuppressStall();
+  pausedTimeoutCannotAuthorizePlaying();
 }
