@@ -15,6 +15,7 @@ void Policy::resetBaseline(const Sample& sample)
   baselinePosition_ = sample.positionMs;
   lastPosition_ = sample.positionMs;
   lastAdvanceTime_ = sample.nowMs;
+  lastSampleTime_ = sample.nowMs;
   baselineFrame_ = sample.frameSerial;
   baselineRevision_ = sample.revision;
   baselineGeneration_ = sample.generation;
@@ -40,14 +41,16 @@ Action Policy::observe(const Sample& sample)
       !sample.buffering && sample.visible && sample.exposed && !sample.eof;
   if (attempted_ || !eligible || !sample.generation) { baseline_ = false; return Action::None; }
   const bool reset = !baseline_ || sample.paused || !sample.outstanding || sample.positionMs < 0 ||
-      sample.nowMs < baselineTime_ || sample.positionMs < baselinePosition_ || sample.frameSerial != baselineFrame_ ||
+      sample.nowMs < lastSampleTime_ || sample.positionMs < lastPosition_ || sample.frameSerial != baselineFrame_ ||
       sample.revision != baselineRevision_ || sample.generation != baselineGeneration_ ||
       sample.outstanding != baselineOutstanding_;
   if (reset) resetBaseline(sample);
   if (sample.positionMs > lastPosition_) { lastPosition_ = sample.positionMs; lastAdvanceTime_ = sample.nowMs; }
+  lastSampleTime_ = sample.nowMs;
   // The 1.5 second freshness window is a policy choice requiring runtime validation.
   const bool stalled = !sample.paused && sample.outstanding && sample.positionMs > baselinePosition_ &&
-      sample.nowMs - baselineTime_ >= 5000 && sample.nowMs - lastAdvanceTime_ <= 1500;
+      sample.nowMs - baselineTime_ >= 5000 && sample.nowMs >= lastAdvanceTime_ &&
+      sample.nowMs - lastAdvanceTime_ <= 1500;
   if (!sample.operationTimedOut && !sample.rendererFault && !stalled) return Action::None;
   if (sample.nowMs > std::numeric_limits<std::int64_t>::max() - 15000) { fail(); return Action::Blocked; }
   attempted_ = true; revision_ = sample.revision; generation_ = sample.generation;
