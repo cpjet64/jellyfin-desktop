@@ -22,6 +22,6 @@ private:
   bool nearTarget(std::int64_t value) const;
   Key key_;
   std::uint64_t attempt_ = 0, discontinuity_ = 0, previousSource_ = 0, renderSerial_ = 0;
-  std::int64_t entry_ = 0, target_ = 0, deadline_ = 0, lastMs_ = 0;
+  std::int64_t entry_ = 0, target_ = 0, deadline_ = 0, lastMs_ = 0, positionMsAt_ = 0;
   bool active_ = false, submitted_ = false, swapped_ = false, positioned_ = false;
 };

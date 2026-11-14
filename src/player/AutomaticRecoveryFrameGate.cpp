@@ -28,8 +28,10 @@ bool AutomaticRecoveryFrameGate::rendered(Key key, std::uint64_t attempt, const 
 {
   if (!matches(key, attempt, now) || frame.size != sizeof(frame) || frame.version != RECOVERY_FRAME_OBSERVATION_VERSION ||
       frame.valid != 1 || frame.reserved || frame.playlist_entry_id != static_cast<std::uint64_t>(entry_) ||
-      frame.discontinuity_id != discontinuity_ || !frame.source_frame_serial || frame.source_frame_serial <= previousSource_ ||
-      !frame.render_serial || !std::isfinite(frame.media_pts) || frame.media_pts < 0 ||
+      frame.discontinuity_id != discontinuity_ || frame.discontinuity_id > std::numeric_limits<std::int64_t>::max() ||
+      !frame.source_frame_serial || frame.source_frame_serial > std::numeric_limits<std::int64_t>::max() ||
+      frame.source_frame_serial <= previousSource_ || !frame.render_serial ||
+      frame.render_serial > std::numeric_limits<std::int64_t>::max() || !std::isfinite(frame.media_pts) || frame.media_pts < 0 ||
       frame.media_pts > double(std::numeric_limits<std::int64_t>::max() / 2000)) { invalidate(); return false; }
   const auto ptsMs = static_cast<std::int64_t>(frame.media_pts * 1000.0);
   if (!nearTarget(ptsMs)) { invalidate(); return false; }
@@ -51,10 +53,10 @@ bool AutomaticRecoveryFrameGate::position(Key key, std::uint64_t attempt, std::i
   if (!matches(key, attempt, now) || entry != entry_ || !nativePaused || !nearTarget(positionMs)) {
     invalidate(); return false;
   }
-  positioned_ = true; lastMs_ = now; return true;
+  positioned_ = true; positionMsAt_ = lastMs_ = now; return true;
 }
 bool AutomaticRecoveryFrameGate::ready(Key key, std::uint64_t attempt, std::int64_t now) const
-{ return matches(key, attempt, now) && positioned_ && submitted_ && swapped_; }
+{ return matches(key, attempt, now) && positioned_ && now - positionMsAt_ < 2000 && submitted_ && swapped_; }
 void AutomaticRecoveryFrameGate::invalidate()
 {
   active_ = submitted_ = swapped_ = positioned_ = false; key_ = {}; attempt_ = renderSerial_ = 0;
