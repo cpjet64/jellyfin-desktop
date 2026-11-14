@@ -1,0 +1,35 @@
+#include "AutomaticRecoverySession.h"
+
+bool AutomaticRecoverySession::same(Key a, Key b)
+{
+  return a.session && a.revision && a.generation && a.session == b.session &&
+      a.revision == b.revision && a.generation == b.generation;
+}
+void AutomaticRecoverySession::begin(Key key, const QString& url, const QVariantMap& options,
+                                     const QVariantMap& metadata, const QVariant& audio,
+                                     const QVariant& subtitle, bool paused)
+{
+  invalidate();
+  if (!same(key, key) || url.isEmpty()) return;
+  candidate_.key = key; candidate_.url = url; candidate_.options = options; candidate_.metadata = metadata;
+  candidate_.audio = audio; candidate_.subtitle = subtitle; candidate_.paused = paused;
+}
+bool AutomaticRecoverySession::accept(Key key, std::int64_t entry)
+{
+  if (!same(candidate_.key, key) || entry <= 0 || accepted_) return false;
+  candidate_.entry = entry; accepted_ = true; return true;
+}
+bool AutomaticRecoverySession::position(Key key, std::int64_t entry, std::int64_t positionMs)
+{
+  if (!accepted_ || !same(candidate_.key, key) || entry != candidate_.entry || positionMs < 0) return false;
+  candidate_.positionMs = positionMs; return true;
+}
+void AutomaticRecoverySession::invalidate()
+{
+  candidate_ = Snapshot{}; accepted_ = false;
+}
+bool AutomaticRecoverySession::snapshot(Key current, Snapshot& result) const
+{
+  if (!accepted_ || !same(candidate_.key, current) || candidate_.entry <= 0 || candidate_.positionMs < 0) return false;
+  result = candidate_; return true;
+}
