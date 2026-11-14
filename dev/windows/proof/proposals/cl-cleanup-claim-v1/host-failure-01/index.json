@@ -1,0 +1,23 @@
+{
+  "schema": "discovery-host-failure-copy-v1",
+  "source_sha": "2dcd183897bf7dc4a43a7555f76d4f173c11e8b7",
+  "allocation": "071652ee",
+  "scope": "pre-compiler setup failure; helper and compiler did not start; no receipt",
+  "files": [
+    {
+      "path": "parent.json",
+      "bytes": 1240,
+      "sha256": "f7bf7144f6449f093959b3e9836d13dd91a5953eb149099e55326609ec45c00b"
+    },
+    {
+      "path": "host.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "host.stderr",
+      "bytes": 657,
+      "sha256": "452969a2ab82378dca07d8442be0de831b1b2f3cc3543a433b719da1ead35c7e"
+    }
+  ]
+}
