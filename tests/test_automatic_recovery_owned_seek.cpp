@@ -21,7 +21,7 @@ static Seek::Operation operation(bool paused = false)
 static Seek::Position position(bool paused = false)
 {
   Seek::Position value;
-  value.key = key; value.eventEpoch = 11; value.entry = 7; value.positionMs = 10000;
+  value.key = key; value.eventEpoch = 11; value.batchSequence = 10; value.entry = 7; value.positionMs = 10000;
   value.observedMs = 200; value.seekable = true; value.video = true; value.nativePaused = paused;
   return value;
 }
@@ -115,12 +115,33 @@ static void newerContradictoryNativeStateRevokesOldPosition()
     Seek seek; const auto op = operation(); auto newer = position();
     CHECK(seek.begin(op)); seek.reply(op.replyId, 0, 150); seek.position(position(), 200);
     newer.observedMs = 201;
+    newer.batchSequence = 11;
     if (contradiction == 0) newer.seeking = true;
     if (contradiction == 1) newer.nativePaused = true;
     if (contradiction == 2) newer.positionMs = op.checkpointMs;
     seek.position(newer, 201);
     seek.submission(submission(), 202);
     CHECK(seek.poll(key, 203) != State::Complete);
+    auto fresh = position(); fresh.batchSequence = 12; fresh.observedMs = 204;
+    seek.position(fresh, 204);
+    CHECK(seek.poll(key, 205) == State::Complete);
+  }
+}
+
+static void staleOrWrongScopeCannotRevokeFreshPosition()
+{
+  for (int stale = 0; stale != 5; ++stale) {
+    Seek seek; const auto op = operation(); auto old = position();
+    CHECK(seek.begin(op)); seek.reply(op.replyId, 0, 150); seek.position(position(), 200);
+    old.observedMs = 201; old.seeking = true;
+    if (stale == 0) old.batchSequence = 10; // Duplicate.
+    if (stale == 1) old.batchSequence = 9;
+    if (stale == 2) { old.batchSequence = 11; ++old.key.revision; }
+    if (stale == 3) { old.batchSequence = 11; ++old.entry; }
+    if (stale == 4) { old.batchSequence = 11; old.eventEpoch = op.baselineEpoch; }
+    seek.position(old, 201);
+    seek.submission(submission(), 202);
+    CHECK(seek.poll(key, 203) == State::Complete);
   }
 }
 
@@ -133,4 +154,5 @@ int main()
   staleReplyCancellationAndNewIntentCannotComplete();
   targetNotPriorCheckpointQualifiesPosition();
   newerContradictoryNativeStateRevokesOldPosition();
+  staleOrWrongScopeCannotRevokeFreshPosition();
 }
