@@ -10,13 +10,13 @@ import re
 import sys
 from pathlib import Path
 
-from recovery_lock_preflight import parse_object, verify
+from recovery_lock_preflight import BUILD, RUST_COMPONENTS, parse_object, verify
 
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
-def file_hash(path):
-    digest = hashlib.sha256()
+def file_hash(path, algorithm="sha256"):
+    digest = hashlib.new(algorithm)
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
@@ -41,6 +41,42 @@ def plain_file(root, name):
     return path
 
 
+def verify_materials(lock, root, inventory):
+    payload = (BUILD / "subrandr-registry-inventory.json").read_bytes().replace(b"\r\n", b"\n")
+    contract = lock.get("cargo_inventories", {}).get("subrandr", {})
+    if hashlib.sha256(payload).hexdigest() != contract.get("inventory_sha256"):
+        raise ValueError("Cargo inventory differs from source lock")
+    registry = parse_object(payload)
+    source = next((item for item in lock["sources"] if item["name"] == "subrandr"), {})
+    if source.get("commit") != registry["source_commit"]:
+        raise ValueError("Cargo inventory is for a different subrandr commit")
+    if registry["cargo_lock_sha256"] != contract.get("cargo_lock_sha256"):
+        raise ValueError("Cargo.lock identity differs from source lock")
+    expected = {f"rust/{name}": value for name, value in RUST_COMPONENTS.items()}
+    for package in registry["packages"]:
+        if package.get("source") == "registry+https://github.com/rust-lang/crates.io-index":
+            name = f"crate/{package['name']}/{package['version']}"
+            if name in expected:
+                raise ValueError(f"duplicate locked material: {name}")
+            expected[name] = package["checksum"]
+    records = inventory.get("materials")
+    if not isinstance(records, list):
+        raise ValueError("Rust and Cargo materials missing")
+    found, paths = set(), set()
+    for record in records:
+        if not isinstance(record, dict) or set(record) != {"name", "path"}:
+            raise ValueError("invalid material record")
+        name, path = record["name"], record["path"]
+        if name not in expected or name in found or not isinstance(path, str) or path in paths:
+            raise ValueError("unknown or duplicate material")
+        if file_hash(plain_file(root, path)) != expected[name]:
+            raise ValueError(f"material differs from pinned checksum: {name}")
+        found.add(name)
+        paths.add(path)
+    if found != set(expected):
+        raise ValueError("Rust and Cargo material set is incomplete")
+
+
 def verify_inventory(lock, root, inventory):
     current = root.absolute()
     while True:
@@ -52,7 +88,7 @@ def verify_inventory(lock, root, inventory):
         current = current.parent
     if inventory.get("schema_version") != 1:
         raise ValueError("unsupported input inventory")
-    expected = {item["name"] for item in lock["sources"]}
+    expected = {item["name"]: item for item in lock["sources"]}
     records = inventory.get("sources")
     if not isinstance(records, list):
         raise ValueError("source inventory missing")
@@ -70,9 +106,18 @@ def verify_inventory(lock, root, inventory):
         source = plain_file(root, path)
         if source.stat().st_size != record["size"] or file_hash(source) != record["sha256"]:
             raise ValueError(f"staged bytes changed: {name}")
+        locked = expected[name]
+        if locked["kind"] == "archive":
+            for algorithm in ("sha256", "sha512"):
+                if locked.get(algorithm) and file_hash(source, algorithm) != locked[algorithm]:
+                    raise ValueError(f"archive differs from source lock: {name}")
+        elif locked["kind"] == "git":
+            raise ValueError(f"Git object and submodule verification is not implemented: {name}")
+        else:
+            raise ValueError(f"unsupported source kind: {name}")
         names.add(name)
         paths.add(path)
-    if names != expected:
+    if names != set(expected):
         raise ValueError("staged inventory does not cover the lock source list")
 
 
@@ -89,7 +134,9 @@ def main():
         payload = args.inventory.read_bytes()
         if not SHA256.fullmatch(args.inventory_sha256) or hashlib.sha256(payload).hexdigest() != args.inventory_sha256:
             raise ValueError("inventory identity differs from approved digest")
-        verify_inventory(lock, args.inputs, parse_object(payload))
+        inventory = parse_object(payload)
+        verify_materials(lock, args.inputs, inventory)
+        verify_inventory(lock, args.inputs, inventory)
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"Offline input byte verification failed: {error}", file=sys.stderr)
         return 1
