@@ -181,3 +181,11 @@ index 6a0286db..58e01f98 100644
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +        qtRecoveryFinish(false, true);
 +#endif
+diff --git a/tests/auto/quick/CMakeLists.txt b/tests/auto/quick/CMakeLists.txt
+index a387325e..e1e4f3a4 100644
+--- a/tests/auto/quick/CMakeLists.txt
++++ b/tests/auto/quick/CMakeLists.txt
+@@ -16,0 +17,3 @@ if(QT_FEATURE_private_tests)
++    if(WIN32 AND QT_FEATURE_opengl)
++        add_subdirectory(qtrecoveryaggregate)
++    endif()

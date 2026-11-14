@@ -144,7 +144,7 @@ void qtRecoveryFinish(bool endSucceeded, bool skipPresent)
     const bool swapSucceeded = state.active
             && qt_recovery_swap_finish_v1(&state.ticket, endSucceeded, skipPresent);
     if (swapSucceeded && endSucceeded && !skipPresent && state.associated && state.drew
-        && !state.ambiguous && state.frame.attempt && state.content && state.texture && state.displayTexture) {
+        && !state.ambiguous && state.content && state.texture && state.displayTexture) {
         completed.size = sizeof(completed);
         completed.version = QT_RECOVERY_SUBMISSION_ABI_VERSION;
         completed.ticket = state.ticket;
@@ -227,7 +227,8 @@ extern "C" int qt_recovery_take_submission_v1(uint64_t window, uint64_t renderer
                                                QtRecoverySubmissionV1 *result)
 {
     if (!result || result->size != sizeof(*result) || result->version != QT_RECOVERY_SUBMISSION_ABI_VERSION
-        || !attempt || completed.ticket.window_lifetime != window
+        || completed.size != sizeof(completed) || !window || !renderer
+        || completed.ticket.window_lifetime != window
         || completed.frame.renderer_generation != renderer || completed.frame.attempt != attempt)
         return 0;
     *result = completed;

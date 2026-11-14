@@ -20,9 +20,10 @@ It does not establish runtime capability or a successful frame submission.
 Apply `patches/qt/quick/qtdeclarative-6.9.3-ticket-fbo.patch` with
 `git apply --unidiff-zero` at the pinned
 Qt Declarative root, then place the three adjacent `QtRecovery*.{h,cpp}` files
-in `src/quick/recovery/`. The patched Qt Base private bridge must be built and
-installed as part of the same compatible kit. The source-only test is not yet
-integrated into the upstream Qt test build and has not been executed.
+in `src/quick/recovery/`. Copy `patches/qt/quick/tests/CMakeLists.txt` and
+`tst_qtrecovery_aggregate.cpp` into `tests/auto/quick/qtrecoveryaggregate/`.
+The patched Qt Base private bridge must be built and installed as part of the
+same compatible kit. The registered source-only tests have not been executed.
 
 The threaded loop begins the frame before synchronization and calls `endFrame`
 after rendering. A failed begin can still emit `afterFrameEnd`; a failed end can
@@ -37,4 +38,8 @@ checks the standard texture material's selected QSG and QRhi texture bindings
 against the registered display texture and retains attributed content across
 tickets. Multisample resolves fail closed: the upstream resolve operation
 returns no result from which this adapter can establish successful transfer.
-The required full negative-test source and integration review remain open.
+The helper test exercises the actual Quick aggregation and QtGui swap bridge
+with synthetic identities, including zero-attempt readiness, failed swaps and
+retained-frame reuse. It does not exercise the batch renderer's merged-set or
+material-binding integration. Full negative-test source and integration review
+remain open.
