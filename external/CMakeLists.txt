@@ -11,6 +11,8 @@ if(USE_STATIC_MPVQT)
     include(PatchedMpvQt)
     if(MPVQT_C2_DIAGNOSTIC_ONLY)
       include(PatchedMpvQtC2)
+    else()
+      include(PatchedMpvQtRecovery)
     endif()
     set(_mpvqt_src "${_mpvqt_patched}")
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/mpvqt_export.h" "${_mpvqt_src}/mpvqt_export.h" COPYONLY)
@@ -27,6 +29,14 @@ if(USE_STATIC_MPVQT)
     ${_mpvqt_src}/mpvcontroller.cpp
     ${_mpvqt_wrapper}
   )
+  if(MPVQT_EXTERNAL_EVENTS AND NOT MPVQT_C2_DIAGNOSTIC_ONLY)
+    target_sources(MpvQt PRIVATE
+      "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RendererOwners.cpp"
+      "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RendererOwners.h"
+      "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RecoveryExchange.h")
+    target_include_directories(MpvQt PUBLIC "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime")
+    target_compile_definitions(MpvQt PUBLIC MPVQT_RECOVERY_RUNTIME)
+  endif()
   if(MPVQT_C2_DIAGNOSTIC_ONLY)
     target_sources(MpvQt PRIVATE c2/DiagnosticFailureInjection.cpp)
   endif()

@@ -66,6 +66,11 @@ void MpvVideoItem::initialize() {
         return;
     }
 
+    if (!mpvController()) {
+        qWarning() << "MpvVideoItem has no available player controller";
+        return;
+    }
+
 #ifdef MPVQT_EXTERNAL_EVENTS
     if (!m_player->tryBindMpvController(mpvController())) {
         qWarning() << "MpvVideoItem cannot bind a second player controller";
