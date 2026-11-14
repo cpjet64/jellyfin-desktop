@@ -130,6 +130,12 @@ bool PlayerComponent::tryBindMpvController(MpvController* controller)
 {
   if (QThread::currentThread() != thread())
     qFatal("MpvQt event consumer must be bound on the PlayerComponent thread");
+#ifdef PLAYER_RECOVERY_ACTOR_TEST
+  if (!controller && recoveryTestMode()) {
+    if (syntheticControllerBound_ || m_mpv) return false;
+    syntheticControllerBound_ = true; ++m_mpvGeneration; return true;
+  }
+#endif
   if (!controller || m_mpv) return false;
   if (m_lastMpvController != controller) m_doAc3Transcoding = false;
   m_lastMpvController = controller;
@@ -142,6 +148,9 @@ void PlayerComponent::releaseMpvController(MpvController* controller)
 {
   if (QThread::currentThread() != thread())
     qFatal("MpvQt event consumer must be released on the PlayerComponent thread");
+#ifdef PLAYER_RECOVERY_ACTOR_TEST
+  if (!controller) { if (!syntheticControllerBound_) return; syntheticControllerBound_ = false; }
+#endif
   if (m_mpv != controller) return;
   cancelRecoverySeekBeforeIntent();
   invalidateNativeReceipt();

@@ -65,6 +65,72 @@ bool PlayerComponent::recoveryIntentChanged(bool clear)
   (void)clear; return true;
 #endif
 }
+bool PlayerComponent::recoveryPreferenceChanged(PlaybackIntent::ChangeKind kind)
+{
+#ifdef MPVQT_RECOVERY_RUNTIME
+  if (m_recovery) { m_recovery->userChanged(false, kind); return m_recovery->preferenceDeferred(); }
+#else
+  (void)kind;
+#endif
+  return false;
+}
+void PlayerComponent::recoveryReplacementStopResult(bool admitted)
+{
+#ifdef MPVQT_RECOVERY_RUNTIME
+  if (m_recovery) m_recovery->replacementStopResult(admitted);
+#else
+  (void)admitted;
+#endif
+}
+bool PlayerComponent::recoveryNativeAvailable() const
+{
+#if defined(MPVQT_RECOVERY_RUNTIME) && defined(PLAYER_RECOVERY_ACTOR_TEST)
+  return m_mpv || (m_recovery && m_recovery->testEnabled_);
+#else
+  return m_mpv;
+#endif
+}
+bool PlayerComponent::recoveryTestMode() const
+{
+#if defined(MPVQT_RECOVERY_RUNTIME) && defined(PLAYER_RECOVERY_ACTOR_TEST)
+  return m_recovery && m_recovery->testEnabled_;
+#else
+  return false;
+#endif
+}
+void PlayerComponent::applySelectedStreams()
+{
+#ifdef PLAYER_RECOVERY_ACTOR_TEST
+  if (ordinaryTracksDispatch_) { ordinaryTracksDispatch_(m_currentAudioStream, m_currentSubtitleStream); return; }
+#endif
+  reselectStream(m_currentSubtitleStream, MediaType::Subtitle);
+  reselectStream(m_currentAudioStream, MediaType::Audio);
+}
+int PlayerComponent::applySelectedPause(bool paused)
+{
+#ifdef PLAYER_RECOVERY_ACTOR_TEST
+  if (ordinaryPauseDispatch_) return ordinaryPauseDispatch_(paused);
+#endif
+  return m_mpv ? m_mpv->setProperty("pause", paused) : MPV_ERROR_UNINITIALIZED;
+}
+void PlayerComponent::continuePreloadedHook(quint64 id)
+{
+#ifdef PLAYER_RECOVERY_ACTOR_TEST
+  if (ordinaryHookDispatch_) { ordinaryHookDispatch_(id); return; }
+#endif
+#if MPV_CLIENT_API_VERSION >= MPV_MAKE_VERSION(1, 100)
+  nativeCall([id](mpv_handle* handle) { return mpv_hook_continue(handle, id); });
+#else
+  (void)id;
+#endif
+}
+void PlayerComponent::continuePreloadedHook(const QString& id)
+{
+#ifdef PLAYER_RECOVERY_ACTOR_TEST
+  if (ordinaryLegacyHookDispatch_) { ordinaryLegacyHookDispatch_(id); return; }
+#endif
+  if (m_mpv) m_mpv->command(QStringList() << "hook-ack" << id);
+}
 void PlayerComponent::recoveryUserReplacement()
 {
 #ifdef MPVQT_RECOVERY_RUNTIME
@@ -126,8 +192,7 @@ bool PlayerComponent::applyPreloadedStreams(const QString& hookToken)
 #else
   (void)hookToken;
 #endif
-  reselectStream(m_currentSubtitleStream, MediaType::Subtitle);
-  reselectStream(m_currentAudioStream, MediaType::Audio);
+  applySelectedStreams();
 #ifdef MPVQT_RECOVERY_RUNTIME
   if (m_recovery) m_recovery->finishPreload();
 #endif

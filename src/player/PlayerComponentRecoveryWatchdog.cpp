@@ -38,6 +38,7 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
     if (startSerial_ == std::numeric_limits<std::uint64_t>::max()) {
       startSerialExhausted_ = true; ordinaryLedger_.failClosed(); ordinarySelection_.revoke(); ordinaryReplacement_.revoke();
     } else if (!startSerialExhausted_) ++startSerial_;
+    ordinaryReplacement_.started(startSerial_);
   }
   bool hookEvent = false;
   hookTokenValid_ = false;
@@ -64,7 +65,7 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
     if (native && native->event_id == MPV_EVENT_COMMAND_REPLY)
       ordinaryLedger_.reply(native->reply_userdata, native->error >= 0);
     if (native && (native->event_id == MPV_EVENT_QUEUE_OVERFLOW || native->event_id == MPV_EVENT_SHUTDOWN)) {
-      ordinaryLedger_.failClosed(); ordinarySelection_.revoke(); ordinaryAfterId_ = 0;
+      ordinaryReplacement_.revoke(); ordinaryLedger_.failClosed(); ordinarySelection_.revoke(); ordinaryAfterId_ = 0;
     }
     runtime_.internalEvent(native);
     restoreEvent(native, now);
@@ -94,7 +95,8 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
 
 void PlayerComponentRecovery::tick()
 {
-  const auto now = nowMs();
+  const auto now = clockNow();
+  ordinaryReplacement_.expire(now);
   if (ordinaryLoad_.pending && now >= ordinaryLoad_.deadlineMs) flushOrdinaryLoad(false);
   checkOwnedSeek(now);
   if (replacementTransition_ && now >= transitionDeadline_) {

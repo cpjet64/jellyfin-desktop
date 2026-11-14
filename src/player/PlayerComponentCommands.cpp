@@ -37,7 +37,7 @@ bool PlayerComponent::load(const QString& url, const QVariantMap& options, const
 void PlayerComponent::stop()
 {
   if (!intentControlThread()) return;
-  if (!cancelRecoverySeekBeforeIntent()) return;
+  if (!cancelRecoverySeekBeforeIntent()) { if (m_replacementStop) recoveryReplacementStopResult(false); return; }
   if (!m_replacementStop) invalidateNativeReceipt();
   if (!m_replacementStop) { m_playbackIntent.stop(PlaybackIntent::Reason::WebStopUnclassified); recoveryIntentChanged(true); }
   const auto revision = m_playbackIntent.snapshot().revision;
@@ -45,11 +45,13 @@ void PlayerComponent::stop()
   using Observation = PlayerIntentObservation;
   Observation::Scope observed(Observation::Kind::StopEnter);
   if (WebClientFaultGuard::instance().rendererLost()) {
+    if (m_replacementStop) recoveryReplacementStopResult(false);
     if (!m_replacementStop) m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::GuardRejected);
     Observation::stopResult(Observation::Outcome::GuardRejected);
     return;
   }
   const auto result = stopMpv();
+  if (m_replacementStop) recoveryReplacementStopResult(result.status == NativeStopResult::Status::Accepted);
   if (!m_replacementStop) m_playbackIntent.dispatch(revision,
     result.status == NativeStopResult::Status::Unavailable ? PlaybackIntent::Dispatch::Unavailable :
     result.status == NativeStopResult::Status::Error ? PlaybackIntent::Dispatch::NativeRejected : PlaybackIntent::Dispatch::NativeAccepted);
@@ -58,10 +60,12 @@ void PlayerComponent::stop()
   Observation::stopResult(outcome, result.error);
 #else
   if (WebClientFaultGuard::instance().rendererLost()) {
+    if (m_replacementStop) recoveryReplacementStopResult(false);
     if (!m_replacementStop) m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::GuardRejected);
     return;
   }
   const auto result = stopMpv();
+  if (m_replacementStop) recoveryReplacementStopResult(result.status == NativeStopResult::Status::Accepted);
   if (!m_replacementStop) m_playbackIntent.dispatch(revision,
     result.status == NativeStopResult::Status::Unavailable ? PlaybackIntent::Dispatch::Unavailable :
     result.status == NativeStopResult::Status::Error ? PlaybackIntent::Dispatch::NativeRejected : PlaybackIntent::Dispatch::NativeAccepted);

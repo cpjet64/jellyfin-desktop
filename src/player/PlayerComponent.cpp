@@ -562,7 +562,7 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       if (!strcmp(msg->args[1], "2"))
       {
         (void)applyPreloadedStreams(resumeId);
-        m_mpv->command( QStringList() << "hook-ack" << resumeId);
+        continuePreloadedHook(resumeId);
         break;
       }
       break;
@@ -581,7 +581,7 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       if (!strcmp(hook->name, "on_preloaded"))
       {
         (void)applyPreloadedStreams(QString::number(id));
-        nativeCall([id](mpv_handle* handle) { return mpv_hook_continue(handle, id); });
+        continuePreloadedHook(id);
         break;
       }
       break;

@@ -16,6 +16,7 @@
 #include <memory>
 #include <mpv/client.h>
 #include "RendererOwners.h"
+#include "PlaybackIntent.h"
 
 class PlayerComponent;
 class MpvVideoItem;
@@ -31,7 +32,7 @@ public:
   void drain();
   bool queue(const QStringList& command, const QString& url, const QVariantMap& options,
              const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle);
-  bool userChanged(bool clear);
+  bool userChanged(bool clear, PlaybackIntent::ChangeKind kind = PlaybackIntent::ChangeKind::Revoke);
   bool ownsEnd(const mpv_event* event);
   bool restoring() const { return restoring_; }
   bool recoveryPreloadAllowed() const;
@@ -40,12 +41,25 @@ public:
   void finishPreload();
   void applyDeferredTracks();
   void beginUserReplacement();
+  void replacementStopResult(bool admitted);
+  bool preferenceDeferred() const { return preferenceDeferred_; }
   RendererRuntime::NativeLease acquireNative() const;
   std::shared_ptr<RendererRuntime::CoreOwner> coreOwner() const { return core_; }
   void prepareOwnedSeek(std::int64_t targetMs);
   int dispatchOwnedSeek(std::int64_t targetMs);
   bool cancelBeforeIntent() { return cancelOwnedSeek(); }
 private:
+  friend class PlayerComponent;
+#ifdef PLAYER_RECOVERY_ACTOR_TEST
+  friend class TestPlayerRecoveryActor;
+  void bindTestConsumer(RendererRuntime::WakeRelay* relay);
+#endif
+  std::int64_t clockNow() const;
+  int ordinaryGet(std::uint64_t id, const char* name, mpv_format format);
+  int ordinaryCommand(std::uint64_t id, const char** args);
+  bool preserveOrdinaryPreference(PlaybackIntent::ChangeKind kind, const PlaybackIntent::Snapshot& intent);
+  bool ordinaryPreferenceCurrent() const;
+  bool applyOrdinaryPause();
   void tick();
   void event(const mpv_event* event, std::int64_t now);
   void usability(std::uint64_t generation, std::uint64_t request, bool usable);
@@ -104,6 +118,11 @@ private:
     std::int64_t deadlineMs = 0;
     bool pending = false;
   } ordinaryLoad_;
+  struct OrdinaryPreferences {
+    std::uint64_t epoch = 0, request = 0, binding = 0, revision = 0;
+    QVariant audio, subtitle;
+    bool paused = false, active = false;
+  } ordinaryPreferences_;
   QSet<std::int64_t> ordinaryBeforeEntries_;
   QString ordinaryExpectedUrl_;
   std::uint64_t ordinaryAfterId_ = 0, ordinaryAfterStart_ = 0, ordinaryAfterRevision_ = 0, ordinaryAfterBinding_ = 0;
@@ -126,6 +145,8 @@ private:
   std::int64_t normalCurrentEntry_ = 0, replacementOldEntry_ = 0;
   std::uint64_t replacementBeforeStart_ = 0;
   bool replacementArming_ = false;
+  OrdinaryReplacementEnd::Identity replacementIdentity_;
+  std::int64_t replacementDeadline_ = 0;
   bool startSerialExhausted_ = false;
   std::int64_t lastStartedEntry_ = 0;
   std::int64_t transitionDeadline_ = 0;
@@ -154,5 +175,14 @@ private:
   bool recoveryTracksApplied_ = false;
   bool replacementTransition_ = false;
   bool seekPrepared_ = false, nativeSeekArmed_ = false, seekCancellationFailed_ = false;
+  bool preferenceDeferred_ = false;
+#ifdef PLAYER_RECOVERY_ACTOR_TEST
+  bool testEnabled_ = false;
+  QPointer<RendererRuntime::WakeRelay> testRelay_;
+  std::function<std::int64_t()> testClock_;
+  std::function<mpv_event*()> nextNativeEvent_;
+  std::function<int(std::uint64_t, const char*, mpv_format)> ordinaryGetDispatch_;
+  std::function<int(std::uint64_t, const char**)> ordinaryCommandDispatch_;
+#endif
 };
 #endif

@@ -252,6 +252,9 @@ Q_SIGNALS:
 
 private:
   friend class PlayerComponentRecovery;
+#ifdef PLAYER_RECOVERY_ACTOR_TEST
+  friend class TestPlayerRecoveryActor;
+#endif
   friend class TestPlayerNativeReceipts;
   friend class TestPlayerNativeRestore;
   friend class TestPlayerRestoreCleanup;
@@ -355,6 +358,14 @@ private:
   bool setupRecovery();
   void releaseRecovery();
   bool recoveryIntentChanged(bool clear);
+  bool recoveryPreferenceChanged(PlaybackIntent::ChangeKind kind);
+  void recoveryReplacementStopResult(bool admitted);
+  bool recoveryNativeAvailable() const;
+  bool recoveryTestMode() const;
+  void applySelectedStreams();
+  int applySelectedPause(bool paused);
+  void continuePreloadedHook(quint64 id);
+  void continuePreloadedHook(const QString& id);
   void recoveryUserReplacement();
   bool noteQueueIntent(bool paused);
   bool cancelRecoverySeekBeforeIntent();
@@ -382,6 +393,13 @@ private:
   void reselectStream(const QVariant &streamSelection, MediaType target);
 
   MpvController* m_mpv = nullptr;
+#ifdef PLAYER_RECOVERY_ACTOR_TEST
+  std::function<void(const QVariant&, const QVariant&)> ordinaryTracksDispatch_;
+  std::function<int(bool)> ordinaryPauseDispatch_;
+  std::function<void(quint64)> ordinaryHookDispatch_;
+  std::function<void(const QString&)> ordinaryLegacyHookDispatch_;
+  bool syntheticControllerBound_ = false;
+#endif
 #ifdef MPVQT_RECOVERY_RUNTIME
   PlayerComponentRecovery* m_recovery = nullptr;
 #endif

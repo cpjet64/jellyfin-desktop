@@ -70,18 +70,18 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
   m_replacementLoad = false;
   if (!replacement && !noteQueueIntent(!options.value("autoplay").toBool())) return;
   const auto revision = m_playbackIntent.snapshot().revision;
-  if (!m_mpv) {
+  if (!recoveryNativeAvailable()) {
     m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
     qWarning() << "PlayerComponent::queueMedia: mpv not initialized yet";
     return;
   }
 
-  InputComponent::Get().cancelAutoRepeat();
+  if (!recoveryTestMode()) InputComponent::Get().cancelAutoRepeat();
 
   m_mediaFrameRate = metadata["frameRate"].toFloat(); // returns 0 on failure
   m_serverMediaInfo = metadata["media"].toMap();
 
-  updateVideoConfiguration();
+  if (!recoveryTestMode()) updateVideoConfiguration();
 
   QUrl qurl = url;
   QString host = qurl.host();
@@ -131,7 +131,7 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
   emit onMetaData(jellyfinMetadata, jellyfinBaseUrl);
 
   // Request album art from the provider
-  if (m_albumArtProvider)
+  if (m_albumArtProvider && !recoveryTestMode())
     m_albumArtProvider->requestArtwork(jellyfinMetadata, jellyfinBaseUrl);
 }
 
@@ -140,15 +140,15 @@ void PlayerComponent::play()
   if (!intentControlThread()) return;
   if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.resume();
-  recoveryIntentChanged(false);
+  if (recoveryPreferenceChanged(PlaybackIntent::ChangeKind::Resume)) return;
   const auto revision = m_playbackIntent.snapshot().revision;
-  if (!m_mpv) {
+  if (!recoveryNativeAvailable()) {
     m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
     qWarning() << "PlayerComponent::play: mpv not initialized yet";
     return;
   }
   QStringList args = (QStringList() << "set" << "pause" << "no");
-  m_mpv->command( args);
+  if (recoveryTestMode()) applySelectedPause(false); else m_mpv->command( args);
   m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Queued);
 }
 
@@ -157,15 +157,15 @@ void PlayerComponent::pause()
   if (!intentControlThread()) return;
   if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.pause();
-  recoveryIntentChanged(false);
+  if (recoveryPreferenceChanged(PlaybackIntent::ChangeKind::Pause)) return;
   const auto revision = m_playbackIntent.snapshot().revision;
-  if (!m_mpv) {
+  if (!recoveryNativeAvailable()) {
     m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
     qWarning() << "PlayerComponent::pause: mpv not initialized yet";
     return;
   }
   QStringList args = (QStringList() << "set" << "pause" << "yes");
-  m_mpv->command( args);
+  if (recoveryTestMode()) applySelectedPause(true); else m_mpv->command( args);
   m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Queued);
 }
 
@@ -221,8 +221,7 @@ void PlayerComponent::setSubtitleStream(const QVariant &subtitleStream)
   if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
   m_currentSubtitleStream = subtitleStream;
-  recoveryIntentChanged(false);
-  reselectStream(m_currentSubtitleStream, MediaType::Subtitle);
+  if (!recoveryPreferenceChanged(PlaybackIntent::ChangeKind::Subtitle)) reselectStream(m_currentSubtitleStream, MediaType::Subtitle);
 }
 
 void PlayerComponent::setAudioStream(const QVariant &audioStream)
@@ -231,8 +230,7 @@ void PlayerComponent::setAudioStream(const QVariant &audioStream)
   if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
   m_currentAudioStream = audioStream;
-  recoveryIntentChanged(false);
-  reselectStream(m_currentAudioStream, MediaType::Audio);
+  if (!recoveryPreferenceChanged(PlaybackIntent::ChangeKind::Audio)) reselectStream(m_currentAudioStream, MediaType::Audio);
 }
 
 void PlayerComponent::handleMpvEvents()

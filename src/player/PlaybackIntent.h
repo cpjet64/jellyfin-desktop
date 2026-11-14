@@ -9,6 +9,7 @@ class PlaybackIntent
 public:
   static constexpr std::uint64_t MaxSafeInteger = 9007199254740991ULL;
   enum class Desired { Stopped, Playing, Paused, Exiting };
+  enum class ChangeKind { Revoke, Pause, Resume, Audio, Subtitle };
   enum class Reason { Initial, LegacyUnclassified, WebStopUnclassified, NativeStop,
                       RendererLost, UnattributedEvent, UnsupportedCommand, CounterExhausted, Exiting };
   enum class Dispatch { None, GuardRejected, Queued, NativeAccepted, NativeRejected, Unavailable };

@@ -15,7 +15,8 @@ bool OrdinaryLoadSelection::begin(std::uint64_t replyId, std::uint64_t revision,
 void OrdinaryLoadSelection::started(std::int64_t entry, std::uint64_t startSerial)
 {
   if (!replyId_) return;
-  if (entry <= 0 || entry_ || startSerial != beforeStart_ + 1 || beforeEntries_.contains(entry)) { revoke(); return; }
+  if (entry <= 0 || entry_ || startSerial != beforeStart_ + 1 || beforeEntries_.contains(entry) ||
+      (mappedEntry_ && mappedEntry_ != entry)) { revoke(); return; }
   entry_ = entry; startSerial_ = startSerial;
 }
 void OrdinaryLoadSelection::after(std::int64_t entry, std::uint64_t startSerial, bool uniqueCurrentAndUrlMatch)
@@ -24,11 +25,17 @@ void OrdinaryLoadSelection::after(std::int64_t entry, std::uint64_t startSerial,
   if (!entry_ || entry != entry_ || startSerial != startSerial_ || !uniqueCurrentAndUrlMatch || after_) { revoke(); return; }
   after_ = true;
 }
-void OrdinaryLoadSelection::reply(std::uint64_t replyId, bool successfulEntryless)
+void OrdinaryLoadSelection::reply(std::uint64_t replyId, bool successfulEntryless, std::int64_t mappedEntry)
 {
   if (!replyId_ || replyId != replyId_) return;
-  if (!successfulEntryless || success_) { revoke(); return; }
+  if (success_ || (!successfulEntryless && mappedEntry <= 0) || (entry_ && mappedEntry && entry_ != mappedEntry)) { revoke(); return; }
+  mappedEntry_ = mappedEntry;
   success_ = true;
+}
+bool OrdinaryLoadSelection::revise(std::uint64_t previous, std::uint64_t revision, const QVariant& audio, const QVariant& subtitle)
+{
+  if (!replyId_ || revision_ != previous || revision <= previous) return false;
+  revision_ = revision; audio_ = audio; subtitle_ = subtitle; return true;
 }
 void OrdinaryLoadSelection::ended(std::int64_t entry)
 {
@@ -49,6 +56,6 @@ bool OrdinaryLoadSelection::select(std::uint64_t revision, std::uint64_t binding
 }
 void OrdinaryLoadSelection::revoke()
 {
-  replyId_ = revision_ = binding_ = beforeStart_ = startSerial_ = 0; entry_ = 0;
+  replyId_ = revision_ = binding_ = beforeStart_ = startSerial_ = 0; entry_ = mappedEntry_ = 0;
   beforeEntries_.clear(); audio_ = {}; subtitle_ = {}; success_ = after_ = loaded_ = false;
 }
