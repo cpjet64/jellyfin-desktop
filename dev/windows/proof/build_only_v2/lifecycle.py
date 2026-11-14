@@ -2,7 +2,6 @@
 from contextlib import ExitStack
 import ntpath
 from time import monotonic, sleep
-from build_only.identity import RetainedHandlesError
 
 
 class SettlementError(RuntimeError):
@@ -86,6 +85,7 @@ def _identify(api, job, pins, baseline, end, clock, stack, evidence, handoff):
             identity = pin.verify_process(api, process, job)
             used.add(role)
         except Exception as exc:
+            from build_only.identity import RetainedHandlesError
             if isinstance(exc, RetainedHandlesError):
                 handoff.retain(exc)
             observation = getattr(exc, 'identity_observation', None)
