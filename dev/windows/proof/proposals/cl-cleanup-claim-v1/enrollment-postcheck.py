@@ -13,7 +13,8 @@ SOURCE = '80b842ae0d7ad4c3384b9eacfb9c492962febebae449c90a2b18d6b1e4f25915'
 def read_closed_receipt(api, w):
     raw_handle = api.k.CreateFileW(RECEIPT, w.GENERIC_READ, 0, None, w.OPEN_EXISTING,
                                    w.FILE_FLAG_OPEN_REPARSE_POINT, None)
-    with w.Handle(api, raw_handle) as handle:
+    handle = w.Handle(api, raw_handle)
+    try:
         info = w.FILE_INFO()
         api.check(api.k.GetFileInformationByHandle(handle.value, C.byref(info)))
         if info.attributes & w.FILE_ATTRIBUTE_REPARSE_POINT:
@@ -28,9 +29,29 @@ def read_closed_receipt(api, w):
             data.extend(buffer.raw[:count.value])
             if len(data) > 1048576:
                 raise ValueError('receipt exceeds bound')
+    finally:
+        try:
+            handle.close()
+        except Exception as error:
+            raise RuntimeError('exclusive receipt handle close failed') from error
     if api.opened != 1 or api.closed != 1 or api.close_failed:
         raise RuntimeError('receipt handle did not close')
     return bytes(data)
+
+
+def failure_details(error):
+    chain = []
+    seen = set()
+    while error is not None and id(error) not in seen and len(chain) < 8:
+        seen.add(id(error))
+        message = ''.join(c if 32 <= ord(c) < 127 else '?' for c in str(error))[:256]
+        entry = {'type': type(error).__name__[:80], 'message': message}
+        for field in ('hresult', 'winerror', 'errno'):
+            value = getattr(error, field, None)
+            entry[field] = value if type(value) is int else None
+        chain.append(entry)
+        error = error.__cause__ or (None if error.__suppress_context__ else error.__context__)
+    return {'schema': 'enrollment-postcheck-error-v1', 'result': 'NONPASS', 'causes': chain}
 
 
 def main():
@@ -65,5 +86,6 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except Exception:
+    except Exception as error:
+        print(json.dumps(failure_details(error), separators=(',', ':')), file=sys.stderr)
         raise SystemExit(1)
