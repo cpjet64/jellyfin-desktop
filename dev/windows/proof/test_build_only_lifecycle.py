@@ -119,6 +119,14 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual(run(api, root=root)["result"], "failed")
             self.assertTrue(api.emergency)
 
+    def test_root_observed_at_deadline_fails(self):
+        clock = Clock()
+        clock.now = 2.0
+        api = FakeAPI([(0, 1)])
+        result = settle(api, object(), Root(), Pin(), 2.0, clock=clock, pause=clock.pause)
+        self.assertEqual(result["result"], "failed")
+        self.assertTrue(api.emergency)
+
     def test_invalid_identity_or_membership_never_targeted(self):
         for failure in ("identity", "member", "open", "truncated"):
             api = FakeAPI([(1, 2), (1, 2), (0, 2)], (20,))
@@ -137,6 +145,13 @@ class LifecycleTests(unittest.TestCase):
             api = FakeAPI(states, (20,))
             self.assertEqual(run(api)["result"], "failed")
             self.assertTrue(api.emergency)
+
+    def test_transient_association_during_classification(self):
+        api = FakeAPI([(1, 2), (1, 2), (1, 3), (0, 3)], (20,))
+        result = run(api)
+        self.assertEqual(result["result"], "failed")
+        self.assertEqual(api.terminated, [])
+        self.assertTrue(api.emergency)
 
     def test_terminate_failure_and_wait_timeout(self):
         for failure in ("terminate", "wait"):
