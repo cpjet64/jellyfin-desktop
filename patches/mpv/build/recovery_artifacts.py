@@ -19,6 +19,16 @@ HEX = re.compile(r"[0-9a-f]{64}\Z")
 EXPORT = re.compile(r"^\s*\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(mpv_[A-Za-z0-9_]+)\b", re.M)
 IMPORT = re.compile(r"(?<![A-Za-z0-9_])(?:__imp_)?(mpv_[A-Za-z0-9_]+)\b")
 DEPENDENCY = re.compile(r"^\s+([^\s\\/]+\.dll)\s*$", re.I | re.M)
+WINDOWS_SYSTEM_DLLS = {
+    "advapi32.dll", "avrt.dll", "bcrypt.dll", "comdlg32.dll", "crypt32.dll", "d3d11.dll",
+    "d3d12.dll", "d3d9.dll", "d3dcompiler_47.dll", "dbghelp.dll", "dnsapi.dll", "dwmapi.dll",
+    "dxgi.dll", "gdi32.dll", "imm32.dll", "iphlpapi.dll", "kernel32.dll", "kernelbase.dll", "mf.dll", "mfplat.dll",
+    "mfreadwrite.dll", "msimg32.dll", "msvcrt.dll", "normaliz.dll", "ntdll.dll", "ole32.dll",
+    "oleaut32.dll", "opengl32.dll", "powrprof.dll", "propsys.dll", "psapi.dll", "secur32.dll",
+    "setupapi.dll", "shcore.dll", "shell32.dll", "shlwapi.dll", "ucrtbase.dll", "user32.dll",
+    "userenv.dll", "version.dll", "winhttp.dll", "wininet.dll", "winmm.dll", "wintrust.dll",
+    "ws2_32.dll", "wtsapi32.dll",
+}
 
 
 def hash_file(path):
@@ -117,10 +127,16 @@ def checked_paths(config):
         raise ValueError("variant headers missing")
     if not isinstance(config["dependency_closure"], list):
         raise ValueError("variant dependency closure missing")
+    if config["dependency_closure"]:
+        raise ValueError("static profile forbids non-system runtime DLL dependencies")
     all_paths = [config["dll"], config["msvc_import_library"]] + config["headers"] + config["dependency_closure"]
     if any(not isinstance(path, str) for path in all_paths) or len(all_paths) != len({path.casefold() for path in all_paths}):
         raise ValueError("duplicate variant artifact paths")
     return all_paths
+
+
+def is_windows_system_import(name):
+    return name.lower() in WINDOWS_SYSTEM_DLLS
 
 
 def variant_manifest(root, name, lock):
@@ -143,6 +159,8 @@ def variant_manifest(root, name, lock):
         raise ValueError(f"system import policy missing: {name}")
     if len(system) != len({value.casefold() for value in system}):
         raise ValueError(f"duplicate system import: {name}")
+    if any(not is_windows_system_import(value) for value in system):
+        raise ValueError(f"non-system DLL declared as system import: {name}")
     return {
         "cpu_baseline": config["gcc_arch"], "target_triple": config["target"],
         "crt": config["crt"], "configuration_sha256": config["configuration_sha256"],
@@ -166,6 +184,7 @@ def build_manifest(root, qt_root, lock, lock_sha):
         raise ValueError("producer source commit missing")
     return {"schema_version": 1, "input_lock_sha256": lock_sha,
             "provider_commit": lock["provider_commit"], "mpv_commit": lock["mpv_commit"],
+            "runtime_dependency_profile": lock["runtime_dependency_profile"],
             "bridge_patches": lock["bridge_patches"], "producer": producer,
             "qt_kit": qt_manifest(qt_root, lock),
             "variants": {name: variant_manifest(root, name, lock) for name in ("x86_64", "x86_64_v3")}}
@@ -205,6 +224,9 @@ def verify_dependencies(root, tool, config):
     if len(names) != len(set(names)):
         raise ValueError("ambiguous runtime dependency basenames")
     allowed = set(names) | {name.lower() for name in config["system_imports"]}
+    for name in config["system_imports"]:
+        if (paths[0].parent / name).exists():
+            raise ValueError(f"declared system DLL is shadowed beside mpv: {name}")
     for path in paths:
         if path.suffix.lower() != ".dll":
             raise ValueError(f"runtime dependency is not a DLL: {path.name}")
@@ -229,6 +251,10 @@ def verify_windows(root, tool, lock):
 
 def verify_packaged(package_root, manifest):
     check_root(package_root)
+    systems = {name.lower() for variant in manifest["variants"].values() for name in variant["system_imports"]}
+    for name in systems:
+        if (package_root / name).exists():
+            raise ValueError(f"declared system DLL is shadowed in package: {name}")
     for name, installed in (("x86_64_v3", "libmpv-2.dll"), ("x86_64", "libmpv-fallback.dll")):
         expected = manifest["variants"][name]["dll"]
         actual = artifact(package_root, installed)

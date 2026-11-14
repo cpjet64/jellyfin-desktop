@@ -21,6 +21,23 @@ PRIVATE_EXPORTS = {
     "mpv_render_context_render_recovery_v1", "mpv_render_context_render_recovery_v2",
     "mpv_recovery_seek_async_v1", "mpv_recovery_seek_cancel_v1",
 }
+QT_BRIDGE_PATHS = {
+    "patches/qt/base/QtRecoverySwap.cpp",
+    "patches/qt/base/qtbase-6.9.3-swap.patch",
+    "patches/qt/base/source-identity.txt",
+    "patches/qt/quick/QtRecoveryBatchUpload.cpp",
+    "patches/qt/quick/QtRecoveryClipState_p.h",
+    "patches/qt/quick/QtRecoveryDrawSet_p.h",
+    "patches/qt/quick/QtRecoveryPrimitive.cpp",
+    "patches/qt/quick/QtRecoveryPrimitive_p.h",
+    "patches/qt/quick/QtRecoveryQuick.cpp",
+    "patches/qt/quick/QtRecoveryQuick_p.h",
+    "patches/qt/quick/QtRecoverySubmissionAbi.h",
+    "patches/qt/quick/QtRecoveryUploadDebug.cpp",
+    "patches/qt/quick/qtdeclarative-6.9.3-batch-renderer.patch",
+    "patches/qt/quick/qtdeclarative-6.9.3-ticket-fbo.patch",
+    "patches/qt/runtime/QtRecoveryAbi.h",
+}
 MINIMUM_PUBLIC_EXPORTS = {
     "mpv_command_async", "mpv_command_string", "mpv_create", "mpv_error_string", "mpv_free",
     "mpv_get_property_osd_string", "mpv_hook_add", "mpv_hook_continue", "mpv_initialize",
@@ -113,21 +130,32 @@ def check_patches(lock):
             raise ValueError(f"bridge patch changed: {name}")
 
 
+def qt_text_identity(content):
+    canonical = content.replace(b"\r\n", b"\n")
+    if b"\r" in canonical:
+        raise ValueError("Qt source contains an unsupported lone carriage return")
+    sha256 = hashlib.sha256(canonical).hexdigest()
+    blob = hashlib.sha1(b"blob " + str(len(canonical)).encode() + b"\0" + canonical).hexdigest()
+    return sha256, blob
+
+
 def check_qt_inputs(lock):
     qt = lock.get("qt_kit", {})
     if (qt.get("version") != "6.9.3" or not HEX64.fullmatch(qt.get("configuration_sha256", "")) or
             not isinstance(qt.get("configuration_file"), str) or not qt["configuration_file"]):
         raise ValueError("Qt kit version or configuration identity missing")
     patches = qt.get("source_patches")
-    if not isinstance(patches, list) or len(patches) < 2:
-        raise ValueError("Qt base and Quick source patch identities missing")
+    if not isinstance(patches, list):
+        raise ValueError("Qt bridge source identities missing")
     names = set()
     for item in patches:
-        path, expected = item.get("path", ""), item.get("sha256", "")
+        if not isinstance(item, dict) or set(item) != {"path", "sha256", "git_blob"}:
+            raise ValueError("invalid Qt source identity fields")
+        path, expected, blob = item["path"], item["sha256"], item["git_blob"]
         parts = path.split("/")
         if (len(parts) < 3 or parts[:2] != ["patches", "qt"] or
                 any(part in ("", ".", "..") or "\\" in part or ":" in part for part in parts) or
-                path in names or not HEX64.fullmatch(expected)):
+                path in names or not HEX64.fullmatch(expected) or not HEX40.fullmatch(blob)):
             raise ValueError("invalid Qt source patch identity")
         names.add(path)
         current = ROOT
@@ -136,8 +164,13 @@ def check_qt_inputs(lock):
             info = current.lstat()
             if current.is_symlink() or getattr(info, "st_file_attributes", 0) & 0x400:
                 raise ValueError("reparse point in Qt source patch path")
-        if digest(current) != expected:
-            raise ValueError(f"Qt source patch changed: {path}")
+        actual_sha, actual_blob = qt_text_identity(current.read_bytes())
+        if actual_sha != expected:
+            raise ValueError(f"Qt canonical source SHA-256 changed: {path}")
+        if actual_blob != blob:
+            raise ValueError(f"Qt canonical Git blob changed: {path}")
+    if names != QT_BRIDGE_PATHS:
+        raise ValueError("Qt bridge source path set differs from the selected Base/Quick series")
 
 
 def check_configuration(lock):
@@ -155,6 +188,8 @@ def check_configuration(lock):
         raise ValueError("Rust channel manifest mismatch")
     if lock.get("rust_components") != RUST_COMPONENTS:
         raise ValueError("Rust component identities differ from approved selection")
+    if lock.get("runtime_dependency_profile") != "windows-static-nonsystem":
+        raise ValueError("static non-system runtime dependency profile required")
     variants = lock.get("variants", {})
     for key, cpu in (("x86_64", "x86-64"), ("x86_64_v3", "x86-64-v3")):
         variant = variants.get(key, {})

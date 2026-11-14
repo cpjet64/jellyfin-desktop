@@ -4,12 +4,13 @@
   "title": "Proposed custom mpv artifact manifest, not a build lock",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "input_lock_sha256", "provider_commit", "mpv_commit", "bridge_patches", "producer", "qt_kit", "variants"],
+  "required": ["schema_version", "input_lock_sha256", "provider_commit", "mpv_commit", "runtime_dependency_profile", "bridge_patches", "producer", "qt_kit", "variants"],
   "properties": {
     "schema_version": {"const": 1},
     "input_lock_sha256": {"$ref": "#/$defs/sha256"},
     "provider_commit": {"const": "1f8d2e76255abc48f0456d9be99b4cab9c6566e6"},
     "mpv_commit": {"const": "01e2533f3143b8940857ca419b0b367f583e05ca"},
+    "runtime_dependency_profile": {"const": "windows-static-nonsystem"},
     "bridge_patches": {
       "type": "array", "minItems": 3, "uniqueItems": true,
       "items": {
@@ -35,10 +36,20 @@
         "configuration_sha256": {"$ref": "#/$defs/sha256"},
         "configuration_file": {"$ref": "#/$defs/artifact"},
         "source_patches": {
-          "type": "array", "minItems": 2,
+          "type": "array", "minItems": 15, "maxItems": 15, "uniqueItems": true,
           "items": {
-            "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
-            "properties": {"path": {"type": "string", "pattern": "^patches/qt/"}, "sha256": {"$ref": "#/$defs/sha256"}}
+            "type": "object", "additionalProperties": false, "required": ["path", "sha256", "git_blob"],
+            "properties": {
+              "path": {"enum": [
+                "patches/qt/base/QtRecoverySwap.cpp", "patches/qt/base/qtbase-6.9.3-swap.patch", "patches/qt/base/source-identity.txt",
+                "patches/qt/quick/QtRecoveryBatchUpload.cpp", "patches/qt/quick/QtRecoveryClipState_p.h", "patches/qt/quick/QtRecoveryDrawSet_p.h",
+                "patches/qt/quick/QtRecoveryPrimitive.cpp", "patches/qt/quick/QtRecoveryPrimitive_p.h", "patches/qt/quick/QtRecoveryQuick.cpp",
+                "patches/qt/quick/QtRecoveryQuick_p.h", "patches/qt/quick/QtRecoverySubmissionAbi.h", "patches/qt/quick/QtRecoveryUploadDebug.cpp",
+                "patches/qt/quick/qtdeclarative-6.9.3-batch-renderer.patch", "patches/qt/quick/qtdeclarative-6.9.3-ticket-fbo.patch", "patches/qt/runtime/QtRecoveryAbi.h"
+              ]},
+              "sha256": {"$ref": "#/$defs/sha256"},
+              "git_blob": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+            }
           }
         },
         "artifacts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifact"}}
@@ -73,7 +84,7 @@
         "dll": {"$ref": "#/$defs/artifact"},
         "msvc_import_library": {"$ref": "#/$defs/artifact"},
         "headers": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifact"}},
-        "dependency_closure": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
+        "dependency_closure": {"type": "array", "maxItems": 0},
         "system_imports": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
         "public_exports": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "contains": {"const": "mpv_render_context_render"}},
         "private_exports": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "contains": {"const": "mpv_render_context_render_recovery_v1"}},

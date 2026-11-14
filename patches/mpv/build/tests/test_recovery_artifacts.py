@@ -3,6 +3,7 @@
 import sys
 import tempfile
 import unittest
+import hashlib
 from unittest import mock
 from pathlib import Path
 
@@ -45,6 +46,59 @@ class RecoveryArtifactContracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate"):
             artifacts.checked_paths(config)
 
+    def test_static_profile_rejects_non_system_runtime_closure(self):
+        config = {"dll": "mpv/libmpv-2.dll", "msvc_import_library": "mpv/libmpv-2.dll.lib",
+                  "headers": ["mpv/include/mpv/client.h"], "dependency_closure": ["mpv/libgcc.dll"]}
+        with self.assertRaisesRegex(ValueError, "static profile"):
+            artifacts.checked_paths(config)
+
+    def test_unreviewed_library_cannot_be_called_system(self):
+        self.assertFalse(artifacts.is_windows_system_import("libgcc_s_seh-1.dll"))
+        self.assertFalse(artifacts.is_windows_system_import("api-ms-win-unreviewed.dll"))
+        self.assertTrue(artifacts.is_windows_system_import("KERNEL32.DLL"))
+
+    def test_qt_text_identity_accepts_crlf_but_not_changed_tokens(self):
+        lf = b"int frame = 1;\nint next = frame;\n"
+        crlf = lf.replace(b"\n", b"\r\n")
+        expected = (hashlib.sha256(lf).hexdigest(),
+                    hashlib.sha1(b"blob " + str(len(lf)).encode() + b"\0" + lf).hexdigest())
+        self.assertEqual(preflight.qt_text_identity(lf), expected)
+        self.assertEqual(preflight.qt_text_identity(crlf), expected)
+        self.assertNotEqual(preflight.qt_text_identity(lf.replace(b"1", b"2")), expected)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            relative = "patches/qt/base/QtRecoverySwap.cpp"
+            path = root / relative
+            path.parent.mkdir(parents=True)
+            lock = {"qt_kit": {"version": "6.9.3", "configuration_sha256": "a" * 64,
+                               "configuration_file": "build-config.json", "source_patches": [
+                                   {"path": relative, "sha256": expected[0], "git_blob": expected[1]}]}}
+            with mock.patch.object(preflight, "ROOT", root), mock.patch.object(preflight, "QT_BRIDGE_PATHS", {relative}):
+                path.write_bytes(lf)
+                preflight.check_qt_inputs(lock)
+                path.write_bytes(crlf)
+                preflight.check_qt_inputs(lock)
+                path.write_bytes(lf.replace(b"1", b"2"))
+                with self.assertRaisesRegex(ValueError, "SHA-256 changed"):
+                    preflight.check_qt_inputs(lock)
+
+    def test_two_qt_sources_cannot_replace_complete_bridge_series(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            items = []
+            for relative in ("patches/qt/base/QtRecoverySwap.cpp", "patches/qt/quick/QtRecoveryQuick.cpp"):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                content = b"source\n"
+                path.write_bytes(content)
+                sha, blob = preflight.qt_text_identity(content)
+                items.append({"path": relative, "sha256": sha, "git_blob": blob})
+            lock = {"qt_kit": {"version": "6.9.3", "configuration_sha256": "a" * 64,
+                               "configuration_file": "build-config.json", "source_patches": items}}
+            with mock.patch.object(preflight, "ROOT", root):
+                with self.assertRaisesRegex(ValueError, "path set"):
+                    preflight.check_qt_inputs(lock)
+
     def test_required_variant_cannot_reuse_other_variant_paths(self):
         lock = {"variants": {"x86_64": {"dll": "mpv/libmpv-2.dll",
                                            "msvc_import_library": "mpv/libmpv-2.dll.lib",
@@ -82,8 +136,8 @@ class RecoveryArtifactContracts(unittest.TestCase):
             (root / "libmpv-fallback.dll").write_bytes(b"stale")
             primary = artifacts.artifact(root, "libmpv-2.dll")
             expected = {"sha256": "0" * 64, "size": 5}
-            manifest = {"variants": {"x86_64_v3": {"dll": primary},
-                                     "x86_64": {"dll": expected}}}
+            manifest = {"variants": {"x86_64_v3": {"dll": primary, "system_imports": []},
+                                     "x86_64": {"dll": expected, "system_imports": []}}}
             with self.assertRaisesRegex(ValueError, "fallback"):
                 artifacts.verify_packaged(root, manifest)
 
