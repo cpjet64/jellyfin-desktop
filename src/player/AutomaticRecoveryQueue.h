@@ -19,6 +19,7 @@ public:
   bool snapshot(Key current, Snapshot& output) const;
   bool reviseActive(Key previous, Key current, bool paused);
   bool updateTracks(Key current, const QVariant& audio, const QVariant& subtitle);
+  bool replaceActiveEntry(Key current, std::int64_t previous, std::int64_t entry, std::int64_t positionMs);
   bool poll(std::int64_t nowMs);
   bool takeExpired(Expired& output);
   Key activeKey() const { return active_.key(); }

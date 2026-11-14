@@ -65,6 +65,12 @@ void AutomaticRecoveryRuntime::userIntentChanged()
   revoked_ = queue_.activeKey();
   advanceEpoch();
 }
+void AutomaticRecoveryRuntime::internalEvent(const mpv_event* event)
+{
+  if (event && (event->event_id == MPV_EVENT_START_FILE || event->event_id == MPV_EVENT_END_FILE ||
+      event->event_id == MPV_EVENT_SEEK || event->event_id == MPV_EVENT_PLAYBACK_RESTART ||
+      event->event_id == MPV_EVENT_QUEUE_OVERFLOW || event->event_id == MPV_EVENT_SHUTDOWN)) advanceEpoch();
+}
 void AutomaticRecoveryRuntime::advanceEpoch()
 {
   if (eventEpoch_ == std::numeric_limits<std::uint64_t>::max()) eventEpoch_ = 0;
@@ -89,6 +95,8 @@ bool AutomaticRecoveryRuntime::reviseActive(Key previous, Key current, bool paus
 }
 bool AutomaticRecoveryRuntime::updateTracks(Key current, const QVariant& audio, const QVariant& subtitle)
 { return queue_.updateTracks(current, audio, subtitle); }
+bool AutomaticRecoveryRuntime::replaceActiveEntry(Key current, std::int64_t previous, std::int64_t entry, std::int64_t positionMs)
+{ return queue_.replaceActiveEntry(current, previous, entry, positionMs); }
 std::uint64_t AutomaticRecoveryRuntime::reserveSequence()
 {
   if (sequence_ >= AutomaticRecoveryLoad::MaxSequence) return 0;

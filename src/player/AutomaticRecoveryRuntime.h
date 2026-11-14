@@ -17,6 +17,7 @@ public:
   void observe(const mpv_event* event, Key current, std::int64_t nowMs);
   void userIntentChanged();
   std::uint64_t eventEpoch() const { return eventEpoch_; }
+  void internalEvent(const mpv_event* event);
   Key activeKey() const { return queue_.activeKey(); }
   std::int64_t activeEntry() const { return queue_.activeEntry(); }
   // The caller must supply only a completed, epoch-bracketed native observation.
@@ -24,6 +25,7 @@ public:
   bool snapshot(Key current, AutomaticRecoverySession::Snapshot& output) const;
   bool reviseActive(Key previous, Key current, bool paused);
   bool updateTracks(Key current, const QVariant& audio, const QVariant& subtitle);
+  bool replaceActiveEntry(Key current, std::int64_t previous, std::int64_t entry, std::int64_t positionMs);
   std::uint64_t reserveSequence();
   bool takeTimeout(Key current, std::int64_t nowMs, std::uint64_t& sequence);
   void invalidate();

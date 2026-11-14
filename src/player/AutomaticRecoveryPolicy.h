@@ -21,6 +21,7 @@ public:
   bool frameObserved(std::uint64_t generation, std::uint64_t loadAttempt, std::uint64_t frameSerial, std::int64_t nowMs);
   bool mayUnpause(const Sample& sample) const;
   void fail();
+  void suspendBaseline() { baseline_ = false; }
   Phase phase() const { return phase_; }
   std::int64_t deadlineMs() const { return deadline_; }
   bool attempted() const { return attempted_; }

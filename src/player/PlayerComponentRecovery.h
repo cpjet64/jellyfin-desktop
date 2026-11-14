@@ -27,6 +27,8 @@ public:
              const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle);
   void userChanged(bool clear);
   bool ownsEnd(const mpv_event* event) const;
+  bool restoring() const { return restoring_; }
+  bool recoveryPreloadAllowed() const;
 private:
   void tick();
   void event(const mpv_event* event, std::int64_t now);
@@ -38,6 +40,11 @@ private:
   void submitted(std::uint64_t generation, std::uint64_t serial);
   void swapped(std::uint64_t generation, std::uint64_t serial);
   void maybeResume(std::int64_t now);
+  bool validRestore(std::int64_t now) const;
+  void failRestore();
+  void restoreEvent(const mpv_event* event, std::int64_t now);
+  void dispatchReload(std::int64_t now);
+  void recoveryTick(std::int64_t now);
   void recordSourceFrame(std::uint64_t generation, const RecoveryFrameObservationV1& frame);
   static std::int64_t nowMs();
   PlayerComponent* player_;
@@ -52,11 +59,16 @@ private:
   AutomaticRecoveryFrameGate frameGate_;
   std::uint64_t session_ = 0, attempt_ = 0, request_ = 0;
   std::uint64_t rendererGeneration_ = 0, frameEpoch_ = 0, previousSource_ = 0, unpauseId_ = 0;
+  std::uint64_t pauseId_ = 0;
+  std::uint64_t verifiedSource_ = 0;
   std::int64_t recoveryEntry_ = 0, observationStarted_ = 0;
   std::uint64_t lastSource_ = 0;
   std::uint64_t sourceGeneration_ = 0, sourceEntry_ = 0, sourceFirst_ = 0;
+  std::uint64_t sourceEpoch_ = 0;
   AutomaticRecoveryObservation::Result observationResult_;
   bool recoveryLoaded_ = false, frameGateActive_ = false, positionReady_ = false, observationRecovery_ = false;
   bool bound_ = false, observationPending_ = false, awaitingUsability_ = false;
+  bool restoring_ = false, loadDispatched_ = false, resumePending_ = false, completed_ = false;
+  bool recoveryRestarted_ = false;
 };
 #endif

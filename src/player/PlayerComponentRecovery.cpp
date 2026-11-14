@@ -56,7 +56,7 @@ void PlayerComponentRecovery::shutdown()
 bool PlayerComponentRecovery::queue(const QStringList& command, const QString& url, const QVariantMap& options,
                                     const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle)
 {
-  if (!bound_ || !item_ || !item_->recoveryFrameObservationAvailable() || !core_ ||
+  if (!bound_ || !item_ || !core_ ||
       session_ == std::numeric_limits<std::uint64_t>::max()) return false;
   auto lease = core_->acquireNative();
   if (!lease.get()) return false;
@@ -72,6 +72,9 @@ void PlayerComponentRecovery::userChanged(bool clear)
   runtime_.userIntentChanged(); observation_.invalidate(); observationPending_ = awaitingUsability_ = false;
   frameGate_.invalidate(); recoveryLoad_.invalidate(); policy_.fail();
   frameGateActive_ = positionReady_ = recoveryLoaded_ = false;
+  restoring_ = loadDispatched_ = resumePending_ = completed_ = false;
+  recoveryRestarted_ = false; verifiedSource_ = 0;
+  pauseId_ = unpauseId_ = 0;
   if (clear) { runtime_.invalidate(); return; }
   const auto intent = player_->m_playbackIntent.snapshot();
   if (intent.desired == PlaybackIntent::Desired::Stopped || intent.desired == PlaybackIntent::Desired::Exiting) return;
@@ -100,7 +103,7 @@ bool PlayerComponentRecovery::ownsEnd(const mpv_event* event) const
 {
   if (!event || event->event_id != MPV_EVENT_END_FILE || !event->data || !sameIntent()) return false;
   const auto* end = static_cast<const mpv_event_end_file*>(event->data);
-  return recoveryLoad_.state() == AutomaticRecoveryLoad::State::Pending &&
+  return restoring_ &&
       end->playlist_entry_id == saved_.entry && end->reason == MPV_END_FILE_REASON_STOP;
 }
 void PlayerComponentRecovery::beginObservation(AutomaticRecoverySession::Key key, std::int64_t entry, std::int64_t now)

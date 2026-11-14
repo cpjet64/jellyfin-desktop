@@ -41,6 +41,12 @@ bool AutomaticRecoverySession::tracks(Key current, const QVariant& audio, const 
   if (!same(candidate_.key, current) || !accepted_ || !loaded_) return false;
   candidate_.audio = audio; candidate_.subtitle = subtitle; return true;
 }
+bool AutomaticRecoverySession::replaceEntry(Key current, std::int64_t previous, std::int64_t entry, std::int64_t positionMs)
+{
+  if (!same(candidate_.key, current) || !accepted_ || !loaded_ || candidate_.entry != previous ||
+      entry <= 0 || entry == previous || positionMs < 0) return false;
+  candidate_.entry = entry; candidate_.positionMs = positionMs; return true;
+}
 void AutomaticRecoverySession::invalidate()
 {
   candidate_ = Snapshot{}; accepted_ = false; loaded_ = false;

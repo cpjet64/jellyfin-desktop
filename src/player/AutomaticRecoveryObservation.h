@@ -15,6 +15,7 @@ public:
                const Dispatch& dispatch);
   bool take(Key current, std::uint64_t eventEpoch, std::int64_t nowMs, Result& result);
   bool ready() const { return phase_ == Phase::Ready; }
+  bool failed() const { return phase_ == Phase::Failed; }
   void invalidate();
 private:
   enum class Phase { Idle, Before, Payload, After, Ready, Failed };
