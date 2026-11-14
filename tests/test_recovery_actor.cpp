@@ -93,6 +93,10 @@ private slots:
   void mismatchedMappedEntry();
   void cancelledPendingLoad_data();
   void cancelledPendingLoad();
+  void boundedPreparationRetries_data();
+  void boundedPreparationRetries();
+  void preparationDeadline();
+  void malformedPreparationFails();
 };
 
 void TestPlayerRecoveryActor::pendingPreferences_data()
@@ -122,7 +126,7 @@ void TestPlayerRecoveryActor::pendingPreferences()
   Fixture f;
   f.replace();
   QVERIFY(!f.queries.empty());
-  if (submitted) { f.beforePlaylist(); QVERIFY(!f.commands.empty()); }
+  if (submitted) { f.beforePlaylist(); QCOMPARE(f.commands.size(), std::size_t{1}); }
   f.player.pause();
   if (!paused) f.player.play();
   f.player.setAudioStream(11);
@@ -133,7 +137,7 @@ void TestPlayerRecoveryActor::pendingPreferences()
   QCOMPARE(f.player.m_playbackIntent.snapshot().revision, intent.revision);
   QCOMPARE(f.player.m_playbackIntent.snapshot().desired,
            paused ? PlaybackIntent::Desired::Paused : PlaybackIntent::Desired::Playing);
-  if (!submitted) { f.beforePlaylist(); QVERIFY(!f.commands.empty()); }
+  if (!submitted) { f.beforePlaylist(); QCOMPARE(f.commands.size(), std::size_t{1}); }
   if (!submitted) QVERIFY(f.commands.back().second.back().contains(paused ? QStringLiteral("pause=yes") : QStringLiteral("pause=no")));
   f.finishNew(mapped ? INT64_C(4294967317) : 20, mapped, startFirst);
   QCOMPARE(f.player.m_playbackIntent.snapshot().revision, intent.revision);
@@ -184,6 +188,7 @@ void TestPlayerRecoveryActor::staleClassification()
 void TestPlayerRecoveryActor::simulatedBindingRevocation()
 {
   Fixture f;
+  QSignalSpy failures(&f.player, &PlayerComponent::loadPreparationFailed);
   f.replace();
   f.beforePlaylist();
   QVERIFY(!f.commands.empty());
@@ -202,30 +207,41 @@ void TestPlayerRecoveryActor::simulatedBindingRevocation()
   QVERIFY(f.player.m_playbackIntent.snapshot().revision > before.revision);
   QCOMPARE(f.player.m_playbackIntent.snapshot().reason, PlaybackIntent::Reason::UnattributedEvent);
   QVERIFY(f.properties.empty());
+  QCOMPARE(failures.size(), 0);
   QVERIFY(!f.actor->runtime_.activeKey().session);
 }
 
 void TestPlayerRecoveryActor::cancelledPendingLoad_data()
 {
-  QTest::addColumn<bool>("seek");
-  QTest::newRow("seek") << true;
-  QTest::newRow("clear-queue") << false;
+  QTest::addColumn<int>("operation");
+  QTest::newRow("seek") << 0;
+  QTest::newRow("clear-queue") << 1;
+  QTest::newRow("stop") << 2;
+  QTest::newRow("new-item") << 3;
+  QTest::newRow("start-baseline-changed") << 4;
+  QTest::newRow("event-overflow") << 5;
 }
 
 void TestPlayerRecoveryActor::cancelledPendingLoad()
 {
-  QFETCH(bool, seek);
+  QFETCH(int, operation);
   Fixture f;
+  QSignalSpy failures(&f.player, &PlayerComponent::loadPreparationFailed);
   f.replace();
   QVERIFY(!f.queries.empty());
   const auto oldQuery = f.queries.back();
-  if (seek) f.player.seekTo(12000); else f.player.clearQueue();
+  if (operation == 0) f.player.seekTo(12000);
+  else if (operation == 1) f.player.clearQueue();
+  else if (operation == 2) f.player.stop();
+  else if (operation == 3) f.player.load(QStringLiteral("https://example.invalid/successor"), {{"autoplay", true}}, {}, 31, 32);
+  else { if (operation == 4) f.events.start(6); else f.events.overflow(); f.wake(); }
   const auto intent = f.player.m_playbackIntent.snapshot();
   QVERIFY(f.commands.empty());
   f.events.playlistReply(oldQuery, {{5, true, "https://example.invalid/old"}});
   f.wake();
   QVERIFY(f.commands.empty());
   QCOMPARE(f.player.m_playbackIntent.snapshot().revision, intent.revision);
+  QCOMPARE(failures.size(), 0);
   QVERIFY(!f.actor->runtime_.activeKey().session);
 }
 
@@ -236,7 +252,8 @@ void TestPlayerRecoveryActor::postStopSnapshotExcludesOldEntry()
   QVERIFY(!f.queries.empty());
   f.events.playlistReply(f.queries.back(), {});
   f.wake();
-  QVERIFY(!f.commands.empty());
+  QCOMPARE(f.commands.size(), std::size_t{1});
+  QCOMPARE(f.queries.size(), std::size_t{1});
   f.player.pause();
   f.player.setAudioStream(11);
   f.player.setSubtitleStream(12);
@@ -291,18 +308,37 @@ void TestPlayerRecoveryActor::controlsAfterUnqualifiedLoad_data()
 
 void TestPlayerRecoveryActor::controlsAfterUnqualifiedLoad()
 {
-  // Source-review proposal: these cases require ordinary load admission when
-  // playlist preflight fails. The current actor candidate instead rejects the
-  // load; that unresolved behavior choice remains an acceptance blocker.
   QFETCH(int, failure);
   Fixture f;
+  QSignalSpy failures(&f.player, &PlayerComponent::loadPreparationFailed);
   if (failure == 0) f.commandResult = MPV_ERROR_COMMAND;
   if (failure == 3) f.getResult = MPV_ERROR_PROPERTY_UNAVAILABLE;
   f.replace();
   if (failure == 0) f.beforePlaylist();
-  if (failure == 1) { f.events.playlistError(f.queries.back()); f.wake(); }
+  if (failure == 1) {
+    for (int i = 0; i != 3; ++i) {
+      f.events.playlistError(f.queries.back()); f.wake();
+      if (i != 2) { f.now += 500; f.actor->tick(); }
+    }
+  }
   if (failure == 2) { f.now += 1501; f.actor->tick(); }
-  QVERIFY(!f.commands.empty());
+  if (failure == 3) { f.now += 500; f.actor->tick(); f.now += 500; f.actor->tick(); }
+  if (failure == 0) { f.now += 2000; f.actor->tick(); QCOMPARE(f.queries.size(), std::size_t{1}); }
+  if (failure == 1 || failure == 3) {
+    QCOMPARE(f.queries.size(), std::size_t{3});
+    QVERIFY(f.queries[0] != f.queries[1] && f.queries[1] != f.queries[2] && f.queries[0] != f.queries[2]);
+  }
+  QCOMPARE(f.commands.size(), failure == 0 ? std::size_t{1} : std::size_t{0});
+  QCOMPARE(failures.size(), failure == 0 ? 0 : 1);
+  if (failure == 0) QCOMPARE(f.player.m_playbackIntent.snapshot().dispatch, PlaybackIntent::Dispatch::NativeRejected);
+  if (failure != 0) {
+    const auto result = f.player.m_playbackIntent.snapshot();
+    QCOMPARE(result.dispatch, failure == 2 ? PlaybackIntent::Dispatch::PreparationTimeout :
+                                            PlaybackIntent::Dispatch::PreparationUnavailable);
+    QCOMPARE(failures[0][0].toULongLong(), result.request);
+    QCOMPARE(failures[0][1].toString(), failure == 2 ? QStringLiteral("preparation-timeout") :
+                                                      QStringLiteral("preparation-unavailable"));
+  }
   f.playerCommands.clear();
   f.properties.clear();
   f.player.pause();
@@ -317,26 +353,92 @@ void TestPlayerRecoveryActor::controlsAfterUnqualifiedLoad()
   QVERIFY(f.property(QStringLiteral("aid"), 21));
   QVERIFY(f.property(QStringLiteral("sid"), 22));
   QVERIFY(!f.actor->runtime_.activeKey().session);
-  if (failure == 0) return;
-  f.getResult = 0;
-  const auto queryCount = f.queries.size();
-  f.properties.clear();
+  const auto count = f.commands.size();
   f.events.end(5, MPV_END_FILE_REASON_STOP);
-  f.events.commandReplyEntry(f.commands.back().first, 20);
-  f.events.start(20);
   f.wake();
-  QVERIFY(f.queries.size() > queryCount);
-  f.afterPlaylist();
-#if MPV_CLIENT_API_VERSION >= MPV_MAKE_VERSION(1, 100)
-  f.events.preloadHook(std::uint64_t{17});
-#else
-  f.events.preloadHook(std::string("17"));
-#endif
-  f.events.fileLoaded();
-  f.wake();
-  QVERIFY(f.property(QStringLiteral("aid"), 21));
-  QVERIFY(f.property(QStringLiteral("sid"), 22));
+  QCOMPARE(f.commands.size(), count);
+  QVERIFY(!f.actor->replacementTransition_);
+  if (failure == 1 || failure == 3) {
+    f.events.playlistReply(f.queries.back(), {}); f.wake();
+    QCOMPARE(f.commands.size(), count);
+    QCOMPARE(failures.size(), 1);
+  }
+}
+
+void TestPlayerRecoveryActor::boundedPreparationRetries_data()
+{
+  QTest::addColumn<bool>("dispatchFailure");
+  QTest::addColumn<bool>("mapped");
+  QTest::newRow("dispatch-error-map") << true << true;
+  QTest::newRow("dispatch-error-none") << true << false;
+  QTest::newRow("reply-error-map") << false << true;
+  QTest::newRow("reply-error-none") << false << false;
+}
+
+void TestPlayerRecoveryActor::boundedPreparationRetries()
+{
+  QFETCH(bool, dispatchFailure);
+  QFETCH(bool, mapped);
+  Fixture f;
+  if (dispatchFailure) f.getResult = MPV_ERROR_PROPERTY_UNAVAILABLE;
+  f.replace();
+  QCOMPARE(f.queries.size(), std::size_t{1});
+  const auto obsolete = f.queries.front();
+  const auto deadline = f.actor->ordinaryLoad_.deadlineMs;
+  if (!dispatchFailure) { f.events.playlistError(obsolete); f.wake(); }
+  f.getResult = 0;
+  f.player.pause(); f.player.setAudioStream(11); f.player.setSubtitleStream(12);
+  QCOMPARE(f.actor->ordinaryLoad_.deadlineMs, deadline);
+  f.now += 499; f.actor->tick();
+  QCOMPARE(f.queries.size(), std::size_t{1});
+  QVERIFY(f.commands.empty());
+  ++f.now; f.actor->tick();
+  QCOMPARE(f.queries.size(), std::size_t{2});
+  QVERIFY(f.queries.back() != obsolete);
+  f.events.playlistReply(obsolete, {}); f.wake();
+  QVERIFY(f.commands.empty());
+  f.events.playlistReply(f.queries.back(), {}); f.wake();
+  QCOMPARE(f.commands.size(), std::size_t{1});
+  QVERIFY(f.commands.back().second.back().contains(QStringLiteral("pause=yes")));
+  f.events.end(5, MPV_END_FILE_REASON_STOP); f.wake();
+  f.finishNew(mapped ? INT64_C(4294967317) : 20, mapped);
+  QVERIFY(f.property(QStringLiteral("aid"), 11));
+  QVERIFY(f.property(QStringLiteral("sid"), 12));
   QVERIFY(f.property(QStringLiteral("pause"), true));
+}
+
+void TestPlayerRecoveryActor::preparationDeadline()
+{
+  for (int atDeadline = 0; atDeadline != 2; ++atDeadline) {
+    Fixture f;
+    QSignalSpy failures(&f.player, &PlayerComponent::loadPreparationFailed);
+    f.replace();
+    QCOMPARE(f.queries.size(), std::size_t{1});
+    const auto query = f.queries.front();
+    f.now += 1499; f.actor->tick();
+    QCOMPARE(f.queries.size(), std::size_t{1});
+    if (atDeadline) { ++f.now; f.events.playlistReply(query, {}); f.wake(); }
+    else { ++f.now; f.actor->tick(); f.events.playlistReply(query, {}); f.wake(); }
+    QCOMPARE(f.queries.size(), std::size_t{1});
+    QVERIFY(f.commands.empty());
+    QCOMPARE(failures.size(), 1);
+    QCOMPARE(failures[0][1].toString(), QStringLiteral("preparation-timeout"));
+    QVERIFY(!f.actor->runtime_.activeKey().session);
+  }
+}
+
+void TestPlayerRecoveryActor::malformedPreparationFails()
+{
+  Fixture f;
+  QSignalSpy failures(&f.player, &PlayerComponent::loadPreparationFailed);
+  f.replace();
+  f.events.malformedPlaylist(f.queries.back()); f.wake();
+  QCOMPARE(f.queries.size(), std::size_t{1});
+  QVERIFY(f.commands.empty());
+  QCOMPARE(failures.size(), 1);
+  QCOMPARE(failures[0][1].toString(), QStringLiteral("preparation-unavailable"));
+  f.now += 1000; f.actor->tick();
+  QCOMPARE(f.queries.size(), std::size_t{1});
 }
 
 QTEST_GUILESS_MAIN(TestPlayerRecoveryActor)

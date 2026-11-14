@@ -67,6 +67,13 @@ public:
     pending_.push_back(std::move(event));
   }
 
+  void overflow()
+  {
+    auto event = std::make_unique<Event>();
+    event->value.event_id = MPV_EVENT_QUEUE_OVERFLOW;
+    pending_.push_back(std::move(event));
+  }
+
   void preloadHook(const std::string& token)
   {
     auto event = std::make_unique<Event>();
@@ -135,6 +142,19 @@ public:
     event->value.event_id = MPV_EVENT_GET_PROPERTY_REPLY;
     event->value.reply_userdata = userdata;
     event->value.error = MPV_ERROR_PROPERTY_UNAVAILABLE;
+    pending_.push_back(std::move(event));
+  }
+
+  void malformedPlaylist(std::uint64_t userdata)
+  {
+    auto event = std::make_unique<Event>();
+    event->property.name = event->propertyName;
+    event->property.format = MPV_FORMAT_NODE;
+    event->property.data = &event->playlist;
+    event->playlist.format = MPV_FORMAT_NONE;
+    event->value.event_id = MPV_EVENT_GET_PROPERTY_REPLY;
+    event->value.reply_userdata = userdata;
+    event->value.data = &event->property;
     pending_.push_back(std::move(event));
   }
 
