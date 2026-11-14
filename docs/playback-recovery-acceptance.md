@@ -9,8 +9,50 @@ state. Stop, closing playback, a new item, and changed track selections must not
 be undone by delayed recovery work. Windows changes must retain native Linux
 and macOS regression coverage.
 
-This outcome is not yet delivered. Passing web-renderer containment tests does
-not establish recovery from loss of the native OpenGL context or a GPU reset.
+The production automatic path is under development and is not accepted until
+the installed-artifact evidence below passes. Passing web-renderer containment
+tests does not establish recovery from loss of the native OpenGL context or a
+GPU reset. Preserve the web-renderer guard and report unsupported renderer
+capabilities as blocked; never infer a safe retirement from a missing context.
+
+## Automatic recovery acceptance plan
+
+Evaluate the current user session every 500 ms. A stalled eligible, outstanding
+video operation needs five seconds without frame progress while the playback
+clock advances; an attributable operation
+timeout or renderer fault may trigger directly. Pause, loading, seeking,
+buffering, an unexposed window, audio-only media, EOF, and reset suppress the
+stall timer and reset its baseline. One attempt is allowed per user session,
+including its recovery load, with one overall 15-second deadline. A failure is
+sticky; a second fault must not start a loop. Stop, exit, new item, newer seek
+or track selection, and stale generation or replies cannot revive old intent.
+Restore paused first; only a fresh replacement-generation frame can permit an
+authorized return to playing. A failed retirement or restoration cannot be
+acknowledged as successful. Preserve authenticated loads without putting
+credentials or authenticated URLs into logs or persistent evidence.
+
+The working interpretation, pending product-owner confirmation before
+execution, allows an operation-timeout reload to retain a usable renderer
+generation. It still requires a newly attributable accepted load and a newer
+post-seek frame. A renderer retirement and recreation requires a new renderer
+generation; do not invent one for a same-renderer reload.
+
+Before hands-on acceptance, record the exact package version, source identity,
+artifact hash, machine, GPU, driver, display and server configuration. Generate
+a local clip with moving recognizable content and audio; retain its generation
+recipe and hash. Inject each fault through the actual adapter and renderer path,
+not a direct recovery call or synthetic frame. Run three fresh playing sessions
+with attributable timeouts and three fresh playing sessions with stalled or
+renderer faults, one paused session, Stop and new-item cancellation, and a
+failed or repeated-fault case. Record each trigger, observed sequence, timing,
+outcome and teardown. Playing acceptance requires recognizably different
+post-fault frames, advancing position, and expected audio. Paused acceptance
+requires the correct picture, position and paused state. Screenshots alone,
+blackness, audio alone, a configured video output, and fake frames do not prove
+visible recovery. Record native Linux and macOS headless regressions separately;
+they do not substitute for installed visible-video acceptance. The legacy
+JMP 1.12 / Qt 5 report is historical baseline context; an unpredictable field
+trigger is not a reason to skip the controlled production-path fault tests.
 
 ## Current boundaries
 
