@@ -12,6 +12,15 @@ VCTIP_SHA256 = 'D591358C6AEE4B673562CA3B3A15C250E612708394FE3B44A7A7EDA2470570A5
 VCTIP_SIZE = 335288
 
 
+def _annotate(error, **values):
+    fields = ('operation', 'process_creation_time', 'process_image_path', 'input_path',
+              'final_path', 'file_id', 'observed_size', 'expected_size')
+    observation = {key: None for key in fields}
+    observation.update(getattr(error, 'identity_observation', {}))
+    observation.update(values)
+    error.identity_observation = observation
+
+
 class RetainedHandlesError(OSError):
     """Close failed; the caller must retain and resolve these exact handles."""
     def __init__(self, message, handles):
@@ -37,8 +46,16 @@ class FilePin:
             self.sha256 = self._hash(self.handle)
             if self.sha256 != self.expected_sha256:
                 raise OSError('pinned file content mismatch')
-        except BaseException:
-            self.close()
+        except BaseException as error:
+            context = {'operation': 'pin_open', 'input_path': self.path,
+                       'final_path': getattr(self, 'final_path', None), 'file_id': getattr(self, 'file_id', None),
+                       'observed_size': getattr(self, 'size', None), 'expected_size': self.expected_size}
+            _annotate(error, **context)
+            try:
+                self.close()
+            except BaseException as close_error:
+                _annotate(close_error, **context)
+                raise close_error from error
             raise
 
     def _open_chain(self):
@@ -80,21 +97,41 @@ class FilePin:
             digest.update(buffer.raw[:read.value])
 
     def assert_path_unchanged(self):
-        with FilePin(self.api, self.path, self.expected_sha256, self.expected_size) as current:
-            if current.file_id != self.file_id or current.final_path.casefold() != self.final_path.casefold():
-                raise OSError('pinned file path identity changed')
+        try:
+            with FilePin(self.api, self.path, self.expected_sha256, self.expected_size) as current:
+                if current.file_id != self.file_id or current.final_path.casefold() != self.final_path.casefold():
+                    raise OSError('pinned file path identity changed')
+        except BaseException as error:
+            _annotate(error, operation='pinned_file_recheck')
+            raise
 
     def verify_process(self, api, process, job):
-        if api is not self.api or api.wait(process, 0) or not api.in_job(process, job):
-            raise OSError('process is not a live member of the owned job')
-        created = api.creation_time(process)
-        image = api.image_path(process)
-        with FilePin(api, image, self.expected_sha256, self.expected_size) as reported:
-            if reported.file_id != self.file_id or reported.final_path != self.final_path:
-                raise OSError('process image file identity mismatch')
-        self.assert_path_unchanged()
-        if api.wait(process, 0) or not api.in_job(process, job) or api.creation_time(process) != created:
-            raise OSError('process identity or membership changed')
+        created, image, operation = None, None, 'process_validation'
+        reported_details = None
+        try:
+            if api is not self.api or api.wait(process, 0) or not api.in_job(process, job):
+                raise OSError('process is not a live member of the owned job')
+            created = api.creation_time(process)
+            image = api.image_path(process)
+            operation = 'process_reported_image'
+            with FilePin(api, image, self.expected_sha256, self.expected_size) as reported:
+                reported_details = {'input_path': reported.path, 'final_path': reported.final_path,
+                                    'file_id': reported.file_id, 'observed_size': reported.size,
+                                    'expected_size': self.expected_size}
+                if reported.file_id != self.file_id or reported.final_path != self.final_path:
+                    raise OSError('process image file identity mismatch')
+            operation = 'pinned_file_recheck'
+            self.assert_path_unchanged()
+            operation = 'process_validation'
+            if api.wait(process, 0) or not api.in_job(process, job) or api.creation_time(process) != created:
+                raise OSError('process identity or membership changed')
+        except BaseException as error:
+            if operation == 'process_reported_image' and reported_details is not None:
+                _annotate(error, **reported_details)
+            elif operation == 'process_reported_image' and not getattr(error, 'identity_observation', {}).get('input_path'):
+                _annotate(error, input_path=image, expected_size=self.expected_size)
+            _annotate(error, operation=operation, process_creation_time=created, process_image_path=image)
+            raise
         return {'path': image, 'creation_time': created, 'volume': self.file_id[0],
                 'file_index_high': self.file_id[1], 'file_index_low': self.file_id[2],
                 'sha256': self.sha256, 'size': self.size}
