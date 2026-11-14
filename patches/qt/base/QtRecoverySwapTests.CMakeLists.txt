@@ -1,0 +1,8 @@
+# Private bridge ABI test; copied into tests/auto/gui/kernel/qtrecoveryswap.
+qt_internal_add_test(tst_qtrecoveryswap
+    SOURCES
+        QtRecoverySwapTests.cpp
+    LIBRARIES
+        Qt::Gui
+        Qt::GuiPrivate
+)

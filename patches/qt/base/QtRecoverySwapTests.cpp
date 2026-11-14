@@ -1,6 +1,11 @@
 // Source-only negative cases for the private bridge; not executed in this allocation.
-#include "QtRecoveryAbi.h"
+#include <QtGui/private/QtRecoveryAbi.h>
 #include <cassert>
+#include <cstdlib>
+
+// Keep checks active in release builds as well as debug builds.
+#undef assert
+#define assert(condition) do { if (!(condition)) std::abort(); } while (false)
 
 static QtRecoverySwapTicketV1 ticket()
 {
@@ -16,6 +21,12 @@ static void report(const QtRecoverySwapTicketV1 &t, int success = 1)
 int main()
 {
     auto t = ticket();
+    auto invalid = t; invalid.frame_serial = 0;
+    assert(!qt_recovery_swap_begin_v1(&invalid));
+    assert(qt_recovery_swap_begin_v1(&t));
+    assert(!qt_recovery_swap_begin_v1(&t));
+    report(t);
+    assert(!qt_recovery_swap_finish_v1(&t, 1, 0)); // nested begin poisons scope
     assert(qt_recovery_swap_begin_v1(&t));
     assert(!qt_recovery_swap_finish_v1(&t, 1, 0)); // missing
     assert(qt_recovery_swap_begin_v1(&t));
