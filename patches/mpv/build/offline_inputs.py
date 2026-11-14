@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from recovery_lock_preflight import BUILD, ROOT, RUST_COMPONENTS, parse_object, verify
-from offline_git import verify_bundle, verify_checkout
+from offline_git import verify_bundle, verify_checkout, verify_nghttp3_checkout
 
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -162,6 +162,29 @@ def verify_source_checkout(lock, root, inventory, git, checkdir, name, checkout)
         raise ValueError("checkout bundle size differs from inventory")
     verify_checkout(git, lock["host_tools"]["git"]["sha256"], bundle,
                     checkdir, matches[0], checkout)
+
+
+def verify_nghttp3_expansion_v1(lock, root, inventory, git, checks, checkout):
+    """Verify the selected nghttp3 tree and its exactly mapped sfparse child."""
+    if not all(path.is_absolute() for path in (root, git, checks, checkout)):
+        raise ValueError("verification paths must be absolute")
+    checks.resolve(strict=True).relative_to(ROOT.resolve(strict=True))
+    checkout.resolve(strict=True).relative_to(ROOT.resolve(strict=True))
+    for path in (root, git, checks):
+        check_plain_root(path)
+    selected = []
+    for name in ("nghttp3", "sfparse"):
+        sources = [item for item in lock["sources"] if item.get("name") == name]
+        rows = [item for item in inventory["sources"] if item.get("name") == name]
+        if len(sources) != 1 or len(rows) != 1 or sources[0].get("kind") != "git":
+            raise ValueError("missing or ambiguous expansion source")
+        row, source = rows[0], sources[0]
+        bundle = plain_file(root, row["path"])
+        if row.get("sha256") != source.get("bundle_sha256") or bundle.stat().st_size != row.get("size"):
+            raise ValueError("expansion bundle differs from approved inventory")
+        selected.append((source, bundle))
+    verify_nghttp3_checkout(git, lock["host_tools"]["git"]["sha256"], selected[0][1],
+                            selected[1][1], checks, selected[0][0], selected[1][0], checkout)
 
 
 def main():

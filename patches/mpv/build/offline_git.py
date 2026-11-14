@@ -118,17 +118,19 @@ def verify_bundle(git, expected_git_sha, bundle, checkdir, locked):
     return listing
 
 
-def tree_files(listing):
+def tree_files(listing, allow_gitlinks=False):
     files = {}
     for entry in listing.split(b"\0"):
         if not entry:
             continue
         metadata, separator, name = entry.partition(b"\t")
         fields = metadata.split(b" ")
+        if allow_gitlinks and len(fields) == 3 and fields[:2] == [b"160000", b"commit"]:
+            continue
         if not separator or len(fields) != 3 or fields[1] != b"blob" or fields[0] not in (b"100644", b"100755"):
             raise ValueError("source tree contains unsupported link, gitlink, or object")
         path = name.decode("utf-8", errors="strict")
-        if path in files or any(part in ("", ".", "..") for part in path.split("/")):
+        if "\\" in path or path in files or any(part in ("", ".", "..") for part in path.split("/")):
             raise ValueError("invalid source tree path")
         files[path] = (fields[0], fields[2])
     return files
@@ -143,8 +145,7 @@ def blob_identity(path):
     return value.hexdigest().encode("ascii")
 
 
-def verify_checkout(git, expected_git_sha, bundle, checkdir, locked, checkout):
-    """Verify a private checkout against its locked bundle; supports regular files only."""
+def verify_files(checkout, files):
     checkout = Path(checkout)
     for item in (checkout, *checkout.parents):
         info = item.lstat()
@@ -152,14 +153,12 @@ def verify_checkout(git, expected_git_sha, bundle, checkdir, locked, checkout):
             raise ValueError("linked checkout root")
     if not checkout.is_absolute() or not checkout.is_dir():
         raise ValueError("checkout must be an absolute directory")
-    bundle_sha = locked.get("bundle_sha256")
-    if not isinstance(bundle_sha, str) or not SHA256.fullmatch(bundle_sha) or digest(bundle) != bundle_sha:
-        raise ValueError("checkout bundle identity differs from lock")
-    files = tree_files(verify_bundle(git, expected_git_sha, bundle, checkdir, locked))
     dirs = {str(Path(name).parent).replace("\\", "/") for name in files}
     dirs |= {str(parent).replace("\\", "/") for name in files for parent in Path(name).parents}
     found = set()
-    for base, children, names in os.walk(checkout, followlinks=False):
+    def onerror(error):
+        raise error
+    for base, children, names in os.walk(checkout, followlinks=False, onerror=onerror):
         for name in children + names:
             item = Path(base) / name
             relative = item.relative_to(checkout).as_posix()
@@ -178,5 +177,42 @@ def verify_checkout(git, expected_git_sha, bundle, checkdir, locked, checkout):
             found.add(relative)
     if found != set(files):
         raise ValueError("checkout omits locked tree files")
+
+
+def verified_listing(git, expected_git_sha, bundle, checkdir, locked):
+    bundle_sha = locked.get("bundle_sha256")
+    if not isinstance(bundle_sha, str) or not SHA256.fullmatch(bundle_sha) or digest(bundle) != bundle_sha:
+        raise ValueError("checkout bundle identity differs from lock")
+    listing = verify_bundle(git, expected_git_sha, bundle, checkdir, locked)
     if digest(bundle) != bundle_sha:
         raise ValueError("checkout bundle changed during verification")
+    return listing
+
+
+def verify_checkout(git, expected_git_sha, bundle, checkdir, locked, checkout):
+    """Verify a private checkout against its locked bundle; supports regular files only."""
+    listing = verified_listing(git, expected_git_sha, bundle, checkdir, locked)
+    verify_files(checkout, tree_files(listing))
+
+
+def verify_nghttp3_checkout(git, git_sha, parent_bundle, child_bundle, checks,
+                            parent, child, checkout):
+    """Verify the single versioned nghttp3/lib/sfparse expansion, without fetching."""
+    link = "lib/sfparse"
+    parent_id = "d29ceea176cebc1f41c9d818c3b1825143d3f813"
+    child_id = "4b313cfd2e1b389ae632b36dcd50402307289af2"
+    if (parent.get("name") != "nghttp3" or parent.get("commit") != parent_id or
+            child.get("name") != "sfparse" or child.get("commit") != child_id or
+            parent.get("gitlinks") != {link: child_id} or
+            parent.get("submodules") != {link: "sfparse"} or child.get("gitlinks") != {} or
+            child.get("submodules") != {}):
+        raise ValueError("nghttp3 expansion differs from the selected v1 source case")
+    parent_list = verified_listing(git, git_sha, parent_bundle, checks / "parent", parent)
+    child_list = verified_listing(git, git_sha, child_bundle, checks / "child", child)
+    files = tree_files(parent_list, allow_gitlinks=True)
+    for name, identity in tree_files(child_list).items():
+        combined = link + "/" + name
+        if combined in files:
+            raise ValueError("overlapping expanded submodule path")
+        files[combined] = identity
+    verify_files(checkout, files)
