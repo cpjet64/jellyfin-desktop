@@ -19,7 +19,6 @@ struct CoreOwner;
 class NativeLease {
 public:
     NativeLease() = default;
-    explicit NativeLease(std::shared_ptr<CoreOwner> owner);
     NativeLease(NativeLease &&other) noexcept;
     NativeLease &operator=(NativeLease &&other) noexcept;
     NativeLease(const NativeLease &) = delete;
@@ -28,6 +27,8 @@ public:
     mpv_handle *get() const;
     explicit operator bool() const { return static_cast<bool>(owner); }
 private:
+    explicit NativeLease(std::shared_ptr<CoreOwner> owner);
+    friend struct CoreOwner;
     std::shared_ptr<CoreOwner> owner;
 };
 
@@ -56,6 +57,7 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     std::atomic<bool> wakeClosed{false};
     std::atomic<unsigned> wakeCallbacks{0};
     std::mutex postingMutex;
+    std::mutex wakeRegistrationMutex;
 
     bool enterControl();
     void leaveControl();

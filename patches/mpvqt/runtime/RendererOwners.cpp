@@ -59,15 +59,15 @@ static void wakeCore(void *opaque)
 
 bool CoreOwner::enterControl()
 {
-    admittedControl.fetch_add(1, std::memory_order_acq_rel);
-    if (commandAuthority.load(std::memory_order_acquire)) return true;
-    admittedControl.fetch_sub(1, std::memory_order_acq_rel);
+    admittedControl.fetch_add(1);
+    if (commandAuthority.load()) return true;
+    admittedControl.fetch_sub(1);
     return false;
 }
 
 void CoreOwner::leaveControl()
 {
-    admittedControl.fetch_sub(1, std::memory_order_acq_rel);
+    admittedControl.fetch_sub(1);
     if (finalizationRequested.load(std::memory_order_acquire)) maybeFinalize();
 }
 
@@ -94,12 +94,14 @@ bool CoreOwner::postControl(std::function<void(mpv_handle *)> operation)
 void CoreOwner::revokeControl()
 {
     std::lock_guard<std::mutex> lock(postingMutex);
-    commandAuthority.store(false, std::memory_order_release);
+    commandAuthority.store(false);
 }
 
 bool CoreOwner::installExternalWakeup()
 {
+    std::lock_guard<std::mutex> lock(wakeRegistrationMutex);
     if (!handle || !wakeRelay || !commandAuthority.load(std::memory_order_acquire)) return false;
+    if (wakeClosed.load(std::memory_order_acquire)) return false;
     wakeAdmission.store(true, std::memory_order_release);
     mpv_set_wakeup_callback(handle, wakeCore, this);
     return true;
@@ -107,6 +109,7 @@ bool CoreOwner::installExternalWakeup()
 
 void CoreOwner::closeExternalWakeup()
 {
+    std::lock_guard<std::mutex> lock(wakeRegistrationMutex);
     wakeAdmission.store(false, std::memory_order_release);
     if (handle) mpv_set_wakeup_callback(handle, nullptr, nullptr);
     wakeClosed.store(true, std::memory_order_release);
@@ -129,7 +132,7 @@ bool CoreOwner::requestFinalization()
 void CoreOwner::maybeFinalize()
 {
     if (!finalizationRequested.load(std::memory_order_acquire)) return;
-    if (!wakeClosed.load(std::memory_order_acquire) || !handle || !controller || !worker || admittedControl.load(std::memory_order_acquire) != 0 ||
+    if (!wakeClosed.load(std::memory_order_acquire) || !handle || !controller || !worker || admittedControl.load() != 0 ||
         liveGenerations.load(std::memory_order_acquire) != 0 || wakeCallbacks.load(std::memory_order_acquire) != 0)
         return;
     bool expected = false;
@@ -139,6 +142,7 @@ void CoreOwner::maybeFinalize()
         mpv_terminate_destroy(owner->handle);
         owner->handle = nullptr;
         owner->wakeRelay->deleteLater();
+        owner->controller->deleteLater();
         QObject::connect(owner->worker, &QThread::finished, owner->worker, &QObject::deleteLater);
         QObject::connect(owner->worker, &QThread::finished, [owner] {
             std::lock_guard<std::mutex> lock(pendingMutex());
@@ -241,7 +245,7 @@ bool RetirementCoordinator::quarantine(const std::shared_ptr<GenerationOwner> &o
     std::lock_guard<std::mutex> lock(mutex);
     if (!owner || retained != owner || quarantined()) return false;
     owner->revoke();
-    owner->core->commandAuthority.store(false, std::memory_order_release);
+    owner->core->commandAuthority.store(false);
     owner->blocked.store(true, std::memory_order_release);
     quarantined() = owner;
     retained.reset();
