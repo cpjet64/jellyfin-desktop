@@ -56,4 +56,6 @@ class PlanTests(unittest.TestCase):
         env = commands.child_environment("/job", "/job/tools/bin")
         self.assertEqual(env["CARGO_NET_OFFLINE"], "true")
         self.assertEqual(env["MESON_WRAP_MODE"], "nodownload")
+        self.assertEqual(env["CCACHE_DISABLE"], "1")
+        self.assertEqual(env["SCCACHE_DISABLE"], "1")
         self.assertNotIn("HTTP_PROXY", env)

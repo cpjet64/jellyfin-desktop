@@ -4,9 +4,10 @@ This checkpoint is **not an executable build producer**. It records the ordered
 phases, fixed source and Rust identities, path layout, fixed CMake configure and
 build commands, guarded invocation and raw SDK staging proposal. No configure,
 extraction, toolchain installation, build, test, or import of this code was
-performed. Invocation is hard disabled in source. Owned-process supervision
-remains to be implemented and qualified; the required interface is described in
-`invoke.py` and does not itself establish a cgroup or network isolation.
+performed. The proposed supervisor holds its session leader through cleanup,
+following `portable_proof/executor.py`, and treats unknown group survivors as
+nonpass. It does not establish network isolation or contain a deliberately
+escaped child. This proposal has not been qualified for compiler processes.
 
 The intended native Linux VM flow is: validate a separately approved complete
 lock and prestaged input inventory, verify the actual Git objects and all
@@ -32,8 +33,10 @@ patches, and no complete lock or adapter is present. The staging paths and
 provider CMake options are proposals that require validation against the fixed
 adapter. `CARGO_NET_OFFLINE` and `MESON_WRAP_MODE` alone do not prove that every
 nested invocation uses `--locked --offline` and `--wrap-mode=nodownload`; the
-adapter and offline supervisor must enforce those requirements. Tool hashes
-must originate in the separately approved lock, not caller assertions. The
-current `prerequisites_verified` placeholder is not a validation mechanism and
-must be replaced by direct identity checks before enabling invocation. An
-authorized future VM run needs separate review after these gaps are closed.
+adapter and authorized VM isolation must enforce those requirements. Tool
+hashes come from a separately approved review manifest. The supplied source
+object verifier, mpv copy operation, and module bootstrap are unresolved trust
+boundaries, not yet independently implemented or qualified; they must be bound
+to reviewed source before invoking this proposal. The adapter itself does not
+remove every network fetch or materialize the four Rust archives. An authorized
+future VM run needs separate review after these gaps are closed.
