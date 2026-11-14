@@ -61,7 +61,7 @@ bool CoreOwner::enterControl()
 {
     admittedControl.fetch_add(1);
     if (commandAuthority.load()) return true;
-    admittedControl.fetch_sub(1);
+    leaveControl();
     return false;
 }
 
@@ -117,8 +117,8 @@ void CoreOwner::revokeControl()
 bool CoreOwner::installExternalWakeup()
 {
     std::lock_guard<std::mutex> lock(wakeRegistrationMutex);
-    if (!handle || !wakeRelay || !commandAuthority.load(std::memory_order_acquire)) return false;
     if (wakeClosed.load(std::memory_order_acquire)) return false;
+    if (!handle || !wakeRelay || !commandAuthority.load(std::memory_order_acquire)) return false;
     wakeAdmission.store(true, std::memory_order_release);
     mpv_set_wakeup_callback(handle, wakeCore, this);
     return true;
@@ -127,6 +127,7 @@ bool CoreOwner::installExternalWakeup()
 void CoreOwner::closeExternalWakeup()
 {
     std::lock_guard<std::mutex> lock(wakeRegistrationMutex);
+    if (wakeClosed.load(std::memory_order_acquire)) return;
     wakeAdmission.store(false, std::memory_order_release);
     if (handle) mpv_set_wakeup_callback(handle, nullptr, nullptr);
     wakeClosed.store(true, std::memory_order_release);
@@ -134,13 +135,16 @@ void CoreOwner::closeExternalWakeup()
 
 bool CoreOwner::requestFinalization()
 {
-    bool first = false;
-    if (!finalizationRequested.compare_exchange_strong(first, true)) return false;
     {
-        std::lock_guard<std::mutex> lock(pendingMutex());
-        pendingCores().push_back(shared_from_this());
+        std::lock_guard<std::mutex> admission(postingMutex);
+        if (finalizationRequested.load()) return false;
+        {
+            std::lock_guard<std::mutex> retained(pendingMutex());
+            pendingCores().push_back(shared_from_this());
+        }
+        commandAuthority.store(false);
+        finalizationRequested.store(true, std::memory_order_release);
     }
-    revokeControl();
     closeExternalWakeup();
     maybeFinalize();
     return true;
@@ -148,13 +152,14 @@ bool CoreOwner::requestFinalization()
 
 void CoreOwner::maybeFinalize()
 {
-    if (!finalizationRequested.load(std::memory_order_acquire)) return;
-    if (!wakeClosed.load(std::memory_order_acquire) || !handle || !controller || !worker || admittedControl.load() != 0 ||
+    if (!finalizationRequested.load(std::memory_order_acquire) || commandAuthority.load()) return;
+    if (!wakeClosed.load(std::memory_order_acquire) || admittedControl.load() != 0 ||
         liveGenerations.load(std::memory_order_acquire) != 0 || externalConsumers.load() != 0 ||
         wakeCallbacks.load(std::memory_order_acquire) != 0)
         return;
     bool expected = false;
     if (!finalizationQueued.compare_exchange_strong(expected, true)) return;
+    if (!handle || !controller || !worker || !wakeRelay) return;
     auto owner = shared_from_this();
     const bool queued = QMetaObject::invokeMethod(wakeRelay, [owner] {
         const bool posted = QMetaObject::invokeMethod(owner->controller, [owner] {
@@ -163,8 +168,11 @@ void CoreOwner::maybeFinalize()
                 owner->maybeFinalize();
                 return;
             }
-            mpv_terminate_destroy(owner->handle);
-            owner->handle = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(owner->wakeRegistrationMutex);
+                mpv_terminate_destroy(owner->handle);
+                owner->handle = nullptr;
+            }
             owner->wakeRelay->deleteLater();
             owner->controller->deleteLater();
             QObject::connect(owner->worker, &QThread::finished, owner->worker, &QObject::deleteLater);
@@ -190,7 +198,7 @@ std::shared_ptr<GenerationOwner> GenerationOwner::create(quint64 id, const std::
 {
     if (!id || !core) return {};
     std::lock_guard<std::mutex> lock(core->postingMutex);
-    if (!core->commandAuthority.load()) return {};
+    if (!core->commandAuthority.load() || core->finalizationRequested.load()) return {};
     return std::shared_ptr<GenerationOwner>(new GenerationOwner(id, core));
 }
 
