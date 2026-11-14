@@ -1,0 +1,200 @@
+diff --git a/src/quick/CMakeLists.txt b/src/quick/CMakeLists.txt
+index d3d9087a..499b3f0b 100644
+--- a/src/quick/CMakeLists.txt
++++ b/src/quick/CMakeLists.txt
+@@ -125,0 +126,2 @@ qt_internal_add_qml_module(Quick
++        recovery/QtRecoveryBatchUpload.cpp recovery/QtRecoveryUploadDebug.cpp
++        recovery/QtRecoveryDrawSet_p.h recovery/QtRecoveryClipState_p.h
+@@ -610,0 +613,6 @@ qt_internal_extend_target(Quick CONDITION QT_FEATURE_opengl OR QT_FEATURE_opengl
++qt_internal_extend_target(Quick CONDITION WIN32 AND QT_FEATURE_opengl
++    SOURCES
++        recovery/QtRecoveryQuick.cpp recovery/QtRecoveryQuick_p.h
++        recovery/QtRecoverySubmissionAbi.h
++)
++
+diff --git a/src/quick/items/qquickframebufferobject.cpp b/src/quick/items/qquickframebufferobject.cpp
+index cdae6fbe..47b8b86f 100644
+--- a/src/quick/items/qquickframebufferobject.cpp
++++ b/src/quick/items/qquickframebufferobject.cpp
+@@ -15,0 +16,3 @@
++#ifdef Q_OS_WIN
++#include "../recovery/QtRecoveryQuick_p.h"
++#endif
+@@ -176,0 +180,4 @@ public:
++#ifdef Q_OS_WIN
++        recoveryNodeLifetime = qtRecoveryIdentity();
++        qtRecoveryRegisterNode(static_cast<QSGGeometryNode *>(this), recoveryNodeLifetime);
++#endif
+@@ -181,0 +189,3 @@ public:
++#ifdef Q_OS_WIN
++        qtRecoveryUnregisterNode(static_cast<QSGGeometryNode *>(this), recoveryNodeLifetime);
++#endif
+@@ -209,0 +220,3 @@ public Q_SLOTS:
++#ifdef Q_OS_WIN
++            qtRecoveryFboBegin(fbo->handle(), recoveryNodeLifetime);
++#endif
+@@ -214,0 +228,6 @@ public Q_SLOTS:
++#ifdef Q_OS_WIN
++            if (msDisplayFbo)
++                qtRecoveryFboAbort(); // The void resolve API does not report success.
++            else
++                qtRecoveryFboEnd(fbo->texture(), recoveryTextureGeneration, texture());
++#endif
+@@ -241,0 +261,4 @@ public:
++#ifdef Q_OS_WIN
++    uint64_t recoveryNodeLifetime = 0;
++    uint64_t recoveryTextureGeneration = 0;
++#endif
+@@ -293,0 +317,3 @@ QSGNode *QQuickFramebufferObject::updatePaintNode(QSGNode *node, UpdatePaintNode
++#ifdef Q_OS_WIN
++        qtRecoveryInvalidateNode(n->recoveryNodeLifetime);
++#endif
+@@ -302,0 +329,3 @@ QSGNode *QQuickFramebufferObject::updatePaintNode(QSGNode *node, UpdatePaintNode
++#ifdef Q_OS_WIN
++        n->recoveryTextureGeneration = qtRecoveryIdentity();
++#endif
+diff --git a/src/quick/scenegraph/coreapi/qsgbatchrenderer_p.h b/src/quick/scenegraph/coreapi/qsgbatchrenderer_p.h
+index 1da4fb93..eb012b99 100644
+--- a/src/quick/scenegraph/coreapi/qsgbatchrenderer_p.h
++++ b/src/quick/scenegraph/coreapi/qsgbatchrenderer_p.h
+@@ -20,0 +21,2 @@
++#include <QtQuick/private/QtRecoveryDrawSet_p.h>
++#include <QtQuick/private/QtRecoveryClipState_p.h>
+@@ -29,0 +32 @@
++#include <QtCore/QVarLengthArray>
+@@ -34,0 +38,2 @@ QT_BEGIN_NAMESPACE
++class QSGMaterialShaderPrivate;
++
+@@ -44,0 +50,3 @@ struct Batch;
++#ifndef QT_NO_DEBUG_OUTPUT
++void qsgRecoveryDumpUpload(const Batch *, const QSGGeometry *, bool, bool, int (*)(int));
++#endif
+@@ -294,0 +303,4 @@ struct Element {
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++    const void *recoveryBoundTexture = nullptr;
++    const void *recoveryBoundRhiTexture = nullptr;
++#endif
+@@ -340,14 +351,0 @@ struct ClipBatchRootInfo : public BatchRootInfo
+-struct DrawSet
+-{
+-    DrawSet(int v, int z, int i)
+-        : vertices(v)
+-        , zorders(z)
+-        , indices(i)
+-    {
+-    }
+-    DrawSet() {}
+-    int vertices = 0;
+-    int zorders = 0;
+-    int indices = 0;
+-    int indexCount = 0;
+-};
+@@ -361,42 +358,0 @@ enum BatchCompatibility
+-struct ClipState
+-{
+-    enum ClipTypeBit
+-    {
+-        NoClip = 0x00,
+-        ScissorClip = 0x01,
+-        StencilClip = 0x02
+-    };
+-    Q_DECLARE_FLAGS(ClipType, ClipTypeBit)
+-
+-    const QSGClipNode *clipList;
+-    ClipType type;
+-    QRhiScissor scissor;
+-    int stencilRef;
+-
+-    inline void reset();
+-};
+-
+-struct StencilClipState
+-{
+-    StencilClipState() : drawCalls(1) { }
+-
+-    bool updateStencilBuffer = false;
+-    QRhiShaderResourceBindings *srb = nullptr;
+-    QRhiBuffer *vbuf = nullptr;
+-    QRhiBuffer *ibuf = nullptr;
+-    QRhiBuffer *ubuf = nullptr;
+-
+-    struct StencilDrawCall {
+-        int stencilRef;
+-        int vertexCount;
+-        int indexCount;
+-        QRhiCommandBuffer::IndexFormat indexFormat;
+-        quint32 vbufOffset;
+-        quint32 ibufOffset;
+-        quint32 ubufOffset;
+-    };
+-    QDataBuffer<StencilDrawCall> drawCalls;
+-
+-    inline void reset();
+-};
+-
+@@ -815,0 +772,3 @@ private:
++    bool countRecoveryBatch(Batch *b, QSGGeometry *g, int &unmergedIndexSize);
++    void uploadRecoveryMergedBatch(Batch *b, QSGGeometry *g);
++    void uploadRecoveryUnmergedBatch(Batch *b);
+@@ -822,0 +782,8 @@ private:
++    void collectRecoveryUniform(QSGMaterialShader *shader, QSGMaterialShaderPrivate *pd,
++                                QSGMaterialShader::RenderState &renderState, QSGMaterial *material,
++                                const Batch *batch, int ubufOffset, int ubufRegionSize,
++                                char *directUpdatePtr, QVarLengthArray<QRhiShaderResourceBinding, 8> &bindings);
++    void updateRecoverySamplers(QSGMaterialShaderPrivate *pd, int binding,
++                                const QVarLengthArray<QSGTexture *, 4> &nextTex, bool isAnisotropic);
++    void updateShaderBindings(Element *e, const QVarLengthArray<QRhiShaderResourceBinding, 8> &bindings,
++                              int ubufBinding);
+diff --git a/src/quick/scenegraph/qsgthreadedrenderloop.cpp b/src/quick/scenegraph/qsgthreadedrenderloop.cpp
+index 6a0286db..58e01f98 100644
+--- a/src/quick/scenegraph/qsgthreadedrenderloop.cpp
++++ b/src/quick/scenegraph/qsgthreadedrenderloop.cpp
+@@ -14,0 +15,4 @@
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++#include <QtGui/QOpenGLContext>
++#include "../recovery/QtRecoveryQuick_p.h"
++#endif
+@@ -314,0 +319,4 @@ public:
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++    const uint64_t recoveryWindowLifetime = qtRecoveryIdentity();
++    uint64_t recoverySceneGeneration = qtRecoveryIdentity();
++#endif
+@@ -593,0 +602,4 @@ void QSGRenderThread::teardownGraphics()
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++    qt_recovery_revoke_v1(recoveryWindowLifetime);
++    recoverySceneGeneration = qtRecoveryIdentity();
++#endif
+@@ -728,0 +741,17 @@ void QSGRenderThread::syncAndRender()
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++        if (rhi->backend() == QRhi::OpenGLES2) {
++            QOpenGLContext *context = QOpenGLContext::currentContext();
++            QtRecoverySwapTicketV1 ticket{};
++            ticket.size = sizeof(ticket);
++            ticket.version = QT_RECOVERY_SWAP_ABI_VERSION;
++            ticket.window_lifetime = recoveryWindowLifetime;
++            ticket.scenegraph_generation = recoverySceneGeneration;
++            ticket.frame_serial = qtRecoveryIdentity();
++            ticket.render_thread = reinterpret_cast<uintptr_t>(QThread::currentThread());
++            ticket.swapchain = reinterpret_cast<uintptr_t>(cd->swapchain);
++            ticket.render_target = reinterpret_cast<uintptr_t>(cd->swapchain->currentFrameRenderTarget());
++            ticket.surface = reinterpret_cast<uintptr_t>(static_cast<QSurface *>(window));
++            ticket.platform_context = reinterpret_cast<uintptr_t>(context ? context->handle() : nullptr);
++            qtRecoveryBegin(ticket);
++        }
++#endif
+@@ -788,0 +818,3 @@ void QSGRenderThread::syncAndRender()
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++        qtRecoveryFinish(frameResult == QRhi::FrameOpSuccess, false);
++#endif
+@@ -810,0 +843,3 @@ void QSGRenderThread::syncAndRender()
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++        qtRecoveryFinish(false, true);
++#endif
+diff --git a/tests/auto/quick/CMakeLists.txt b/tests/auto/quick/CMakeLists.txt
+index a387325e..e1e4f3a4 100644
+--- a/tests/auto/quick/CMakeLists.txt
++++ b/tests/auto/quick/CMakeLists.txt
+@@ -16,0 +17,3 @@ if(QT_FEATURE_private_tests)
++    if(WIN32 AND QT_FEATURE_opengl)
++        add_subdirectory(qtrecoveryaggregate)
++    endif()
