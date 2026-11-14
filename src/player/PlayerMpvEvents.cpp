@@ -99,7 +99,7 @@ void PlayerComponent::setupMpvEvents()
 void PlayerComponent::finishMpvEventSetup()
 {
 #ifdef MPVQT_RECOVERY_RUNTIME
-  handleMpvEvents();
+  // The exclusive consumer performs its initial drain during binding.
 #else
 #ifndef MPVQT_EXTERNAL_EVENTS
   connect(this, &PlayerComponent::onMpvEvents, this, &PlayerComponent::handleMpvEvents, Qt::QueuedConnection);

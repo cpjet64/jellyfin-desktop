@@ -38,8 +38,14 @@ bool PlayerComponent::setupRecovery()
 #ifdef MPVQT_RECOVERY_RUNTIME
   if (m_recovery) return true;
   auto* recovery = new PlayerComponentRecovery(this);
-  if (!recovery->bind()) { delete recovery; return false; }
+  QPointer<PlayerComponent> playerGuard(this);
+  QPointer<PlayerComponentRecovery> recoveryGuard(recovery);
   m_recovery = recovery;
+  const bool bound = recovery->bind();
+  if (!playerGuard) return false;
+  if (!bound || !recoveryGuard) {
+    m_recovery = nullptr; delete recoveryGuard.data(); return false;
+  }
 #endif
   return true;
 }
