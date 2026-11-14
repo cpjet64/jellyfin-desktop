@@ -12,6 +12,7 @@ qt_internal_add_test(tst_qtrecoveryaggregate
 )
 
 qt_internal_add_test(tst_qtrecoverydrawsets
-    SOURCES tst_qtrecovery_drawsets.cpp
+    SOURCES tst_qtrecovery_drawsets.cpp ../../../../src/quick/recovery/QtRecoveryPrimitive.cpp
+    INCLUDE_DIRECTORIES ../../../../src/quick/recovery
     LIBRARIES Qt::QuickPrivate
 )

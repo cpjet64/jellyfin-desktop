@@ -104,10 +104,10 @@ uint64_t qtRecoveryNodeIdentity(const void *node)
 }
 
 void qtRecoveryMarkDraw(uint64_t nodeLifetime, uintptr_t renderTarget, const void *boundTexture, const void *boundRhiTexture,
-                        bool normalColorPass)
+                        int sampleCount, bool normalColorPass)
 {
     const NodeRegistration *entry = findNode(nodeLifetime);
-    if (!state.active || !entry || !normalColorPass || !entry->content || !boundTexture || !boundRhiTexture
+    if (!state.active || !entry || !normalColorPass || sampleCount != 1 || !entry->content || !boundTexture || !boundRhiTexture
         || entry->textureWrapper != boundTexture || entry->window != state.ticket.window_lifetime
         || entry->scene != state.ticket.scenegraph_generation || renderTarget != state.ticket.render_target
         || static_cast<const QSGTexture *>(boundTexture)->rhiTexture() != boundRhiTexture)
@@ -233,6 +233,11 @@ extern "C" int qt_recovery_publish_native_frame_v1(const QtRecoveryFrameV1 *fram
 extern "C" const char *qt_recovery_quick_source_id_v1()
 {
     return QT_RECOVERY_QUICK_SOURCE_ID;
+}
+
+extern "C" const char *qt_recovery_quick_bound_gui_source_id_v1()
+{
+    return qt_recovery_swap_source_id_v1();
 }
 
 extern "C" int qt_recovery_take_submission_v1(uint64_t window, uint64_t renderer, uint64_t attempt,
