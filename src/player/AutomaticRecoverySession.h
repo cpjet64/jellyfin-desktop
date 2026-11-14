@@ -19,6 +19,7 @@ public:
   void begin(Key key, const QString& url, const QVariantMap& options, const QVariantMap& metadata,
              const QVariant& audio, const QVariant& subtitle, bool paused);
   bool accept(Key key, std::int64_t entry);
+  bool loaded(Key key, std::int64_t entry);
   bool position(Key key, std::int64_t entry, std::int64_t positionMs);
   bool revise(Key previous, Key current, bool paused);
   void invalidate();
@@ -27,4 +28,5 @@ private:
   static bool same(Key a, Key b);
   Snapshot candidate_;
   bool accepted_ = false;
+  bool loaded_ = false;
 };

@@ -21,8 +21,13 @@ bool AutomaticRecoverySession::accept(Key key, std::int64_t entry)
 }
 bool AutomaticRecoverySession::position(Key key, std::int64_t entry, std::int64_t positionMs)
 {
-  if (!accepted_ || !same(candidate_.key, key) || entry != candidate_.entry || positionMs < 0) return false;
+  if (!accepted_ || !loaded_ || !same(candidate_.key, key) || entry != candidate_.entry || positionMs < 0) return false;
   candidate_.positionMs = positionMs; return true;
+}
+bool AutomaticRecoverySession::loaded(Key key, std::int64_t entry)
+{
+  if (!accepted_ || loaded_ || !same(candidate_.key, key) || entry != candidate_.entry) return false;
+  loaded_ = true; return true;
 }
 bool AutomaticRecoverySession::revise(Key previous, Key current, bool paused)
 {
@@ -33,10 +38,10 @@ bool AutomaticRecoverySession::revise(Key previous, Key current, bool paused)
 }
 void AutomaticRecoverySession::invalidate()
 {
-  candidate_ = Snapshot{}; accepted_ = false;
+  candidate_ = Snapshot{}; accepted_ = false; loaded_ = false;
 }
 bool AutomaticRecoverySession::snapshot(Key current, Snapshot& result) const
 {
-  if (!accepted_ || !same(candidate_.key, current) || candidate_.entry <= 0 || candidate_.positionMs < 0) return false;
+  if (!accepted_ || !loaded_ || !same(candidate_.key, current) || candidate_.entry <= 0 || candidate_.positionMs < 0) return false;
   result = candidate_; return true;
 }
