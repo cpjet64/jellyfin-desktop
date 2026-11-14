@@ -82,12 +82,12 @@ def _validate_lifecycle(record, policy):
         _number(value)
     if (deadlines["root_deadline_ms"] != deadlines["start_ms"] + policy.deadline_ms
             or not deadlines["start_ms"] <= root["observed_ms"] < deadlines["root_deadline_ms"]
-            or not root["observed_ms"] <= deadlines["grace_deadline_ms"] <= deadlines["root_deadline_ms"]
-            or deadlines["grace_deadline_ms"] > root["observed_ms"] + policy.grace_ms
+            or deadlines["grace_deadline_ms"] != min(deadlines["root_deadline_ms"], root["observed_ms"] + policy.grace_ms)
             or deadlines["cleanup_deadline_ms"] != deadlines["cleanup_start_ms"] + 10000
             or not root["observed_ms"] <= deadlines["cleanup_start_ms"]
             or deadlines["cleanup_start_ms"] >= deadlines["root_deadline_ms"]
-            or not deadlines["cleanup_start_ms"] <= deadlines["settled_ms"] <= deadlines["cleanup_deadline_ms"]):
+            or not deadlines["cleanup_start_ms"] <= deadlines["settled_ms"] < deadlines["cleanup_deadline_ms"]
+            or (record["result"] == "telemetry_cleanup" and deadlines["cleanup_start_ms"] < deadlines["grace_deadline_ms"])):
         raise ValueError("deadline mismatch")
     _keys(record["owned"], ("opened", "closed", "failed"))
     for value in record["owned"].values():
@@ -109,6 +109,9 @@ def _validate_settlement(record, policy):
             _number(value)
     if (record["baseline"]["total"] != record["before"]["total"]
             or record["baseline"]["total"] != record["final"]["total"]
+            or record["baseline"]["total"] < 1 + record["baseline"]["active"]
+            or any(record[field]["active"] > record[field]["total"] for field in ("baseline", "before", "final"))
+            or record["before"]["active"] > record["baseline"]["active"]
             or record["final"]["active"] != 0):
         raise ValueError("new association or unsettled job")
     pin = {"path": policy.telemetry_path, "sha256": policy.telemetry_sha256,
@@ -133,6 +136,8 @@ def _validate_settlement(record, policy):
         _keys(item, ("pid", "creation_time", "path", "sha256", "size", "version", "file_id", "member", "action", "signaled", "closed"))
         _number(item["pid"], 1)
         _number(item["creation_time"], 1)
+        if (item["pid"], item["creation_time"]) == (record["root"]["pid"], record["root"]["creation_time"]):
+            raise ValueError("residual is exited root")
         _number(item["size"], 1)
         if item["pid"] in seen or any(item[key] != value for key, value in pin.items()):
             raise ValueError("residual identity mismatch")

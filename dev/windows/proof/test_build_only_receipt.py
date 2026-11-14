@@ -95,6 +95,36 @@ class ReceiptTests(unittest.TestCase):
         record["deadlines"]["cleanup_deadline_ms"] = 10350
         self.assertEqual(check(policy, record)["result"], "natural")
 
+    def test_invalid_counts_and_deadlines(self):
+        for failure in ("zero_total", "insufficient_total", "active_increase", "short_grace",
+                        "early_cleanup", "settled_at_deadline"):
+            policy, record = make_receipt(True)
+            if failure == "zero_total":
+                for field in ("baseline", "before", "final"):
+                    record[field]["total"] = 0
+            elif failure == "insufficient_total":
+                for field in ("baseline", "before", "final"):
+                    record[field]["total"] = 1
+            elif failure == "active_increase":
+                record["before"]["active"] = 2
+            elif failure == "short_grace":
+                record["deadlines"]["grace_deadline_ms"] = 299
+            elif failure == "early_cleanup":
+                record["deadlines"]["cleanup_start_ms"] = 250
+                record["deadlines"]["cleanup_deadline_ms"] = 10250
+            else:
+                record["deadlines"]["settled_ms"] = 10300
+            with self.subTest(failure=failure), self.assertRaises(ValueError):
+                check(policy, record)
+
+    def test_reused_pid_requires_different_creation_time(self):
+        policy, record = make_receipt(True)
+        record["residuals"][0]["pid"] = record["root"]["pid"]
+        self.assertEqual(check(policy, record)["result"], "telemetry_cleanup")
+        record["residuals"][0]["creation_time"] = record["root"]["creation_time"]
+        with self.assertRaises(ValueError):
+            check(policy, record)
+
     def test_boolean_sizes_and_zero_handles_rejected(self):
         for change in ("executable", "pin", "handles"):
             policy, record = make_receipt()

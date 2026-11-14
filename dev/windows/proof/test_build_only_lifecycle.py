@@ -185,3 +185,30 @@ class LifecycleTests(unittest.TestCase):
             api.wait_result = failure != "wait"
             self.assertEqual(run(api)["result"], "failed")
             self.assertTrue(api.emergency)
+
+    def test_final_accounting_and_handle_close_deadline_overrun(self):
+        for point in ("accounting", "close"):
+            clock = Clock()
+
+            class DelayedHandle(Handle):
+                def __exit__(self, *args):
+                    if point == "close":
+                        clock.now = 10.0005
+                    return False
+
+            class DelayedAPI(FakeAPI):
+                def open_process(self, pid):
+                    return DelayedHandle(pid)
+
+                def accounting(self, job):
+                    state = super().accounting(job)
+                    if point == "accounting" and state == (0, 2):
+                        clock.now = 10.0005
+                    return state
+
+            api = DelayedAPI([(1, 2), (1, 2), (1, 2), (0, 2)], (20,))
+            result = settle(api, object(), Root(), Pin(), 2.0, grace_seconds=0,
+                            clock=clock, pause=clock.pause)
+            with self.subTest(point=point):
+                self.assertEqual(result["result"], "failed")
+                self.assertTrue(result["emergency"])
