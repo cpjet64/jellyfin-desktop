@@ -314,13 +314,19 @@ def configure(system, mode):
     command("build", ["cmake", "--build", str(BUILD), "--parallel", "4"], timeout=1800)
 
 
-def headless_checks():
-    expression = "^(" + "|".join(HEADLESS_TESTS) + ")$"
+def headless_checks(mode="system"):
+    admission = ("test_mpvqt_recovery_exchange",
+                 "renderer_admission_delayedFinalizationReservesOnce",
+                 "renderer_admission_cancelledWaiterIsNotCalled",
+                 "renderer_admission_completionBeforeRegistrationAllowsReservation",
+                 "renderer_admission_quarantineWinsAdmission") if mode == "static" else ()
+    required = HEADLESS_TESTS + admission
+    expression = "^(" + "|".join(required) + ")$"
     report_path = RESULTS / "headless-ctest.xml"
     command("headless-ctest", ["ctest", "--test-dir", str(BUILD), "-R", expression,
             "--output-on-failure", "--no-tests=error", "--timeout", "60", "--output-junit", str(report_path)], timeout=900)
     report = [sys.executable, "dev/ci/check_results.py", "junit", str(report_path)]
-    for name in HEADLESS_TESTS:
+    for name in required:
         report += ["--require", name]
     command("headless-ctest-report", report)
     command("input-plugin", ["node", "--test", "tests/test_inputPlugin.js"], timeout=120)
@@ -333,7 +339,7 @@ def headless_checks():
             env=producer_env, timeout=120)
     command("bundle-paths", [sys.executable, "tests/test_bundle_paths.py"], timeout=120)
     command("package-freshness", [sys.executable, "tests/test_windows_package_freshness.py"], timeout=300)
-    print(f"PASS: {len(HEADLESS_TESTS)} explicitly classified headless CTest cases", flush=True)
+    print(f"PASS: {len(required)} explicitly classified headless CTest cases", flush=True)
 
 
 def desktop_preflight(system, desktop_missing):
@@ -416,7 +422,7 @@ def run_stages(system, mode, desktop_missing):
     configure(system, mode)
     from build_manifest import capture
     capture(ROOT, Path(os.environ["CI_EVIDENCE_DIR"]), BUILD / "tests/test_renderer_loss_offscreen")
-    headless_checks()
+    headless_checks(mode)
     if mode == "static":
         run_healthy_diagnostic(system, ROOT, BUILD, RESULTS, command, os.environ)
     directory = Path(os.environ["CI_EVIDENCE_DIR"])
