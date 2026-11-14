@@ -97,6 +97,7 @@ private:
   void tickOrdinaryPreparation(std::int64_t now);
   void failOrdinaryPreparation(bool timeout);
   bool ordinaryPreparationCurrent() const;
+  bool ordinaryPreparationTime(std::int64_t now);
   static std::int64_t nowMs();
   PlayerComponent* player_;
   QPointer<MpvVideoItem> item_;
@@ -118,7 +119,7 @@ private:
     QVariantMap options, metadata;
     QVariant audio, subtitle;
     std::uint64_t queryId = 0, beforeStart = 0;
-    std::int64_t deadlineMs = 0, nextAttemptMs = 0;
+    std::int64_t startMs = 0, lastCheckedMs = 0, deadlineMs = 0, nextAttemptMs = 0;
     unsigned attempts = 0;
     bool pending = false, waiting = false;
   } ordinaryLoad_;

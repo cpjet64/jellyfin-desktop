@@ -79,6 +79,7 @@ bool PlayerComponentRecovery::beginOrdinaryLoad(const QStringList& command, cons
   if (now < 0 || now > std::numeric_limits<std::int64_t>::max() - 1500) {
     failOrdinaryPreparation(false); return true;
   }
+  ordinaryLoad_.startMs = ordinaryLoad_.lastCheckedMs = now;
   ordinaryLoad_.deadlineMs = now + 1500; ordinaryLoad_.nextAttemptMs = now;
   tickOrdinaryPreparation(now);
   return true;
@@ -89,6 +90,13 @@ bool PlayerComponentRecovery::ordinaryPreparationCurrent() const
   return ordinaryLoad_.pending && ordinaryPreferenceCurrent() && !startSerialExhausted_ &&
       ordinaryLoad_.beforeStart == startSerial_ && ordinaryLedger_.available() &&
       bound_ && (core_ || player_->recoveryTestMode());
+}
+
+bool PlayerComponentRecovery::ordinaryPreparationTime(std::int64_t now)
+{
+  if (now < ordinaryLoad_.startMs || now < ordinaryLoad_.lastCheckedMs) return false;
+  ordinaryLoad_.lastCheckedMs = now;
+  return true;
 }
 
 void PlayerComponentRecovery::failOrdinaryPreparation(bool timeout)
@@ -111,13 +119,14 @@ void PlayerComponentRecovery::tickOrdinaryPreparation(std::int64_t now)
 {
   if (!ordinaryLoad_.pending) return;
   if (!ordinaryPreferenceCurrent()) { ordinaryLoad_ = {}; ordinaryPreferences_ = {}; return; }
-  if (now < 0 || !ordinaryPreparationCurrent()) { failOrdinaryPreparation(false); return; }
+  if (!ordinaryPreparationTime(now) || !ordinaryPreparationCurrent()) { failOrdinaryPreparation(false); return; }
   if (now >= ordinaryLoad_.deadlineMs) { failOrdinaryPreparation(true); return; }
   if (ordinaryLoad_.waiting || now < ordinaryLoad_.nextAttemptMs) return;
   if (ordinaryLoad_.attempts >= 3) { failOrdinaryPreparation(false); return; }
   ordinaryLoad_.queryId = nextPlaylistQuery();
   if (!ordinaryLoad_.queryId) { failOrdinaryPreparation(false); return; }
-  ++ordinaryLoad_.attempts; ordinaryLoad_.nextAttemptMs = now + 500;
+  ++ordinaryLoad_.attempts;
+  ordinaryLoad_.nextAttemptMs = ordinaryLoad_.deadlineMs - now < 500 ? ordinaryLoad_.deadlineMs : now + 500;
   ordinaryLoad_.waiting = ordinaryGet(ordinaryLoad_.queryId, "playlist", MPV_FORMAT_NODE) >= 0;
   if (!ordinaryLoad_.waiting && ordinaryLoad_.attempts >= 3) failOrdinaryPreparation(false);
 }
@@ -169,7 +178,8 @@ bool PlayerComponentRecovery::flushOrdinaryLoad(bool allowSelection)
     ordinaryLoad_ = {}; ordinaryPreferences_.active = false; return false;
   }
   const auto now = clockNow();
-  if (now < 0 || now >= ordinaryLoad_.deadlineMs || !ordinaryPreparationCurrent()) {
+  if (!ordinaryPreparationTime(now)) { failOrdinaryPreparation(false); return false; }
+  if (now >= ordinaryLoad_.deadlineMs || !ordinaryPreparationCurrent()) {
     failOrdinaryPreparation(now >= ordinaryLoad_.deadlineMs); return false;
   }
   auto load = ordinaryLoad_;
@@ -182,7 +192,8 @@ bool PlayerComponentRecovery::flushOrdinaryLoad(bool allowSelection)
       current.revision == load.key.revision && player_->m_mpvGeneration == load.key.generation;
   if (!qualified) { failOrdinaryPreparation(false); return false; }
   const auto admissionTime = clockNow();
-  if (admissionTime < 0 || admissionTime >= load.deadlineMs || !ordinaryPreparationCurrent()) {
+  if (!ordinaryPreparationTime(admissionTime)) { failOrdinaryPreparation(false); return false; }
+  if (admissionTime >= load.deadlineMs || !ordinaryPreparationCurrent()) {
     failOrdinaryPreparation(admissionTime >= load.deadlineMs); return false;
   }
   ordinaryExpectedUrl_ = load.command.value(1);
@@ -196,7 +207,7 @@ bool PlayerComponentRecovery::flushOrdinaryLoad(bool allowSelection)
     }
     return result;
   }, load.key, load.command, load.url, load.options, load.metadata, load.audio, load.subtitle,
-      !load.options.value("autoplay").toBool(), clockNow());
+      !load.options.value("autoplay").toBool(), admissionTime);
   if (!accepted) player_->m_playbackIntent.dispatch(load.key.revision, PlaybackIntent::Dispatch::NativeRejected);
   if (!accepted || !ordinarySelection_.active()) ordinaryPreferences_.active = false;
   ordinaryBeforeEntries_.clear();
@@ -210,7 +221,8 @@ void PlayerComponentRecovery::ordinaryEvent(const mpv_event* event, std::int64_t
       event->reply_userdata == ordinaryLoad_.queryId) {
     ordinaryLoad_.waiting = false;
     if (!ordinaryPreferenceCurrent()) { ordinaryLoad_ = {}; ordinaryPreferences_ = {}; return; }
-    if (now < 0 || now >= ordinaryLoad_.deadlineMs) { failOrdinaryPreparation(now >= ordinaryLoad_.deadlineMs); return; }
+    if (!ordinaryPreparationTime(now)) { failOrdinaryPreparation(false); return; }
+    if (now >= ordinaryLoad_.deadlineMs) { failOrdinaryPreparation(true); return; }
     if (!ordinaryPreparationCurrent()) { failOrdinaryPreparation(false); return; }
     if (event->error < 0) {
       if (ordinaryLoad_.attempts >= 3) failOrdinaryPreparation(false);
