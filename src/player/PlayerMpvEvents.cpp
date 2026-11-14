@@ -5,8 +5,60 @@
 #include <QDebug>
 #include <QThread>
 #include <QCoreApplication>
+#include <QMetaObject>
 #ifdef MPVQT_RECOVERY_RUNTIME
 #include "PlayerComponentRecovery.h"
+#include <atomic>
+#include <memory>
+#endif
+
+#ifdef MPVQT_RECOVERY_RUNTIME
+namespace {
+// The lease admits only this already-received hook. It fences finalization,
+// including after GUI authority has been revoked; it does not admit commands.
+// The retained owner is the exact original core, so a later player binding
+// cannot redirect this hook even when its numeric binding generation changes.
+class PendingHook final : public std::enable_shared_from_this<PendingHook> {
+public:
+  using Operation = std::function<int(mpv_handle*)>;
+  PendingHook(std::shared_ptr<RendererRuntime::CoreOwner> core, RendererRuntime::NativeLease lease, Operation operation)
+      : core_(std::move(core)), lease_(std::move(lease)), operation_(std::move(operation)) {}
+  ~PendingHook() {
+    // No native cancellation acknowledgement exists on a discarded callback.
+    // Retain the admitted operation until process exit rather than finalize it.
+    if (lease_.get()) (void)new RendererRuntime::NativeLease(std::move(lease_));
+  }
+  void setQuitConnection(const QMetaObject::Connection& connection) { quitConnection_ = connection; }
+  void dispatch() {
+    if (dispatched_.exchange(true)) return;
+    auto self = shared_from_this();
+    QObject::disconnect(quitConnection_);
+    if (!core_->controller || !QMetaObject::invokeMethod(core_->controller, [self] {
+      const int result = self->operation_(self->lease_.get());
+      if (result >= 0) self->lease_ = {};
+    }, Qt::QueuedConnection)) return;
+  }
+private:
+  std::shared_ptr<RendererRuntime::CoreOwner> core_;
+  RendererRuntime::NativeLease lease_;
+  Operation operation_;
+  std::atomic<bool> dispatched_{false};
+  QMetaObject::Connection quitConnection_;
+};
+
+std::shared_ptr<PendingHook> reserveHook(const std::shared_ptr<RendererRuntime::CoreOwner>& owner,
+                                         PendingHook::Operation operation)
+{
+  if (!owner || !operation) return {};
+  auto lease = owner->acquireNative();
+  if (!lease.get()) return {};
+  auto pending = std::make_shared<PendingHook>(owner, std::move(lease), std::move(operation));
+  if (auto* app = QCoreApplication::instance())
+    pending->setQuitConnection(QObject::connect(app, &QCoreApplication::aboutToQuit, app,
+      [pending] { pending->dispatch(); }, Qt::DirectConnection));
+  return pending;
+}
+}
 #endif
 
 #ifndef MPVQT_RECOVERY_RUNTIME
@@ -126,14 +178,12 @@ void PlayerComponent::scheduleMpvHook(const QString& resumeId)
 {
 #ifdef MPVQT_RECOVERY_RUNTIME
   const auto owner = m_recovery ? m_recovery->coreOwner() : nullptr;
-  if (!owner) return;
   const auto id = resumeId.toUtf8();
-  scheduleMpvHook(std::function<void()>([owner, id] {
-    auto lease = owner->acquireNative();
-    if (!lease.get()) return;
+  const auto pending = reserveHook(owner, [id](mpv_handle* handle) {
     const char* args[] = {"hook-ack", id.constData(), nullptr};
-    mpv_command(lease.get(), args);
-  }));
+    return mpv_command(handle, args);
+  });
+  if (pending) scheduleMpvHook(std::function<void()>([pending] { pending->dispatch(); }));
 #else
 #ifdef MPVQT_EXTERNAL_EVENTS
   const auto generation = m_mpvGeneration;
@@ -153,11 +203,8 @@ void PlayerComponent::scheduleMpvHook(uint64_t id)
 {
 #ifdef MPVQT_RECOVERY_RUNTIME
   const auto owner = m_recovery ? m_recovery->coreOwner() : nullptr;
-  if (!owner) return;
-  scheduleMpvHook(std::function<void()>([owner, id] {
-    auto lease = owner->acquireNative();
-    if (lease.get()) mpv_hook_continue(lease.get(), id);
-  }));
+  const auto pending = reserveHook(owner, [id](mpv_handle* handle) { return mpv_hook_continue(handle, id); });
+  if (pending) scheduleMpvHook(std::function<void()>([pending] { pending->dispatch(); }));
 #else
 #ifdef MPVQT_C2_DIAGNOSTIC_ONLY
   m_c2LastScheduledHookId = id;
