@@ -9,7 +9,7 @@ class TestPlayerRecoveryActor : public QObject {
 private:
   struct Fixture {
     PlayerComponent player;
-    PlayerComponentRecovery* actor = new PlayerComponentRecovery(&player);
+    PlayerComponentRecovery* actor = nullptr;
     RendererRuntime::WakeRelay relay;
     RecoveryActorNativeEvents events;
     std::int64_t now = 1000;
@@ -21,8 +21,17 @@ private:
 
     Fixture()
     {
+      bindActor();
+      if (!player.tryBindMpvController(nullptr)) qFatal("Synthetic actor binding failed");
+      player.m_playbackIntent.play(false);
+      events.start(5);
+      wake();
+    }
+
+    void bindActor()
+    {
+      actor = new PlayerComponentRecovery(&player);
       player.m_recovery = actor;
-      player.m_mpvGeneration = 1;
       player.m_stopDispatch = [] { return PlayerComponent::NativeStopResult{PlayerComponent::NativeStopResult::Status::Accepted, 0}; };
       player.ordinaryTracksDispatch_ = [this](const QVariant& audio, const QVariant& subtitle) { tracks.emplace_back(audio, subtitle); };
       player.ordinaryPauseDispatch_ = [this](bool paused) { pauses.push_back(paused); return 0; };
@@ -39,9 +48,6 @@ private:
         return 0;
       };
       actor->bindTestConsumer(&relay);
-      player.m_playbackIntent.play(false);
-      events.start(5);
-      wake();
     }
 
     void wake() { relay.notify(); QCoreApplication::processEvents(); }
@@ -69,6 +75,7 @@ private slots:
   void pendingPreferences();
   void staleClassification_data();
   void staleClassification();
+  void simulatedBindingRevocation();
 };
 
 void TestPlayerRecoveryActor::pendingPreferences_data()
@@ -137,6 +144,7 @@ void TestPlayerRecoveryActor::staleClassification()
   if (change == 2) f.now += 15001;
   if (change == 3 || change == 4) { f.beforePlaylist(); f.events.start(20); f.wake(); }
   const auto previous = f.player.m_playbackIntent.snapshot();
+  f.tracks.clear();
   const auto entry = change == 3 || change == 4 ? 20 : 5;
   const auto reason = change == 3 ? MPV_END_FILE_REASON_EOF :
                       change == 4 ? MPV_END_FILE_REASON_ERROR : MPV_END_FILE_REASON_STOP;
@@ -144,7 +152,32 @@ void TestPlayerRecoveryActor::staleClassification()
   f.wake();
   QVERIFY(f.player.m_playbackIntent.snapshot().revision > previous.revision);
   QCOMPARE(f.player.m_playbackIntent.snapshot().reason, PlaybackIntent::Reason::UnattributedEvent);
+  QVERIFY(f.tracks.empty());
   if (change == 0) QCOMPARE(f.player.m_playbackIntent.snapshot().desired, PlaybackIntent::Desired::Stopped);
+}
+
+void TestPlayerRecoveryActor::simulatedBindingRevocation()
+{
+  Fixture f;
+  f.replace();
+  f.beforePlaylist();
+  QVERIFY(!f.commands.empty());
+  const auto oldReply = f.commands.back().first;
+  f.player.pause();
+  f.player.setAudioStream(11);
+  f.player.releaseMpvController(nullptr);
+  f.bindActor();
+  QVERIFY(f.player.tryBindMpvController(nullptr));
+  f.player.load(QStringLiteral("https://example.invalid/rebound"), {{"autoplay", true}}, {}, 31, 32);
+  const auto before = f.player.m_playbackIntent.snapshot();
+  f.tracks.clear();
+  f.events.commandReply(oldReply);
+  f.events.end(5, MPV_END_FILE_REASON_STOP);
+  f.wake();
+  QVERIFY(f.player.m_playbackIntent.snapshot().revision > before.revision);
+  QCOMPARE(f.player.m_playbackIntent.snapshot().reason, PlaybackIntent::Reason::UnattributedEvent);
+  QVERIFY(f.tracks.empty());
+  QVERIFY(!f.actor->runtime_.activeKey().session);
 }
 
 QTEST_GUILESS_MAIN(TestPlayerRecoveryActor)

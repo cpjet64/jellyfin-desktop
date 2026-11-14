@@ -2,6 +2,7 @@ if(USE_STATIC_MPVQT AND MPVQT_EXTERNAL_EVENTS AND NOT MPVQT_C2_DIAGNOSTIC_ONLY)
   get_target_property(_recovery_actor_sources jmp_core SOURCES)
   add_library(recovery_actor_test_core STATIC ${_recovery_actor_sources})
   set_target_properties(recovery_actor_test_core PROPERTIES AUTOMOC ON)
+  target_compile_features(recovery_actor_test_core PRIVATE cxx_std_17)
   target_compile_definitions(recovery_actor_test_core PUBLIC PLAYER_RECOVERY_ACTOR_TEST
     $<TARGET_PROPERTY:jmp_core,COMPILE_DEFINITIONS>)
   target_include_directories(recovery_actor_test_core PRIVATE $<TARGET_PROPERTY:jmp_core,INCLUDE_DIRECTORIES>)
