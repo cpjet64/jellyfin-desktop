@@ -16,7 +16,7 @@ def make_receipt(cleanup=False):
     pin = {"path": policy.telemetry_path, "sha256": policy.telemetry_sha256,
            "size": policy.telemetry_size, "version": policy.telemetry_version,
            "file_id": policy.telemetry_file_id}
-    residual = {"pid": 2, **pin, "member": True, "action": "already_exited",
+    residual = {"pid": 2, "creation_time": 2, **pin, "member": True, "action": "already_exited",
                 "signaled": True, "closed": True}
     active = int(cleanup)
     record = {"schema": "build-only-v1", "source": policy.source_sha256,
@@ -57,7 +57,8 @@ class ReceiptTests(unittest.TestCase):
             check(policy, record, production=True)
 
     def test_failure_cases(self):
-        cases = [("root", "exit", 1), ("root", "observed_ms", 1101),
+        cases = [("root", "exit", 1), ("root", "observed_ms", 1100),
+                 ("deadlines", "cleanup_start_ms", 1100),
                  ("root", "pid", True), ("before", "total", 3),
                  ("owned", "failed", 1), ("outputs", "fresh_before_launch", False),
                  ("file_pin", "file_id", "other")]
@@ -69,16 +70,23 @@ class ReceiptTests(unittest.TestCase):
                 check(policy, record)
 
     def test_emergency_and_bad_residual(self):
-        for change in ("emergency", "wait", "identity"):
+        for change in ("emergency", "wait", "identity", "creation"):
             policy, record = make_receipt(True)
             if change == "emergency":
                 record["emergency_cleanup"] = True
             elif change == "wait":
                 record["residuals"][0]["signaled"] = False
-            else:
+            elif change == "identity":
                 record["residuals"][0]["sha256"] = "f" * 64
+            else:
+                del record["residuals"][0]["creation_time"]
             with self.subTest(change=change), self.assertRaises(ValueError):
                 check(policy, record)
+
+    def test_early_natural_settlement(self):
+        policy, record = make_receipt()
+        record["deadlines"]["cleanup_start_ms"] = 250
+        self.assertEqual(check(policy, record)["result"], "natural")
 
     def test_closure_and_malformed(self):
         policy, record = make_receipt()

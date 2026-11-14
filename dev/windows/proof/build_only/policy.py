@@ -44,6 +44,9 @@ PRODUCTION_POLICIES: dict[str, Policy] = {}
 REQUIRED_ENV = frozenset(name.casefold() for name in (
     "PATH", "INCLUDE", "LIB", "LIBPATH", "CL", "_CL_", "LINK", "_LINK_",
     "SystemRoot", "TMP", "TEMP"))
+VCTIP_SHA256 = "d591358c6aee4b673562ca3b3a15c250e612708394fe3b44a7a7eda2470570a5"
+VCTIP_PATH = (r"c:\program files (x86)\microsoft visual studio\2022\buildtools"
+              r"\vc\tools\msvc\14.44.35207\bin\hostx64\x64\vctip.exe")
 
 
 def _digest(value: str) -> bool:
@@ -100,6 +103,11 @@ def validate_command(policy: Policy, command: CommandIdentity) -> CommandIdentit
     if (not _absolute(policy.telemetry_path) or type(policy.telemetry_size) is not int
             or policy.telemetry_size <= 0 or not policy.telemetry_version or not policy.telemetry_file_id):
         raise ValueError("invalid telemetry file pin")
+    if policy.kind == "production" and (
+            _canonical(policy.telemetry_path) != VCTIP_PATH
+            or policy.telemetry_sha256 != VCTIP_SHA256 or policy.telemetry_size != 335288
+            or policy.telemetry_version != "14.44.35229.0"):
+        raise ValueError("production telemetry pin mismatch")
     if not isinstance(command.args, tuple) or not all(isinstance(a, str) for a in command.args):
         raise ValueError("invalid arguments")
     paths = (command.executable, command.cwd, command.stdout, command.stderr,
