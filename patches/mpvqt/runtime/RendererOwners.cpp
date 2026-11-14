@@ -149,7 +149,20 @@ static void startConfirmedJoin(const std::shared_ptr<CoreOwner> &owner, QObject 
 std::shared_ptr<CoreOwner> CoreOwner::adoptReserved(quint64 token, mpv_handle *native, MpvController *control,
                                                    QThread *thread, WakeRelay *relay, QObject *lifecycleDispatcher)
 {
-    if (!native || !control || !thread || !relay || !lifecycleDispatcher ||
+    if (!native) return {};
+    return adoptInternal(token, native, control, thread, relay, lifecycleDispatcher, false);
+}
+
+std::shared_ptr<CoreOwner> CoreOwner::adoptFailedReservation(quint64 token, MpvController *control,
+    QThread *thread, WakeRelay *relay, QObject *lifecycleDispatcher)
+{
+    return adoptInternal(token, nullptr, control, thread, relay, lifecycleDispatcher, true);
+}
+
+std::shared_ptr<CoreOwner> CoreOwner::adoptInternal(quint64 token, mpv_handle *native, MpvController *control,
+    QThread *thread, WakeRelay *relay, QObject *lifecycleDispatcher, bool failed)
+{
+    if (!control || !thread || !relay || !lifecycleDispatcher ||
         lifecycleDispatcher->thread() != QThread::currentThread() ||
         control->thread() != thread || relay->thread() != thread)
         return {};
@@ -161,6 +174,8 @@ std::shared_ptr<CoreOwner> CoreOwner::adoptReserved(quint64 token, mpv_handle *n
     owner->controller = control;
     owner->worker = thread;
     owner->wakeRelay = relay;
+    owner->failedInitialization = failed;
+    if (failed) owner->commandAuthority.store(false);
     slot.active = owner;
     slot.lifecycleDispatcher = lifecycleDispatcher;
     QObject::connect(thread, &QThread::finished, lifecycleDispatcher, [owner, lifecycleDispatcher] {
@@ -330,7 +345,7 @@ void CoreOwner::maybeFinalize()
         return;
     bool expected = false;
     if (!finalizationQueued.compare_exchange_strong(expected, true)) return;
-    if (!handle || !controller || !worker || !wakeRelay) return;
+    if ((!handle && !failedInitialization) || !controller || !worker || !wakeRelay) return;
     auto owner = shared_from_this();
     const bool queued = QMetaObject::invokeMethod(wakeRelay, [owner] {
         const bool posted = QMetaObject::invokeMethod(owner->controller, [owner] {
@@ -342,7 +357,7 @@ void CoreOwner::maybeFinalize()
             }
             {
                 std::lock_guard<std::mutex> lock(owner->wakeRegistrationMutex);
-                mpv_terminate_destroy(owner->handle);
+                if (owner->handle) mpv_terminate_destroy(owner->handle);
                 owner->handle = nullptr;
                 owner->nativeDestroyed.store(true, std::memory_order_release);
             }
