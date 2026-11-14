@@ -66,6 +66,7 @@ void MpvVideoItem::setPlayerComponent(PlayerComponent* player)
 #endif
 #ifdef MPVQT_RECOVERY_RUNTIME
     const bool bindingChanged = m_player != player;
+    const bool hadBinding = !m_player.isNull();
     if (bindingChanged) disconnect(m_playerDestroyConnection);
 #endif
     qDebug() << "MpvVideoItem::setPlayerComponent called, mpvController():" << mpvController();
@@ -77,8 +78,11 @@ void MpvVideoItem::setPlayerComponent(PlayerComponent* player)
         });
     }
     if (bindingChanged && !mpvController()) {
-        if (player) refreshRecoveryBootstrap();
-        else suspendRecoveryBootstrap();
+        if (player) {
+            if (hadBinding || !recoveryBootstrapInFlightCurrent()) refreshRecoveryBootstrap();
+        } else {
+            suspendRecoveryBootstrap();
+        }
     }
 #endif
     initialize();

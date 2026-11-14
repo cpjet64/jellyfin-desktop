@@ -1,5 +1,5 @@
 diff --git a/src/mpvabstractitem.cpp b/src/mpvabstractitem.cpp
-index ffccf4ab..acf05884 100644
+index ffccf4ab..35d8a076 100644
 --- a/src/mpvabstractitem.cpp
 +++ b/src/mpvabstractitem.cpp
 @@ -10,0 +11 @@
@@ -8,7 +8,15 @@ index ffccf4ab..acf05884 100644
 +#include <QPointer>
 +#include <QTimer>
 +#include <chrono>
-@@ -37,0 +42,103 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
+@@ -14,0 +19 @@
++#include "MpvRecoveryBootstrap.h"
+@@ -38,6 +43,118 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
+-    d_ptr->m_workerThread = new QThread;
+-    d_ptr->m_mpvController = new MpvController(mode);
+-    d_ptr->m_workerThread->start();
+-    d_ptr->m_mpvController->moveToThread(d_ptr->m_workerThread);
+-    QMetaObject::invokeMethod(d_ptr->m_mpvController, &MpvController::init, Qt::BlockingQueuedConnection);
+-    d_ptr->m_mpv = d_ptr->m_mpvController->mpv();
 +    d_ptr->mode = mode;
 +    refreshRecoveryBootstrap();
 +}
@@ -46,7 +54,9 @@ index ffccf4ab..acf05884 100644
 +    d_ptr->bootstrapToken = result.token;
 +    if (result.status == RendererRuntime::AdmissionStatus::Reserved) {
 +        completeRecoveryBootstrap(result.token, revision);
-+    } else if (result.status == RendererRuntime::AdmissionStatus::Deferred) {
++    }
++    if (result.status == RendererRuntime::AdmissionStatus::Deferred ||
++        result.status == RendererRuntime::AdmissionStatus::Reserved) {
 +        QTimer::singleShot(static_cast<int>(d_ptr->bootstrapDeadlineMs - now), this,
 +                           [guard, revision] { if (guard) guard->expireRecoveryBootstrap(revision); });
 +    } else {
@@ -95,6 +105,11 @@ index ffccf4ab..acf05884 100644
 +    return d_ptr->bootstrapFailed;
 +}
 +
++bool MpvAbstractItem::recoveryBootstrapInFlightCurrent() const
++{
++    return d_ptr->bootstrapInFlightRevision && d_ptr->bootstrapInFlightRevision == d_ptr->bootstrapRevision;
++}
++
 +void MpvAbstractItem::failRecoveryBootstrap(quint64 revision)
 +{
 +    if (revision != d_ptr->bootstrapRevision || d_ptr->core || d_ptr->bootstrapFailed) return;
@@ -112,105 +127,38 @@ index ffccf4ab..acf05884 100644
 +        expireRecoveryBootstrap(revision);
 +        return;
 +    }
-@@ -39 +146 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
--    d_ptr->m_mpvController = new MpvController(mode);
-+    d_ptr->m_mpvController = new MpvController(d_ptr->mode);
-@@ -42 +149,13 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
--    QMetaObject::invokeMethod(d_ptr->m_mpvController, &MpvController::init, Qt::BlockingQueuedConnection);
-+    if (!QMetaObject::invokeMethod(d_ptr->m_mpvController, &MpvController::init, Qt::BlockingQueuedConnection)) {
-+        auto *worker = d_ptr->m_workerThread;
-+        auto *controller = d_ptr->m_mpvController;
-+        connect(worker, &QThread::finished, controller, &QObject::deleteLater);
-+        connect(worker, &QThread::finished, worker, &QObject::deleteLater);
-+        d_ptr->bootstrapToken = 0;
-+        d_ptr->m_workerThread = nullptr;
-+        d_ptr->m_mpvController = nullptr;
-+        worker->quit();
-+        d_ptr->bootstrapFailed = true;
-+        emit recoveryBootstrapFailed();
-+        return;
-+    }
-@@ -44,0 +164,17 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
-+    if (!initializeRecoveryOwner(d_ptr->mode, reservation)) {
-+        d_ptr->bootstrapToken = 0;
-+        d_ptr->bootstrapFailed = true;
-+        emit recoveryBootstrapFailed();
-+        return;
-+    }
 +    d_ptr->bootstrapToken = 0;
++    d_ptr->bootstrapInFlightRevision = revision;
++    QPointer<MpvAbstractItem> guard(this);
++    MpvRecoveryBootstrap::start(reservation, revision, d_ptr->mode,
++        [guard](std::shared_ptr<RendererRuntime::CoreOwner> owner, quint64 resultRevision) {
++            return guard && guard->acceptRecoveryBootstrap(owner, resultRevision);
++        });
++}
+@@ -45 +162,19 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
+-    connect(d_ptr->m_workerThread, &QThread::finished, d_ptr->m_mpvController, &MpvController::deleteLater);
++bool MpvAbstractItem::acceptRecoveryBootstrap(const std::shared_ptr<RendererRuntime::CoreOwner> &owner,
++                                               quint64 revision)
++{
++    if (d_ptr->bootstrapInFlightRevision == revision) d_ptr->bootstrapInFlightRevision = 0;
++    if (revision != d_ptr->bootstrapRevision || d_ptr->bootstrapFailed || d_ptr->core) return false;
 +    if (recoverySteadyMilliseconds() >= d_ptr->bootstrapDeadlineMs) {
-+        d_ptr->core->requestFinalization();
-+        d_ptr->core.reset();
-+        d_ptr->m_mpvController = nullptr;
-+        d_ptr->m_workerThread = nullptr;
-+        d_ptr->m_mpv = nullptr;
-+        d_ptr->bootstrapFailed = true;
-+        emit recoveryBootstrapFailed();
-+        return;
++        failRecoveryBootstrap(revision);
++        return false;
 +    }
-@@ -48,0 +185,120 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
++    if (!owner) {
++        failRecoveryBootstrap(revision);
++        return false;
++    }
++    d_ptr->core = owner;
++    d_ptr->m_mpvController = owner->controller;
++    d_ptr->m_workerThread = owner->worker;
++    d_ptr->m_mpv = owner->handle;
++    connect(owner->wakeRelay, &RendererRuntime::WakeRelay::renderUpdateRequested, this,
++            &MpvAbstractItem::deliverRecoveryNotifications, Qt::QueuedConnection);
+@@ -48,0 +184,60 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
 +    emit recoveryBootstrapReady();
 +    update();
-+}
-+
-+bool MpvAbstractItem::initializeRecoveryOwner(MpvController::EventMode mode, quint64 reservation)
-+{
-+    auto *relay = new RendererRuntime::WakeRelay;
-+    relay->moveToThread(d_ptr->m_workerThread);
-+    auto *lifecycleDispatcher = QCoreApplication::instance();
-+    if (lifecycleDispatcher) {
-+        static bool shutdownConnected = false;
-+        if (!shutdownConnected) {
-+            connect(lifecycleDispatcher, &QCoreApplication::aboutToQuit, lifecycleDispatcher,
-+                    [lifecycleDispatcher] { RendererRuntime::closeAdmissionDispatcher(lifecycleDispatcher); },
-+                    Qt::DirectConnection);
-+            shutdownConnected = true;
-+        }
-+    }
-+    d_ptr->core = RendererRuntime::CoreOwner::adoptReserved(reservation, d_ptr->m_mpv, d_ptr->m_mpvController,
-+                                                            d_ptr->m_workerThread, relay, lifecycleDispatcher);
-+    if (!d_ptr->core) {
-+        struct FailedAdoption {
-+            MpvController *controller;
-+            QThread *worker;
-+            mpv_handle *native;
-+            RendererRuntime::WakeRelay *relay;
-+        };
-+        auto *controller = d_ptr->m_mpvController;
-+        auto *worker = d_ptr->m_workerThread;
-+        auto *storage = new FailedAdoption{controller, worker, d_ptr->m_mpv, relay};
-+        connect(worker, &QThread::finished, controller, &QObject::deleteLater);
-+        connect(worker, &QThread::finished, worker, &QObject::deleteLater);
-+        QMetaObject::invokeMethod(controller, [storage] {
-+            if (storage->native) {
-+                mpv_set_wakeup_callback(storage->native, nullptr, nullptr);
-+                mpv_terminate_destroy(storage->native);
-+            }
-+            storage->relay->deleteLater();
-+            storage->controller->deleteLater();
-+            storage->worker->quit();
-+            delete storage;
-+        }, Qt::QueuedConnection);
-+        d_ptr->m_mpvController = nullptr;
-+        d_ptr->m_workerThread = nullptr;
-+        d_ptr->m_mpv = nullptr;
-+        return false;
-+    }
-+    const auto owner = d_ptr->core;
-+    if (!QMetaObject::invokeMethod(d_ptr->m_mpvController, [owner, controller = d_ptr->m_mpvController] {
-+            controller->bindRecoveryCore(owner);
-+        }, Qt::BlockingQueuedConnection)) {
-+        owner->requestFinalization();
-+        d_ptr->core.reset();
-+        d_ptr->m_mpvController = nullptr;
-+        d_ptr->m_workerThread = nullptr;
-+        d_ptr->m_mpv = nullptr;
-+        return false;
-+    }
-+    connect(relay, &RendererRuntime::WakeRelay::renderUpdateRequested, this,
-+            &MpvAbstractItem::deliverRecoveryNotifications, Qt::QueuedConnection);
-+    if (mode == MpvController::EventMode::External)
-+        d_ptr->core->installExternalWakeup();
 +    return true;
 +}
 +
@@ -269,7 +217,7 @@ index ffccf4ab..acf05884 100644
 +        if (submissionPending && operationId)
 +            emit recoveryFrameSubmissionOperation(generation, submission, operationId);
 +        update();
-@@ -53,2 +309,5 @@ MpvAbstractItem::~MpvAbstractItem()
+@@ -53,2 +248,11 @@ MpvAbstractItem::~MpvAbstractItem()
 -    if (d_ptr->m_mpv_gl) {
 -        mpv_render_context_free(d_ptr->m_mpv_gl);
 +    if (d_ptr->bootstrapToken) RendererRuntime::cancelCoreReservation(d_ptr->bootstrapToken);
@@ -277,13 +225,14 @@ index ffccf4ab..acf05884 100644
 +    {
 +        std::lock_guard<std::mutex> lock(d_ptr->exchange->mutex);
 +        if (auto generation = d_ptr->exchange->owner.lock()) generation->revoke();
-@@ -56 +315,25 @@ MpvAbstractItem::~MpvAbstractItem()
--    mpv_set_wakeup_callback(d_ptr->m_mpv, nullptr, nullptr);
++    }
 +    if (d_ptr->core) {
 +        disconnect(d_ptr->core->wakeRelay, nullptr, this, nullptr);
-+        d_ptr->core->requestFinalization();
++        const auto owner = d_ptr->core;
++        QMetaObject::invokeMethod(owner->controller, [owner] { owner->requestFinalization(); }, Qt::QueuedConnection);
 +        d_ptr->core.reset();
-+    }
+@@ -56 +260,20 @@ MpvAbstractItem::~MpvAbstractItem()
+-    mpv_set_wakeup_callback(d_ptr->m_mpv, nullptr, nullptr);
 +}
 +
 +bool MpvAbstractItem::recoveryFrameObservationAvailable() const
@@ -304,7 +253,7 @@ index ffccf4ab..acf05884 100644
 +    std::lock_guard<std::mutex> lock(d_ptr->exchange->mutex);
 +    return d_ptr->exchange->bootstrapSupported ? d_ptr->exchange->submission.ticket.scenegraph_generation : 0;
 +}
-@@ -58,4 +341,54 @@ MpvAbstractItem::~MpvAbstractItem()
+@@ -58,4 +281,54 @@ MpvAbstractItem::~MpvAbstractItem()
 -    d_ptr->m_workerThread->quit();
 -    d_ptr->m_workerThread->wait();
 -    d_ptr->m_workerThread->deleteLater();
@@ -363,27 +312,27 @@ index ffccf4ab..acf05884 100644
 +        }
 +    }
 +    emit rendererUsabilityResult(generation, requestId, false);
-@@ -76 +409,2 @@ int MpvAbstractItem::setPropertyBlocking(const QString &property, const QVariant
+@@ -76 +349,2 @@ int MpvAbstractItem::setPropertyBlocking(const QString &property, const QVariant
 -    int error;
 +    if (!d_ptr->m_mpvController) return MPV_ERROR_UNINITIALIZED;
 +    int error = MPV_ERROR_UNINITIALIZED;
-@@ -88,0 +423 @@ void MpvAbstractItem::setPropertyAsync(const QString &property, const QVariant &
+@@ -88,0 +363 @@ void MpvAbstractItem::setPropertyAsync(const QString &property, const QVariant &
 +    if (!d_ptr->m_mpvController) return;
-@@ -98,0 +434 @@ QVariant MpvAbstractItem::getProperty(const QString &property)
+@@ -98,0 +374 @@ QVariant MpvAbstractItem::getProperty(const QString &property)
 +    if (!d_ptr->m_mpvController) return {};
-@@ -106,0 +443 @@ void MpvAbstractItem::getPropertyAsync(const QString &property, int id)
+@@ -106,0 +383 @@ void MpvAbstractItem::getPropertyAsync(const QString &property, int id)
 +    if (!d_ptr->m_mpvController) return;
-@@ -111,0 +449 @@ QVariant MpvAbstractItem::commandBlocking(const QVariant &params)
+@@ -111,0 +389 @@ QVariant MpvAbstractItem::commandBlocking(const QVariant &params)
 +    if (!d_ptr->m_mpvController) return {};
-@@ -118,0 +457 @@ void MpvAbstractItem::commandAsync(const QStringList &params, int id)
+@@ -118,0 +397 @@ void MpvAbstractItem::commandAsync(const QStringList &params, int id)
 +    if (!d_ptr->m_mpvController) return;
-@@ -123,0 +463 @@ QVariant MpvAbstractItem::expandText(const QString &text)
+@@ -123,0 +403 @@ QVariant MpvAbstractItem::expandText(const QString &text)
 +    if (!d_ptr->m_mpvController) return {};
-@@ -135 +475 @@ int MpvAbstractItem::unobserveProperty(uint64_t id)
+@@ -135 +415 @@ int MpvAbstractItem::unobserveProperty(uint64_t id)
 -    return mpvController()->unobserveProperty(id);
 +    return d_ptr->m_mpvController ? mpvController()->unobserveProperty(id) : MPV_ERROR_UNINITIALIZED;
 diff --git a/src/mpvabstractitem.h b/src/mpvabstractitem.h
-index 74ec427b..911e3e48 100644
+index 74ec427b..c3198fa6 100644
 --- a/src/mpvabstractitem.h
 +++ b/src/mpvabstractitem.h
 @@ -15,0 +16,9 @@
@@ -396,7 +345,7 @@ index 74ec427b..911e3e48 100644
 +Q_DECLARE_METATYPE(QtRecoverySubmissionV1)
 +
 +namespace RendererRuntime { struct CoreOwner; }
-@@ -36,0 +46,16 @@ public:
+@@ -36,0 +46,17 @@ public:
 +    std::shared_ptr<RendererRuntime::CoreOwner> recoveryCoreLease() const;
 +    quint64 recoveryRendererGeneration() const;
 +    bool recoveryFrameObservationAvailable() const;
@@ -410,10 +359,11 @@ index 74ec427b..911e3e48 100644
 +    void suspendRecoveryBootstrap();
 +    void restrictRecoveryBootstrapDeadline(qint64 absoluteSteadyMsDeadline);
 +    bool recoveryBootstrapUnavailable() const;
++    bool recoveryBootstrapInFlightCurrent() const;
 +    bool recoveryOwnedSeekAvailable() const;
 +    int dispatchRecoveryOwnedSeek(quint64 replyUserdata, quint64 operationId, quint64 expectedEntryId, qint64 targetMs);
 +    int cancelRecoveryOwnedSeek();
-@@ -41,0 +67,8 @@ Q_SIGNALS:
+@@ -41,0 +68,8 @@ Q_SIGNALS:
 +    void rendererUsabilityResult(quint64 generation, quint64 requestId, bool usable);
 +    void rendererContextUnavailable(quint64 generation);
 +    void recoveryCapabilityUnavailable(quint64 generation);
@@ -422,23 +372,23 @@ index 74ec427b..911e3e48 100644
 +    void recoveryFrameRendered(quint64 generation, RecoveryFrameObservationV1 frame);
 +    void recoveryFrameSubmission(quint64 generation, QtRecoverySubmissionV1 submission);
 +    void recoveryFrameSubmissionOperation(quint64 generation, QtRecoverySubmissionV1 submission, quint64 operationId);
-@@ -49,0 +83,7 @@ protected:
+@@ -49,0 +84,7 @@ protected:
 +
 +private:
-+    bool initializeRecoveryOwner(MpvController::EventMode mode, quint64 reservation);
++    bool acceptRecoveryBootstrap(const std::shared_ptr<RendererRuntime::CoreOwner> &owner, quint64 revision);
 +    void completeRecoveryBootstrap(quint64 reservation, quint64 revision);
 +    void expireRecoveryBootstrap(quint64 revision);
 +    void failRecoveryBootstrap(quint64 revision);
 +    void deliverRecoveryNotifications(quint64 generation);
 diff --git a/src/mpvabstractitem_p.h b/src/mpvabstractitem_p.h
-index 53736300..f7a1f76a 100644
+index 53736300..7e92d361 100644
 --- a/src/mpvabstractitem_p.h
 +++ b/src/mpvabstractitem_p.h
 @@ -10,0 +11,3 @@
 +#include "RendererOwners.h"
 +#include "RecoveryExchange.h"
 +#include "RecoveryFrameBridge.h"
-@@ -21 +24,9 @@ public:
+@@ -21 +24,10 @@ public:
 -    mpv_render_context *m_mpv_gl{nullptr};
 +    std::shared_ptr<RendererRuntime::CoreOwner> core;
 +    std::shared_ptr<RecoveryExchange> exchange = std::make_shared<RecoveryExchange>();
@@ -447,5 +397,6 @@ index 53736300..f7a1f76a 100644
 +    MpvController::EventMode mode = MpvController::EventMode::Internal;
 +    quint64 bootstrapRevision = 0;
 +    quint64 bootstrapToken = 0;
++    quint64 bootstrapInFlightRevision = 0;
 +    qint64 bootstrapDeadlineMs = 0;
 +    bool bootstrapFailed = false;
