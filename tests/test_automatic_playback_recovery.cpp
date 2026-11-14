@@ -348,6 +348,31 @@ static void timeoutCanOccurDuringSuppressedStall()
   }
 }
 
+static void internalBufferingReloadNeverRearmsSessionBudget()
+{
+  Policy policy; auto s = sample();
+  s.buffering = true; s.readStalled = true;
+  CHECK(policy.observe(s) == Action::Reload);
+  CHECK(policy.attempted());
+  CHECK(policy.restoreStarted(42, 10, 100));
+  CHECK(policy.frameObserved(1, 42, 11, 200));
+  s.nowMs = 300;
+  CHECK(policy.observe(s) == Action::None);
+  s.revision++;
+  CHECK(policy.observe(s) != Action::Reload);
+  s.session++;
+  CHECK(policy.observe(s) == Action::Reload);
+
+  Policy cancelled; s = sample();
+  s.buffering = s.readStalled = true;
+  CHECK(cancelled.observe(s) == Action::Reload);
+  ++s.revision; s.nowMs = 100;
+  CHECK(cancelled.observe(s) == Action::Cancel);
+  CHECK(cancelled.observe(s) != Action::Reload);
+  ++s.session;
+  CHECK(cancelled.observe(s) == Action::Reload);
+}
+
 int main()
 {
   stallRequiresFullEligibleInterval();
@@ -367,4 +392,5 @@ int main()
   backwardsClockOrPositionResetsStall();
   unusableRendererBlocksAndStillMediaDoesNotStall();
   timeoutCanOccurDuringSuppressedStall();
+  internalBufferingReloadNeverRearmsSessionBudget();
 }

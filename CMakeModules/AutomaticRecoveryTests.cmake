@@ -51,7 +51,7 @@ add_executable(test_automatic_recovery_frame_gate
   "${CMAKE_SOURCE_DIR}/src/player/AutomaticRecoveryFrameGate.cpp")
 target_include_directories(test_automatic_recovery_frame_gate PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_compile_features(test_automatic_recovery_frame_gate PRIVATE cxx_std_17)
-target_link_libraries(test_automatic_recovery_frame_gate PRIVATE Qt6::Core)
+target_link_libraries(test_automatic_recovery_frame_gate PRIVATE Qt6::Core Qt6::Gui Qt6::Quick)
 add_test(NAME test_automatic_recovery_frame_gate COMMAND test_automatic_recovery_frame_gate)
 set_tests_properties(test_automatic_recovery_frame_gate PROPERTIES TIMEOUT 60)
 
