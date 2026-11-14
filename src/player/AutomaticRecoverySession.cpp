@@ -36,6 +36,11 @@ bool AutomaticRecoverySession::revise(Key previous, Key current, bool paused)
   candidate_.key = current; candidate_.paused = paused; candidate_.positionMs = -1;
   return true;
 }
+bool AutomaticRecoverySession::tracks(Key current, const QVariant& audio, const QVariant& subtitle)
+{
+  if (!same(candidate_.key, current) || !accepted_ || !loaded_) return false;
+  candidate_.audio = audio; candidate_.subtitle = subtitle; return true;
+}
 void AutomaticRecoverySession::invalidate()
 {
   candidate_ = Snapshot{}; accepted_ = false; loaded_ = false;

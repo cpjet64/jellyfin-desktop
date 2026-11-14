@@ -23,6 +23,7 @@ public:
   bool recordPosition(Key key, std::int64_t entry, std::int64_t positionMs, std::int64_t nowMs);
   bool snapshot(Key current, AutomaticRecoverySession::Snapshot& output) const;
   bool reviseActive(Key previous, Key current, bool paused);
+  bool updateTracks(Key current, const QVariant& audio, const QVariant& subtitle);
   std::uint64_t reserveSequence();
   bool takeTimeout(Key current, std::int64_t nowMs, std::uint64_t& sequence);
   void invalidate();

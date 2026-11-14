@@ -87,6 +87,8 @@ bool AutomaticRecoveryRuntime::reviseActive(Key previous, Key current, bool paus
   if (!queue_.reviseActive(previous, current, paused)) return false;
   return true;
 }
+bool AutomaticRecoveryRuntime::updateTracks(Key current, const QVariant& audio, const QVariant& subtitle)
+{ return queue_.updateTracks(current, audio, subtitle); }
 std::uint64_t AutomaticRecoveryRuntime::reserveSequence()
 {
   if (sequence_ >= AutomaticRecoveryLoad::MaxSequence) return 0;

@@ -250,6 +250,7 @@ Q_SIGNALS:
   void bufferedRangesUpdated(const QVariantList& ranges);
 
 private:
+  friend class PlayerComponentRecovery;
   friend class TestPlayerNativeReceipts;
   friend class TestPlayerNativeRestore;
   friend class TestPlayerRestoreCleanup;

@@ -22,6 +22,7 @@ public:
   bool loaded(Key key, std::int64_t entry);
   bool position(Key key, std::int64_t entry, std::int64_t positionMs);
   bool revise(Key previous, Key current, bool paused);
+  bool tracks(Key current, const QVariant& audio, const QVariant& subtitle);
   void invalidate();
   std::int64_t entry() const { return accepted_ && loaded_ ? candidate_.entry : 0; }
   Key key() const { return accepted_ && loaded_ ? candidate_.key : Key{}; }

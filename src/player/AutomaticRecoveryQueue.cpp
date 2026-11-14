@@ -82,6 +82,8 @@ bool AutomaticRecoveryQueue::snapshot(Key current, Snapshot& output) const
 { return active_.snapshot(current, output); }
 bool AutomaticRecoveryQueue::reviseActive(Key previous, Key current, bool paused)
 { return active_.revise(previous, current, paused); }
+bool AutomaticRecoveryQueue::updateTracks(Key current, const QVariant& audio, const QVariant& subtitle)
+{ return active_.tracks(current, audio, subtitle); }
 bool AutomaticRecoveryQueue::poll(std::int64_t nowMs) { return observeTime(nowMs); }
 bool AutomaticRecoveryQueue::takeExpired(Expired& output)
 {
