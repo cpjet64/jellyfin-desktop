@@ -25,6 +25,11 @@ private:
     friend class TestPlayerReleasedState;
 #endif
     void initialize();
+#ifdef MPVQT_RECOVERY_RUNTIME
+    void applyMpvOptions();
+    bool m_optionsApplied = false;
+    QMetaObject::Connection m_playerDestroyConnection;
+#endif
 
 #ifdef MPVQT_EXTERNAL_EVENTS
     QPointer<PlayerComponent> m_player;

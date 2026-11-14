@@ -6,11 +6,11 @@ set(_recovery_inputs
   "mpvrenderer.cpp|b519e71867813e8bcb73ef4353df1d32700e0ca988575c1e2f4017c1d1d1b798"
   "mpvrenderer.h|a35f52d0d4641db2c4bb03d0ced7ba40864f6e6b471b2cb42cc3e7068dda919f")
 set(_recovery_outputs
-  "mpvabstractitem.cpp|6bf5811d33f64e72c02173b43b3ae893605c46ec8fad6c8198fd3d4d4bcdcf21"
-  "mpvabstractitem.h|5ff2f9bc241f10bb1ed90bb09d65651e5be74db855120e64e8714768e08f5b47"
-  "mpvabstractitem_p.h|fb095701688d77140f266eb3fe0f6878e33b67d7de63b153d5208c7cd7793d62"
-  "mpvrenderer.cpp|d57b14a35f1d6a9a9a3776895fa2ed399462197f9bec18143735368c24c5fd66"
-  "mpvrenderer.h|0896da8ffc50b34e5498853228ddcd6c54c2578cc9610b665eb8395fc5a7ed4c")
+  "mpvabstractitem.cpp|b20770291d821f9c37bf1e1fccc343febcc02358bb71209a5c797acc50f0e973"
+  "mpvabstractitem.h|cb38fc80ceae719cff9d43b689934141e5eef9d1d51213b3b0c65b088feef523"
+  "mpvabstractitem_p.h|b159706537fcc31159dc54509621e50fbb4d597897390f1b42c7092c73cc9d37"
+  "mpvrenderer.cpp|45ad456405cecca8108848f4e5e550f1585fed47ea93070a12390afb70b91206"
+  "mpvrenderer.h|77bd03874e8e420fc09eba17a45d1b2359249227f42bee258fbaa0ea2d807fbb")
 
 function(_verify_recovery_sources entries)
   foreach(_entry IN LISTS ${entries})

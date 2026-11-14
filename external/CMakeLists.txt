@@ -35,12 +35,13 @@ if(USE_STATIC_MPVQT)
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RendererOwners.h"
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RecoveryFrameBridge.cpp"
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RecoveryFrameBridge.h"
+      "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/MpvRecoveryNative.cpp"
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/QtSubmissionBridge.cpp"
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/QtSubmissionBridge.h"
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RecoveryExchange.h")
     target_include_directories(MpvQt PUBLIC "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime" "${CMAKE_SOURCE_DIR}/src/native")
     # This denotes the C++ interface only; runtime capability is probed separately.
-    target_compile_definitions(MpvQt PUBLIC MPVQT_RECOVERY_RUNTIME MPVQT_RECOVERY_FRAME_API)
+    target_compile_definitions(MpvQt PUBLIC MPVQT_RECOVERY_RUNTIME MPVQT_RECOVERY_FRAME_API MPVQT_OWNED_SEEK_API)
     if(UNIX AND CMAKE_DL_LIBS)
       target_link_libraries(MpvQt PRIVATE ${CMAKE_DL_LIBS})
     endif()
