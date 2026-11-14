@@ -135,7 +135,13 @@ bool PlayerComponentRecovery::flushOrdinaryLoad(bool allowSelection)
   }
   const auto current = player_->m_playbackIntent.snapshot();
   const bool qualified = allowSelection && !startSerialExhausted_ && ordinaryLedger_.available() &&
-      load.beforeStart == startSerial_ && current.revision == load.key.revision && player_->m_mpvGeneration == load.key.generation;
+      load.beforeStart == startSerial_ && ordinaryPreferenceCurrent() &&
+      current.revision == load.key.revision && player_->m_mpvGeneration == load.key.generation;
+  if (!qualified) {
+    ordinaryPreferences_.active = false; ordinaryBeforeEntries_.clear();
+    player_->m_playbackIntent.dispatch(load.key.revision, PlaybackIntent::Dispatch::NativeRejected);
+    return false;
+  }
   ordinaryExpectedUrl_ = load.command.value(1);
   const bool accepted = runtime_.submitUserLoad([&](std::uint64_t id, const char** args) {
     const int result = ordinaryCommand(id, args);
