@@ -5,15 +5,20 @@
 #include <QDebug>
 #include <QThread>
 
+#ifndef MPVQT_RECOVERY_RUNTIME
 namespace {
 void wakePlayer(void* context)
 {
   emit static_cast<PlayerComponent*>(context)->onMpvEvents();
 }
 }
+#endif
 
 void PlayerComponent::setupMpvEvents()
 {
+#ifdef MPVQT_RECOVERY_RUNTIME
+  return;
+#else
 #ifdef MPVQT_EXTERNAL_EVENTS
   if (QThread::currentThread() != thread())
     qFatal("MpvQt event consumer must be initialized on the PlayerComponent thread");
@@ -24,14 +29,19 @@ void PlayerComponent::setupMpvEvents()
 #ifdef MPVQT_EXTERNAL_EVENTS
   emit onMpvEvents();
 #endif
+#endif
 }
 
 void PlayerComponent::finishMpvEventSetup()
 {
+#ifdef MPVQT_RECOVERY_RUNTIME
+  handleMpvEvents();
+#else
 #ifndef MPVQT_EXTERNAL_EVENTS
   connect(this, &PlayerComponent::onMpvEvents, this, &PlayerComponent::handleMpvEvents, Qt::QueuedConnection);
 #endif
   emit onMpvEvents();
+#endif
 }
 
 void PlayerComponent::subscribeMpvSettings()
@@ -71,8 +81,11 @@ void PlayerComponent::releaseMpvController(MpvController* controller)
   if (m_mpv != controller) return;
   invalidateNativeReceipt();
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
+  releaseRecovery();
   m_reloadAudioTimer.stop();
+#ifndef MPVQT_RECOVERY_RUNTIME
   mpv_set_wakeup_callback(controller->mpv(), nullptr, nullptr);
+#endif
   m_mpv = nullptr;
   ++m_mpvGeneration;
 }

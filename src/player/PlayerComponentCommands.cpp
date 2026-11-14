@@ -13,6 +13,7 @@ bool PlayerComponent::load(const QString& url, const QVariantMap& options, const
 {
   if (!intentControlThread()) return false;
   invalidateNativeReceipt();
+  recoveryUserReplacement();
 #ifdef PLAYER_INTENT_DIAGNOSTIC_ONLY
   PlayerIntentObservation::Scope observed(PlayerIntentObservation::Kind::LoadEnter);
 #endif
@@ -22,6 +23,7 @@ bool PlayerComponent::load(const QString& url, const QVariantMap& options, const
     const auto position = options.value("startMilliseconds").toLongLong(&valid);
     m_playbackIntent.seek(valid ? position : -1);
   }
+  recoveryIntentChanged(true);
   QScopedValueRollback<bool> replacement(m_replacementLoad, true);
   {
     QScopedValueRollback<bool> cleanup(m_replacementStop, true);
@@ -35,7 +37,7 @@ void PlayerComponent::stop()
 {
   if (!intentControlThread()) return;
   if (!m_replacementStop) invalidateNativeReceipt();
-  if (!m_replacementStop) m_playbackIntent.stop(PlaybackIntent::Reason::WebStopUnclassified);
+  if (!m_replacementStop) { m_playbackIntent.stop(PlaybackIntent::Reason::WebStopUnclassified); recoveryIntentChanged(true); }
   const auto revision = m_playbackIntent.snapshot().revision;
 #ifdef PLAYER_INTENT_DIAGNOSTIC_ONLY
   using Observation = PlayerIntentObservation;
@@ -69,6 +71,7 @@ PlayerComponent::NativeStopResult PlayerComponent::requestNativeStop()
   if (!intentControlThread()) return {NativeStopResult::Status::Unavailable, 0};
   invalidateNativeReceipt();
   m_playbackIntent.stop(PlaybackIntent::Reason::NativeStop);
+  recoveryIntentChanged(true);
   const auto revision = m_playbackIntent.snapshot().revision;
   const auto result = stopMpv();
   m_playbackIntent.dispatch(revision, result.status == NativeStopResult::Status::Unavailable ? PlaybackIntent::Dispatch::Unavailable :

@@ -16,6 +16,13 @@ bool PlayerComponentRecovery::recoveryPreloadAllowed() const
 {
   return validRestore(nowMs()) && loadDispatched_ && recoveryLoad_.startedEntry() > 0;
 }
+bool PlayerComponentRecovery::prepareRecoveryPreload()
+{
+  if (!recoveryPreloadAllowed()) return false;
+  player_->m_currentAudioStream = saved_.audio;
+  player_->m_currentSubtitleStream = saved_.subtitle;
+  return true;
+}
 
 void PlayerComponentRecovery::failRestore()
 {

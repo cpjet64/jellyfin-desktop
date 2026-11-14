@@ -22,6 +22,8 @@ PlayerComponentRecovery::PlayerComponentRecovery(PlayerComponent* player) : QObj
   connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [this] { userChanged(true); });
 }
 PlayerComponentRecovery::~PlayerComponentRecovery() { shutdown(); }
+RendererRuntime::NativeLease PlayerComponentRecovery::acquireNative() const
+{ return core_ ? core_->acquireNative() : RendererRuntime::NativeLease{}; }
 bool PlayerComponentRecovery::bind()
 {
   if (bound_ || !player_->m_window) return bound_;
@@ -29,9 +31,11 @@ bool PlayerComponentRecovery::bind()
   if (!item_) return false;
   core_ = item_->recoveryCoreLease();
   if (!core_ || !core_->wakeRelay || !core_->bindExternalConsumer()) { core_.reset(); return false; }
+  lifetimeLease_ = core_->acquireNative();
+  if (!lifetimeLease_.get()) { core_->unbindExternalConsumer(); core_.reset(); return false; }
   connect(core_->wakeRelay, &RendererRuntime::WakeRelay::nativeEventsAvailable, this,
           [this] { drain(); }, Qt::QueuedConnection);
-  if (!core_->installExternalWakeup()) { disconnect(core_->wakeRelay, nullptr, this, nullptr); core_->unbindExternalConsumer(); core_.reset(); return false; }
+  if (!core_->installExternalWakeup()) { disconnect(core_->wakeRelay, nullptr, this, nullptr); core_->unbindExternalConsumer(); lifetimeLease_ = {}; core_.reset(); return false; }
   connect(item_, &MpvVideoItem::rendererUsabilityResult, this,
           [this](quint64 generation, quint64 request, bool usable) { usability(generation, request, usable); });
 #ifdef MPVQT_RECOVERY_FRAME_API
@@ -51,7 +55,7 @@ void PlayerComponentRecovery::shutdown()
   if (core_->wakeRelay) disconnect(core_->wakeRelay, nullptr, this, nullptr);
   core_->closeExternalWakeup();
   if (bound_) core_->unbindExternalConsumer();
-  bound_ = false; core_.reset(); item_.clear();
+  bound_ = false; lifetimeLease_ = {}; core_.reset(); item_.clear();
 }
 bool PlayerComponentRecovery::queue(const QStringList& command, const QString& url, const QVariantMap& options,
                                     const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle)
@@ -74,6 +78,7 @@ void PlayerComponentRecovery::userChanged(bool clear)
   frameGateActive_ = positionReady_ = recoveryLoaded_ = false;
   restoring_ = loadDispatched_ = resumePending_ = completed_ = false;
   recoveryRestarted_ = false; verifiedSource_ = 0;
+  replacementTransition_ = false;
   pauseId_ = unpauseId_ = 0;
   if (clear) { runtime_.invalidate(); return; }
   const auto intent = player_->m_playbackIntent.snapshot();
@@ -93,17 +98,28 @@ void PlayerComponentRecovery::drain()
     const bool internalEnd = ownsEnd(native);
     event(native, nowMs());
     player_->observeNativeReceipt(native);
-    if (native->event_id == MPV_EVENT_END_FILE && !internalEnd)
-      player_->m_playbackIntent.invalidate(PlaybackIntent::Reason::UnattributedEvent);
-    player_->handleMpvEvent(native);
+    if (native->event_id == MPV_EVENT_END_FILE && !internalEnd) {
+      player_->m_playbackIntent.invalidate(PlaybackIntent::Reason::UnattributedEvent); userChanged(true);
+    }
+    if (internalEnd) {
+      const auto* end = static_cast<const mpv_event_end_file*>(native->data);
+      if (!lastStartedEntry_ || lastStartedEntry_ == end->playlist_entry_id) {
+        player_->m_inPlayback = false; player_->m_playbackCanceled = false; player_->m_playbackError.clear();
+        replacementTransition_ = true; transitionDeadline_ = restoring_ ? policy_.deadlineMs() : nowMs() + 15000;
+      }
+    } else {
+      if (native->event_id == MPV_EVENT_START_FILE) replacementTransition_ = false;
+      player_->handleMpvEvent(native);
+    }
   }
-  player_->updatePlaybackState();
+  if (!replacementTransition_) player_->updatePlaybackState();
 }
 bool PlayerComponentRecovery::ownsEnd(const mpv_event* event) const
 {
-  if (!event || event->event_id != MPV_EVENT_END_FILE || !event->data || !sameIntent()) return false;
+  if (!event || event->event_id != MPV_EVENT_END_FILE || !event->data) return false;
   const auto* end = static_cast<const mpv_event_end_file*>(event->data);
-  return restoring_ &&
+  if (replacedEntry_ > 0 && end->playlist_entry_id == replacedEntry_ && end->reason == MPV_END_FILE_REASON_STOP) return true;
+  return validRestore(nowMs()) &&
       end->playlist_entry_id == saved_.entry && end->reason == MPV_END_FILE_REASON_STOP;
 }
 void PlayerComponentRecovery::beginObservation(AutomaticRecoverySession::Key key, std::int64_t entry, std::int64_t now)

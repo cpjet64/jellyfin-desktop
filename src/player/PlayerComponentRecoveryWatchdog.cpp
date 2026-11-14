@@ -27,6 +27,10 @@ void PlayerComponentRecovery::recordSourceFrame(std::uint64_t generation, const 
 
 void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
 {
+  if (native && native->event_id == MPV_EVENT_START_FILE && native->data)
+    lastStartedEntry_ = static_cast<const mpv_event_start_file*>(native->data)->playlist_entry_id;
+  if (native && native->event_id == MPV_EVENT_END_FILE && native->data &&
+      static_cast<const mpv_event_end_file*>(native->data)->playlist_entry_id == replacedEntry_) replacedEntry_ = 0;
   if (restoring_) {
     runtime_.internalEvent(native);
     restoreEvent(native, now);
@@ -53,6 +57,9 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
 void PlayerComponentRecovery::tick()
 {
   const auto now = nowMs();
+  if (replacementTransition_ && now >= transitionDeadline_) {
+    replacementTransition_ = false; player_->updatePlaybackState();
+  }
   if ((restoring_ || awaitingUsability_) && now >= policy_.deadlineMs()) { failRestore(); return; }
   if (!bound_ || !item_ || !core_ || !item_->recoveryFrameObservationAvailable()) {
     policy_.suspendBaseline();

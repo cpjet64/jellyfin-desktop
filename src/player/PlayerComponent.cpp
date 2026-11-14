@@ -71,7 +71,7 @@ void PlayerComponent::componentPostInitialize()
 PlayerComponent::~PlayerComponent()
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
-  if (m_mpv) releaseMpvController(m_mpv);
+  if (m_mpv) releaseMpvController(m_mpv); else releaseRecovery();
 #endif
   // m_mpv is owned by MpvVideoItem, don't access it here as it may be destroyed
 }
@@ -80,10 +80,10 @@ PlayerComponent::~PlayerComponent()
 bool PlayerComponent::componentInitialize()
 {
   connect(&WebClientFaultGuard::instance(), &WebClientFaultGuard::rendererLostChanged, this, [this] {
-    if (WebClientFaultGuard::instance().rendererLost()) { revokeNativeReceiptHost(); m_playbackIntent.invalidate(PlaybackIntent::Reason::RendererLost); }
+    if (WebClientFaultGuard::instance().rendererLost()) { revokeNativeReceiptHost(); m_playbackIntent.invalidate(PlaybackIntent::Reason::RendererLost); recoveryIntentChanged(true); }
   });
   if (WebClientFaultGuard::instance().rendererLost()) { revokeNativeReceiptHost(); m_playbackIntent.invalidate(PlaybackIntent::Reason::RendererLost); }
-  connect(qApp, &QCoreApplication::aboutToQuit, this, [this] { revokeNativeReceiptHost(); m_playbackIntent.exit(); });
+  connect(qApp, &QCoreApplication::aboutToQuit, this, [this] { revokeNativeReceiptHost(); m_playbackIntent.exit(); recoveryIntentChanged(true); });
   // Defer mpv creation until setQtQuickWindow() where we get MpvQt's handle
   // m_mpv will be set via setMpvHandle() called from MpvVideoItem::initMpv()
   return true;
@@ -92,7 +92,7 @@ bool PlayerComponent::componentInitialize()
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::initializeMpv()
 {
-  if (!m_mpv)
+  if (!m_mpv || !setupRecovery())
     throw FatalException(tr("Failed to load mpv."));
 
   // MpvQt already called mpv_initialize(), so mpv is ready
@@ -561,8 +561,7 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       // Used to initialize stream selections.
       if (!strcmp(msg->args[1], "2"))
       {
-        reselectStream(m_currentSubtitleStream, MediaType::Subtitle);
-        reselectStream(m_currentAudioStream, MediaType::Audio);
+        if (!applyPreloadedStreams()) break;
         m_mpv->command( QStringList() << "hook-ack" << resumeId);
         break;
       }
@@ -581,8 +580,7 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       }
       if (!strcmp(hook->name, "on_preloaded"))
       {
-        reselectStream(m_currentSubtitleStream, MediaType::Subtitle);
-        reselectStream(m_currentAudioStream, MediaType::Audio);
+        if (!applyPreloadedStreams()) break;
         mpv_hook_continue(m_mpv->mpv(), id);
         break;
       }

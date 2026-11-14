@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <memory>
 #include <mpv/client.h>
+#include "RendererOwners.h"
 
 class PlayerComponent;
 class MpvVideoItem;
@@ -29,6 +30,9 @@ public:
   bool ownsEnd(const mpv_event* event) const;
   bool restoring() const { return restoring_; }
   bool recoveryPreloadAllowed() const;
+  bool prepareRecoveryPreload();
+  void beginUserReplacement() { replacedEntry_ = runtime_.activeEntry(); }
+  RendererRuntime::NativeLease acquireNative() const;
 private:
   void tick();
   void event(const mpv_event* event, std::int64_t now);
@@ -50,6 +54,7 @@ private:
   PlayerComponent* player_;
   QPointer<MpvVideoItem> item_;
   std::shared_ptr<RendererRuntime::CoreOwner> core_;
+  RendererRuntime::NativeLease lifetimeLease_;
   QTimer timer_;
   AutomaticRecoveryRuntime runtime_;
   AutomaticRecoveryObservation observation_;
@@ -62,6 +67,9 @@ private:
   std::uint64_t pauseId_ = 0;
   std::uint64_t verifiedSource_ = 0;
   std::int64_t recoveryEntry_ = 0, observationStarted_ = 0;
+  std::int64_t replacedEntry_ = 0;
+  std::int64_t lastStartedEntry_ = 0;
+  std::int64_t transitionDeadline_ = 0;
   std::uint64_t lastSource_ = 0;
   std::uint64_t sourceGeneration_ = 0, sourceEntry_ = 0, sourceFirst_ = 0;
   std::uint64_t sourceEpoch_ = 0;
@@ -70,5 +78,6 @@ private:
   bool bound_ = false, observationPending_ = false, awaitingUsability_ = false;
   bool restoring_ = false, loadDispatched_ = false, resumePending_ = false, completed_ = false;
   bool recoveryRestarted_ = false;
+  bool replacementTransition_ = false;
 };
 #endif

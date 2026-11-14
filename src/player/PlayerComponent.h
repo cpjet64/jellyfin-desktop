@@ -22,6 +22,7 @@
 
 class MpvController;
 class AlbumArtProvider;
+class PlayerComponentRecovery;
 struct PlaybackCheckpoint;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -348,6 +349,14 @@ private:
   void handleMpvEvent(mpv_event *event);
   void setupMpvEvents();
   void finishMpvEventSetup();
+  bool applyPreloadedStreams();
+  bool setupRecovery();
+  void releaseRecovery();
+  void recoveryIntentChanged(bool clear);
+  void recoveryUserReplacement();
+  void noteQueueIntent(bool paused);
+  bool dispatchPlayerLoad(const QStringList& command, const QString& url, const QVariantMap& options,
+                          const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle);
   void subscribeMpvSettings();
   QString configureAudioPassthrough(const QString& deviceType);
   void scheduleMpvHook(const std::function<void()>& resume);
@@ -365,6 +374,9 @@ private:
   void reselectStream(const QVariant &streamSelection, MediaType target);
 
   MpvController* m_mpv = nullptr;
+#ifdef MPVQT_RECOVERY_RUNTIME
+  PlayerComponentRecovery* m_recovery = nullptr;
+#endif
 #ifdef MPVQT_EXTERNAL_EVENTS
   quint64 m_mpvGeneration = 0;
   QPointer<MpvController> m_lastMpvController;
