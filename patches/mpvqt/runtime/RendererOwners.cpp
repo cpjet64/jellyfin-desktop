@@ -1,10 +1,45 @@
 #include "RendererOwners.h"
 #include "mpvcontroller.h"
 #include <QMetaObject>
+#include <algorithm>
+#include <vector>
 
 namespace RendererRuntime {
 
 static std::shared_ptr<GenerationOwner> &quarantined();
+
+NativeLease::NativeLease(std::shared_ptr<CoreOwner> value) : owner(std::move(value)) {}
+NativeLease::NativeLease(NativeLease &&other) noexcept : owner(std::move(other.owner)) {}
+NativeLease &NativeLease::operator=(NativeLease &&other) noexcept
+{
+    if (this != &other) {
+        if (owner) owner->leaveControl();
+        owner = std::move(other.owner);
+    }
+    return *this;
+}
+NativeLease::~NativeLease() { if (owner) owner->leaveControl(); }
+mpv_handle *NativeLease::get() const { return owner ? owner->handle : nullptr; }
+
+static std::mutex &pendingMutex() { static auto *value = new std::mutex; return *value; }
+static std::vector<std::shared_ptr<CoreOwner>> &pendingCores()
+{
+    static auto *value = new std::vector<std::shared_ptr<CoreOwner>>;
+    return *value;
+}
+
+std::shared_ptr<CoreOwner> CoreOwner::adopt(mpv_handle *native, MpvController *control,
+                                           QThread *thread, WakeRelay *relay)
+{
+    if (!native || !control || !thread || !relay || control->thread() != thread || relay->thread() != thread)
+        return {};
+    auto owner = std::make_shared<CoreOwner>();
+    owner->handle = native;
+    owner->controller = control;
+    owner->worker = thread;
+    owner->wakeRelay = relay;
+    return owner;
+}
 
 static void wakeCore(void *opaque)
 {
@@ -33,17 +68,25 @@ bool CoreOwner::enterControl()
 void CoreOwner::leaveControl()
 {
     admittedControl.fetch_sub(1, std::memory_order_acq_rel);
+    if (finalizationRequested.load(std::memory_order_acquire)) maybeFinalize();
+}
+
+NativeLease CoreOwner::acquireNative()
+{
+    if (!enterControl()) return {};
+    return NativeLease(shared_from_this());
 }
 
 bool CoreOwner::postControl(std::function<void(mpv_handle *)> operation)
 {
-    std::lock_guard<std::mutex> lock(postingMutex);
+    std::unique_lock<std::mutex> lock(postingMutex);
     if (!operation || !controller || !enterControl()) return false;
     auto lease = shared_from_this();
     const bool queued = QMetaObject::invokeMethod(controller, [lease, operation = std::move(operation)] {
         struct Leave { std::shared_ptr<CoreOwner> owner; ~Leave() { owner->leaveControl(); } } guard{lease};
         operation(lease->handle);
     }, Qt::QueuedConnection);
+    lock.unlock();
     if (!queued) leaveControl();
     return queued;
 }
@@ -66,26 +109,45 @@ void CoreOwner::closeExternalWakeup()
 {
     wakeAdmission.store(false, std::memory_order_release);
     if (handle) mpv_set_wakeup_callback(handle, nullptr, nullptr);
+    wakeClosed.store(true, std::memory_order_release);
 }
 
 bool CoreOwner::requestFinalization()
 {
+    bool first = false;
+    if (!finalizationRequested.compare_exchange_strong(first, true)) return false;
+    {
+        std::lock_guard<std::mutex> lock(pendingMutex());
+        pendingCores().push_back(shared_from_this());
+    }
     revokeControl();
     closeExternalWakeup();
-    if (!handle || !controller || !worker || admittedControl.load(std::memory_order_acquire) != 0 ||
+    maybeFinalize();
+    return true;
+}
+
+void CoreOwner::maybeFinalize()
+{
+    if (!finalizationRequested.load(std::memory_order_acquire)) return;
+    if (!wakeClosed.load(std::memory_order_acquire) || !handle || !controller || !worker || admittedControl.load(std::memory_order_acquire) != 0 ||
         liveGenerations.load(std::memory_order_acquire) != 0 || wakeCallbacks.load(std::memory_order_acquire) != 0)
-        return false;
+        return;
     bool expected = false;
-    if (!finalizationRequested.compare_exchange_strong(expected, true)) return false;
+    if (!finalizationQueued.compare_exchange_strong(expected, true)) return;
     auto owner = shared_from_this();
     const bool queued = QMetaObject::invokeMethod(controller, [owner] {
-        mpv_set_wakeup_callback(owner->handle, nullptr, nullptr);
         mpv_terminate_destroy(owner->handle);
         owner->handle = nullptr;
+        owner->wakeRelay->deleteLater();
+        QObject::connect(owner->worker, &QThread::finished, owner->worker, &QObject::deleteLater);
+        QObject::connect(owner->worker, &QThread::finished, [owner] {
+            std::lock_guard<std::mutex> lock(pendingMutex());
+            auto &pending = pendingCores();
+            pending.erase(std::remove(pending.begin(), pending.end(), owner), pending.end());
+        });
         owner->worker->quit();
     }, Qt::QueuedConnection);
-    if (!queued) finalizationRequested.store(false, std::memory_order_release);
-    return queued;
+    if (!queued) finalizationQueued.store(false, std::memory_order_release);
 }
 
 GenerationOwner::GenerationOwner(quint64 id, std::shared_ptr<CoreOwner> coreLease)
@@ -113,6 +175,16 @@ void GenerationOwner::revoke()
     callbackAdmission.store(false, std::memory_order_release);
 }
 
+void GenerationOwner::notifyRenderUpdate()
+{
+    if (!observerAuthority.load(std::memory_order_acquire) || !core || !core->wakeRelay) return;
+    auto owner = shared_from_this();
+    QMetaObject::invokeMethod(core->wakeRelay, [owner] {
+        if (owner->observerAuthority.load(std::memory_order_acquire))
+            emit owner->core->wakeRelay->renderUpdateRequested(owner->generation);
+    }, Qt::QueuedConnection);
+}
+
 bool GenerationOwner::retireOnOriginalContext()
 {
     revoke();
@@ -121,6 +193,12 @@ bool GenerationOwner::retireOnOriginalContext()
     if (callbacks.load(std::memory_order_acquire) != 0) {
         blocked.store(true, std::memory_order_release);
         return false;
+    }
+    if (!context && !contextEverCreated) {
+        retired.store(true, std::memory_order_release);
+        core->liveGenerations.fetch_sub(1, std::memory_order_acq_rel);
+        core->maybeFinalize();
+        return true;
     }
     if (!context || !originalThread || !originalContext ||
         QThread::currentThread() != originalThread ||
@@ -132,6 +210,7 @@ bool GenerationOwner::retireOnOriginalContext()
     context = nullptr;
     retired.store(true, std::memory_order_release);
     core->liveGenerations.fetch_sub(1, std::memory_order_acq_rel);
+    if (core->finalizationRequested.load(std::memory_order_acquire)) core->maybeFinalize();
     return true;
 }
 

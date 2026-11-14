@@ -15,6 +15,22 @@ class MpvController;
 
 namespace RendererRuntime {
 
+struct CoreOwner;
+class NativeLease {
+public:
+    NativeLease() = default;
+    explicit NativeLease(std::shared_ptr<CoreOwner> owner);
+    NativeLease(NativeLease &&other) noexcept;
+    NativeLease &operator=(NativeLease &&other) noexcept;
+    NativeLease(const NativeLease &) = delete;
+    NativeLease &operator=(const NativeLease &) = delete;
+    ~NativeLease();
+    mpv_handle *get() const;
+    explicit operator bool() const { return static_cast<bool>(owner); }
+private:
+    std::shared_ptr<CoreOwner> owner;
+};
+
 class WakeRelay : public QObject {
     Q_OBJECT
 public:
@@ -22,6 +38,7 @@ public:
     void notify() { emit nativeEventsAvailable(); }
 signals:
     void nativeEventsAvailable();
+    void renderUpdateRequested(quint64 generation);
 };
 
 // Native destruction is explicit and must be dispatched after external fences.
@@ -32,22 +49,28 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     WakeRelay *wakeRelay = nullptr; // owned on worker until queued fence
     std::atomic<bool> commandAuthority{true};
     std::atomic<bool> finalizationRequested{false};
+    std::atomic<bool> finalizationQueued{false};
     std::atomic<unsigned> admittedControl{0};
     std::atomic<unsigned> liveGenerations{0};
     std::atomic<bool> wakeAdmission{false};
+    std::atomic<bool> wakeClosed{false};
     std::atomic<unsigned> wakeCallbacks{0};
     std::mutex postingMutex;
 
     bool enterControl();
     void leaveControl();
+    NativeLease acquireNative();
     bool postControl(std::function<void(mpv_handle *)> operation);
     void revokeControl();
     bool installExternalWakeup();
     void closeExternalWakeup();
     bool requestFinalization();
+    void maybeFinalize();
+    static std::shared_ptr<CoreOwner> adopt(mpv_handle *handle, MpvController *controller,
+                                            QThread *worker, WakeRelay *relay);
 };
 
-struct GenerationOwner {
+struct GenerationOwner : std::enable_shared_from_this<GenerationOwner> {
     GenerationOwner(quint64 id, std::shared_ptr<CoreOwner> coreLease);
     const quint64 generation;
     const std::shared_ptr<CoreOwner> core;
@@ -57,12 +80,14 @@ struct GenerationOwner {
     std::atomic<bool> retired{false};
     std::atomic<bool> blocked{false};
     mpv_render_context *context = nullptr; // render thread only
+    bool contextEverCreated = false; // render thread only
     QPointer<QOpenGLContext> originalContext;
     QPointer<QThread> originalThread;
 
     bool enterCallback();
     void leaveCallback();
     void revoke();
+    void notifyRenderUpdate();
     bool retireOnOriginalContext();
 };
 
