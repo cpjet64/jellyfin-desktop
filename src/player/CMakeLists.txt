@@ -6,7 +6,7 @@ add_sources(AutomaticRecoveryPolicy.cpp AutomaticRecoveryPolicy.h AutomaticRecov
 add_sources(AutomaticRecoveryReadStall.cpp AutomaticRecoveryReadStall.h)
 add_sources(AutomaticRecoveryReload.cpp AutomaticRecoveryReload.h AutomaticRecoveryRuntime.cpp AutomaticRecoveryRuntime.h)
 add_sources(AutomaticRecoverySession.cpp AutomaticRecoverySession.h PlayerComponentRecovery.cpp PlayerComponentRecovery.h)
-add_sources(PlayerComponentRecoveryWatchdog.cpp PlayerComponentRecoveryRestore.cpp PlayerComponentRecoveryReadStall.cpp)
+add_sources(PlayerComponentRecoveryWatchdog.cpp PlayerComponentRecoveryRestore.cpp PlayerComponentRecoveryReadStall.cpp PlayerComponentRecoverySubmission.cpp)
 endif()
 add_sources(PlayerRecoveryIntegration.cpp)
 add_sources(PlaybackIntent.cpp PlaybackIntent.h PlaybackCheckpoint.cpp PlaybackCheckpoint.h)

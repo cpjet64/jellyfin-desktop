@@ -41,10 +41,8 @@ bool PlayerComponentRecovery::bind()
 #ifdef MPVQT_RECOVERY_FRAME_API
   connect(item_, &MpvVideoItem::recoveryFrameRendered, this,
           [this](quint64 generation, const RecoveryFrameObservationV1& frame) { rendered(generation, frame); });
-  connect(item_, &MpvVideoItem::recoveryFrameSubmitted, this,
-          [this](quint64 generation, quint64 serial) { submitted(generation, serial); });
-  connect(item_, &MpvVideoItem::recoveryFrameSwapped, this,
-          [this](quint64 generation, quint64 serial) { swapped(generation, serial); });
+  connect(item_, &MpvVideoItem::recoveryFrameSubmission, this,
+          [this](quint64 generation, QtRecoverySubmissionV1 result) { submission(generation, result); });
 #endif
   bound_ = true; timer_.start(); return true;
 }
@@ -72,6 +70,7 @@ bool PlayerComponentRecovery::queue(const QStringList& command, const QString& u
 }
 void PlayerComponentRecovery::userChanged(bool clear)
 {
+  clearFrameAttempt();
   const auto previous = runtime_.activeKey();
   runtime_.userIntentChanged(); observation_.invalidate(); observationPending_ = awaitingUsability_ = false;
   readStall_.reset();

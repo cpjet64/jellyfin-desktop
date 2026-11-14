@@ -46,8 +46,9 @@ private:
   bool sameIntent() const;
   void beginFrameGate(std::int64_t now);
   void rendered(std::uint64_t generation, const RecoveryFrameObservationV1& frame);
-  void submitted(std::uint64_t generation, std::uint64_t serial);
-  void swapped(std::uint64_t generation, std::uint64_t serial);
+  void submission(std::uint64_t generation, const QtRecoverySubmissionV1& submission);
+  bool armFrameAttempt();
+  void clearFrameAttempt();
   void maybeResume(std::int64_t now);
   bool validRestore(std::int64_t now) const;
   void failRestore();
@@ -74,6 +75,8 @@ private:
   AutomaticRecoveryFrameGate frameGate_;
   std::uint64_t session_ = 0, attempt_ = 0, request_ = 0;
   std::uint64_t rendererGeneration_ = 0, frameEpoch_ = 0, previousSource_ = 0, unpauseId_ = 0;
+  std::uint64_t windowLifetime_ = 0, sceneGeneration_ = 0, pendingSubmissionEpoch_ = 0;
+  QtRecoverySubmissionV1 pendingSubmission_{};
   std::uint64_t pauseId_ = 0;
   std::uint64_t verifiedSource_ = 0;
   std::int64_t recoveryEntry_ = 0, observationStarted_ = 0;
@@ -94,6 +97,7 @@ private:
   bool bound_ = false, observationPending_ = false, awaitingUsability_ = false;
   bool restoring_ = false, loadDispatched_ = false, resumePending_ = false, completed_ = false;
   bool recoveryRestarted_ = false;
+  bool submissionPending_ = false;
   bool recoveryTracksApplied_ = false;
   bool replacementTransition_ = false;
 };

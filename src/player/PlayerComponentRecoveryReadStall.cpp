@@ -53,7 +53,7 @@ void PlayerComponentRecovery::watchdogObservation(AutomaticRecoverySession::Key 
   if (action != AutomaticRecovery::Action::Reload) return;
   if (request_ == std::numeric_limits<std::uint64_t>::max()) { policy_.fail(); return; }
   saved_ = snapshot; rendererGeneration_ = item_->recoveryRendererGeneration();
-  if (!rendererGeneration_) { policy_.fail(); return; }
+  if (!rendererGeneration_ || !armFrameAttempt()) { clearFrameAttempt(); policy_.fail(); return; }
   readStall_.reset(); awaitingUsability_ = true;
   item_->requestRendererUsability(rendererGeneration_, ++request_, policy_.deadlineMs());
 }

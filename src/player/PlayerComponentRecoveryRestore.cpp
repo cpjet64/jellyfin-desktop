@@ -8,9 +8,15 @@
 
 bool PlayerComponentRecovery::validRestore(std::int64_t now) const
 {
-  return restoring_ && now >= 0 && now < policy_.deadlineMs() && sameIntent() && item_ &&
+  const bool current = restoring_ && now >= 0 && now < policy_.deadlineMs() && sameIntent() && item_ &&
       item_->recoveryFrameObservationAvailable() && rendererGeneration_ &&
       item_->recoveryRendererGeneration() == rendererGeneration_;
+#ifdef MPVQT_RECOVERY_FRAME_API
+  return current && windowLifetime_ && sceneGeneration_ && item_->recoveryWindowLifetime() == windowLifetime_ &&
+      item_->recoverySceneGraphGeneration() == sceneGeneration_;
+#else
+  return current && false;
+#endif
 }
 bool PlayerComponentRecovery::recoveryPreloadAllowed() const
 {
@@ -27,6 +33,7 @@ bool PlayerComponentRecovery::prepareRecoveryPreload()
 
 void PlayerComponentRecovery::failRestore()
 {
+  clearFrameAttempt();
   if (recoveryLoad_.startedEntry() > 0) cancelledRecoveryEntry_ = recoveryLoad_.startedEntry();
   restoring_ = awaitingUsability_ = resumePending_ = frameGateActive_ = false;
   observationPending_ = false; observation_.invalidate(); frameGate_.invalidate();
@@ -78,10 +85,9 @@ void PlayerComponentRecovery::usability(std::uint64_t generation, std::uint64_t 
   restoring_ = true;
   const auto now = nowMs();
   if (!usable || !validRestore(now)) { failRestore(); return; }
-  const auto sequence = runtime_.reserveSequence();
-  if (!sequence || !recoveryLoad_.begin({saved_.key.session, saved_.key.revision, saved_.key.generation},
-                                        sequence, policy_.deadlineMs())) { failRestore(); return; }
-  attempt_ = sequence; previousSource_ = lastSource_; pauseId_ = (std::uint64_t{4} << 61) | sequence;
+  if (!attempt_ || !recoveryLoad_.begin({saved_.key.session, saved_.key.revision, saved_.key.generation},
+                                        attempt_, policy_.deadlineMs())) { failRestore(); return; }
+  pauseId_ = (std::uint64_t{4} << 61) | attempt_;
   auto lease = core_->acquireNative();
   int paused = 1;
   if (!lease.get() || mpv_set_property_async(lease.get(), pauseId_, "pause", MPV_FORMAT_FLAG, &paused) < 0)
@@ -109,7 +115,7 @@ void PlayerComponentRecovery::restoreEvent(const mpv_event* native, std::int64_t
   }
   if (native->event_id == MPV_EVENT_SET_PROPERTY_REPLY && native->reply_userdata == unpauseId_ && resumePending_) {
     resumePending_ = false; unpauseId_ = 0;
-    if (native->error < 0) failRestore(); else { completed_ = true; restoring_ = false; }
+    if (native->error < 0) failRestore(); else { completed_ = true; restoring_ = false; clearFrameAttempt(); }
     return;
   }
   if (!loadDispatched_) return;
@@ -143,11 +149,14 @@ void PlayerComponentRecovery::beginFrameGate(std::int64_t now)
   if (!validRestore(now)) { failRestore(); return; }
   recoveryEntry_ = recoveryLoad_.entry(); frameEpoch_ = runtime_.eventEpoch();
   if (!policy_.restoreStarted(attempt_, previousSource_, now) ||
-      !frameGate_.begin(saved_.key, attempt_, recoveryEntry_, saved_.positionMs, frameEpoch_, previousSource_, now,
-                        policy_.deadlineMs())) { failRestore(); return; }
+      !frameGate_.begin(saved_.key, attempt_, recoveryEntry_, saved_.positionMs, frameEpoch_, previousSource_,
+                        rendererGeneration_, windowLifetime_, sceneGeneration_, now, policy_.deadlineMs())) { failRestore(); return; }
   frameGateActive_ = true; observation_.invalidate(); observationPending_ = false;
   applyDeferredTracks();
   beginObservation(saved_.key, recoveryEntry_, now);
+  if (submissionPending_ && pendingSubmissionEpoch_ == frameEpoch_) {
+    const auto pending = pendingSubmission_; submissionPending_ = false; submission(rendererGeneration_, pending);
+  } else submissionPending_ = false;
 }
 
 void PlayerComponentRecovery::recoveryTick(std::int64_t now)
@@ -172,26 +181,6 @@ void PlayerComponentRecovery::recoveryTick(std::int64_t now)
 void PlayerComponentRecovery::rendered(std::uint64_t generation, const RecoveryFrameObservationV1& frame)
 {
   recordSourceFrame(generation, frame);
-  if (!restoring_ || !frameGateActive_) return;
-  const auto now = nowMs();
-  if (!validRestore(now) || generation != rendererGeneration_ || runtime_.eventEpoch() != frameEpoch_ ||
-      !frameGate_.rendered(saved_.key, attempt_, frameEpoch_, frame, now)) { failRestore(); return; }
-  verifiedSource_ = frame.source_frame_serial;
-}
-void PlayerComponentRecovery::submitted(std::uint64_t generation, std::uint64_t serial)
-{
-  if (!restoring_ || !frameGateActive_) return;
-  const auto now = nowMs();
-  if (!validRestore(now) || generation != rendererGeneration_ || runtime_.eventEpoch() != frameEpoch_ ||
-      !frameGate_.submitted(saved_.key, attempt_, frameEpoch_, serial, now)) failRestore();
-}
-void PlayerComponentRecovery::swapped(std::uint64_t generation, std::uint64_t serial)
-{
-  if (!restoring_ || !frameGateActive_) return;
-  const auto now = nowMs();
-  if (!validRestore(now) || generation != rendererGeneration_ || runtime_.eventEpoch() != frameEpoch_ ||
-      !frameGate_.swapped(saved_.key, attempt_, frameEpoch_, serial, now)) { failRestore(); return; }
-  maybeResume(now);
 }
 
 void PlayerComponentRecovery::maybeResume(std::int64_t now)
@@ -202,7 +191,7 @@ void PlayerComponentRecovery::maybeResume(std::int64_t now)
       !runtime_.replaceActiveEntry(saved_.key, saved_.entry, recoveryEntry_, observationResult_.positionMs)) {
     failRestore(); return;
   }
-  if (saved_.paused) { completed_ = true; restoring_ = false; return; }
+  if (saved_.paused) { completed_ = true; restoring_ = false; clearFrameAttempt(); return; }
   AutomaticRecovery::Sample sample;
   sample.nowMs = now; sample.session = saved_.key.session; sample.revision = saved_.key.revision;
   sample.generation = saved_.key.generation; sample.desiredPaused = false;

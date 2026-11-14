@@ -14,13 +14,17 @@ bool AutomaticRecoveryFrameGate::nearTarget(std::int64_t value) const
 }
 bool AutomaticRecoveryFrameGate::begin(Key key, std::uint64_t attempt, std::int64_t entry, std::int64_t targetMs,
                                        std::uint64_t epoch, std::uint64_t previousSource,
+                                       std::uint64_t rendererGeneration, std::uint64_t windowLifetime,
+                                       std::uint64_t sceneGeneration,
                                        std::int64_t nowMs, std::int64_t deadlineMs)
 {
   invalidate();
-  if (!key.session || !key.revision || !key.generation || !attempt || !epoch || entry <= 0 || targetMs < 0 ||
+  if (!key.session || !key.revision || !key.generation || !attempt || !epoch || !rendererGeneration ||
+      !windowLifetime || !sceneGeneration || entry <= 0 || targetMs < 0 ||
       nowMs < 0 || deadlineMs <= nowMs)
     return false;
   key_ = key; attempt_ = attempt; epoch_ = epoch; entry_ = entry; target_ = targetMs; discontinuity_ = 0; previousSource_ = previousSource;
+  rendererGeneration_ = rendererGeneration; windowLifetime_ = windowLifetime; sceneGeneration_ = sceneGeneration;
   lastMs_ = nowMs; deadline_ = deadlineMs; active_ = true; return true;
 }
 bool AutomaticRecoveryFrameGate::rendered(Key key, std::uint64_t attempt, std::uint64_t epoch, const RecoveryFrameObservationV1& frame,
@@ -37,17 +41,32 @@ bool AutomaticRecoveryFrameGate::rendered(Key key, std::uint64_t attempt, std::u
   const auto ptsMs = static_cast<std::int64_t>(frame.media_pts * 1000.0);
   if (!nearTarget(ptsMs)) { invalidate(); return false; }
   discontinuity_ = frame.discontinuity_id;
-  renderSerial_ = frame.render_serial; submitted_ = swapped_ = false; lastMs_ = now; return true;
+  renderSerial_ = frame.render_serial; lastMs_ = now; return true;
 }
-bool AutomaticRecoveryFrameGate::submitted(Key key, std::uint64_t attempt, std::uint64_t epoch, std::uint64_t serial, std::int64_t now)
+bool AutomaticRecoveryFrameGate::validSubmission(const QtRecoverySubmissionV1& s)
 {
-  if (!matches(key, attempt, epoch, now) || !renderSerial_ || serial != renderSerial_ || submitted_) { invalidate(); return false; }
-  submitted_ = true; lastMs_ = now; return true;
+  const auto& t = s.ticket; const auto& f = s.frame;
+  return s.size == sizeof(s) && s.version == QT_RECOVERY_SUBMISSION_ABI_VERSION && !s.reserved &&
+      t.size == sizeof(t) && t.version == QT_RECOVERY_SWAP_ABI_VERSION && t.window_lifetime && t.scenegraph_generation &&
+      t.frame_serial && t.render_thread && t.swapchain && t.render_target && t.surface && t.platform_context &&
+      f.size == sizeof(f) && f.version == QT_RECOVERY_SUBMISSION_ABI_VERSION && !f.reserved &&
+      f.renderer_generation && f.entry_id && f.discontinuity_id && f.source_frame_serial && f.render_serial &&
+      f.actual_render_fbo && std::isfinite(f.media_pts) && f.media_pts >= 0 && s.node_lifetime &&
+      s.texture_generation && s.fbo_content_serial && s.display_texture;
 }
-bool AutomaticRecoveryFrameGate::swapped(Key key, std::uint64_t attempt, std::uint64_t epoch, std::uint64_t serial, std::int64_t now)
+bool AutomaticRecoveryFrameGate::completeSubmission(Key key, std::uint64_t attempt, std::uint64_t epoch,
+                                                     const QtRecoverySubmissionV1& s, std::int64_t now)
 {
-  if (!matches(key, attempt, epoch, now) || !submitted_ || serial != renderSerial_ || swapped_) { invalidate(); return false; }
-  swapped_ = true; lastMs_ = now; return true;
+  if (!matches(key, attempt, epoch, now) || !validSubmission(s) || !attempt || s.frame.attempt != attempt ||
+      s.frame.renderer_generation != rendererGeneration_ || s.ticket.window_lifetime != windowLifetime_ ||
+      s.ticket.scenegraph_generation != sceneGeneration_) { invalidate(); return false; }
+  RecoveryFrameObservationV1 frame{};
+  frame.size = sizeof(frame); frame.version = RECOVERY_FRAME_OBSERVATION_VERSION; frame.valid = 1;
+  frame.playlist_entry_id = s.frame.entry_id; frame.discontinuity_id = s.frame.discontinuity_id;
+  frame.source_frame_serial = s.frame.source_frame_serial; frame.render_serial = s.frame.render_serial;
+  frame.media_pts = s.frame.media_pts;
+  if (!rendered(key, attempt, epoch, frame, now)) return false;
+  completed_ = true; return true;
 }
 bool AutomaticRecoveryFrameGate::position(Key key, std::uint64_t attempt, std::int64_t entry,
                                           std::int64_t positionMs, bool nativePaused, std::uint64_t epoch, std::int64_t now)
@@ -58,8 +77,8 @@ bool AutomaticRecoveryFrameGate::position(Key key, std::uint64_t attempt, std::i
   positioned_ = true; positionMsAt_ = lastMs_ = now; return true;
 }
 bool AutomaticRecoveryFrameGate::ready(Key key, std::uint64_t attempt, std::uint64_t epoch, std::int64_t now) const
-{ return matches(key, attempt, epoch, now) && positioned_ && now - positionMsAt_ < 2000 && submitted_ && swapped_; }
+{ return matches(key, attempt, epoch, now) && positioned_ && now - positionMsAt_ < 2000 && completed_; }
 void AutomaticRecoveryFrameGate::invalidate()
 {
-  active_ = submitted_ = swapped_ = positioned_ = false; key_ = {}; attempt_ = renderSerial_ = 0;
+  active_ = completed_ = positioned_ = false; key_ = {}; attempt_ = renderSerial_ = 0;
 }
