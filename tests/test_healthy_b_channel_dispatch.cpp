@@ -295,8 +295,11 @@ class TestHealthyGraphArm {
     const auto claim = std::atomic_load(&graph_->access_->intentClaim);
     CHECK(graph_->restoreLoad() && state_->dispatches == 1);
     CHECK(session_->pollPlayback() == ChildSession::Progress::Pending);
+    const auto access = graph_->access_;
     graph_->clock_ = [this] { return normal_ + 1; };
     CHECK(session_->pollPlayback() == ChildSession::Progress::Failed);
+    CHECK(access->phase.load() != AccessPhase::Normal);
+    CHECK(!prepared_->graphOnGuiThread());
     checkFailed(gate, claim, 1);
   }
   void reentrantInitialization(int stage)
