@@ -13,6 +13,19 @@ output and its revised exact response/policy must be independently reviewed befo
 any new compile; this draft neither reuses the old directory nor claims a new
 response identity. The v2 package digest also awaits the assembled candidate.
 
+Before either Python child starts, the reviewed outer retained-input boundary
+must hold pinned Python, every imported v1 and v2 source, and the fixed scripts
+through both helper settlements and postchecks. Fixed import origins must be
+checked. For review, use `-I -S -B -X pycache_prefix=<fresh-private-empty-path>`
+with an absolute per-invocation project-owned prefix and fixed proof path.
+The prefix must stay exclusive and non-reparse. Python documents that this
+prefix redirects bytecode reads as well as writes; `-B` alone only prevents
+bytecode writes. Isolated mode removes the script directory and user site from
+the import path, so the fixed proof directory must be inserted deliberately.
+See https://docs.python.org/3.14/library/sys.html#sys.pycache_prefix and
+https://docs.python.org/3.14/using/cmdline.html. This is a proposal for source
+review, not proof that the bootstrap or installed Python has been qualified.
+
 The finite qualification must use an exclusive Windows build worker or an
 equivalently demonstrable context with no unrelated compiler clients. No worker
 provisioning or interruption of another build is authorized here. A reviewed,
