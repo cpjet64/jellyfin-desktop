@@ -17,9 +17,9 @@ $files = @(
   @('build_only_v2/supervisor.py','1e9ba410ad76691e49bc94efba8a4e467d774b6eeed4bb32b60f7ace0d902fbb',11493),
   @('build_only_v2/receipt.py','73ad320f401fd30b868500962f3d82660bc5b1ccab6ac0b9547cfb73761fdc0b',7146),
   @('build_only_v2/postcheck.py','38af20981d2875de16361e8d0978565340fc7ab03070ebc4b661e4088627ac2e',7249),
-  @('test_build_only_v2_profile.py','c18258a58dc43fc5339b70b71e20cedd732406dacdb8fec8c1172bf57984105e',4223),
-  @('test_build_only_v2_receipt.py','b7e13f1827e4f800e4db0903a34eb75a8dfb4b822cc66dcf3b4e279bedc843c5',10311),
-  @('tests/test_v2_lifecycle_contract.py','3c42a2594b233a3ff9aef743881a3d7f371a08ff0fe7adc5a280c5705904f2cc',10212))
+  @('test_build_only_v2_profile.py','60829fdec6e235f28807118992deca4c3258c3d9fb424fd183e2bb44205232b0',4141),
+  @('test_build_only_v2_receipt.py','b67aacf25bbf0947bdc617abc5c461a13149c8a5f02e71206183369c6b90432d',10129),
+  @('tests/test_v2_lifecycle_contract.py','4bbe2c24bf15d82b3f7d6004eaf567b2bfd311272df511bcb95b39c64a44d4d8',9981))
 
 function Check-Tree($path,$sha) {
   $actual = & git.exe -C $path rev-parse HEAD
@@ -35,9 +35,9 @@ function Check-Blob($repo,$sha,$relative) {
 }
 function Verify-Sources {
   Check-Tree $v1 'd0bb016df169b663567e88fd5586ab7c008e9554'
-  Check-Tree $v2 '05a32b50c1a393d029b0d16485f47976b200020c'
+  Check-Tree $v2 'c5ae404a9acf13d45153ab1763616f91d9091eff'
   Check-Tree $proposal $ReviewedProposalSHA
-  foreach ($entry in $files) { Check-Blob $v2 '05a32b50c1a393d029b0d16485f47976b200020c' ('dev/windows/proof/' + $entry[0]) }
+  foreach ($entry in $files) { Check-Blob $v2 'c5ae404a9acf13d45153ab1763616f91d9091eff' ('dev/windows/proof/' + $entry[0]) }
   foreach ($path in @('pure-controller.ps1','pure-driver.py')) {
     Check-Blob $proposal $ReviewedProposalSHA ('dev/windows/proof/proposals/cl-service-v2/pure-tests/' + $path)
   }
