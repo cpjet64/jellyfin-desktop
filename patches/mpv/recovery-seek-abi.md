@@ -15,6 +15,9 @@ returns an error when the epoch is permanently exhausted. Each new request
 advances the epoch too. Call cancellation before Stop, changing entry, or any
 intent that invalidates an admitted operation. Callers must fail closed on an
 error and must not reuse operation IDs within the lifetime of their evidence.
+If the async API has reserved a reply when exhaustion is reached, it returns
+successful dispatch and sends a negative correlated command reply; no seek is
+admitted. The synchronous cancellation API reports exhaustion immediately.
 
 The core rechecks the entry, playback state and epoch before accepting the
 request and again before seeking. A compare-and-exchange claims application:
@@ -26,6 +29,15 @@ demux seeking and the associated playback reset. Untracked seeks and video
 resets revoke the epoch. Each selected frame retains that epoch and operation,
 and the render path checks the epoch before returning the ID. Consumers must
 also reject observations superseded after the native check.
+
+The new request revokes older owned evidence when its epoch is allocated; its
+admission replaces any older queued seek. The admission check and queue
+replacement run on the core thread. A newer
+untracked seek either runs first and revokes the request before admission, or
+runs afterward and revokes and replaces its queue entry. Cancellation that
+races after the admission check can prevent the later application claim; it
+does not restore the older, already superseded queue entry. Admission and the
+later application claim are separate ordering points.
 
 The V1 symbol and ordinary render entry point remain available. Resolve all
 three owned-seek symbols from the same loaded module as ordinary mpv. When the
