@@ -1,6 +1,5 @@
-#pragma once
-
-// These member definitions share the actor fixture declared by the test TU.
+#include "ActorTest.h"
+#include <limits>
 void TestPlayerRecoveryActor::retryNearClockLimit()
 {
   Fixture f;
