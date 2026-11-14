@@ -69,6 +69,8 @@ def _pin_stack(handoff):
         try:
             yield stack
         except BaseException as exc:
+            if isinstance(exc, RetainedHandlesError):
+                handoff.retain(exc)
             if handoff.primary_error is None:
                 handoff.primary_error = exc
             raise

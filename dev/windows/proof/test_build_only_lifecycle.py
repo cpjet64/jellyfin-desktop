@@ -250,6 +250,49 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(len(record['evidence']['errors']), 4)
         self.assertEqual(record['evidence']['owned']['failed'], 4)
 
+    def test_primary_retained_error_survives_later_pin_close_error(self):
+        ledger = SimpleNamespace(opened=2, closed=0, close_failed=2, in_any_job=lambda: True)
+        primary_handle = RetainedHandle(ledger=ledger)
+        later_handle = RetainedHandle(ledger=ledger)
+        primary = RetainedHandlesError('primary retained failure', (primary_handle,))
+        root = Root(signaled=False)
+        captured = []
+        receipt = SimpleNamespace(write=captured.append, flush=lambda: None)
+        policy = SimpleNamespace(command=object())
+
+        class FailingPin:
+            def close(self):
+                raise RetainedHandlesError('later pin close failure', (later_handle,))
+
+        def fail_job(api, current, env, started, state, handoff):
+            handoff.root = root
+            handoff.deadline = float('inf')
+            with _pin_stack(handoff) as stack:
+                stack.enter_context(_tracked_pin(handoff, api, 'pin', 'hash'))
+                raise primary
+
+        with patch('build_only.supervisor.WinAPI', return_value=ledger), \
+             patch('build_only.supervisor._environment', return_value={}), \
+             patch('build_only.supervisor.inspect_command_inputs'), \
+             patch('build_only.supervisor._receipt', return_value=nullcontext(receipt)), \
+             patch('build_only.supervisor.policy_hash', return_value='policy'), \
+             patch('build_only.supervisor.FilePin', return_value=FailingPin()), \
+             patch('build_only.supervisor._run_job', side_effect=fail_job):
+            with self.assertRaisesRegex(RuntimeError, 'build-only supervision failed') as caught:
+                _supervise(policy, 'unused')
+        handoff = caught.exception.cleanup_handoff
+        self.assertIs(caught.exception.__cause__, primary)
+        self.assertIs(handoff.primary_error, primary)
+        self.assertIs(handoff.root, root)
+        self.assertEqual(len(handoff.handles), 2)
+        self.assertIs(handoff.handles[0], primary_handle)
+        self.assertIs(handoff.handles[1], later_handle)
+        self.assertEqual((primary_handle.calls, later_handle.calls), (1, 1))
+        record = json.loads(captured[0])
+        self.assertEqual(record['result'], 'failed')
+        self.assertIn('primary retained failure', record['evidence']['reason'])
+        self.assertEqual(record['evidence']['owned'], {'opened': 2, 'closed': 2, 'failed': 2})
+
     def test_natural(self):
         api = FakeAPI([(0, 1)])
         self.assertEqual(run(api)["result"], "natural")
