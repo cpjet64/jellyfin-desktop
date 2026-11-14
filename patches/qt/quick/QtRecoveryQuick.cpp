@@ -10,9 +10,55 @@ struct State {
     QtRecoveryFrameV1 frame{};
     uint64_t node = 0, texture = 0, content = 0;
     uint32_t renderFbo = 0, displayTexture = 0;
-    bool active = false, inFbo = false, published = false, associated = false;
+    bool active = false, inFbo = false, published = false, associated = false, drew = false;
 };
 thread_local State state;
+struct NodeRegistration { const void *node = nullptr; uint64_t lifetime = 0; };
+thread_local NodeRegistration nodes[32];
+}
+
+void qtRecoveryRegisterNode(const void *node, uint64_t lifetime)
+{
+    if (!node || !lifetime)
+        return;
+    for (const auto &entry : nodes) {
+        if (entry.node == node)
+            return;
+    }
+    for (auto &entry : nodes) {
+        if (!entry.node) {
+            entry = {node, lifetime};
+            return;
+        }
+    }
+}
+
+void qtRecoveryUnregisterNode(const void *node, uint64_t lifetime)
+{
+    for (auto &entry : nodes) {
+        if (entry.node == node && entry.lifetime == lifetime) {
+            entry = {};
+            if (state.node == lifetime)
+                qtRecoveryFboAbort();
+            return;
+        }
+    }
+}
+
+uint64_t qtRecoveryNodeIdentity(const void *node)
+{
+    for (const auto &entry : nodes) {
+        if (entry.node == node)
+            return entry.lifetime;
+    }
+    return 0;
+}
+
+void qtRecoveryMarkDraw(uint64_t nodeLifetime, uintptr_t renderTarget, bool normalColorPass)
+{
+    if (state.active && state.associated && normalColorPass && nodeLifetime
+        && nodeLifetime == state.node && renderTarget == state.ticket.render_target)
+        state.drew = true;
 }
 
 uint64_t qtRecoveryIdentity()
@@ -66,7 +112,7 @@ void qtRecoveryFboBegin(uint32_t fbo, uint64_t nodeLifetime)
 
 void qtRecoveryFboAbort()
 {
-    state.inFbo = state.published = state.associated = false;
+    state.inFbo = state.published = state.associated = state.drew = false;
     state.renderFbo = 0;
     state.node = state.texture = state.content = 0;
     state.displayTexture = 0;
