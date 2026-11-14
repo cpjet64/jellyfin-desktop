@@ -42,7 +42,7 @@ std::shared_ptr<CoreOwner> CoreOwner::adopt(mpv_handle *native, MpvController *c
     auto &slot = faultSlot();
     std::lock_guard<std::mutex> lock(slot.mutex);
     if (slot.core || !slot.active.expired()) return {};
-    auto owner = std::make_shared<CoreOwner>();
+    auto owner = std::shared_ptr<CoreOwner>(new CoreOwner());
     owner->handle = native;
     owner->controller = control;
     owner->worker = thread;
@@ -57,10 +57,10 @@ bool CoreOwner::blockUnresolvedHook()
     auto &slot = faultSlot();
     {
         std::lock_guard<std::mutex> lock(slot.mutex);
-        if (slot.core) return slot.core == owner;
-        if (slot.active.lock() != owner) return false;
+        if (slot.core && slot.core != owner) return false;
+        if (!slot.core && slot.active.lock() != owner) return false;
         faultQuarantined.store(true, std::memory_order_release);
-        slot.core = owner;
+        if (!slot.core) slot.core = owner;
     }
     requestQuarantineStop();
     revokeControl();
@@ -107,7 +107,7 @@ NativeLease CoreOwner::acquireNative()
 bool CoreOwner::bindExternalConsumer()
 {
     std::lock_guard<std::mutex> lock(postingMutex);
-    if (!commandAuthority.load() || externalConsumers.load() != 0) return false;
+    if (!commandAuthority.load() || faultQuarantined.load() || externalConsumers.load() != 0) return false;
     externalConsumers.store(1);
     return true;
 }
@@ -169,7 +169,8 @@ bool CoreOwner::installExternalWakeup()
 {
     std::lock_guard<std::mutex> lock(wakeRegistrationMutex);
     if (wakeClosed.load(std::memory_order_acquire)) return false;
-    if (!handle || !wakeRelay || !commandAuthority.load(std::memory_order_acquire)) return false;
+    if (!handle || !wakeRelay || !commandAuthority.load(std::memory_order_acquire) ||
+        faultQuarantined.load(std::memory_order_acquire)) return false;
     wakeAdmission.store(true, std::memory_order_release);
     mpv_set_wakeup_callback(handle, wakeCore, this);
     return true;

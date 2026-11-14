@@ -82,6 +82,8 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     void maybeFinalize();
     static std::shared_ptr<CoreOwner> adopt(mpv_handle *handle, MpvController *controller,
                                             QThread *worker, WakeRelay *relay);
+private:
+    CoreOwner() = default;
 };
 
 struct GenerationOwner : std::enable_shared_from_this<GenerationOwner> {
