@@ -3,6 +3,7 @@ from dataclasses import asdict
 import ctypes
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -85,9 +86,16 @@ def _failure(raw, policy, case):
     if evidence["reason"] != "RuntimeError('private job settlement failed')" or evidence["errors"] != []:
         raise AssertionError("unexpected primary or secondary failure")
     owned = evidence["owned"]
-    if (tuple(owned) != ("opened", "closed", "failed") or type(owned["opened"]) is not int
+    if (tuple(owned) != ("opened", "closed", "failed")
+            or any(type(value) is not int for value in owned.values())
             or owned["opened"] <= 0 or owned["opened"] != owned["closed"] or owned["failed"] != 0):
         raise AssertionError("failure handles not closed")
+    pin = {"path": policy.telemetry_path, "sha256": policy.telemetry_sha256,
+           "size": policy.telemetry_size, "version": policy.telemetry_version,
+           "file_id": policy.telemetry_file_id}
+    if (not isinstance(evidence["pin"], dict) or tuple(evidence["pin"]) != tuple(pin)
+            or type(evidence["pin"]["size"]) is not int or evidence["pin"] != pin):
+        raise AssertionError("failure pin mismatch")
     outcome = evidence["outcome"]
     root = outcome["root"]
     expected_outcome = {"result", "root", "root_deadline", "grace", "baseline", "before_intervention",
@@ -96,12 +104,20 @@ def _failure(raw, policy, case):
     if set(outcome) != expected_outcome or set(root) != {"pid", "creation_time", "signaled", "exit",
                                                        "observed_at", "closed", "emergency_signaled"}:
         raise AssertionError("unexpected lifecycle failure fields")
-    if (root["exit"] != 7 or type(root["exit"]) is not int or root["signaled"] is not True
+    if (outcome["result"] != "failed" or any(type(root[key]) is not int or root[key] <= 0
+                                               for key in ("pid", "creation_time"))
+            or any(type(value) not in (int, float) or not math.isfinite(value)
+                   for value in (root["observed_at"], outcome["root_deadline"]))
+            or root["exit"] != 7 or type(root["exit"]) is not int or root["signaled"] is not True
             or root["closed"] is not True or root["observed_at"] >= outcome["root_deadline"]
+            or root["emergency_signaled"] is not True
             or outcome["error"] != "SettlementError('root failed or exceeded deadline')"
-            or outcome["emergency"] is not True or outcome["emergency_final"]["active"] != 0
+            or outcome["emergency"] is not True or outcome["emergency_final"] != {"active": 0, "total": 1}
+            or any(type(value) is not int for value in outcome["emergency_final"].values())
+            or outcome["grace"] != {} or any(outcome[key] is not None for key in ("baseline", "before_intervention", "final"))
+            or outcome["residuals"] != [] or outcome["residual_handles_closed"] is not False
             or outcome["emergency_errors"] != [] or evidence["outputs"] != []
-            or (case / "result.bin").exists()):
+            or os.path.lexists(case / "result.bin")):
         raise AssertionError("unexpected root failure evidence")
 
 
