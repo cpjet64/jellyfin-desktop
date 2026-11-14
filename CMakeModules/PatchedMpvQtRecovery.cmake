@@ -47,7 +47,7 @@ set(_controller_inputs
   "mpvcontroller.cpp|9dd28536d4e3241f3983281b1609669fbf10335c966315f4028352e130d83ec0"
   "mpvcontroller.h|42cf9e3126308bbcce4ba62b8d6f3a4cbba734806ed422c0e160f8cb5ad009e0")
 set(_controller_outputs
-  "mpvcontroller.cpp|8d47b2f7b6a76613c0a180962ec73f131a35958802fe8947672440fd3458f56a"
+  "mpvcontroller.cpp|59035ce9531d069c284481bf93e8a976e38bf5c36e8b62b1b96b9597152ec02f"
   "mpvcontroller.h|d0b9c60aa0bdd8f1bb6667006ab7e13bace5287e9662d75d56b550e5cacd15bd")
 _verify_recovery_sources(_controller_inputs)
 set(_controller_patch "${CMAKE_SOURCE_DIR}/patches/mpvqt/0004-controller-native-lease.patch")
