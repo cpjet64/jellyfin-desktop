@@ -1,0 +1,383 @@
+diff --git a/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp b/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
+index e0ca7c6d..dfad0d05 100644
+--- a/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
++++ b/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
+@@ -6,0 +7,4 @@
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++#include "../../recovery/QtRecoveryQuick_p.h"
++#include <QtQuick/qsgtexturematerial.h>
++#endif
+@@ -2084,0 +2089,34 @@ QMatrix4x4 qsg_matrixForRoot(Node *node)
++bool Renderer::countRecoveryBatch(Batch *b, QSGGeometry *g, int &unmergedIndexSize)
++{
++    // Figure out how much memory we need...
++    b->vertexCount = 0;
++    b->indexCount = 0;
++    unmergedIndexSize = 0;
++    Element *e = b->first;
++
++    // Merged batches always do indexed draw calls. Non-indexed geometry gets
++    // indices generated automatically, when merged.
++    while (e) {
++        QSGGeometry *eg = e->node->geometry();
++        b->vertexCount += eg->vertexCount();
++        int iCount = eg->indexCount();
++        if (b->merged) {
++            if (iCount == 0)
++                iCount = eg->vertexCount();
++            iCount = qsg_fixIndexCount(iCount, g->drawingMode());
++        } else {
++            const int effectiveIndexSize = m_uint32IndexForRhi ? sizeof(quint32) : eg->sizeOfIndex();
++            unmergedIndexSize += iCount * effectiveIndexSize;
++        }
++        b->indexCount += iCount;
++        e = e->nextInBatch;
++    }
++
++    // Abort if there are no vertices in this batch.. We abort this late as
++    // this is a broken usecase which we do not care to optimize for...
++    if (b->vertexCount == 0 || (b->merged && b->indexCount == 0))
++        return false;
++
++    return true;
++}
++
+@@ -2120,3 +2157,0 @@ void Renderer::uploadBatch(Batch *b)
+-    // Figure out how much memory we need...
+-    b->vertexCount = 0;
+-    b->indexCount = 0;
+@@ -2124,23 +2159 @@ void Renderer::uploadBatch(Batch *b)
+-    Element *e = b->first;
+-
+-    // Merged batches always do indexed draw calls. Non-indexed geometry gets
+-    // indices generated automatically, when merged.
+-    while (e) {
+-        QSGGeometry *eg = e->node->geometry();
+-        b->vertexCount += eg->vertexCount();
+-        int iCount = eg->indexCount();
+-        if (b->merged) {
+-            if (iCount == 0)
+-                iCount = eg->vertexCount();
+-            iCount = qsg_fixIndexCount(iCount, g->drawingMode());
+-        } else {
+-            const int effectiveIndexSize = m_uint32IndexForRhi ? sizeof(quint32) : eg->sizeOfIndex();
+-            unmergedIndexSize += iCount * effectiveIndexSize;
+-        }
+-        b->indexCount += iCount;
+-        e = e->nextInBatch;
+-    }
+-
+-    // Abort if there are no vertices in this batch.. We abort this late as
+-    // this is a broken usecase which we do not care to optimize for...
+-    if (b->vertexCount == 0 || (b->merged && b->indexCount == 0))
++    if (!countRecoveryBatch(b, g, unmergedIndexSize))
+@@ -2178,78 +2191,4 @@ void Renderer::uploadBatch(Batch *b)
+-    if (b->merged) {
+-        char *vertexData = b->vbo.data;
+-        char *zData = vertexData + b->vertexCount * g->sizeOfVertex();
+-        char *indexData = b->ibo.data;
+-
+-        quint16 iOffset16 = 0;
+-        quint32 iOffset32 = 0;
+-        e = b->first;
+-        uint verticesInSet = 0;
+-        // Start a new set already after 65534 vertices because 0xFFFF may be
+-        // used for an always-on primitive restart with some apis (adapt for
+-        // uint32 indices as appropriate).
+-        const uint verticesInSetLimit = m_uint32IndexForRhi ? 0xfffffffe : 0xfffe;
+-        int indicesInSet = 0;
+-        b->drawSets.reset();
+-        int drawSetIndices = 0;
+-        const char *indexBase = b->ibo.data;
+-        b->drawSets << DrawSet(0, zData - vertexData, drawSetIndices);
+-        while (e) {
+-            verticesInSet += e->node->geometry()->vertexCount();
+-            if (verticesInSet > verticesInSetLimit) {
+-                b->drawSets.last().indexCount = indicesInSet;
+-                if (g->drawingMode() == QSGGeometry::DrawTriangleStrip) {
+-                    b->drawSets.last().indices += 1 * mergedIndexElemSize();
+-                    b->drawSets.last().indexCount -= 2;
+-                }
+-                drawSetIndices = indexData - indexBase;
+-                b->drawSets << DrawSet(vertexData - b->vbo.data,
+-                                       zData - b->vbo.data,
+-                                       drawSetIndices);
+-                iOffset16 = 0;
+-                iOffset32 = 0;
+-                verticesInSet = e->node->geometry()->vertexCount();
+-                indicesInSet = 0;
+-            }
+-            void *iBasePtr = &iOffset16;
+-            if (m_uint32IndexForRhi)
+-                iBasePtr = &iOffset32;
+-            uploadMergedElement(e, b->positionAttribute, &vertexData, &zData, &indexData, iBasePtr, &indicesInSet);
+-            e = e->nextInBatch;
+-        }
+-        b->drawSets.last().indexCount = indicesInSet;
+-        // We skip the very first and very last degenerate triangles since they aren't needed
+-        // and the first one would reverse the vertex ordering of the merged strips.
+-        if (g->drawingMode() == QSGGeometry::DrawTriangleStrip) {
+-            b->drawSets.last().indices += 1 * mergedIndexElemSize();
+-            b->drawSets.last().indexCount -= 2;
+-        }
+-    } else {
+-        char *vboData = b->vbo.data;
+-        char *iboData = b->ibo.data;
+-        Element *e = b->first;
+-        while (e) {
+-            QSGGeometry *g = e->node->geometry();
+-            int vbs = g->vertexCount() * g->sizeOfVertex();
+-            memcpy(vboData, g->vertexData(), vbs);
+-            vboData = vboData + vbs;
+-            const int indexCount = g->indexCount();
+-            if (indexCount) {
+-                const int effectiveIndexSize = m_uint32IndexForRhi ? sizeof(quint32) : g->sizeOfIndex();
+-                const int ibs = indexCount * effectiveIndexSize;
+-                if (g->sizeOfIndex() == effectiveIndexSize) {
+-                    memcpy(iboData, g->indexData(), ibs);
+-                } else {
+-                    if (g->sizeOfIndex() == sizeof(quint16) && effectiveIndexSize == sizeof(quint32)) {
+-                        quint16 *src = g->indexDataAsUShort();
+-                        quint32 *dst = (quint32 *) iboData;
+-                        for (int i = 0; i < indexCount; ++i)
+-                            dst[i] = src[i];
+-                    } else {
+-                        Q_ASSERT_X(false, "uploadBatch (unmerged)", "uint index with ushort effective index - cannot happen");
+-                    }
+-                }
+-                iboData += ibs;
+-            }
+-            e = e->nextInBatch;
+-        }
+-    }
++    if (b->merged)
++        uploadRecoveryMergedBatch(b, g);
++    else
++        uploadRecoveryUnmergedBatch(b);
+@@ -2257,62 +2196,2 @@ void Renderer::uploadBatch(Batch *b)
+-    if (Q_UNLIKELY(debug_upload())) {
+-        const char *vd = b->vbo.data;
+-        qDebug() << "  -- Vertex Data, count:" << b->vertexCount << " - " << g->sizeOfVertex() << "bytes/vertex";
+-        for (int i=0; i<b->vertexCount; ++i) {
+-            QDebug dump = qDebug().nospace();
+-            dump << "  --- " << i << ": ";
+-            int offset = 0;
+-            for (int a=0; a<g->attributeCount(); ++a) {
+-                const QSGGeometry::Attribute &attr = g->attributes()[a];
+-                dump << attr.position << ":(" << attr.tupleSize << ",";
+-                if (attr.type == QSGGeometry::FloatType) {
+-                    dump << "float ";
+-                    if (attr.isVertexCoordinate)
+-                        dump << "* ";
+-                    for (int t=0; t<attr.tupleSize; ++t)
+-                        dump << *(const float *)(vd + offset + t * sizeof(float)) << " ";
+-                } else if (attr.type == QSGGeometry::UnsignedByteType) {
+-                    dump << "ubyte ";
+-                    for (int t=0; t<attr.tupleSize; ++t)
+-                        dump << *(const unsigned char *)(vd + offset + t * sizeof(unsigned char)) << " ";
+-                }
+-                dump << ") ";
+-                offset += attr.tupleSize * size_of_type(attr.type);
+-            }
+-            if (b->merged && useDepthBuffer()) {
+-                float zorder = ((float*)(b->vbo.data + b->vertexCount * g->sizeOfVertex()))[i];
+-                dump << " Z:(" << zorder << ")";
+-            }
+-            vd += g->sizeOfVertex();
+-        }
+-
+-        if (!b->drawSets.isEmpty()) {
+-            if (m_uint32IndexForRhi) {
+-                const quint32 *id = (const quint32 *) b->ibo.data;
+-                {
+-                    QDebug iDump = qDebug();
+-                    iDump << "  -- Index Data, count:" << b->indexCount;
+-                    for (int i=0; i<b->indexCount; ++i) {
+-                        if ((i % 24) == 0)
+-                            iDump << Qt::endl << "  --- ";
+-                        iDump << id[i];
+-                    }
+-                }
+-            } else {
+-                const quint16 *id = (const quint16 *) b->ibo.data;
+-                {
+-                    QDebug iDump = qDebug();
+-                    iDump << "  -- Index Data, count:" << b->indexCount;
+-                    for (int i=0; i<b->indexCount; ++i) {
+-                        if ((i % 24) == 0)
+-                            iDump << Qt::endl << "  --- ";
+-                        iDump << id[i];
+-                    }
+-                }
+-            }
+-
+-            for (int i=0; i<b->drawSets.size(); ++i) {
+-                const DrawSet &s = b->drawSets.at(i);
+-                qDebug() << "  -- DrawSet: indexCount:" << s.indexCount << " vertices:" << s.vertices << " z:" << s.zorders << " indices:" << s.indices;
+-            }
+-        }
+-    }
++    if (Q_UNLIKELY(debug_upload()))
++        qsgRecoveryDumpUpload(b, g, useDepthBuffer(), m_uint32IndexForRhi, size_of_type);
+@@ -2950,8 +2829,4 @@ static void materialToRendererGraphicsState(GraphicsState *dst,
+-void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+-                                         QSGMaterialShader::RenderState &renderState,
+-                                         QSGMaterial *material,
+-                                         const Batch *batch,
+-                                         Element *e,
+-                                         int ubufOffset,
+-                                         int ubufRegionSize,
+-                                         char *directUpdatePtr)
++void Renderer::collectRecoveryUniform(QSGMaterialShader *shader, QSGMaterialShaderPrivate *pd,
++                                      QSGMaterialShader::RenderState &renderState, QSGMaterial *material,
++                                      const Batch *batch, int ubufOffset, int ubufRegionSize,
++                                      char *directUpdatePtr, QVarLengthArray<QRhiShaderResourceBinding, 8> &bindings)
+@@ -2959,6 +2833,0 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+-    m_current_resource_update_batch = m_resourceUpdates;
+-
+-    QSGMaterialShader *shader = sms->materialShader;
+-    QSGMaterialShaderPrivate *pd = QSGMaterialShaderPrivate::get(shader);
+-    QVarLengthArray<QRhiShaderResourceBinding, 8> bindings;
+-
+@@ -2983,0 +2853,58 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
++}
++
++void Renderer::updateRecoverySamplers(QSGMaterialShaderPrivate *pd, int binding,
++                                      const QVarLengthArray<QSGTexture *, 4> &nextTex, bool isAnisotropic)
++{
++
++    // The QSGTexture, and so the sampler parameters, may have changed.
++    // The rhiTexture is not relevant here.
++    pd->textureBindingTable[binding] = nextTex; // does not own
++    pd->samplerBindingTable[binding].clear();
++
++    if (isAnisotropic) // ###
++        qWarning("QSGTexture anisotropy levels are not currently supported");
++
++    QVarLengthArray<QRhiSampler *, 4> samplers;
++
++    for (QSGTexture *t : nextTex) {
++        const QSGSamplerDescription samplerDesc = QSGSamplerDescription::fromTexture(t);
++
++        QRhiSampler *sampler = m_samplers[samplerDesc];
++
++        if (!sampler) {
++            sampler = newSampler(m_rhi, samplerDesc);
++            if (!sampler->create()) {
++                qWarning("Failed to build sampler");
++                delete sampler;
++                continue;
++            }
++            m_samplers[samplerDesc] = sampler;
++        }
++        samplers.append(sampler);
++    }
++
++    pd->samplerBindingTable[binding] = samplers; // does not own
++}
++
++void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
++                                         QSGMaterialShader::RenderState &renderState,
++                                         QSGMaterial *material,
++                                         const Batch *batch,
++                                         Element *e,
++                                         int ubufOffset,
++                                         int ubufRegionSize,
++                                         char *directUpdatePtr)
++{
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++    e->recoveryBoundTexture = nullptr;
++    e->recoveryBoundRhiTexture = nullptr;
++#endif
++    m_current_resource_update_batch = m_resourceUpdates;
++
++    QSGMaterialShader *shader = sms->materialShader;
++    QSGMaterialShaderPrivate *pd = QSGMaterialShaderPrivate::get(shader);
++    QVarLengthArray<QRhiShaderResourceBinding, 8> bindings;
++
++    collectRecoveryUniform(shader, pd, renderState, material, batch, ubufOffset, ubufRegionSize,
++                           directUpdatePtr, bindings);
++
+@@ -3013,31 +2940,2 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+-        if (nextTex != prevTex || hasDirtySamplerOptions) {
+-
+-            // The QSGTexture, and so the sampler parameters, may have changed.
+-            // The rhiTexture is not relevant here.
+-            pd->textureBindingTable[binding] = nextTex; // does not own
+-            pd->samplerBindingTable[binding].clear();
+-
+-            if (isAnisotropic) // ###
+-                qWarning("QSGTexture anisotropy levels are not currently supported");
+-
+-            QVarLengthArray<QRhiSampler *, 4> samplers;
+-
+-            for (QSGTexture *t : nextTex) {
+-                const QSGSamplerDescription samplerDesc = QSGSamplerDescription::fromTexture(t);
+-
+-                QRhiSampler *sampler = m_samplers[samplerDesc];
+-
+-                if (!sampler) {
+-                    sampler = newSampler(m_rhi, samplerDesc);
+-                    if (!sampler->create()) {
+-                        qWarning("Failed to build sampler");
+-                        delete sampler;
+-                        continue;
+-                    }
+-                    m_samplers[samplerDesc] = sampler;
+-                }
+-                samplers.append(sampler);
+-            }
+-
+-            pd->samplerBindingTable[binding] = samplers; // does not own
+-        }
++        if (nextTex != prevTex || hasDirtySamplerOptions)
++            updateRecoverySamplers(pd, binding, nextTex, isAnisotropic);
+@@ -3062,0 +2961,11 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++                static QSGOpaqueTextureMaterial opaqueRecoveryMaterial;
++                static QSGTextureMaterial alphaRecoveryMaterial;
++                if (binding == 1 && count == 1 && i == 0 && sampler && texture
++                    && texture == nextTex[0]->rhiTexture()
++                    && (material->type() == opaqueRecoveryMaterial.type()
++                        || material->type() == alphaRecoveryMaterial.type())) {
++                    e->recoveryBoundTexture = nextTex[0];
++                    e->recoveryBoundRhiTexture = texture;
++                }
++#endif
+@@ -3075,0 +2985,5 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
++    updateShaderBindings(e, bindings, pd->ubufBinding);
++}
++
++void Renderer::updateShaderBindings(Element *e, const QVarLengthArray<QRhiShaderResourceBinding, 8> &bindings, int ubufBinding)
++{
+@@ -3136 +3050 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+-        if (pd->ubufBinding <= 0 || bindings.size() <= 1)
++        if (ubufBinding <= 0 || bindings.size() <= 1)
+@@ -3144 +3058 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+-        if (!e->srb->create())
++        if (!e->srb->create()) {
+@@ -3145,0 +3060,5 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++            e->recoveryBoundTexture = nullptr;
++            e->recoveryBoundRhiTexture = nullptr;
++#endif
++        }
+@@ -3366,0 +3286,7 @@ void Renderer::renderMergedBatch(PreparedRenderBatch *renderBatch, bool depthPos
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++        if (draw.indexCount > 0 && !draw.recoveryOverflow) {
++            for (quint64 node : draw.recoveryNodes)
++                qtRecoveryMarkDraw(node, reinterpret_cast<uintptr_t>(renderTarget().rt), e->recoveryBoundTexture, e->recoveryBoundRhiTexture,
++                                   !depthPostPass && m_renderMode != QSGRendererInterface::RenderMode3D);
++        }
++#endif
+@@ -3579,0 +3506,4 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++                qtRecoveryMarkDraw(qtRecoveryNodeIdentity(e->node), reinterpret_cast<uintptr_t>(renderTarget().rt), e->recoveryBoundTexture, e->recoveryBoundRhiTexture,
++                                   !depthPostPass && m_renderMode != QSGRendererInterface::RenderMode3D);
++#endif
+@@ -3583,0 +3514,5 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++            if (g->vertexCount() > 0)
++                qtRecoveryMarkDraw(qtRecoveryNodeIdentity(e->node), reinterpret_cast<uintptr_t>(renderTarget().rt), e->recoveryBoundTexture, e->recoveryBoundRhiTexture,
++                                   !depthPostPass && m_renderMode != QSGRendererInterface::RenderMode3D);
++#endif

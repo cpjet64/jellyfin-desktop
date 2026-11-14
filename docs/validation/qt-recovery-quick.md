@@ -17,14 +17,22 @@ installed. The source candidate adds ticket, FBO, draw-recording and private
 completion hooks, but has not been compiled, tested, or independently reviewed.
 It does not establish runtime capability or a successful frame submission.
 
-Apply `patches/qt/quick/qtdeclarative-6.9.3-ticket-fbo.patch` with
-`git apply --unidiff-zero` at the pinned
-Qt Declarative root, then place the three adjacent `QtRecovery*.{h,cpp}` files
-in `src/quick/recovery/`. Copy `patches/qt/quick/tests/CMakeLists.txt` and
+Apply the `qtdeclarative-6.9.3-ticket-fbo.patch` and
+`qtdeclarative-6.9.3-batch-renderer.patch` files with `git apply --unidiff-zero` at the pinned
+Qt Declarative root, then place all adjacent `QtRecovery*.h` and
+`QtRecovery*.cpp` files in `src/quick/recovery/`. Copy
+`patches/qt/quick/tests/CMakeLists.txt` and
 `tst_qtrecovery_aggregate.cpp`, and `tst_qtrecovery_drawsets.cpp` into
 `tests/auto/quick/qtrecoveryaggregate/`.
 The patched Qt Base private bridge must be built and installed as part of the
 same compatible kit. The registered source-only tests have not been executed.
+The source apply check passed for both patches together. Their SHA-256 values
+for the current LF bytes are:
+
+| Patch | SHA-256 |
+| --- | --- |
+| `qtdeclarative-6.9.3-ticket-fbo.patch` | `efb8ae00aa96ec78f9c618b7e7498b072417014d3ad004b88d9107fbf2df0b45` |
+| `qtdeclarative-6.9.3-batch-renderer.patch` | `18f64d8b67e702cd9407f49776bd982f0152f616f34b34290a22be03e85e8acd` |
 
 The threaded loop begins the frame before synchronization and calls `endFrame`
 after rendering. A failed begin can still emit `afterFrameEnd`; a failed end can
@@ -47,12 +55,11 @@ material-binding integration remain untested; integration review remains open.
 
 The publication boundary rejects out-of-range identity and timestamp values
 before retaining a native frame. The added negative source cases have not been
-run. The binding collector remains in the upstream renderer function: moving
-it out safely requires transferring the existing sampler factory and private
-shader, texture, cache and renderer state together, and needs separate review.
-In the retrieved source, `uploadBatch` grows from 248 to 255 physical lines
-(216 to 224 nonblank lines excluding line comments), while
-`updateMaterialDynamicData` shrinks from 202 to 144 physical lines (144 to 109
-by the same proxy). These counts are not logical-line measurements. Both
-functions remain oversized; the added upload hook increases an existing
-violation and is an unresolved source-policy blocker.
+run. Upload counting, merged/unmerged copies, and diagnostics now have separate
+cohesive routines; uniform and sampler updates have separate routines as well.
+`uploadBatch` shrinks from 248 to 89 physical lines, and
+`updateMaterialDynamicData` from 202 to 99. The latter contains 75 nonblank
+lines excluding line comments, a conservative line-count proxy, not a measured
+logical-line count. The existing renderer source shrinks from 4,324 to 4,259
+physical lines and its private header from 1,030 to 997. These inherited files
+remain oversized; the extraction and its behavior need independent review.
