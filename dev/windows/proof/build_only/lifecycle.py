@@ -54,7 +54,14 @@ def _identify(api, job, pin, baseline, end, clock, stack, evidence):
         _milliseconds(end, clock)
         if not api.in_job(process, job):
             raise SettlementError('process left job')
-        identity = pin.verify_process(api, process, job)
+        try:
+            identity = pin.verify_process(api, process, job)
+        except Exception as exc:
+            observation = getattr(exc, 'identity_observation', None)
+            raise SettlementError(
+                f'identity verification failed: pid={pid}, operation=verify_process, '
+                f'exception={type(exc).__name__}, detail={exc!r}, observation={observation!r}'
+            ) from exc
         evidence['residuals'].append({'pid': pid, 'identity': identity, 'member': True,
                                       'action': 'none', 'signaled': False})
     return processes
