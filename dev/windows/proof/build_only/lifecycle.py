@@ -1,10 +1,28 @@
 """Settle a private job without accepting unidentified process termination."""
 from contextlib import ExitStack
 from time import monotonic, sleep
+from .identity import RetainedHandlesError
 
 
 class SettlementError(RuntimeError):
     pass
+
+
+class CleanupHandoff:
+    """Private owner for exact unresolved objects, never serialized in receipts."""
+    def __init__(self):
+        self.handles = []
+        self.attempted = set()
+        self.deadline = None
+        self.root = None
+        self.original_error = None
+
+    def retain(self, error):
+        if self.original_error is None:
+            self.original_error = error
+        for handle in error.retained_handles:
+            if not any(handle is existing for existing in self.handles):
+                self.handles.append(handle)
 
 
 def _milliseconds(end, clock):
@@ -41,7 +59,7 @@ def _grace(api, job, end, clock, pause, evidence):
         pause(min(0.025, max(0.0, end - clock())))
 
 
-def _identify(api, job, pin, baseline, end, clock, stack, evidence):
+def _identify(api, job, pin, baseline, end, clock, stack, evidence, handoff):
     pids = tuple(api.members(job))
     if len(pids) != len(set(pids)) or len(pids) != baseline['active']:
         raise SettlementError('incomplete job enumeration')
@@ -57,6 +75,8 @@ def _identify(api, job, pin, baseline, end, clock, stack, evidence):
         try:
             identity = pin.verify_process(api, process, job)
         except Exception as exc:
+            if isinstance(exc, RetainedHandlesError):
+                handoff.retain(exc)
             observation = getattr(exc, 'identity_observation', None)
             cause = exc.__cause__
             retained = len(getattr(exc, 'retained_handles', ()))
@@ -84,11 +104,11 @@ def _intervene(api, processes, evidence, end, clock):
             raise SettlementError('residual did not exit before deadline')
 
 
-def _cleanup(api, job, pin, end, clock, evidence):
+def _cleanup(api, job, pin, end, clock, evidence, handoff):
     baseline = _account(api, job)
     evidence['baseline'] = baseline
     with ExitStack() as stack:
-        processes = _identify(api, job, pin, baseline, end, clock, stack, evidence)
+        processes = _identify(api, job, pin, baseline, end, clock, stack, evidence, handoff)
         _milliseconds(end, clock)
         before = _account(api, job)
         evidence['before_intervention'] = before
@@ -139,7 +159,7 @@ def _emergency(api, job, root, end, clock, pause, evidence):
         errors.append('accounting: ' + repr(exc))
 
 
-def settle(api, job, root, pin, deadline, *, grace_seconds=1.0, clock=monotonic, pause=sleep):
+def settle(api, job, root, pin, deadline, *, handoff, grace_seconds=1.0, clock=monotonic, pause=sleep):
     """Return detailed success or failure evidence; emergency never succeeds.
 
     `deadline` is the absolute monotonic root deadline. The caller retains the
@@ -150,6 +170,7 @@ def settle(api, job, root, pin, deadline, *, grace_seconds=1.0, clock=monotonic,
                 'grace': {}, 'baseline': None, 'before_intervention': None,
                 'final': None, 'residuals': [], 'residual_handles_closed': False,
                 'emergency': False, 'emergency_errors': [], 'error': None}
+    handoff.root = root
     cleanup_end = None
     try:
         if not 0 <= grace_seconds <= 1:
@@ -162,12 +183,16 @@ def settle(api, job, root, pin, deadline, *, grace_seconds=1.0, clock=monotonic,
         evidence['cleanup_start'] = clock()
         cleanup_end = evidence['cleanup_start'] + 10.0
         evidence['cleanup_deadline'] = cleanup_end
-        _cleanup(api, job, pin, cleanup_end, clock, evidence)
+        handoff.deadline = cleanup_end
+        _cleanup(api, job, pin, cleanup_end, clock, evidence, handoff)
     except BaseException as exc:
         evidence['result'] = 'failed'
         evidence['error'] = repr(exc)
         if cleanup_end is None:
             cleanup_end = clock() + 10.0
             evidence['cleanup_deadline'] = cleanup_end
+            handoff.deadline = cleanup_end
         _emergency(api, job, root, cleanup_end, clock, pause, evidence)
+    if evidence['root']['closed']:
+        handoff.root = None
     return evidence

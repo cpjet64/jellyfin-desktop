@@ -13,7 +13,7 @@ import sys
 from time import monotonic
 
 from .identity import FilePin, ObservedFile, RetainedHandlesError
-from .lifecycle import settle
+from .lifecycle import CleanupHandoff, settle
 from .policy import PRODUCTION_POLICIES, inspect_command_inputs, policy_hash
 from .spawn import launch, LaunchFailure
 from .winapi import WinAPI
@@ -198,7 +198,7 @@ def _close_launch_failure(api, job, failure):
     return errors
 
 
-def _run_job(api, policy, env, started, receipt):
+def _run_job(api, policy, env, started, receipt, handoff):
     import msvcrt
     command = inspect_command_inputs(policy, env)
     with ExitStack() as stack:
@@ -236,9 +236,10 @@ def _run_job(api, policy, env, started, receipt):
         except LaunchFailure as exc:
             receipt['errors'].extend(_close_launch_failure(api, job, exc))
             raise
+        handoff.root = root
         try:
             outcome = settle(api, job, root, telemetry, started[0] + policy.deadline_ms / 1000,
-                             grace_seconds=policy.grace_ms / 1000)
+                             handoff=handoff, grace_seconds=policy.grace_ms / 1000)
         except BaseException as exc:
             raise UnsettledRootError(root) from exc
         receipt['outcome'] = outcome
@@ -256,7 +257,23 @@ def _run_job(api, policy, env, started, receipt):
         raise RuntimeError('owned handles did not close')
 
 
-def _supervise(policy, receipt_path):
+def _close_retained(handoff, clock=monotonic):
+    errors = []
+    for handle in handoff.handles:
+        if getattr(handle, 'value', None) is None or id(handle) in handoff.attempted:
+            continue
+        if handoff.deadline is None or clock() >= handoff.deadline:
+            errors.append('retained handle cleanup deadline unavailable or expired')
+            break
+        handoff.attempted.add(id(handle))
+        try:
+            handle.close()
+        except BaseException as exc:
+            errors.append(repr(exc))
+    return errors
+
+
+def _supervise_owned(policy, receipt_path, handoff):
     env = _environment(policy.command)
     inspect_command_inputs(policy, env)
     api = WinAPI()
@@ -267,18 +284,16 @@ def _supervise(policy, receipt_path):
     with _receipt(receipt_path) as receipt:
         failure = None
         try:
-            _run_job(api, policy, env, started, state)
+            _run_job(api, policy, env, started, state, handoff)
         except RetainedHandlesError as exc:
             state['reason'] = repr(exc)
-            for handle in exc.retained_handles:
-                try:
-                    handle.close()
-                except BaseException as close_error:
-                    state['errors'].append(repr(close_error))
+            handoff.retain(exc)
             failure = exc
         except BaseException as exc:
             state['reason'] = repr(exc)
             failure = exc
+        if failure is not None:
+            state['errors'].extend(_close_retained(handoff))
         state['owned'] = {'opened': api.opened, 'closed': api.closed, 'failed': api.close_failed}
         try:
             record = (_assemble(policy, state, api, started[0]) if failure is None else
@@ -294,6 +309,15 @@ def _supervise(policy, receipt_path):
     if failure is not None:
         raise RuntimeError('build-only supervision failed') from failure
     return record
+
+
+def _supervise(policy, receipt_path):
+    handoff = CleanupHandoff()
+    try:
+        return _supervise_owned(policy, receipt_path, handoff)
+    except BaseException as exc:
+        exc.cleanup_handoff = handoff
+        raise
 
 
 def production(policy_name, receipt_path):
