@@ -42,3 +42,23 @@ module bytes before importing them, but its own bytes and the Python interpreter
 must be authenticated by the caller before launch. The adapter itself does not
 remove every network fetch or materialize the four Rust archives. An authorized
 future VM run needs separate review after these gaps are closed.
+
+## Review evidence contract
+
+The proposal requires six distinct `qualified` records: provider and source
+graph, provider overlays, nested Cargo, Rust and host toolchains, input lock and
+prestage inventory, and reviewed modules. Each binds a SHA-256 subject computed
+from the corresponding lock or review-manifest data, plus a reviewed proof path
+and hash. The approved review manifest binds the evidence document through
+`qualification_evidence_sha256` and must include every proof file identity. The
+producer carries that evidence hash into raw SDK provenance. `evidence.py`
+defines the proposed format and subject construction. No qualifying document or
+proof is supplied by this checkpoint.
+
+Hashes establish identities, not the truth of a qualification. Independent
+review must examine the evidence, approve the manifest and source SHA, and
+authorize eventual execution. Readiness flags, offline environment variables
+and a `qualified` string do not themselves prove closure, overlay correctness,
+nested Cargo behavior, or Rust toolchain materialization. Log and output
+inventory, exclusive source protection and resulting artifact identities also
+require qualification. This is neither a build receipt nor a final Windows kit.

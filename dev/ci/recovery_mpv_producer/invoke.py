@@ -8,6 +8,7 @@ import shutil
 import time
 
 from commands import Command, child_environment, commands
+from evidence import validate_evidence
 from plan import PATCHES, PROVIDER, MPV, validate_layout
 from stage import stage_sdk
 import supervisor
@@ -55,8 +56,10 @@ def check_review(review, root, source_sha):
                 "dev/ci/recovery_mpv_producer/commands.py",
                 "dev/ci/recovery_mpv_producer/supervisor.py",
                 "dev/ci/recovery_mpv_producer/stage.py",
+                "dev/ci/recovery_mpv_producer/evidence.py",
                 "dev/ci/recovery_mpv_producer/plan.py",
                 "patches/mpv/build/offline_provider/adapter.py",
+                "patches/mpv/build/offline_provider/recipe_edits.py",
                 "patches/mpv/build/offline_inputs.py",
                 "patches/mpv/build/offline_git.py",
                 "patches/mpv/build/recovery_lock_preflight.py",
@@ -93,10 +96,9 @@ def produce(context, lock_gate, input_gate, adapter, executor):
     review = verified_json(context.review_manifest, context.review_sha256)
     check_review(review, root, context.reviewed_source_sha)
     lock = lock_gate.verify(context.lock, context.lock_sha256)
-    verification = lock.get("verification", {})
-    if (verification.get("provider_adapter_complete") is not True or
-            verification.get("cargo_nested_offline_proven") is not True):
-        raise ValueError("provider offline and nested Cargo evidence incomplete")
+    evidence_sha = review.get("qualification_evidence_sha256", "")
+    evidence = verified_json(context.evidence, evidence_sha)
+    validate_evidence(root, lock, context.lock_sha256, context.inventory_sha256, review, evidence)
     inventory = verified_json(context.inventory, context.inventory_sha256)
     if lock["provider_commit"] != PROVIDER or lock["mpv_commit"] != MPV:
         raise ValueError("source selection mismatch")
@@ -128,4 +130,5 @@ def produce(context, lock_gate, input_gate, adapter, executor):
         supervisor.run(command, env, output / "logs" / (command.phase + ".log"), deadline, executor)
     return stage_sdk(output, {"reviewed_source_sha": context.reviewed_source_sha,
                               "lock_sha256": context.lock_sha256,
-                              "inventory_sha256": context.inventory_sha256})
+                              "inventory_sha256": context.inventory_sha256,
+                              "qualification_evidence_sha256": evidence_sha})
