@@ -137,10 +137,30 @@ static void invalidNativeFrame()
     bad = f.frame; bad.render_serial = over; rejectsFrame(f, bad);
 }
 
+static void unsupportedSamplingIsScoped()
+{
+    Fixture f; f.begin(); f.publish(); f.draw(); f.swap(); qtRecoveryFinish(true, false);
+    assert(f.take());
+    ++f.ticket.frame_serial; f.begin();
+    qtRecoveryMarkDraw(f.life, f.ticket.render_target, &f.texture, f.texture.rhiTexture(), 4, true);
+    f.swap(); qtRecoveryFinish(true, false);
+    assert(!f.take());
+    assert(!qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation + 1, f.frame.attempt));
+    assert(qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation, f.frame.attempt));
+    assert(!qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation, f.frame.attempt));
+    ++f.ticket.frame_serial; f.begin();
+    qtRecoveryFboBegin(f.frame.actual_render_fbo, f.life);
+    QtRecoverySwapTicketV1 active{};
+    assert(qt_recovery_publish_native_frame_v1(&f.frame, &active));
+    qtRecoveryFboUnsupported(); f.swap(); qtRecoveryFinish(true, false);
+    assert(qt_recovery_take_unsupported_v1(f.ticket.window_lifetime, f.frame.renderer_generation, f.frame.attempt));
+}
+
 int main()
 {
     assert(std::strcmp(qt_recovery_quick_bound_gui_source_id_v1(), qt_recovery_swap_source_id_v1()) == 0);
     successAndReuse(); zeroAttemptReadiness(); swapFailures(); badDraws(); revocationAndReuse();
     invalidFboAndResolve();
     invalidNativeFrame();
+    unsupportedSamplingIsScoped();
 }

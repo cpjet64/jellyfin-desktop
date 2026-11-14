@@ -14,7 +14,7 @@ index d3d9087a..b1a2a1eb 100644
 +)
 +
 diff --git a/src/quick/items/qquickframebufferobject.cpp b/src/quick/items/qquickframebufferobject.cpp
-index cdae6fbe..7e24fdcd 100644
+index cdae6fbe..f3813b95 100644
 --- a/src/quick/items/qquickframebufferobject.cpp
 +++ b/src/quick/items/qquickframebufferobject.cpp
 @@ -15,0 +16,3 @@
@@ -34,13 +34,10 @@ index cdae6fbe..7e24fdcd 100644
 +#ifdef Q_OS_WIN
 +            qtRecoveryFboBegin(fbo->handle(), recoveryNodeLifetime);
 +#endif
-@@ -213 +226 @@ public Q_SLOTS:
--            if (msDisplayFbo)
-+            if (msDisplayFbo || fbo->format().samples() > 1)
 @@ -214,0 +228,6 @@ public Q_SLOTS:
 +#ifdef Q_OS_WIN
-+            if (msDisplayFbo)
-+                qtRecoveryFboAbort(); // The void resolve API does not report success.
++            if (msDisplayFbo || fbo->format().samples() > 1)
++                qtRecoveryFboUnsupported(); // The void resolve API does not report success.
 +            else
 +                qtRecoveryFboEnd(fbo->texture(), recoveryTextureGeneration, texture());
 +#endif

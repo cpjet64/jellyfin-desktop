@@ -15,6 +15,12 @@ struct State {
 };
 thread_local State state;
 thread_local QtRecoverySubmissionV1 completed{};
+struct Unsupported {
+    QtRecoverySwapTicketV1 ticket{};
+    QtRecoveryFrameV1 frame{};
+    uint64_t node = 0;
+};
+thread_local Unsupported unsupported;
 struct NodeRegistration {
     const void *node = nullptr;
     uint64_t lifetime = 0, window = 0, scene = 0;
@@ -68,6 +74,8 @@ void qtRecoveryRegisterNode(const void *node, uint64_t lifetime)
 
 void qtRecoveryInvalidateNode(uint64_t lifetime)
 {
+    if (unsupported.node == lifetime)
+        unsupported = {};
     if (completed.node_lifetime == lifetime)
         completed = {};
     if (NodeRegistration *entry = findNode(lifetime)) {
@@ -82,6 +90,8 @@ void qtRecoveryInvalidateNode(uint64_t lifetime)
 
 void qtRecoveryUnregisterNode(const void *node, uint64_t lifetime)
 {
+    if (unsupported.node == lifetime)
+        unsupported = {};
     if (completed.node_lifetime == lifetime)
         completed = {};
     for (auto &entry : nodes) {
@@ -107,11 +117,16 @@ void qtRecoveryMarkDraw(uint64_t nodeLifetime, uintptr_t renderTarget, const voi
                         int sampleCount, bool normalColorPass)
 {
     const NodeRegistration *entry = findNode(nodeLifetime);
-    if (!state.active || !entry || !normalColorPass || sampleCount != 1 || !entry->content || !boundTexture || !boundRhiTexture
+    if (!state.active || !entry || !normalColorPass || !entry->content || !boundTexture || !boundRhiTexture
         || entry->textureWrapper != boundTexture || entry->window != state.ticket.window_lifetime
         || entry->scene != state.ticket.scenegraph_generation || renderTarget != state.ticket.render_target
         || static_cast<const QSGTexture *>(boundTexture)->rhiTexture() != boundRhiTexture)
         return;
+    if (sampleCount != 1) {
+        if (sampleCount > 1)
+            unsupported = {state.ticket, entry->frame, nodeLifetime};
+        return;
+    }
     if (state.drew && state.node != nodeLifetime) {
         state.ambiguous = true;
         return;
@@ -167,6 +182,9 @@ void qtRecoveryFinish(bool endSucceeded, bool skipPresent)
         completed.texture_generation = state.texture;
         completed.fbo_content_serial = state.content;
         completed.display_texture = state.displayTexture;
+        if (unsupported.ticket.window_lifetime == completed.ticket.window_lifetime
+            && unsupported.frame.renderer_generation == completed.frame.renderer_generation)
+            unsupported = {};
     }
     state = {};
 }
@@ -190,6 +208,13 @@ void qtRecoveryFboAbort()
     state.renderFbo = 0;
     state.node = state.texture = state.content = 0;
     state.displayTexture = 0;
+}
+
+void qtRecoveryFboUnsupported()
+{
+    if (state.active && state.inFbo && state.published && findNode(state.node))
+        unsupported = {state.ticket, state.frame, state.node};
+    qtRecoveryFboAbort();
 }
 
 void qtRecoveryFboEnd(uint32_t displayTexture, uint64_t textureGeneration, const void *textureWrapper)
@@ -253,8 +278,19 @@ extern "C" int qt_recovery_take_submission_v1(uint64_t window, uint64_t renderer
     return 1;
 }
 
+extern "C" int qt_recovery_take_unsupported_v1(uint64_t window, uint64_t renderer, uint64_t attempt)
+{
+    if (!window || !renderer || unsupported.ticket.window_lifetime != window
+        || unsupported.frame.renderer_generation != renderer || unsupported.frame.attempt != attempt)
+        return 0;
+    unsupported = {};
+    return 1;
+}
+
 extern "C" void qt_recovery_revoke_v1(uint64_t windowLifetime)
 {
+    if (unsupported.ticket.window_lifetime == windowLifetime)
+        unsupported = {};
     if (completed.ticket.window_lifetime == windowLifetime)
         completed = {};
     for (auto &entry : nodes) {

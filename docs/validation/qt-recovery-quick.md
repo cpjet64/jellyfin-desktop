@@ -31,7 +31,7 @@ for the current LF bytes are:
 
 | Patch | SHA-256 |
 | --- | --- |
-| `qtdeclarative-6.9.3-ticket-fbo.patch` | `6768d03fbc074e7f8350a3881764c25ed2aed253ae2faf2998a85ee09c5cef0f` |
+| `qtdeclarative-6.9.3-ticket-fbo.patch` | `07dba8a2668c09af08bf0ec7f5eb3b7f6fdaed7b615779e9b303cd155fe1f7f2` |
 | `qtdeclarative-6.9.3-batch-renderer.patch` | `3e91f995f2a839d053c03c049d1a0dde993e67d6c52a1cc3f47e778af00f7249` |
 
 The threaded loop begins the frame before synchronization and calls `endFrame`
@@ -54,7 +54,8 @@ retained-frame reuse. A separate source test exercises the batch renderer's
 draw-set membership storage and overflow. The actual renderer draw and
 material-binding integration remain untested; integration review remains open.
 `qt_recovery_quick_bound_gui_source_id_v1` exposes the linked Gui bridge identity
-for consumer verification.
+for consumer verification. `qt_recovery_take_unsupported_v1` consumes a
+scoped unsupported-sampling record; it is distinct from a missing submission.
 
 The publication boundary rejects out-of-range identity and timestamp values
 before retaining a native frame. The added negative source cases have not been
