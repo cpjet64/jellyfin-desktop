@@ -90,8 +90,15 @@ class Pin:
         self.valid = valid
 
     def verify_process(self, api, process, job):
-        if not self.valid:
-            error = ValueError("wrong identity")
+        if self.valid is False or self.valid == "retained":
+            if self.valid == "retained":
+                class RetainedHandlesError(OSError):
+                    pass
+                error = RetainedHandlesError("close failed")
+                error.retained_handles = (object(), object())
+                error.__cause__ = OSError("pinned file size mismatch")
+            else:
+                error = ValueError("wrong identity")
             error.identity_observation = {"operation": "process_reported_image",
                                           "process_creation_time": 100,
                                           "process_image_path": r"C:\fixture\child.exe",
@@ -159,13 +166,13 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(root.close_calls, 0)
 
     def test_invalid_identity_or_membership_never_targeted(self):
-        for failure in ("identity", "member", "open", "truncated"):
+        for failure in ("identity", "retained", "member", "open", "truncated"):
             api = FakeAPI([(1, 2), (1, 2), (0, 2)], (20,))
             api.member = failure != "member"
             api.fail_open = failure == "open"
             if failure == "truncated":
                 api.pids = ()
-            result = run(api, pin=Pin(failure != "identity"))
+            result = run(api, pin=Pin("retained" if failure == "retained" else failure != "identity"))
             self.assertEqual(result["result"], "failed")
             self.assertEqual(api.terminated, [])
             self.assertTrue(api.emergency)
@@ -173,6 +180,10 @@ class LifecycleTests(unittest.TestCase):
                 for expected in ("pid=20", "verify_process", "ValueError", "wrong identity",
                                  "process_reported_image", "process_creation_time", "100",
                                  "process_image_path", "child.exe"):
+                    self.assertIn(expected, result["error"])
+            if failure == "retained":
+                for expected in ("pid=20", "verify_process", "RetainedHandlesError", "cause_type=OSError",
+                                 "pinned file size mismatch", "retained_handle_count=2", "cause=OSError"):
                     self.assertIn(expected, result["error"])
 
     def test_new_association_before_or_after_intervention(self):
