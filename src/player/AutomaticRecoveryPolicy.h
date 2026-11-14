@@ -16,8 +16,9 @@ class Policy {
 public:
   Action observe(const Sample& sample);
   bool retired(std::uint64_t original, std::uint64_t replacement, std::int64_t nowMs);
-  bool restoreStarted(std::int64_t nowMs);
-  bool frameObserved(std::uint64_t generation, std::int64_t nowMs);
+  // Call only after the identified load and its post-seek state are qualified.
+  bool restoreStarted(std::uint64_t acceptedLoadAttempt, std::uint64_t frameSerialBeforeRestore, std::int64_t nowMs);
+  bool frameObserved(std::uint64_t generation, std::uint64_t loadAttempt, std::uint64_t frameSerial, std::int64_t nowMs);
   bool mayUnpause(const Sample& sample) const;
   void fail();
   Phase phase() const { return phase_; }
@@ -31,8 +32,10 @@ private:
   std::uint64_t session_ = 0, revision_ = 0, generation_ = 0, replacement_ = 0;
   std::uint64_t baselineFrame_ = 0;
   std::uint64_t baselineRevision_ = 0, baselineGeneration_ = 0;
+  std::uint64_t loadAttempt_ = 0, restoreFrameSerial_ = 0;
   std::int64_t baselineTime_ = 0, baselinePosition_ = -1, deadline_ = 0;
   std::int64_t lastPosition_ = -1, lastAdvanceTime_ = 0;
+  std::int64_t lastAttemptTime_ = 0;
   bool attempted_ = false, baseline_ = false, baselineOutstanding_ = false, wasPaused_ = false;
 };
 }
