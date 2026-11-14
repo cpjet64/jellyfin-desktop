@@ -20,6 +20,7 @@ public:
   bool position(Key key, std::uint64_t attempt, std::int64_t entry, std::int64_t positionMs,
                 bool nativePaused, std::uint64_t epoch, std::int64_t nowMs);
   bool ready(Key key, std::uint64_t attempt, std::uint64_t epoch, std::int64_t nowMs) const;
+  bool completed() const { return completed_; }
   void invalidate();
 private:
   bool matches(Key key, std::uint64_t attempt, std::uint64_t epoch, std::int64_t nowMs) const;

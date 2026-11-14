@@ -163,6 +163,9 @@ void PlayerComponentRecovery::recoveryTick(std::int64_t now)
 {
   if (!validRestore(now) || (frameGateActive_ && runtime_.eventEpoch() != frameEpoch_)) { failRestore(); return; }
   if (!frameGateActive_ || resumePending_) return;
+  // A paused retained frame may be redrawn under a new real Qt ticket; only the
+  // private submission result can complete the gate. This does not rearm time.
+  if (!frameGate_.completed()) item_->update();
   if (observationPending_ && now - observationStarted_ >= 2000) {
     observationPending_ = false; observation_.invalidate();
   }
