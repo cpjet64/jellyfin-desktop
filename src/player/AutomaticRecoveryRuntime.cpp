@@ -3,19 +3,20 @@
 #include <QByteArray>
 #include <QVector>
 #include <limits>
+#include "RecoveryIdentity.h"
 
 bool AutomaticRecoveryRuntime::submitUserLoad(const CommandDispatch& dispatch, Key key, const QStringList& command,
     const QString& url, const QVariantMap& options, const QVariantMap& metadata,
     const QVariant& audio, const QVariant& subtitle, bool paused, std::int64_t nowMs)
 {
-  if (!dispatch || !eventEpoch_ || command.isEmpty() || nowMs < 0 || nowMs > std::numeric_limits<std::int64_t>::max() - 15000 ||
-      sequence_ >= AutomaticRecoveryLoad::MaxSequence) return false;
+  if (!dispatch || !eventEpoch_ || command.isEmpty() || nowMs < 0 || nowMs > std::numeric_limits<std::int64_t>::max() - 15000) return false;
   if (generation_ && generation_ != key.generation) invalidate();
   generation_ = key.generation;
   AutomaticRecoverySession::Snapshot recipe;
   recipe.url = url; recipe.options = options; recipe.metadata = metadata;
   recipe.audio = audio; recipe.subtitle = subtitle; recipe.paused = paused;
-  const auto sequence = ++sequence_;
+  const auto sequence = reserveSequence();
+  if (!sequence) return false;
   if (!queue_.enqueue(sequence, key, recipe, nowMs + 15000)) return false;
   QVector<QByteArray> bytes;
   bytes.reserve(command.size());
@@ -100,10 +101,7 @@ bool AutomaticRecoveryRuntime::replaceActiveEntry(Key current, std::int64_t prev
 bool AutomaticRecoveryRuntime::selections(std::int64_t entry, Key current, QVariant& audio, QVariant& subtitle) const
 { return queue_.selections(entry, current, audio, subtitle); }
 std::uint64_t AutomaticRecoveryRuntime::reserveSequence()
-{
-  if (sequence_ >= AutomaticRecoveryLoad::MaxSequence) return 0;
-  return ++sequence_;
-}
+{ return RecoveryIdentity::take(RecoveryIdentity::Domain::Load); }
 bool AutomaticRecoveryRuntime::takeTimeout(Key current, std::int64_t nowMs, std::uint64_t& sequence)
 {
   if (!current.session || !current.revision || !current.generation || current.generation != generation_ ||

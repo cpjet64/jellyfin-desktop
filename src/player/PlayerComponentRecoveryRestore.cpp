@@ -4,6 +4,7 @@
 #include "AutomaticRecoveryReload.h"
 #include "MpvVideoItem.h"
 #include "PlayerComponent.h"
+#include "RecoveryIdentity.h"
 #include "RendererOwners.h"
 
 bool PlayerComponentRecovery::validRestore(std::int64_t now) const
@@ -49,6 +50,8 @@ bool PlayerComponentRecovery::preparePreload(const QString& hookToken)
   } else {
     const AutomaticRecoverySession::Key current{0, hookRevision_, hookBinding_};
     if (runtime_.selections(hookEntry_, current, player_->m_currentAudioStream, player_->m_currentSubtitleStream)) return true;
+    if (ordinarySelection_.select(hookRevision_, hookBinding_, hookEntry_, hookStart_, false,
+                                  player_->m_currentAudioStream, player_->m_currentSubtitleStream)) return true;
   }
   deferredEntry_ = hookEntry_; deferredStart_ = hookStart_; deferredRevision_ = hookRevision_;
   deferredBinding_ = hookBinding_; deferredAttempt_ = hookAttempt_;
@@ -58,6 +61,7 @@ bool PlayerComponentRecovery::preparePreload(const QString& hookToken)
 void PlayerComponentRecovery::finishPreload()
 {
   if (hookAttempt_ && hookAttempt_ == attempt_) recoveryTracksApplied_ = true;
+  if (!hookAttempt_) ordinarySelection_.revoke();
   deferredEntry_ = 0;
 }
 
@@ -69,12 +73,15 @@ void PlayerComponentRecovery::applyDeferredTracks()
     if (!restoring_ || deferredAttempt_ != attempt_ || !recoveryLoaded_ || !prepareRecoveryPreload()) return;
   } else {
     const AutomaticRecoverySession::Key current{0, deferredRevision_, deferredBinding_};
-    if (runtime_.activeEntry() != deferredEntry_ ||
-        !runtime_.selections(deferredEntry_, current, player_->m_currentAudioStream, player_->m_currentSubtitleStream)) return;
+    const bool recoveryRecipe = runtime_.activeEntry() == deferredEntry_ &&
+        runtime_.selections(deferredEntry_, current, player_->m_currentAudioStream, player_->m_currentSubtitleStream);
+    if (!recoveryRecipe && !ordinarySelection_.select(deferredRevision_, deferredBinding_, deferredEntry_, deferredStart_, true,
+                                                       player_->m_currentAudioStream, player_->m_currentSubtitleStream)) return;
   }
   player_->reselectStream(player_->m_currentSubtitleStream, PlayerComponent::MediaType::Subtitle);
   player_->reselectStream(player_->m_currentAudioStream, PlayerComponent::MediaType::Audio);
   if (deferredAttempt_) recoveryTracksApplied_ = true;
+  else ordinarySelection_.revoke();
   deferredEntry_ = 0;
 }
 
@@ -87,7 +94,9 @@ void PlayerComponentRecovery::usability(std::uint64_t generation, std::uint64_t 
   if (!usable || !validRestore(now)) { failRestore(); return; }
   if (!attempt_ || !recoveryLoad_.begin({saved_.key.session, saved_.key.revision, saved_.key.generation},
                                         attempt_, policy_.deadlineMs())) { failRestore(); return; }
-  pauseId_ = (std::uint64_t{4} << 61) | attempt_;
+  const auto pauseSequence = RecoveryIdentity::take(RecoveryIdentity::Domain::Pause);
+  if (!pauseSequence) { failRestore(); return; }
+  pauseId_ = (std::uint64_t{9} << 60) | pauseSequence;
   auto lease = core_->acquireNative();
   int paused = 1;
   if (!lease.get() || mpv_set_property_async(lease.get(), pauseId_, "pause", MPV_FORMAT_FLAG, &paused) < 0)
@@ -200,7 +209,9 @@ void PlayerComponentRecovery::maybeResume(std::int64_t now)
   sample.generation = saved_.key.generation; sample.desiredPaused = false;
   if (!policy_.mayUnpause(sample)) { failRestore(); return; }
   auto lease = core_->acquireNative();
-  int paused = 0; unpauseId_ = (std::uint64_t{5} << 61) | attempt_;
+  const auto unpauseSequence = RecoveryIdentity::take(RecoveryIdentity::Domain::Unpause);
+  if (!unpauseSequence) { failRestore(); return; }
+  int paused = 0; unpauseId_ = (std::uint64_t{10} << 60) | unpauseSequence;
   if (!lease.get() || mpv_set_property_async(lease.get(), unpauseId_, "pause", MPV_FORMAT_FLAG, &paused) < 0) {
     failRestore(); return;
   }

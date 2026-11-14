@@ -1,4 +1,5 @@
 #include "PlayerComponent.h"
+#include "RecoveryIdentity.h"
 #include <MpvController>
 
 namespace {
@@ -90,8 +91,11 @@ bool PlayerComponent::dispatchNativeRestoreSeek()
   const QByteArray position = QByteArray::number(ms / 1000) + '.' + QByteArray::number(ms % 1000).rightJustified(3, '0');
   const char* args[] = {"seek", position.constData(), "absolute+exact", nullptr};
   int result = -1;
-  if (m_restoreDispatch) result = m_restoreDispatch(seekTag | key.attempt, args);
-  else result = nativeAsyncCommand(seekTag | key.attempt, args);
+  const auto sequence = RecoveryIdentity::take(RecoveryIdentity::Domain::FixtureSeek);
+  if (!sequence) { m_nativeRestore.seekPending = false; m_nativeRestore.failed = true; return false; }
+  m_nativeRestore.seekUserdata = seekTag | sequence;
+  if (m_restoreDispatch) result = m_restoreDispatch(m_nativeRestore.seekUserdata, args);
+  else result = nativeAsyncCommand(m_nativeRestore.seekUserdata, args);
   m_nativeRestore.seekAccepted = result >= 0;
   m_nativeRestore.seekError = result;
   if (result < 0) { m_nativeRestore.seekPending = false; m_nativeRestore.failed = true; }
@@ -126,7 +130,7 @@ void PlayerComponent::observeNativeRestore(const mpv_event* event)
   const auto receipt = m_nativeReceipts.snapshot();
   if (!sameKey(key, receipt.key) || key.core != m_mpvGeneration) return;
   if (event->event_id == MPV_EVENT_COMMAND_REPLY && m_nativeRestore.seekPending &&
-      event->reply_userdata == (seekTag | key.attempt)) {
+      m_nativeRestore.seekUserdata && event->reply_userdata == m_nativeRestore.seekUserdata) {
     m_nativeRestore.seekPending = false;
     m_nativeRestore.seekReply = true;
     m_nativeRestore.seekReplyError = event->error;

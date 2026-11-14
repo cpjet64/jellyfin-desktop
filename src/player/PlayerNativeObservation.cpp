@@ -1,4 +1,5 @@
 #include "PlayerComponent.h"
+#include "RecoveryIdentity.h"
 #include <MpvController>
 #include <chrono>
 
@@ -32,6 +33,9 @@ bool PlayerComponent::requestNativeObservation(PlaybackNativeReceipts::Key key, 
   m_nativeObservation = {};
   m_nativeObservation.key = key;
   m_nativeObservation.id = id;
+  const auto sequence = RecoveryIdentity::take(RecoveryIdentity::Domain::FixtureObservation);
+  if (!sequence) return false;
+  m_nativeObservation.userdata = observationTag | sequence;
   m_nativeObservation.durationMs = durationMs;
   m_nativeObservation.paused = paused;
   m_nativeObservation.postSeek = restorePostSeekReady();
@@ -39,8 +43,8 @@ bool PlayerComponent::requestNativeObservation(PlaybackNativeReceipts::Key key, 
   m_nativeObservation.requestedNs = monotonicNs();
   const char* args[] = {"expand-text", NativePlaybackObservation::expression(), nullptr};
   int result = -1;
-  if (m_observationDispatch) result = m_observationDispatch(observationTag | id, args);
-  else result = nativeAsyncCommand(observationTag | id, args);
+  if (m_observationDispatch) result = m_observationDispatch(m_nativeObservation.userdata, args);
+  else result = nativeAsyncCommand(m_nativeObservation.userdata, args);
   m_nativeObservation.accepted = result >= 0;
   if (result < 0) m_nativeObservation.pending = false;
   return result >= 0;
@@ -73,7 +77,7 @@ void PlayerComponent::observeNativeObservation(const mpv_event* event)
 {
 #ifdef MPVQT_EXTERNAL_EVENTS
   if (!event || event->event_id != MPV_EVENT_COMMAND_REPLY || !m_nativeObservation.pending ||
-      event->reply_userdata != (observationTag | m_nativeObservation.id)) return;
+      !m_nativeObservation.userdata || event->reply_userdata != m_nativeObservation.userdata) return;
   m_nativeObservation.receivedNs = monotonicNs();
   m_nativeObservation.pending = false;
   const auto receipt = m_nativeReceipts.snapshot();

@@ -63,7 +63,6 @@ void PlayerComponentRecovery::shutdown()
   timer_.stop(); userChanged(true);
   if (!core_) return;
   if (core_->wakeRelay) disconnect(core_->wakeRelay, nullptr, this, nullptr);
-  core_->closeExternalWakeup();
   if (bound_) core_->unbindExternalConsumer();
   bound_ = false; lifetimeLease_ = {}; core_.reset(); item_.clear();
 }
@@ -72,16 +71,24 @@ bool PlayerComponentRecovery::queue(const QStringList& command, const QString& u
 {
   if (!bound_ || !item_ || !core_ ||
       session_ == std::numeric_limits<std::uint64_t>::max()) return false;
-  auto lease = core_->acquireNative();
-  if (!lease.get()) return false;
   const auto intent = player_->m_playbackIntent.snapshot();
   const AutomaticRecoverySession::Key key{++session_, intent.revision, player_->m_mpvGeneration};
-  return runtime_.submitUserLoad([&lease](std::uint64_t id, const char** args) {
-    return mpv_command_async(lease.get(), id, args);
-  }, key, command, url, options, metadata, audio, subtitle, !options.value("autoplay").toBool(), nowMs());
+  return beginOrdinaryLoad(command, url, options, metadata, audio, subtitle, key);
+}
+void PlayerComponentRecovery::beginUserReplacement()
+{
+  ordinaryReplacement_.revoke();
+  replacementOldEntry_ = normalCurrentEntry_; replacementBeforeStart_ = startSerial_; replacementArming_ = true;
 }
 bool PlayerComponentRecovery::userChanged(bool clear)
 {
+  const bool armReplacement = clear && replacementArming_;
+  replacementArming_ = false;
+  ordinaryReplacement_.revoke();
+  if (ordinaryLoad_.pending) {
+    if (clear) ordinaryLoad_ = {}; else flushOrdinaryLoad(false);
+  }
+  ordinarySelection_.revoke(); ordinaryAfterId_ = 0;
   const bool cancelled = cancelOwnedSeek();
 #ifdef MPVQT_OWNED_SEEK_API
   if (item_) item_->refreshRecoveryBootstrap();
@@ -99,8 +106,12 @@ bool PlayerComponentRecovery::userChanged(bool clear)
   replacementTransition_ = false;
   pauseId_ = unpauseId_ = 0;
   deferredEntry_ = 0;
-  if (clear) { seekPrepared_ = false; runtime_.invalidate(); return cancelled; }
   const auto intent = player_->m_playbackIntent.snapshot();
+  const auto now = nowMs();
+  if (armReplacement && !startSerialExhausted_ && (intent.desired == PlaybackIntent::Desired::Playing || intent.desired == PlaybackIntent::Desired::Paused) &&
+      now >= 0 && now <= std::numeric_limits<std::int64_t>::max() - 15000)
+    ordinaryReplacement_.arm(replacementOldEntry_, replacementBeforeStart_, intent.revision, player_->m_mpvGeneration, now + 15000);
+  if (clear) { seekPrepared_ = false; runtime_.invalidate(); return cancelled; }
   if (intent.desired == PlaybackIntent::Desired::Stopped || intent.desired == PlaybackIntent::Desired::Exiting) return cancelled;
   const AutomaticRecoverySession::Key current{previous.session, intent.revision, player_->m_mpvGeneration};
   if (runtime_.reviseActive(previous, current, intent.desired == PlaybackIntent::Desired::Paused))
@@ -145,11 +156,12 @@ void PlayerComponentRecovery::drain()
   }
   if (!replacementTransition_) player_->updatePlaybackState();
 }
-bool PlayerComponentRecovery::ownsEnd(const mpv_event* event) const
+bool PlayerComponentRecovery::ownsEnd(const mpv_event* event)
 {
   if (!event || event->event_id != MPV_EVENT_END_FILE || !event->data) return false;
   const auto* end = static_cast<const mpv_event_end_file*>(event->data);
-  if (replacedEntry_ > 0 && end->playlist_entry_id == replacedEntry_ && end->reason == MPV_END_FILE_REASON_STOP) return true;
+  if (ordinaryReplacement_.consume(end->playlist_entry_id, end->reason == MPV_END_FILE_REASON_STOP, startSerial_,
+                                   player_->m_playbackIntent.snapshot().revision, player_->m_mpvGeneration, nowMs())) return true;
   return validRestore(nowMs()) &&
       end->playlist_entry_id == saved_.entry && end->reason == MPV_END_FILE_REASON_STOP;
 }

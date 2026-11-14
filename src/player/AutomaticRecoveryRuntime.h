@@ -34,6 +34,6 @@ private:
   void advanceEpoch();
   AutomaticRecoveryQueue queue_;
   Key revoked_;
-  std::uint64_t sequence_ = 0, generation_ = 0;
+  std::uint64_t generation_ = 0;
   std::uint64_t eventEpoch_ = 1;
 };

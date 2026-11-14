@@ -2,6 +2,7 @@
 #ifdef MPVQT_RECOVERY_RUNTIME
 #include "MpvVideoItem.h"
 #include "PlayerComponent.h"
+#include "RecoveryIdentity.h"
 #include "system/WebClientFaultGuard.h"
 #include <QQuickWindow>
 #include <cmath>
@@ -54,12 +55,13 @@ int PlayerComponentRecovery::dispatchOwnedSeek(std::int64_t targetMs)
       runtime_.activeEntry() != seekCheckpoint_.entry || item_->recoveryRendererGeneration() != bootstrapGeneration_ ||
       item_->recoveryWindowLifetime() != seekWindowLifetime_ || item_->recoverySceneGraphGeneration() != seekSceneGeneration_ ||
       !item_->recoveryOwnedSeekAvailable()) return 0;
-  if (seekOperationSequence_ == std::numeric_limits<std::uint64_t>::max() ||
-      seekReplySequence_ >= ((std::uint64_t{1} << 61) - 1)) return -1;
+  const auto operationId = RecoveryIdentity::take(RecoveryIdentity::Domain::SeekOperation);
+  const auto replySequence = RecoveryIdentity::take(RecoveryIdentity::Domain::SeekReply);
+  if (!operationId || !replySequence) return -1;
   auto lease = core_->acquireNative();
   if (!lease.get()) return -1;
   AutomaticRecoveryOwnedSeek::Operation op;
-  op.key = key; op.operationId = ++seekOperationSequence_; op.replyId = (std::uint64_t{6} << 61) | ++seekReplySequence_;
+  op.key = key; op.operationId = operationId; op.replyId = (std::uint64_t{6} << 61) | replySequence;
   op.baselineEpoch = runtime_.eventEpoch(); op.baselineDiscontinuity = seekBaselineDiscontinuity_; op.baselineSource = seekBaselineSource_;
   op.rendererGeneration = bootstrapGeneration_; op.entry = seekCheckpoint_.entry; op.targetMs = targetMs;
   op.checkpointMs = seekCheckpoint_.positionMs; op.dispatchedMs = nowMs();
@@ -169,7 +171,8 @@ void PlayerComponentRecovery::beginSeekRecovery(AutomaticRecoveryOwnedSeek::Stat
   rendererGeneration_ = item_->recoveryRendererGeneration();
   if (!rendererGeneration_ || !armFrameAttempt()) { clearFrameAttempt(); policy_.fail(); return; }
   awaitingUsability_ = true;
-  if (request_ == std::numeric_limits<std::uint64_t>::max()) { failRestore(); return; }
-  item_->requestRendererUsability(rendererGeneration_, ++request_, policy_.deadlineMs());
+  request_ = RecoveryIdentity::take(RecoveryIdentity::Domain::Usability);
+  if (!request_) { failRestore(); return; }
+  item_->requestRendererUsability(rendererGeneration_, request_, policy_.deadlineMs());
 }
 #endif

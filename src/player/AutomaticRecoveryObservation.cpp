@@ -1,12 +1,12 @@
 #include "AutomaticRecoveryObservation.h"
 #include "AutomaticRecoveryNative.h"
+#include "RecoveryIdentity.h"
 #include <cmath>
 #include <cstring>
 #include <limits>
 
 namespace {
 constexpr std::uint64_t Tag = std::uint64_t{1} << 60;
-constexpr std::uint64_t MaxSequence = (std::uint64_t{1} << 49) - 1;
 constexpr std::int64_t FreshnessMs = 2000; // Initial policy; runtime validation is required.
 const char* const Names[] = {"playlist", "seekable", "seeking", "paused-for-cache", "pause", "time-pos", "vid", "playlist"};
 }
@@ -24,9 +24,11 @@ bool AutomaticRecoveryObservation::begin(Key key, std::int64_t entry, std::uint6
                                          const Dispatch& dispatch)
 {
   invalidate();
-  if (!key.session || !key.revision || !key.generation || entry <= 0 || !epoch || now < 0 || sequence_ >= MaxSequence)
+  if (!key.session || !key.revision || !key.generation || entry <= 0 || !epoch || now < 0)
     return false;
-  ++sequence_; key_ = key; epoch_ = epoch; startedMs_ = lastMs_ = now; result_.entry = entry;
+  sequence_ = RecoveryIdentity::take(RecoveryIdentity::Domain::Observation);
+  if (!sequence_) return false;
+  key_ = key; epoch_ = epoch; startedMs_ = lastMs_ = now; result_.entry = entry;
   phase_ = Phase::Before;
   if (!request(dispatch, 0, Names[0], MPV_FORMAT_NODE)) { invalidate(); return false; }
   return true;

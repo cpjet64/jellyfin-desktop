@@ -290,10 +290,11 @@ private:
   bool m_fixtureCheckpointConsumed = false;
   quint64 m_lastReceiptAttempt = 0;
   quint64 m_lastReceiptRevision = 0;
+  quint64 m_receiptUserdata = 0;
   qint64 m_fixturePosition = -1;
   struct ObservationState {
     PlaybackNativeReceipts::Key key;
-    quint64 id = 0;
+    quint64 id = 0, userdata = 0;
     qint64 durationMs = 0, requestedNs = 0, receivedNs = 0, positionMs = -1;
     bool paused = false, pending = false, accepted = false, valid = false, postSeek = false;
   } m_nativeObservation;
@@ -305,6 +306,7 @@ private:
     bool armed = false, cancelled = false, loadAttempted = false, seekPending = false;
     bool seekAccepted = false, seekReply = false, seekOk = false, restarted = false;
     bool seekAttempted = false, failed = false, cleanupAttempted = false, cleanupObserved = false;
+    quint64 seekUserdata = 0;
     int seekError = 0, seekReplyError = 0;
     NativeStopResult cleanupResult{NativeStopResult::Status::Unavailable, 0};
   } m_nativeRestore;
