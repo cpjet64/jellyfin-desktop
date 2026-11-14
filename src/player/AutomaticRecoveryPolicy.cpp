@@ -20,6 +20,8 @@ void Policy::resetBaseline(const Sample& sample)
   baselineRevision_ = sample.revision;
   baselineGeneration_ = sample.generation;
   baselineOutstanding_ = sample.outstanding;
+  baselineSuppressed_ = sample.desiredPaused || sample.nativePaused || sample.loading || sample.seeking ||
+      sample.buffering || !sample.movingVideo;
 }
 Action Policy::observe(const Sample& sample)
 {
@@ -39,11 +41,12 @@ Action Policy::observe(const Sample& sample)
   }
   const bool eligible = sample.seekable && sample.video && sample.visible && sample.exposed && !sample.eof;
   if (attempted_ || !eligible || !sample.generation) { baseline_ = false; return Action::None; }
-  const bool suppressed = sample.paused || sample.loading || sample.seeking || sample.buffering || !sample.movingVideo;
+  const bool suppressed = sample.desiredPaused || sample.nativePaused || sample.loading || sample.seeking ||
+      sample.buffering || !sample.movingVideo;
   const bool reset = !baseline_ || suppressed || !sample.outstanding || sample.positionMs < 0 ||
       sample.nowMs < lastSampleTime_ || sample.positionMs < lastPosition_ || sample.frameSerial != baselineFrame_ ||
       sample.revision != baselineRevision_ || sample.generation != baselineGeneration_ ||
-      sample.outstanding != baselineOutstanding_;
+      sample.outstanding != baselineOutstanding_ || suppressed != baselineSuppressed_;
   if (reset) resetBaseline(sample);
   if (sample.positionMs > lastPosition_) { lastPosition_ = sample.positionMs; lastAdvanceTime_ = sample.nowMs; }
   lastSampleTime_ = sample.nowMs;
@@ -54,7 +57,7 @@ Action Policy::observe(const Sample& sample)
   if (!sample.operationTimedOut && !sample.rendererFault && !stalled) return Action::None;
   if (sample.nowMs > std::numeric_limits<std::int64_t>::max() - 15000) { fail(); return Action::Blocked; }
   attempted_ = true; revision_ = sample.revision; generation_ = sample.generation;
-  replacement_ = 0; deadline_ = sample.nowMs + 15000; lastAttemptTime_ = sample.nowMs; wasPaused_ = sample.paused;
+  replacement_ = 0; deadline_ = sample.nowMs + 15000; lastAttemptTime_ = sample.nowMs; wasPaused_ = sample.desiredPaused;
   if (sample.rendererFault) { phase_ = Phase::Failed; return Action::Blocked; }
   phase_ = Phase::Reloading;
   return Action::Reload;
@@ -82,7 +85,7 @@ bool Policy::frameObserved(std::uint64_t generation, std::uint64_t attempt, std:
 bool Policy::mayUnpause(const Sample& sample) const
 {
   return phase_ == Phase::Complete && !wasPaused_ && inTime(sample.nowMs) && sample.session == session_ &&
-      sample.revision == revision_ && sample.generation == replacement_ && !sample.paused;
+      sample.revision == revision_ && sample.generation == replacement_ && !sample.desiredPaused;
 }
 void Policy::fail() { phase_ = Phase::Failed; baseline_ = false; }
 }

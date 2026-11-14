@@ -9,7 +9,7 @@ struct Sample {
   std::uint64_t session = 0, revision = 0, generation = 0, frameSerial = 0;
   bool seekable = false, video = false, movingVideo = false, loading = false, seeking = false, buffering = false;
   bool visible = false, exposed = false, eof = false, outstanding = false, operationTimedOut = false;
-  bool rendererFault = false, paused = false;
+  bool rendererFault = false, desiredPaused = false, nativePaused = false;
 };
 
 class Policy {
@@ -37,6 +37,6 @@ private:
   std::int64_t lastPosition_ = -1, lastAdvanceTime_ = 0;
   std::int64_t lastSampleTime_ = 0;
   std::int64_t lastAttemptTime_ = 0;
-  bool attempted_ = false, baseline_ = false, baselineOutstanding_ = false, wasPaused_ = false;
+  bool attempted_ = false, baseline_ = false, baselineOutstanding_ = false, baselineSuppressed_ = false, wasPaused_ = false;
 };
 }
