@@ -1,0 +1,8 @@
+Official upstream: https://github.com/qt/qtbase
+Tag: v6.9.3
+Annotated tag object: 4949f85b58d4c217f841767776c7d62215f6b33e
+Commit: be09b211db70e1b0155d05c18668ad76e7e3df51
+Git blob src/gui/CMakeLists.txt: 5e8545b83a2648f82fed69fea063e08d21789477
+Git blob src/plugins/platforms/windows/qwindowsglcontext.cpp: 5ca52c2c19e7d9fe06e61d6fa6d47550697ced49
+Git blob src/plugins/platforms/windows/qwindowsglcontext.h: bf719598535c3b6eac206357d6de202eebcb3a9f
+Git blob src/gui/rhi/qrhigles2.cpp: d3a9c7968bbe5d2be0936613e9324ade72f3adf9

@@ -1,0 +1,25 @@
+# Private Qt recovery build boundary
+
+This source is an unexecuted candidate, not a capability or artifact claim. Build
+QtBase and QtDeclarative from their pinned matching 6.9.3 source and the same
+MSVC kit and configuration as the application's QtWebEngine. Do not mix MinGW
+Qt components. Check the source blobs in `patches/qt/base/source-identity.txt`,
+apply `qtbase-6.9.3-swap.patch`, and copy `QtRecoverySwap.cpp` and
+`QtRecoveryAbi.h` into QtBase `src/gui/recovery/`. Make that exact header
+available to the matching private QtQuick build. Build identities and hashes of
+all resulting QtGui, QtQuick, and Windows platform plugin binaries must be
+recorded and matched by the consumer before enabling this capability.
+
+The C ABI is versioned and size checked. A caller opens a thread-local ticket
+only after successful beginFrame, with retained lifetime and generation identities,
+and closes or aborts it on every path. The platform hook reports the actual call's
+BOOL for a desktop OpenGL double-buffered window. Missing, repeated, mismatched,
+failed, skipped, or unsupported swaps fail. QtQuick must separately establish
+native frame, resolved display texture and main-pass draw attribution and combine
+that evidence with this result. The owner must revoke delivery on destruction
+and recheck recovery authority and deadline. This bridge is not GPU completion
+or visible-picture evidence. Non-Windows and unpatched builds remain unavailable.
+
+No configure, compiler, execution, packaging, or runtime validation is authorized
+or claimed here. The later build must validate exports, exact ABI sizes, source
+identity, same-kit binary closure, negative cases, and packaged visible playback.
