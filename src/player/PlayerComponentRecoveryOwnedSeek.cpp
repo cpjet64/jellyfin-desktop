@@ -25,12 +25,17 @@ void PlayerComponentRecovery::prepareOwnedSeek(std::int64_t targetMs)
       lastObservation_.nativePaused != (intent.desired == PlaybackIntent::Desired::Paused) ||
       !player_->m_inPlayback || !player_->m_window || !player_->m_window->isVisible() || !player_->m_window->isExposed() ||
       !item_->isVisible() || !player_->m_windowVisible || player_->m_state == PlayerComponent::State::error ||
-      !player_->m_playbackError.isEmpty() || sourceEntry_ != static_cast<std::uint64_t>(entry) ||
-      sourceEpoch_ != runtime_.eventEpoch() || sourceGeneration_ != item_->recoveryRendererGeneration() ||
-      !sourceDiscontinuity_ || !sourceFirst_ || lastSource_ <= sourceFirst_ || player_->m_mediaFrameRate < 1.0f ||
+      !player_->m_playbackError.isEmpty() || bootstrapEntry_ != static_cast<std::uint64_t>(entry) ||
+      !bootstrapEpoch_ || bootstrapEpoch_ != runtime_.eventEpoch() || bootstrapGeneration_ != item_->recoveryRendererGeneration() ||
+      !bootstrapDiscontinuity_ || !bootstrapSource_ ||
+      (intent.desired != PlaybackIntent::Desired::Paused &&
+       (sourceEntry_ != bootstrapEntry_ || sourceEpoch_ != bootstrapEpoch_ || sourceGeneration_ != bootstrapGeneration_ ||
+        !sourceFirst_ || lastSource_ <= sourceFirst_ || player_->m_mediaFrameRate < 1.0f)) ||
       !runtime_.snapshot(key, seekCheckpoint_)) return;
   seekWindowLifetime_ = item_->recoveryWindowLifetime(); seekSceneGeneration_ = item_->recoverySceneGraphGeneration();
-  if (!seekWindowLifetime_ || !seekSceneGeneration_) return;
+  if (!seekWindowLifetime_ || !seekSceneGeneration_ || bootstrapWindow_ != seekWindowLifetime_ ||
+      bootstrapScene_ != seekSceneGeneration_) return;
+  seekBaselineSource_ = bootstrapSource_; seekBaselineDiscontinuity_ = bootstrapDiscontinuity_;
   seekPriorObservation_ = lastObservation_; seekPrepared_ = true;
 #else
   (void)targetMs;
@@ -46,7 +51,7 @@ int PlayerComponentRecovery::dispatchOwnedSeek(std::int64_t targetMs)
   const auto key = runtime_.activeKey();
   if (targetMs < 0 || key.session != seekCheckpoint_.key.session || key.generation != seekCheckpoint_.key.generation ||
       key.revision != intent.revision || key.revision <= seekCheckpoint_.key.revision ||
-      runtime_.activeEntry() != seekCheckpoint_.entry || item_->recoveryRendererGeneration() != sourceGeneration_ ||
+      runtime_.activeEntry() != seekCheckpoint_.entry || item_->recoveryRendererGeneration() != bootstrapGeneration_ ||
       item_->recoveryWindowLifetime() != seekWindowLifetime_ || item_->recoverySceneGraphGeneration() != seekSceneGeneration_ ||
       !item_->recoveryOwnedSeekAvailable()) return 0;
   if (seekOperationSequence_ == std::numeric_limits<std::uint64_t>::max() ||
@@ -55,8 +60,8 @@ int PlayerComponentRecovery::dispatchOwnedSeek(std::int64_t targetMs)
   if (!lease.get()) return -1;
   AutomaticRecoveryOwnedSeek::Operation op;
   op.key = key; op.operationId = ++seekOperationSequence_; op.replyId = (std::uint64_t{6} << 61) | ++seekReplySequence_;
-  op.baselineEpoch = runtime_.eventEpoch(); op.baselineDiscontinuity = sourceDiscontinuity_; op.baselineSource = lastSource_;
-  op.rendererGeneration = sourceGeneration_; op.entry = seekCheckpoint_.entry; op.targetMs = targetMs;
+  op.baselineEpoch = runtime_.eventEpoch(); op.baselineDiscontinuity = seekBaselineDiscontinuity_; op.baselineSource = seekBaselineSource_;
+  op.rendererGeneration = bootstrapGeneration_; op.entry = seekCheckpoint_.entry; op.targetMs = targetMs;
   op.checkpointMs = seekCheckpoint_.positionMs; op.dispatchedMs = nowMs();
   op.desiredPaused = intent.desired == PlaybackIntent::Desired::Paused;
   if (!ownedSeek_.begin(op)) return -1;

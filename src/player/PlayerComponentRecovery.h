@@ -51,6 +51,7 @@ private:
   void beginFrameGate(std::int64_t now);
   void rendered(std::uint64_t generation, const RecoveryFrameObservationV1& frame);
   void submission(std::uint64_t generation, const QtRecoverySubmissionV1& submission);
+  void acceptBootstrapSubmission();
   bool armFrameAttempt();
   void clearFrameAttempt();
   void maybeResume(std::int64_t now);
@@ -92,6 +93,8 @@ private:
   std::uint64_t rendererGeneration_ = 0, frameEpoch_ = 0, previousSource_ = 0, unpauseId_ = 0;
   std::uint64_t windowLifetime_ = 0, sceneGeneration_ = 0, pendingSubmissionEpoch_ = 0;
   QtRecoverySubmissionV1 pendingSubmission_{};
+  QtRecoverySubmissionV1 pendingBootstrap_{};
+  std::uint64_t pendingBootstrapEpoch_ = 0;
   std::uint64_t pauseId_ = 0;
   std::uint64_t verifiedSource_ = 0;
   std::int64_t recoveryEntry_ = 0, observationStarted_ = 0;
@@ -101,6 +104,9 @@ private:
   std::uint64_t lastSource_ = 0;
   std::uint64_t sourceGeneration_ = 0, sourceEntry_ = 0, sourceFirst_ = 0;
   std::uint64_t sourceDiscontinuity_ = 0, seekOperationSequence_ = 0, seekReplySequence_ = 0;
+  std::uint64_t bootstrapEntry_ = 0, bootstrapSource_ = 0, bootstrapDiscontinuity_ = 0;
+  std::uint64_t bootstrapGeneration_ = 0, bootstrapEpoch_ = 0, bootstrapWindow_ = 0, bootstrapScene_ = 0;
+  std::uint64_t seekBaselineSource_ = 0, seekBaselineDiscontinuity_ = 0;
   std::uint64_t seekWindowLifetime_ = 0, seekSceneGeneration_ = 0;
   AutomaticRecoveryOwnedSeek::State seekTimeoutReason_ = AutomaticRecoveryOwnedSeek::State::Empty;
   std::uint64_t sourceEpoch_ = 0;
@@ -116,6 +122,7 @@ private:
   bool restoring_ = false, loadDispatched_ = false, resumePending_ = false, completed_ = false;
   bool recoveryRestarted_ = false;
   bool submissionPending_ = false;
+  bool bootstrapPending_ = false;
   bool recoveryTracksApplied_ = false;
   bool replacementTransition_ = false;
   bool seekPrepared_ = false, nativeSeekArmed_ = false, seekCancellationFailed_ = false;
