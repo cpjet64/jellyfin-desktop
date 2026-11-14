@@ -86,7 +86,26 @@ class ReceiptTests(unittest.TestCase):
     def test_early_natural_settlement(self):
         policy, record = make_receipt()
         record["deadlines"]["cleanup_start_ms"] = 250
+        record["deadlines"]["cleanup_deadline_ms"] = 10250
         self.assertEqual(check(policy, record)["result"], "natural")
+
+    def test_late_after_grace_settlement(self):
+        policy, record = make_receipt()
+        record["deadlines"]["cleanup_start_ms"] = 350
+        record["deadlines"]["cleanup_deadline_ms"] = 10350
+        self.assertEqual(check(policy, record)["result"], "natural")
+
+    def test_boolean_sizes_and_zero_handles_rejected(self):
+        for change in ("executable", "pin", "handles"):
+            policy, record = make_receipt()
+            if change == "executable":
+                record["command"]["executable_size"] = True
+            elif change == "pin":
+                record["file_pin"]["size"] = True
+            else:
+                record["owned"]["opened"] = record["owned"]["closed"] = 0
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                check(policy, record)
 
     def test_closure_and_malformed(self):
         policy, record = make_receipt()

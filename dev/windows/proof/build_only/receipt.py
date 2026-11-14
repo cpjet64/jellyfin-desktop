@@ -62,6 +62,7 @@ def _validate_command(record, policy):
     expected["outputs"] = list(policy.command.outputs)
     expected["env_names"] = list(policy.command.env_names)
     _keys(record["command"], tuple(expected))
+    _number(record["command"]["executable_size"], 1)
     if record["command"] != expected:
         raise ValueError("command identity mismatch")
 
@@ -84,14 +85,15 @@ def _validate_lifecycle(record, policy):
             or not root["observed_ms"] <= deadlines["grace_deadline_ms"] <= deadlines["root_deadline_ms"]
             or deadlines["grace_deadline_ms"] > root["observed_ms"] + policy.grace_ms
             or deadlines["cleanup_deadline_ms"] != deadlines["cleanup_start_ms"] + 10000
-            or not root["observed_ms"] <= deadlines["cleanup_start_ms"] <= deadlines["grace_deadline_ms"]
+            or not root["observed_ms"] <= deadlines["cleanup_start_ms"]
             or deadlines["cleanup_start_ms"] >= deadlines["root_deadline_ms"]
             or not deadlines["cleanup_start_ms"] <= deadlines["settled_ms"] <= deadlines["cleanup_deadline_ms"]):
         raise ValueError("deadline mismatch")
     _keys(record["owned"], ("opened", "closed", "failed"))
     for value in record["owned"].values():
         _number(value)
-    if record["owned"]["opened"] != record["owned"]["closed"] or record["owned"]["failed"] != 0:
+    if (record["owned"]["opened"] < 1 or record["owned"]["opened"] != record["owned"]["closed"]
+            or record["owned"]["failed"] != 0):
         raise ValueError("owned handles not closed")
     _keys(record["finalization"], ("exclusive", "write_complete"))
     if any(value is not True for value in record["finalization"].values()) or record["errors"] != []:
