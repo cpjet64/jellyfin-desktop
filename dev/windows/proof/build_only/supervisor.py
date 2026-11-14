@@ -239,10 +239,8 @@ def _run_job(api, policy, env, started, receipt):
         try:
             outcome = settle(api, job, root, telemetry, started[0] + policy.deadline_ms / 1000,
                              grace_seconds=policy.grace_ms / 1000)
-        except BaseException:
-            failure = LaunchFailure('interrupted', root, (), True, cleanup_deadline=monotonic() + 10.0)
-            receipt['errors'].extend(_close_launch_failure(api, job, failure))
-            raise
+        except BaseException as exc:
+            raise UnsettledRootError(root) from exc
         receipt['outcome'] = outcome
         if outcome['result'] == 'failed':
             if outcome['root'].get('unresolved'):
