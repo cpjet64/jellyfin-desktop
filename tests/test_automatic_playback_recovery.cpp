@@ -15,6 +15,7 @@ static Sample sample()
   value.positionMs = 0;
   value.seekable = true;
   value.video = true;
+  value.movingVideo = true;
   value.visible = true;
   value.exposed = true;
   value.outstanding = true;
@@ -31,7 +32,7 @@ static void stallRequiresFullEligibleInterval()
     CHECK(policy.observe(s) == Action::None);
   }
   s.positionMs += 500;
-  CHECK(policy.observe(s) == Action::Retire);
+  CHECK(policy.observe(s) == Action::Reload);
   CHECK(policy.attempted());
   CHECK(policy.deadlineMs() == 20000);
 }
@@ -39,7 +40,7 @@ static void stallRequiresFullEligibleInterval()
 static void exclusionsResetStallBaseline()
 {
   // Each distinct adapter exclusion must reset the pending stall interval.
-  for (int exclusion = 0; exclusion != 9; ++exclusion) {
+  for (int exclusion = 0; exclusion != 11; ++exclusion) {
     Policy policy;
     auto s = sample();
     CHECK(policy.observe(s) == Action::None);
@@ -47,7 +48,7 @@ static void exclusionsResetStallBaseline()
     s.positionMs = 4500;
     CHECK(policy.observe(s) == Action::None);
     s.nowMs = 5000;
-    if (exclusion == 0) s.paused = true;
+    if (exclusion == 0) s.desiredPaused = true;
     if (exclusion == 1) s.loading = true;
     if (exclusion == 2) s.seeking = true;
     if (exclusion == 3) s.buffering = true;
@@ -56,9 +57,11 @@ static void exclusionsResetStallBaseline()
     if (exclusion == 6) s.video = false;
     if (exclusion == 7) s.eof = true;
     if (exclusion == 8) s.seekable = false;
+    if (exclusion == 9) s.movingVideo = false;
+    if (exclusion == 10) s.nativePaused = true;
     CHECK(policy.observe(s) == Action::None);
-    s.paused = s.loading = s.seeking = s.buffering = s.eof = false;
-    s.visible = s.exposed = s.video = s.seekable = true;
+    s.desiredPaused = s.nativePaused = s.loading = s.seeking = s.buffering = s.eof = false;
+    s.visible = s.exposed = s.video = s.seekable = s.movingVideo = true;
     s.nowMs = 5500;
     CHECK(policy.observe(s) == Action::None);
     s.nowMs = 10499;
@@ -66,7 +69,7 @@ static void exclusionsResetStallBaseline()
     CHECK(policy.observe(s) == Action::None);
     s.nowMs = 10500;
     s.positionMs = 9500;
-    CHECK(policy.observe(s) == Action::Retire);
+    CHECK(policy.observe(s) == Action::Reload);
   }
 }
 
@@ -89,7 +92,7 @@ static void progressAndNoOutstandingResetBaseline()
   CHECK(policy.observe(s) == Action::None);
   s.nowMs = 13500;
   s.positionMs = 5001;
-  CHECK(policy.observe(s) == Action::Retire);
+  CHECK(policy.observe(s) == Action::Reload);
 }
 
 static void oneAttemptPerUserSession()
@@ -112,9 +115,9 @@ static void cancellationAndStaleCompletion()
   for (int change = 0; change != 3; ++change) {
     Policy policy;
     auto s = sample();
-    s.rendererFault = true;
-    CHECK(policy.observe(s) == Action::Retire);
-    s.rendererFault = false;
+    s.operationTimedOut = true;
+    CHECK(policy.observe(s) == Action::Reload);
+    s.operationTimedOut = false;
     if (change == 0) ++s.session; // Stop/new item uses a new session.
     if (change == 1) ++s.revision; // Seek or track selection.
     if (change == 2) ++s.generation;
@@ -125,18 +128,16 @@ static void cancellationAndStaleCompletion()
   }
 }
 
-static void restorationRequiresFreshReplacementFrame()
+static void restorationRequiresFreshAttributedFrame()
 {
   Policy policy;
   auto s = sample();
-  s.rendererFault = true;
-  CHECK(policy.observe(s) == Action::Retire);
-  CHECK(policy.retired(1, 2, 100));
+  s.operationTimedOut = true;
+  CHECK(policy.observe(s) == Action::Reload);
   CHECK(policy.restoreStarted(42, 10, 200));
   CHECK(!policy.mayUnpause(s));
-  CHECK(policy.frameObserved(2, 42, 11, 400));
-  s.generation = 2;
-  s.rendererFault = false;
+  CHECK(policy.frameObserved(1, 42, 11, 400));
+  s.operationTimedOut = false;
   s.nowMs = 400;
   CHECK(policy.mayUnpause(s));
   ++s.revision;
@@ -147,21 +148,18 @@ static void pausedRestorationAndDeadlineFailClosed()
 {
   Policy policy;
   auto s = sample();
-  s.paused = true;
-  s.rendererFault = true;
-  CHECK(policy.observe(s) == Action::Retire);
-  CHECK(policy.retired(1, 2, 100));
+  s.desiredPaused = true;
+  s.operationTimedOut = true;
+  CHECK(policy.observe(s) == Action::Reload);
   CHECK(policy.restoreStarted(42, 10, 200));
-  CHECK(policy.frameObserved(2, 42, 11, 300));
-  s.generation = 2;
+  CHECK(policy.frameObserved(1, 42, 11, 300));
   s.nowMs = 300;
   CHECK(!policy.mayUnpause(s));
 
   Policy expired;
   s = sample();
-  s.rendererFault = true;
-  CHECK(expired.observe(s) == Action::Retire);
-  CHECK(!expired.retired(1, 2, 15000));
+  s.operationTimedOut = true;
+  CHECK(expired.observe(s) == Action::Reload);
   CHECK(!expired.restoreStarted(42, 10, 15000));
   CHECK(!expired.frameObserved(2, 42, 11, 15000));
   CHECK(!expired.mayUnpause(s));
@@ -172,10 +170,9 @@ static void failureNeverAcknowledgesRetirementOrRestore()
   for (int stage = 0; stage != 2; ++stage) {
     Policy policy;
     auto s = sample();
-    s.rendererFault = true;
-    CHECK(policy.observe(s) == Action::Retire);
+    s.operationTimedOut = true;
+    CHECK(policy.observe(s) == Action::Reload);
     if (stage == 1) {
-      CHECK(policy.retired(1, 2, 100));
       CHECK(policy.restoreStarted(42, 10, 200));
     }
     policy.fail();
@@ -184,19 +181,18 @@ static void failureNeverAcknowledgesRetirementOrRestore()
     CHECK(!policy.restoreStarted(42, 10, 300));
     CHECK(!policy.frameObserved(2, 42, 11, 300));
     CHECK(!policy.mayUnpause(s));
-    CHECK(policy.observe(s) != Action::Retire);
+    CHECK(policy.observe(s) != Action::Reload);
   }
 }
 
-static void staleFrameCannotCompleteReplacement()
+static void wrongGenerationCannotCompleteReload()
 {
   Policy policy;
   auto s = sample();
-  s.rendererFault = true;
-  CHECK(policy.observe(s) == Action::Retire);
-  CHECK(policy.retired(1, 2, 100));
+  s.operationTimedOut = true;
+  CHECK(policy.observe(s) == Action::Reload);
   CHECK(policy.restoreStarted(42, 10, 200));
-  CHECK(!policy.frameObserved(1, 42, 11, 300));
+  CHECK(!policy.frameObserved(2, 42, 11, 300));
   CHECK(!policy.mayUnpause(s));
   CHECK(policy.phase() == Phase::Failed);
 }
@@ -219,7 +215,7 @@ static void pausedTimeoutCannotAuthorizePlaying()
 {
   Policy policy;
   auto s = sample();
-  s.paused = true;
+  s.desiredPaused = true;
   s.operationTimedOut = true;
   CHECK(policy.observe(s) == Action::Reload);
   policy.fail();
@@ -239,7 +235,10 @@ static void reloadRequiresNewAttributableFrame()
   CHECK(policy.frameObserved(1, 42, 11, 200));
   s.nowMs = 200;
   s.operationTimedOut = false;
+  s.nativePaused = true;
   CHECK(policy.mayUnpause(s));
+  s.desiredPaused = true;
+  CHECK(!policy.mayUnpause(s));
 }
 
 static void reloadRejectsOldFrameOrWrongAttempt()
@@ -267,22 +266,17 @@ static void invalidRevisionAndRetrogradeTimeFailClosed()
   CHECK(invalid.observe(s) == Action::Cancel);
   CHECK(!invalid.attempted());
 
-  for (int stage = 0; stage != 3; ++stage) {
+  for (int stage = 0; stage != 2; ++stage) {
     Policy policy;
     s = sample();
     s.nowMs = 100;
-    s.rendererFault = true;
-    CHECK(policy.observe(s) == Action::Retire);
+    s.operationTimedOut = true;
+    CHECK(policy.observe(s) == Action::Reload);
     if (stage == 0) {
-      CHECK(!policy.retired(1, 2, 99));
+      CHECK(!policy.restoreStarted(42, 10, 99));
     } else {
-      CHECK(policy.retired(1, 2, 200));
-      if (stage == 1) {
-        CHECK(!policy.restoreStarted(42, 10, 199));
-      } else {
-        CHECK(policy.restoreStarted(42, 10, 300));
-        CHECK(!policy.frameObserved(2, 42, 11, 299));
-      }
+      CHECK(policy.restoreStarted(42, 10, 300));
+      CHECK(!policy.frameObserved(1, 42, 11, 299));
     }
     CHECK(policy.phase() == Phase::Failed);
     CHECK(!policy.mayUnpause(s));
@@ -320,6 +314,65 @@ static void backwardsClockOrPositionResetsStall()
   CHECK(!position.attempted());
 }
 
+static void unusableRendererBlocksAndStillMediaDoesNotStall()
+{
+  Policy lost;
+  auto s = sample();
+  s.rendererFault = true;
+  CHECK(lost.observe(s) == Action::Blocked);
+  CHECK(lost.attempted());
+  CHECK(!lost.restoreStarted(42, 10, 100));
+  CHECK(!lost.mayUnpause(s));
+
+  Policy still;
+  s = sample();
+  s.movingVideo = false;
+  CHECK(still.observe(s) == Action::None);
+  s.nowMs = 6000;
+  s.positionMs = 6000;
+  CHECK(still.observe(s) == Action::None);
+  CHECK(!still.attempted());
+}
+
+static void timeoutCanOccurDuringSuppressedStall()
+{
+  for (int state = 0; state != 4; ++state) {
+    Policy policy;
+    auto s = sample();
+    if (state == 0) s.desiredPaused = true;
+    if (state == 1) s.loading = true;
+    if (state == 2) s.seeking = true;
+    if (state == 3) s.buffering = true;
+    s.operationTimedOut = true;
+    CHECK(policy.observe(s) == Action::Reload);
+  }
+}
+
+static void internalBufferingReloadNeverRearmsSessionBudget()
+{
+  Policy policy; auto s = sample();
+  s.buffering = true; s.readStalled = true;
+  CHECK(policy.observe(s) == Action::Reload);
+  CHECK(policy.attempted());
+  CHECK(policy.restoreStarted(42, 10, 100));
+  CHECK(policy.frameObserved(1, 42, 11, 200));
+  s.nowMs = 300;
+  CHECK(policy.observe(s) == Action::None);
+  s.revision++;
+  CHECK(policy.observe(s) != Action::Reload);
+  s.session++;
+  CHECK(policy.observe(s) == Action::Reload);
+
+  Policy cancelled; s = sample();
+  s.buffering = s.readStalled = true;
+  CHECK(cancelled.observe(s) == Action::Reload);
+  ++s.revision; s.nowMs = 100;
+  CHECK(cancelled.observe(s) == Action::Cancel);
+  CHECK(cancelled.observe(s) != Action::Reload);
+  ++s.session;
+  CHECK(cancelled.observe(s) == Action::Reload);
+}
+
 int main()
 {
   stallRequiresFullEligibleInterval();
@@ -327,14 +380,17 @@ int main()
   progressAndNoOutstandingResetBaseline();
   oneAttemptPerUserSession();
   cancellationAndStaleCompletion();
-  restorationRequiresFreshReplacementFrame();
+  restorationRequiresFreshAttributedFrame();
   pausedRestorationAndDeadlineFailClosed();
   failureNeverAcknowledgesRetirementOrRestore();
-  staleFrameCannotCompleteReplacement();
+  wrongGenerationCannotCompleteReload();
   newFrameAndFrozenClockSuppressStall();
   pausedTimeoutCannotAuthorizePlaying();
   reloadRequiresNewAttributableFrame();
   reloadRejectsOldFrameOrWrongAttempt();
   invalidRevisionAndRetrogradeTimeFailClosed();
   backwardsClockOrPositionResetsStall();
+  unusableRendererBlocksAndStillMediaDoesNotStall();
+  timeoutCanOccurDuringSuppressedStall();
+  internalBufferingReloadNeverRearmsSessionBudget();
 }
