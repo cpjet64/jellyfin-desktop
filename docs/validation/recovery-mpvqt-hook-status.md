@@ -12,16 +12,17 @@ Context creation or rendering failure produces a typed blocked notification.
 
 Known blockers:
 
-- Normal queued MpvController command, property, observation and event-handler
-  calls still use a raw handle. Bind a weak owner and hold a strong native lease
-  over every native operation and event drain, including shutdown races.
-- The native bridge resolver, selected-frame and source-progress observations,
-  and exact Qt submission/swap attribution are absent. No callback or unrelated
-  swap establishes a qualifying frame.
+- A controller lease patch is applied to the copied source after binding the
+  owner on the controller thread. Its coverage and shutdown races require
+  independent review and validation; raw handle getters remain borrowed.
+- The optional native bridge exposes selected-render records and source serials
+  when available. Exact Qt submission/swap attribution is absent. No callback
+  or unrelated swap establishes a qualifying presented frame.
 - Lost-context quarantine currently occurs without an owned stop request and
   acknowledgement, so audio can continue.
-- Adopt-failure fallback queues cleanup on the worker; failed queueing has no
-  completion path. Review containment and owner shutdown with player integration.
+- Adopt-failure fallback queues cleanup on the worker; failed queueing retains
+  the allocation without a completion path. Review containment and owner
+  shutdown with player integration.
 - Usability requests have no cancellation interface; a nonresponsive render
   thread relies on the controller's deadline.
 

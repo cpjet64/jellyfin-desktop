@@ -1,10 +1,10 @@
 diff --git a/src/mpvabstractitem.cpp b/src/mpvabstractitem.cpp
-index ffccf4ab..c8526018 100644
+index ffccf4ab..dd1e4735 100644
 --- a/src/mpvabstractitem.cpp
 +++ b/src/mpvabstractitem.cpp
 @@ -44,0 +45 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
 +    if (!initializeRecoveryOwner(mode)) return;
-@@ -50,0 +52,53 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
+@@ -50,0 +52,76 @@ MpvAbstractItem::MpvAbstractItem(MpvController::EventMode mode, QQuickItem *pare
 +bool MpvAbstractItem::initializeRecoveryOwner(MpvController::EventMode mode)
 +{
 +    auto *relay = new RendererRuntime::WakeRelay;
@@ -12,27 +12,46 @@ index ffccf4ab..c8526018 100644
 +    d_ptr->core = RendererRuntime::CoreOwner::adopt(d_ptr->m_mpv, d_ptr->m_mpvController,
 +                                                    d_ptr->m_workerThread, relay);
 +    if (!d_ptr->core) {
++        struct FailedAdoption {
++            MpvController *controller;
++            QThread *worker;
++            mpv_handle *native;
++            RendererRuntime::WakeRelay *relay;
++        };
 +        auto *controller = d_ptr->m_mpvController;
 +        auto *worker = d_ptr->m_workerThread;
-+        auto *native = d_ptr->m_mpv;
++        auto *storage = new FailedAdoption{controller, worker, d_ptr->m_mpv, relay};
 +        connect(worker, &QThread::finished, controller, &QObject::deleteLater);
 +        connect(worker, &QThread::finished, worker, &QObject::deleteLater);
-+        QMetaObject::invokeMethod(controller, [controller, worker, native, relay] {
-+            if (native) {
-+                mpv_set_wakeup_callback(native, nullptr, nullptr);
-+                mpv_terminate_destroy(native);
++        QMetaObject::invokeMethod(controller, [storage] {
++            if (storage->native) {
++                mpv_set_wakeup_callback(storage->native, nullptr, nullptr);
++                mpv_terminate_destroy(storage->native);
 +            }
-+            relay->deleteLater();
-+            controller->deleteLater();
-+            worker->quit();
++            storage->relay->deleteLater();
++            storage->controller->deleteLater();
++            storage->worker->quit();
++            delete storage;
 +        }, Qt::QueuedConnection);
 +        d_ptr->m_mpvController = nullptr;
 +        d_ptr->m_workerThread = nullptr;
 +        d_ptr->m_mpv = nullptr;
 +        return false;
 +    }
++    const auto owner = d_ptr->core;
++    if (!QMetaObject::invokeMethod(d_ptr->m_mpvController, [owner, controller = d_ptr->m_mpvController] {
++            controller->bindRecoveryCore(owner);
++        }, Qt::BlockingQueuedConnection)) {
++        owner->requestFinalization();
++        d_ptr->core.reset();
++        d_ptr->m_mpvController = nullptr;
++        d_ptr->m_workerThread = nullptr;
++        d_ptr->m_mpv = nullptr;
++        return false;
++    }
 +    connect(relay, &RendererRuntime::WakeRelay::renderUpdateRequested, this, [this](quint64 generation) {
-+        bool ready = false, result = false, usable = false, contextFailure = false;
++        bool ready = false, result = false, usable = false, contextFailure = false, framePending = false;
++        RecoveryFrameObservationV1 frame{};
 +        quint64 resultGeneration = 0, resultId = 0;
 +        {
 +            std::lock_guard<std::mutex> lock(d_ptr->exchange->mutex);
@@ -46,10 +65,14 @@ index ffccf4ab..c8526018 100644
 +            d_ptr->exchange->resultPending = false;
 +            contextFailure = d_ptr->exchange->contextFailurePending;
 +            d_ptr->exchange->contextFailurePending = false;
++            framePending = d_ptr->exchange->framePending;
++            frame = d_ptr->exchange->frame;
++            d_ptr->exchange->framePending = false;
 +        }
 +        if (ready) emit this->ready();
 +        if (result) emit rendererUsabilityResult(resultGeneration, resultId, usable);
 +        if (contextFailure) emit rendererContextUnavailable(generation);
++        if (framePending) emit recoveryFrameRendered(generation, frame);
 +        update();
 +    }, Qt::QueuedConnection);
 +    if (mode == MpvController::EventMode::External)
@@ -58,19 +81,19 @@ index ffccf4ab..c8526018 100644
 +    return true;
 +}
 +
-@@ -53,2 +107,8 @@ MpvAbstractItem::~MpvAbstractItem()
+@@ -53,2 +130,3 @@ MpvAbstractItem::~MpvAbstractItem()
 -    if (d_ptr->m_mpv_gl) {
 -        mpv_render_context_free(d_ptr->m_mpv_gl);
 +    {
 +        std::lock_guard<std::mutex> lock(d_ptr->exchange->mutex);
 +        if (auto generation = d_ptr->exchange->owner.lock()) generation->revoke();
-+    }
+@@ -56 +134,12 @@ MpvAbstractItem::~MpvAbstractItem()
+-    mpv_set_wakeup_callback(d_ptr->m_mpv, nullptr, nullptr);
 +    if (d_ptr->core) {
 +        disconnect(d_ptr->core->wakeRelay, nullptr, this, nullptr);
 +        d_ptr->core->requestFinalization();
 +        d_ptr->core.reset();
-@@ -56 +116,7 @@ MpvAbstractItem::~MpvAbstractItem()
--    mpv_set_wakeup_callback(d_ptr->m_mpv, nullptr, nullptr);
++    }
 +}
 +
 +bool MpvAbstractItem::recoveryFrameObservationAvailable() const
@@ -78,11 +101,17 @@ index ffccf4ab..c8526018 100644
 +    // Qt's public swap signal does not report endFrame failure or identify a frame.
 +    return false;
 +}
-@@ -58,4 +124,25 @@ MpvAbstractItem::~MpvAbstractItem()
+@@ -58,4 +147,31 @@ MpvAbstractItem::~MpvAbstractItem()
 -    d_ptr->m_workerThread->quit();
 -    d_ptr->m_workerThread->wait();
 -    d_ptr->m_workerThread->deleteLater();
 -    mpv_terminate_destroy(d_ptr->m_mpv);
++quint64 MpvAbstractItem::recoverySourceFrameSerial() const
++{
++    std::lock_guard<std::mutex> lock(d_ptr->exchange->mutex);
++    return d_ptr->exchange->sourceFrameSerial;
++}
++
 +std::shared_ptr<RendererRuntime::CoreOwner> MpvAbstractItem::recoveryCoreLease() const
 +{
 +    return d_ptr->core;
@@ -108,42 +137,48 @@ index ffccf4ab..c8526018 100644
 +        }
 +    }
 +    emit rendererUsabilityResult(generation, requestId, false);
-@@ -76 +163,2 @@ int MpvAbstractItem::setPropertyBlocking(const QString &property, const QVariant
+@@ -76 +192,2 @@ int MpvAbstractItem::setPropertyBlocking(const QString &property, const QVariant
 -    int error;
 +    if (!d_ptr->m_mpvController) return MPV_ERROR_UNINITIALIZED;
 +    int error = MPV_ERROR_UNINITIALIZED;
-@@ -88,0 +177 @@ void MpvAbstractItem::setPropertyAsync(const QString &property, const QVariant &
+@@ -88,0 +206 @@ void MpvAbstractItem::setPropertyAsync(const QString &property, const QVariant &
 +    if (!d_ptr->m_mpvController) return;
-@@ -98,0 +188 @@ QVariant MpvAbstractItem::getProperty(const QString &property)
+@@ -98,0 +217 @@ QVariant MpvAbstractItem::getProperty(const QString &property)
 +    if (!d_ptr->m_mpvController) return {};
-@@ -106,0 +197 @@ void MpvAbstractItem::getPropertyAsync(const QString &property, int id)
+@@ -106,0 +226 @@ void MpvAbstractItem::getPropertyAsync(const QString &property, int id)
 +    if (!d_ptr->m_mpvController) return;
-@@ -111,0 +203 @@ QVariant MpvAbstractItem::commandBlocking(const QVariant &params)
+@@ -111,0 +232 @@ QVariant MpvAbstractItem::commandBlocking(const QVariant &params)
 +    if (!d_ptr->m_mpvController) return {};
-@@ -118,0 +211 @@ void MpvAbstractItem::commandAsync(const QStringList &params, int id)
+@@ -118,0 +240 @@ void MpvAbstractItem::commandAsync(const QStringList &params, int id)
 +    if (!d_ptr->m_mpvController) return;
-@@ -123,0 +217 @@ QVariant MpvAbstractItem::expandText(const QString &text)
+@@ -123,0 +246 @@ QVariant MpvAbstractItem::expandText(const QString &text)
 +    if (!d_ptr->m_mpvController) return {};
-@@ -135 +229 @@ int MpvAbstractItem::unobserveProperty(uint64_t id)
+@@ -135 +258 @@ int MpvAbstractItem::unobserveProperty(uint64_t id)
 -    return mpvController()->unobserveProperty(id);
 +    return d_ptr->m_mpvController ? mpvController()->unobserveProperty(id) : MPV_ERROR_UNINITIALIZED;
 diff --git a/src/mpvabstractitem.h b/src/mpvabstractitem.h
-index 74ec427b..9a5b0188 100644
+index 74ec427b..52851912 100644
 --- a/src/mpvabstractitem.h
 +++ b/src/mpvabstractitem.h
-@@ -15,0 +16,3 @@
+@@ -15,0 +16,7 @@
 +#include <memory>
++#include <QMetaType>
++#include "RecoveryFrameObservation.h"
++
++Q_DECLARE_METATYPE(RecoveryFrameObservationV1)
 +
 +namespace RendererRuntime { struct CoreOwner; }
-@@ -36,0 +40,4 @@ public:
+@@ -36,0 +44,5 @@ public:
 +    std::shared_ptr<RendererRuntime::CoreOwner> recoveryCoreLease() const;
 +    quint64 recoveryRendererGeneration() const;
 +    bool recoveryFrameObservationAvailable() const;
++    quint64 recoverySourceFrameSerial() const;
 +    void requestRendererUsability(quint64 generation, quint64 requestId, qint64 absoluteSteadyMsDeadline);
-@@ -41,0 +49,2 @@ Q_SIGNALS:
+@@ -41,0 +54,3 @@ Q_SIGNALS:
 +    void rendererUsabilityResult(quint64 generation, quint64 requestId, bool usable);
 +    void rendererContextUnavailable(quint64 generation);
-@@ -49,0 +59,3 @@ protected:
++    void recoveryFrameRendered(quint64 generation, RecoveryFrameObservationV1 frame);
+@@ -49,0 +65,3 @@ protected:
 +
 +private:
 +    bool initializeRecoveryOwner(MpvController::EventMode mode);
@@ -160,7 +195,7 @@ index 53736300..7aceb140 100644
 +    std::shared_ptr<RecoveryExchange> exchange = std::make_shared<RecoveryExchange>();
 +    bool readySent = false;
 diff --git a/src/mpvrenderer.cpp b/src/mpvrenderer.cpp
-index 46a6a006..54251d3e 100644
+index 46a6a006..3f4b9fbc 100644
 --- a/src/mpvrenderer.cpp
 +++ b/src/mpvrenderer.cpp
 @@ -15,0 +16,2 @@
@@ -174,7 +209,7 @@ index 46a6a006..54251d3e 100644
 +    owner->leaveCallback();
 @@ -35 +39,0 @@ MpvRenderer::MpvRenderer(MpvAbstractItem *new_obj)
 -    : m_mpvAItem{new_obj}
-@@ -37 +41,61 @@ MpvRenderer::MpvRenderer(MpvAbstractItem *new_obj)
+@@ -37 +41,63 @@ MpvRenderer::MpvRenderer(MpvAbstractItem *new_obj)
 -    m_mpvAItem->window()->setPersistentSceneGraph(true);
 +    static std::atomic<quint64> nextGeneration{1};
 +    m_exchange = new_obj->d_ptr->exchange;
@@ -185,6 +220,8 @@ index 46a6a006..54251d3e 100644
 +        std::lock_guard<std::mutex> lock(m_exchange->mutex);
 +        m_exchange->generation = m_generation ? m_generation->generation : 0;
 +        m_exchange->owner = m_generation;
++        m_exchange->framePending = false;
++        m_exchange->sourceFrameSerial = 0;
 +    }
 +    if (new_obj->window()) new_obj->window()->setPersistentSceneGraph(true);
 +}
@@ -237,7 +274,7 @@ index 46a6a006..54251d3e 100644
 +        m_exchange->contextFailurePending = true;
 +    }
 +    m_generation->notifyRenderUpdate();
-@@ -41,0 +106,7 @@ void MpvRenderer::render()
+@@ -41,0 +108,7 @@ void MpvRenderer::render()
 +    if (!m_generation || !m_generation->context) return;
 +    if (!m_generation->originalContext || !m_generation->originalContext->isValid() ||
 +        m_generation->originalContext != QOpenGLContext::currentContext() ||
@@ -245,28 +282,39 @@ index 46a6a006..54251d3e 100644
 +        reportContextFailure();
 +        return;
 +    }
-@@ -42,0 +114,5 @@ void MpvRenderer::render()
+@@ -42,0 +116,5 @@ void MpvRenderer::render()
 +    if (!fbo) {
 +        reportContextFailure();
 +        return;
 +    }
 +    acknowledgeUsability();
-@@ -60 +136 @@ void MpvRenderer::render()
+@@ -60 +138,12 @@ void MpvRenderer::render()
 -    mpv_render_context_render(m_mpvAItem->d_ptr->m_mpv_gl, params);
-+    mpv_render_context_render(m_generation->context, params);
-@@ -66 +142 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
++    const auto result = m_frameResolver.render(m_generation->context, params);
++    if (result.error < 0) {
++        reportContextFailure();
++    } else if (result.capabilityAvailable && result.observation.valid == 1) {
++        {
++            std::lock_guard<std::mutex> lock(m_exchange->mutex);
++            m_exchange->frame = result.observation;
++            m_exchange->sourceFrameSerial = result.observation.source_frame_serial;
++            m_exchange->framePending = true;
++        }
++        m_generation->notifyRenderUpdate();
++    }
+@@ -66 +155 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -    if (!m_mpvAItem->d_ptr->m_mpv_gl) {
 +    if (m_generation && !m_generation->context && !m_generation->blocked.load()) {
-@@ -90 +166,3 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -90 +179,3 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -        int result = mpv_render_context_create(&m_mpvAItem->d_ptr->m_mpv_gl, m_mpvAItem->d_ptr->m_mpv, params);
 +        auto native = m_generation->core->acquireNative();
 +        if (!native) return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
 +        int result = mpv_render_context_create(&m_generation->context, native.get(), params);
-@@ -92 +170,2 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -92 +183,2 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -            qFatal("failed to initialize mpv GL context");
 +            reportContextFailure();
 +            return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
-@@ -95,2 +174,9 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+@@ -95,2 +187,9 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
 -        mpv_render_context_set_update_callback(m_mpvAItem->d_ptr->m_mpv_gl, on_mpv_redraw, m_mpvAItem);
 -        Q_EMIT m_mpvAItem->ready();
 +        m_generation->contextEverCreated = true;
@@ -279,24 +327,26 @@ index 46a6a006..54251d3e 100644
 +        }
 +        m_generation->notifyRenderUpdate();
 diff --git a/src/mpvrenderer.h b/src/mpvrenderer.h
-index 49b291ad..123bb993 100644
+index 49b291ad..e129503c 100644
 --- a/src/mpvrenderer.h
 +++ b/src/mpvrenderer.h
-@@ -10,0 +11,4 @@
+@@ -10,0 +11,5 @@
 +#include <memory>
++#include "RecoveryFrameBridge.h"
 +
 +namespace RendererRuntime { struct GenerationOwner; }
 +struct RecoveryExchange;
-@@ -18,3 +22,2 @@ public:
+@@ -18,3 +23,2 @@ public:
 -    ~MpvRenderer() = default;
 -
 -    MpvAbstractItem *m_mpvAItem{nullptr};
 +    ~MpvRenderer() override;
 +    void synchronize(QQuickFramebufferObject *item) override;
-@@ -26,0 +30,6 @@ public:
+@@ -26,0 +31,7 @@ public:
 +
 +private:
 +    std::shared_ptr<RendererRuntime::GenerationOwner> m_generation;
 +    std::shared_ptr<RecoveryExchange> m_exchange;
++    RecoveryFrameBridge::Resolver m_frameResolver;
 +    void acknowledgeUsability();
 +    void reportContextFailure();

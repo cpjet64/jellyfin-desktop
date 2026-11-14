@@ -3,6 +3,7 @@
 #include <QtGlobal>
 #include <mutex>
 #include <memory>
+#include "RecoveryFrameObservation.h"
 
 namespace RendererRuntime { struct GenerationOwner; }
 
@@ -20,4 +21,7 @@ struct RecoveryExchange {
     bool resultPending = false;
     bool ready = false;
     bool contextFailurePending = false;
+    bool framePending = false;
+    RecoveryFrameObservationV1 frame{};
+    quint64 sourceFrameSerial = 0;
 };

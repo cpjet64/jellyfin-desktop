@@ -33,9 +33,14 @@ if(USE_STATIC_MPVQT)
     target_sources(MpvQt PRIVATE
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RendererOwners.cpp"
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RendererOwners.h"
+      "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RecoveryFrameBridge.cpp"
+      "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RecoveryFrameBridge.h"
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RecoveryExchange.h")
-    target_include_directories(MpvQt PUBLIC "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime")
+    target_include_directories(MpvQt PUBLIC "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime" "${CMAKE_SOURCE_DIR}/src/native")
     target_compile_definitions(MpvQt PUBLIC MPVQT_RECOVERY_RUNTIME)
+    if(UNIX AND CMAKE_DL_LIBS)
+      target_link_libraries(MpvQt PRIVATE ${CMAKE_DL_LIBS})
+    endif()
   endif()
   if(MPVQT_C2_DIAGNOSTIC_ONLY)
     target_sources(MpvQt PRIVATE c2/DiagnosticFailureInjection.cpp)
