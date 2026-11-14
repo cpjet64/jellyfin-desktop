@@ -51,12 +51,12 @@ void PlayerComponent::releaseRecovery()
 #endif
 }
 
-void PlayerComponent::recoveryIntentChanged(bool clear)
+bool PlayerComponent::recoveryIntentChanged(bool clear)
 {
 #ifdef MPVQT_RECOVERY_RUNTIME
-  if (m_recovery) m_recovery->userChanged(clear);
+  return !m_recovery || m_recovery->userChanged(clear);
 #else
-  (void)clear;
+  (void)clear; return true;
 #endif
 }
 void PlayerComponent::recoveryUserReplacement()
@@ -65,8 +65,17 @@ void PlayerComponent::recoveryUserReplacement()
   if (m_recovery) m_recovery->beginUserReplacement();
 #endif
 }
-void PlayerComponent::noteQueueIntent(bool paused)
+bool PlayerComponent::cancelRecoverySeekBeforeIntent()
 {
+#ifdef MPVQT_RECOVERY_RUNTIME
+  return !m_recovery || m_recovery->cancelBeforeIntent();
+#else
+  return true;
+#endif
+}
+bool PlayerComponent::noteQueueIntent(bool paused)
+{
+  if (!cancelRecoverySeekBeforeIntent()) return false;
 #ifdef MPVQT_RECOVERY_RUNTIME
   if (m_playbackIntent.snapshot().desired == PlaybackIntent::Desired::Stopped) m_playbackIntent.play(paused);
   else m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
@@ -74,7 +83,23 @@ void PlayerComponent::noteQueueIntent(bool paused)
   (void)paused;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
 #endif
-  recoveryIntentChanged(false);
+  return recoveryIntentChanged(false);
+}
+void PlayerComponent::prepareRecoverySeek(qint64 targetMs)
+{
+#ifdef MPVQT_RECOVERY_RUNTIME
+  if (m_recovery) m_recovery->prepareOwnedSeek(targetMs);
+#else
+  (void)targetMs;
+#endif
+}
+int PlayerComponent::dispatchRecoverySeek(qint64 targetMs)
+{
+#ifdef MPVQT_RECOVERY_RUNTIME
+  return m_recovery ? m_recovery->dispatchOwnedSeek(targetMs) : 0;
+#else
+  (void)targetMs; return 0;
+#endif
 }
 
 bool PlayerComponent::dispatchPlayerLoad(const QStringList& command, const QString& url, const QVariantMap& options,

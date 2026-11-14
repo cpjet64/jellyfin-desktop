@@ -20,8 +20,12 @@ void PlayerComponentRecovery::recordSourceFrame(std::uint64_t generation, const 
   if (sourceEntry_ != frame.playlist_entry_id || sourceGeneration_ != generation || sourceEpoch_ != runtime_.eventEpoch()) {
     sourceEntry_ = frame.playlist_entry_id; sourceGeneration_ = generation;
     sourceEpoch_ = runtime_.eventEpoch();
+    sourceDiscontinuity_ = frame.discontinuity_id;
     sourceFirst_ = frame.source_frame_serial; lastSource_ = frame.source_frame_serial;
     return;
+  }
+  if (frame.discontinuity_id != sourceDiscontinuity_) {
+    sourceDiscontinuity_ = frame.discontinuity_id; sourceFirst_ = frame.source_frame_serial;
   }
   if (frame.source_frame_serial > lastSource_) lastSource_ = frame.source_frame_serial;
 }
@@ -65,6 +69,7 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
     return;
   }
   const auto intent = player_->m_playbackIntent.snapshot();
+  seekReply(native, now);
   const auto active = runtime_.activeKey();
   const AutomaticRecoverySession::Key current{active.session, intent.revision, player_->m_mpvGeneration};
   runtime_.observe(native, current, now);
@@ -80,6 +85,7 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
 void PlayerComponentRecovery::tick()
 {
   const auto now = nowMs();
+  checkOwnedSeek(now);
   if (replacementTransition_ && now >= transitionDeadline_) {
     replacementTransition_ = false; player_->updatePlaybackState();
   }
@@ -90,9 +96,7 @@ void PlayerComponentRecovery::tick()
     return;
   }
   if (restoring_) { recoveryTick(now); return; }
-  if (awaitingUsability_ && now >= policy_.deadlineMs()) {
-    awaitingUsability_ = false; policy_.fail(); frameGate_.invalidate(); return;
-  }
+  if (awaitingUsability_) return;
   const auto intent = player_->m_playbackIntent.snapshot();
   const auto key = runtime_.activeKey();
   const auto entry = runtime_.activeEntry();
@@ -106,9 +110,14 @@ void PlayerComponentRecovery::tick()
   if (!observation_.ready()) return;
   AutomaticRecoveryObservation::Result result;
   observationPending_ = false;
-  if (!observation_.take(key, runtime_.eventEpoch(), now, result) || result.entry != entry ||
-      !result.seekable || result.seeking || !result.video ||
+  if (!observation_.take(key, runtime_.eventEpoch(), now, result) || result.entry != entry) {
+    policy_.suspendBaseline(); readStall_.reset(); return;
+  }
+  seekPosition(result, now);
+  if (!result.seekable || result.seeking || !result.video ||
       !runtime_.recordPosition(key, entry, result.positionMs, now)) { policy_.suspendBaseline(); readStall_.reset(); return; }
+  lastObservation_ = result;
+  if (ownedSeek_.state() == AutomaticRecoveryOwnedSeek::State::Pending) return;
   watchdogObservation(key, result, now);
 }
 #endif

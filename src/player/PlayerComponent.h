@@ -352,9 +352,12 @@ private:
   bool applyPreloadedStreams(const QString& hookToken);
   bool setupRecovery();
   void releaseRecovery();
-  void recoveryIntentChanged(bool clear);
+  bool recoveryIntentChanged(bool clear);
   void recoveryUserReplacement();
-  void noteQueueIntent(bool paused);
+  bool noteQueueIntent(bool paused);
+  bool cancelRecoverySeekBeforeIntent();
+  void prepareRecoverySeek(qint64 targetMs);
+  int dispatchRecoverySeek(qint64 targetMs);
   int nativeCall(const std::function<int(mpv_handle*)>& operation) const;
   int nativeAsyncCommand(quint64 id, const char** args) const;
   QString nativeOsd(const QString& property) const;

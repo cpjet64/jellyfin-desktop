@@ -11,6 +11,9 @@ bool PlayerComponentRecovery::armFrameAttempt()
   attempt_ = runtime_.reserveSequence();
   if (!windowLifetime_ || !sceneGeneration_ || !attempt_) return false;
   previousSource_ = lastSource_; submissionPending_ = false;
+#ifdef MPVQT_OWNED_SEEK_API
+  item_->restrictRecoveryBootstrapDeadline(policy_.deadlineMs());
+#endif
   item_->setRecoveryFrameAttempt(rendererGeneration_, attempt_, policy_.deadlineMs());
   return true;
 #else

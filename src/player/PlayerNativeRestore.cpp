@@ -47,6 +47,7 @@ bool PlayerComponent::armNativeRestore(const RestoreGrant& grant, quint64 host, 
     return false;
   const auto previous = m_playbackIntent.snapshot();
   if (previous.revision != grant.expectedRevision || previous.desired == PlaybackIntent::Desired::Exiting) return false;
+  if (!cancelRecoverySeekBeforeIntent()) return false;
   m_playbackIntent.play(grant.desiredPaused);
   const auto intent = m_playbackIntent.snapshot();
   if (!intent.request || !intent.revision || intent.desired == PlaybackIntent::Desired::Exiting) return false;
@@ -106,6 +107,7 @@ PlayerComponent::NativeStopResult PlayerComponent::cancelNativeRestore()
     return {NativeStopResult::Status::Unavailable, 0};
   m_nativeRestore.cancelled = true;
   if (!restoreOwnsCurrent()) return {NativeStopResult::Status::Unavailable, 0};
+  if (!cancelRecoverySeekBeforeIntent()) return {NativeStopResult::Status::Unavailable, 0};
   invalidateNativeReceipt();
   m_playbackIntent.stop(PlaybackIntent::Reason::NativeStop);
   if (!m_nativeRestore.loadAttempted) return {NativeStopResult::Status::Unavailable, 0};

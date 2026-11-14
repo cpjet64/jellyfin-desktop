@@ -41,6 +41,7 @@ PlaybackCheckpoint PlayerComponent::makePlaybackCheckpoint() const
 void PlayerComponent::setWebPlaylist(const QVariantList& playlist, const QString& currentItemId)
 {
   if (!intentControlThread()) return;
+  if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
   recoveryIntentChanged(false);
   m_webPlaylist = playlist;
@@ -51,6 +52,7 @@ void PlayerComponent::setWebPlaylist(const QVariantList& playlist, const QString
 void PlayerComponent::clearQueue()
 {
   if (!intentControlThread()) return;
+  if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
   recoveryIntentChanged(false);
   if (!m_mpv) {
@@ -66,7 +68,7 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
   if (!intentControlThread()) return;
   const bool replacement = m_replacementLoad;
   m_replacementLoad = false;
-  if (!replacement) noteQueueIntent(!options.value("autoplay").toBool());
+  if (!replacement && !noteQueueIntent(!options.value("autoplay").toBool())) return;
   const auto revision = m_playbackIntent.snapshot().revision;
   if (!m_mpv) {
     m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
@@ -136,6 +138,7 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
 void PlayerComponent::play()
 {
   if (!intentControlThread()) return;
+  if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.resume();
   recoveryIntentChanged(false);
   const auto revision = m_playbackIntent.snapshot().revision;
@@ -152,6 +155,7 @@ void PlayerComponent::play()
 void PlayerComponent::pause()
 {
   if (!intentControlThread()) return;
+  if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.pause();
   recoveryIntentChanged(false);
   const auto revision = m_playbackIntent.snapshot().revision;
@@ -168,6 +172,8 @@ void PlayerComponent::pause()
 void PlayerComponent::seekTo(qint64 ms)
 {
   if (!intentControlThread()) return;
+  prepareRecoverySeek(ms);
+  if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.seek(ms);
   recoveryIntentChanged(false);
   const auto revision = m_playbackIntent.snapshot().revision;
@@ -176,6 +182,8 @@ void PlayerComponent::seekTo(qint64 ms)
     qWarning() << "PlayerComponent::seekTo: mpv not initialized yet";
     return;
   }
+  const int owned = dispatchRecoverySeek(ms);
+  if (owned) { m_playbackIntent.dispatch(revision, owned > 0 ? PlaybackIntent::Dispatch::Queued : PlaybackIntent::Dispatch::NativeRejected); return; }
   double timeSecs = ms / 1000.0;
   QStringList args = (QStringList() << "seek" << QString::number(timeSecs) << "absolute+exact");
   m_mpv->command( args);
@@ -185,6 +193,7 @@ void PlayerComponent::seekTo(qint64 ms)
 PlayerComponent::NativeSeekResult PlayerComponent::requestNativeSeek(qint64 milliseconds)
 {
   if (QThread::currentThread() != thread()) return {NativeSeekResult::Status::Unavailable, 0};
+  if (!cancelRecoverySeekBeforeIntent()) return {NativeSeekResult::Status::Unavailable, 0};
   m_playbackIntent.seek(milliseconds);
   recoveryIntentChanged(false);
   const auto revision = m_playbackIntent.snapshot().revision;
@@ -209,6 +218,7 @@ PlayerComponent::NativeSeekResult PlayerComponent::checkedSeek(mpv_handle* handl
 void PlayerComponent::setSubtitleStream(const QVariant &subtitleStream)
 {
   if (!intentControlThread()) return;
+  if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
   m_currentSubtitleStream = subtitleStream;
   recoveryIntentChanged(false);
@@ -218,6 +228,7 @@ void PlayerComponent::setSubtitleStream(const QVariant &subtitleStream)
 void PlayerComponent::setAudioStream(const QVariant &audioStream)
 {
   if (!intentControlThread()) return;
+  if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
   m_currentAudioStream = audioStream;
   recoveryIntentChanged(false);

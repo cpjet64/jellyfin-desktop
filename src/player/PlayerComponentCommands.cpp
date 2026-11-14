@@ -12,6 +12,7 @@ bool PlayerComponent::load(const QString& url, const QVariantMap& options, const
                            const QVariant& audioStream, const QVariant& subtitleStream)
 {
   if (!intentControlThread()) return false;
+  if (!cancelRecoverySeekBeforeIntent()) return false;
   invalidateNativeReceipt();
   recoveryUserReplacement();
 #ifdef PLAYER_INTENT_DIAGNOSTIC_ONLY
@@ -36,6 +37,7 @@ bool PlayerComponent::load(const QString& url, const QVariantMap& options, const
 void PlayerComponent::stop()
 {
   if (!intentControlThread()) return;
+  if (!cancelRecoverySeekBeforeIntent()) return;
   if (!m_replacementStop) invalidateNativeReceipt();
   if (!m_replacementStop) { m_playbackIntent.stop(PlaybackIntent::Reason::WebStopUnclassified); recoveryIntentChanged(true); }
   const auto revision = m_playbackIntent.snapshot().revision;
@@ -69,6 +71,7 @@ void PlayerComponent::stop()
 PlayerComponent::NativeStopResult PlayerComponent::requestNativeStop()
 {
   if (!intentControlThread()) return {NativeStopResult::Status::Unavailable, 0};
+  if (!cancelRecoverySeekBeforeIntent()) return {NativeStopResult::Status::Unavailable, 0};
   invalidateNativeReceipt();
   m_playbackIntent.stop(PlaybackIntent::Reason::NativeStop);
   recoveryIntentChanged(true);
