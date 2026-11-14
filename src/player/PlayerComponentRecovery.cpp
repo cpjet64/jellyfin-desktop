@@ -30,12 +30,15 @@ bool PlayerComponentRecovery::bind()
   item_ = player_->m_window->findChild<MpvVideoItem*>("video");
   if (!item_) return false;
   core_ = item_->recoveryCoreLease();
-  if (!core_ || !core_->wakeRelay || !core_->bindExternalConsumer()) { core_.reset(); return false; }
+  if (!core_ || !core_->wakeRelay || !core_->wakeAdmission.load(std::memory_order_acquire) ||
+      core_->wakeClosed.load(std::memory_order_acquire) || !core_->bindExternalConsumer()) { core_.reset(); return false; }
   lifetimeLease_ = core_->acquireNative();
-  if (!lifetimeLease_.get()) { core_->unbindExternalConsumer(); core_.reset(); return false; }
+  if (!lifetimeLease_.get() || !core_->wakeAdmission.load(std::memory_order_acquire) ||
+      core_->wakeClosed.load(std::memory_order_acquire)) {
+    core_->unbindExternalConsumer(); lifetimeLease_ = {}; core_.reset(); return false;
+  }
   connect(core_->wakeRelay, &RendererRuntime::WakeRelay::nativeEventsAvailable, this,
           [this] { drain(); }, Qt::QueuedConnection);
-  if (!core_->installExternalWakeup()) { disconnect(core_->wakeRelay, nullptr, this, nullptr); core_->unbindExternalConsumer(); lifetimeLease_ = {}; core_.reset(); return false; }
   connect(item_, &MpvVideoItem::rendererUsabilityResult, this,
           [this](quint64 generation, quint64 request, bool usable) { usability(generation, request, usable); });
 #ifdef MPVQT_RECOVERY_FRAME_API
@@ -50,7 +53,10 @@ bool PlayerComponentRecovery::bind()
             seekQtSubmission(generation, value, operationId);
           });
 #endif
-  bound_ = true; timer_.start(); return true;
+  bound_ = true; timer_.start();
+  QPointer<PlayerComponentRecovery> guard(this);
+  drain();
+  return guard && guard->bound_;
 }
 void PlayerComponentRecovery::shutdown()
 {
@@ -103,7 +109,15 @@ bool PlayerComponentRecovery::userChanged(bool clear)
 }
 void PlayerComponentRecovery::drain()
 {
-  if (!bound_ || !core_) return;
+  if (!bound_ || !core_ || !player_ || !player_->m_mpv) return;
+  QPointer<PlayerComponentRecovery> guard(this);
+  QPointer<PlayerComponent> playerGuard(player_);
+  const auto owner = core_;
+  const auto binding = player_->m_mpvGeneration;
+  const auto current = [&] {
+    return guard && playerGuard && guard->bound_ && guard->core_ == owner &&
+        playerGuard->m_mpv && playerGuard->m_mpvGeneration == binding;
+  };
   auto lease = core_->acquireNative();
   if (!lease.get()) return;
   for (;;) {
@@ -111,7 +125,9 @@ void PlayerComponentRecovery::drain()
     if (native->event_id == MPV_EVENT_NONE) break;
     const bool internalEnd = ownsEnd(native);
     event(native, nowMs());
+    if (!current()) return;
     player_->observeNativeReceipt(native);
+    if (!current()) return;
     if (native->event_id == MPV_EVENT_END_FILE && !internalEnd) {
       cancelOwnedSeek(); player_->m_playbackIntent.invalidate(PlaybackIntent::Reason::UnattributedEvent); userChanged(true);
     }
@@ -125,6 +141,7 @@ void PlayerComponentRecovery::drain()
       if (native->event_id == MPV_EVENT_START_FILE) replacementTransition_ = false;
       player_->handleMpvEvent(native);
     }
+    if (!current()) return;
   }
   if (!replacementTransition_) player_->updatePlaybackState();
 }
