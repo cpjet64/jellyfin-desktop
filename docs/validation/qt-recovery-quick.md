@@ -21,7 +21,8 @@ Apply `patches/qt/quick/qtdeclarative-6.9.3-ticket-fbo.patch` with
 `git apply --unidiff-zero` at the pinned
 Qt Declarative root, then place the three adjacent `QtRecovery*.{h,cpp}` files
 in `src/quick/recovery/`. Copy `patches/qt/quick/tests/CMakeLists.txt` and
-`tst_qtrecovery_aggregate.cpp` into `tests/auto/quick/qtrecoveryaggregate/`.
+`tst_qtrecovery_aggregate.cpp`, and `tst_qtrecovery_drawsets.cpp` into
+`tests/auto/quick/qtrecoveryaggregate/`.
 The patched Qt Base private bridge must be built and installed as part of the
 same compatible kit. The registered source-only tests have not been executed.
 
@@ -40,6 +41,6 @@ tickets. Multisample resolves fail closed: the upstream resolve operation
 returns no result from which this adapter can establish successful transfer.
 The helper test exercises the actual Quick aggregation and QtGui swap bridge
 with synthetic identities, including zero-attempt readiness, failed swaps and
-retained-frame reuse. It does not exercise the batch renderer's merged-set or
-material-binding integration. Full negative-test source and integration review
-remain open.
+retained-frame reuse. A separate source test exercises the batch renderer's
+draw-set membership storage and overflow. The actual renderer draw and
+material-binding integration remain untested; integration review remains open.

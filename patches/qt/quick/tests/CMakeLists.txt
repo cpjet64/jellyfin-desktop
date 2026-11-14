@@ -10,3 +10,8 @@ qt_internal_add_test(tst_qtrecoveryaggregate
         Qt::Quick
         Qt::GuiPrivate
 )
+
+qt_internal_add_test(tst_qtrecoverydrawsets
+    SOURCES tst_qtrecovery_drawsets.cpp
+    LIBRARIES Qt::QuickPrivate
+)
