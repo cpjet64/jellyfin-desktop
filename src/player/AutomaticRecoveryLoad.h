@@ -16,6 +16,7 @@ public:
   void invalidate();
   State state() const { return state_; }
   std::int64_t entry() const { return state_ == State::Accepted ? replyEntry_ : 0; }
+  std::int64_t startedEntry() const { return startSeen_ ? startedEntry_ : 0; }
   std::uint64_t userdata() const { return Tag | sequence_; }
 private:
   bool matches(Key current) const;

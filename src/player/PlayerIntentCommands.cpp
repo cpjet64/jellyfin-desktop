@@ -6,6 +6,9 @@
 #include <MpvController>
 #include <QDebug>
 #include <QThread>
+#ifdef MPVQT_RECOVERY_RUNTIME
+#include "PlayerComponentRecovery.h"
+#endif
 #ifdef PLAYER_INTENT_DIAGNOSTIC_ONLY
 #include "PlayerIntentObservation.h"
 #define PLAYER_QUEUE_DISPATCH(call) (PlayerIntentObservation::queueDispatch(), (call))
@@ -39,6 +42,7 @@ void PlayerComponent::setWebPlaylist(const QVariantList& playlist, const QString
 {
   if (!intentControlThread()) return;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
+  recoveryIntentChanged(false);
   m_webPlaylist = playlist;
   m_currentWebPlaylistItemId = currentItemId;
   emit webPlaylistChanged(playlist, currentItemId);
@@ -48,6 +52,7 @@ void PlayerComponent::clearQueue()
 {
   if (!intentControlThread()) return;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
+  recoveryIntentChanged(false);
   if (!m_mpv) {
     qWarning() << "PlayerComponent::clearQueue: mpv not initialized yet";
     return;
@@ -61,7 +66,7 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
   if (!intentControlThread()) return;
   const bool replacement = m_replacementLoad;
   m_replacementLoad = false;
-  if (!replacement) m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
+  if (!replacement) noteQueueIntent(!options.value("autoplay").toBool());
   const auto revision = m_playbackIntent.snapshot().revision;
   if (!m_mpv) {
     m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
@@ -116,8 +121,8 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
 
   command << extraArgs;
 
-  PLAYER_QUEUE_DISPATCH(m_mpv->command( command));
-  m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Queued);
+  const bool dispatched = PLAYER_QUEUE_DISPATCH(dispatchPlayerLoad(command, url, options, metadata, audioStream, subtitleStream));
+  m_playbackIntent.dispatch(revision, dispatched ? PlaybackIntent::Dispatch::Queued : PlaybackIntent::Dispatch::NativeRejected);
 
   QVariantMap jellyfinMetadata = metadata["metadata"].toMap();
   QUrl jellyfinBaseUrl = qurl.adjusted(QUrl::RemovePath | QUrl::RemoveQuery);
@@ -132,6 +137,7 @@ void PlayerComponent::play()
 {
   if (!intentControlThread()) return;
   m_playbackIntent.resume();
+  recoveryIntentChanged(false);
   const auto revision = m_playbackIntent.snapshot().revision;
   if (!m_mpv) {
     m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
@@ -147,6 +153,7 @@ void PlayerComponent::pause()
 {
   if (!intentControlThread()) return;
   m_playbackIntent.pause();
+  recoveryIntentChanged(false);
   const auto revision = m_playbackIntent.snapshot().revision;
   if (!m_mpv) {
     m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
@@ -162,6 +169,7 @@ void PlayerComponent::seekTo(qint64 ms)
 {
   if (!intentControlThread()) return;
   m_playbackIntent.seek(ms);
+  recoveryIntentChanged(false);
   const auto revision = m_playbackIntent.snapshot().revision;
   if (!m_mpv) {
     m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
@@ -178,10 +186,12 @@ PlayerComponent::NativeSeekResult PlayerComponent::requestNativeSeek(qint64 mill
 {
   if (QThread::currentThread() != thread()) return {NativeSeekResult::Status::Unavailable, 0};
   m_playbackIntent.seek(milliseconds);
+  recoveryIntentChanged(false);
   const auto revision = m_playbackIntent.snapshot().revision;
   if (WebClientFaultGuard::instance().rendererLost() || !m_mpv || !m_mpv->mpv() || milliseconds < 0)
     { m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable); return {NativeSeekResult::Status::Unavailable, 0}; }
-  const auto result = checkedSeek(m_mpv->mpv(), milliseconds, mpv_command);
+  NativeSeekResult result{NativeSeekResult::Status::Unavailable, 0};
+  nativeCall([&](mpv_handle* handle) { result = checkedSeek(handle, milliseconds, mpv_command); return 0; });
   m_playbackIntent.dispatch(revision, result.status == NativeSeekResult::Status::Accepted ?
     PlaybackIntent::Dispatch::NativeAccepted : PlaybackIntent::Dispatch::NativeRejected);
   return result;
@@ -201,6 +211,7 @@ void PlayerComponent::setSubtitleStream(const QVariant &subtitleStream)
   if (!intentControlThread()) return;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
   m_currentSubtitleStream = subtitleStream;
+  recoveryIntentChanged(false);
   reselectStream(m_currentSubtitleStream, MediaType::Subtitle);
 }
 
@@ -209,12 +220,17 @@ void PlayerComponent::setAudioStream(const QVariant &audioStream)
   if (!intentControlThread()) return;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
   m_currentAudioStream = audioStream;
+  recoveryIntentChanged(false);
   reselectStream(m_currentAudioStream, MediaType::Audio);
 }
 
 void PlayerComponent::handleMpvEvents()
 {
   if (!intentControlThread()) return;
+#ifdef MPVQT_RECOVERY_RUNTIME
+  if (m_recovery) m_recovery->drain();
+  return;
+#else
 #ifdef MPVQT_EXTERNAL_EVENTS
   if (!m_mpv) return;
 #endif
@@ -231,4 +247,5 @@ void PlayerComponent::handleMpvEvents()
   }
   // Once we got all status updates, determine the new canonical state.
   updatePlaybackState();
+#endif
 }

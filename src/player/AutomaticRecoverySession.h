@@ -19,12 +19,19 @@ public:
   void begin(Key key, const QString& url, const QVariantMap& options, const QVariantMap& metadata,
              const QVariant& audio, const QVariant& subtitle, bool paused);
   bool accept(Key key, std::int64_t entry);
+  bool loaded(Key key, std::int64_t entry);
   bool position(Key key, std::int64_t entry, std::int64_t positionMs);
   bool revise(Key previous, Key current, bool paused);
+  bool tracks(Key current, const QVariant& audio, const QVariant& subtitle);
+  bool replaceEntry(Key current, std::int64_t previous, std::int64_t entry, std::int64_t positionMs);
+  bool selections(Key current, QVariant& audio, QVariant& subtitle) const;
   void invalidate();
+  std::int64_t entry() const { return accepted_ && loaded_ ? candidate_.entry : 0; }
+  Key key() const { return accepted_ && loaded_ ? candidate_.key : Key{}; }
   bool snapshot(Key current, Snapshot& result) const;
 private:
   static bool same(Key a, Key b);
   Snapshot candidate_;
   bool accepted_ = false;
+  bool loaded_ = false;
 };

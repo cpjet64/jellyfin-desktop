@@ -7,9 +7,9 @@ enum class Phase { Idle, Reloading, Retiring, Restoring, WaitingFrame, Complete,
 struct Sample {
   std::int64_t nowMs = 0, positionMs = -1;
   std::uint64_t session = 0, revision = 0, generation = 0, frameSerial = 0;
-  bool seekable = false, video = false, loading = false, seeking = false, buffering = false;
+  bool seekable = false, video = false, movingVideo = false, loading = false, seeking = false, buffering = false;
   bool visible = false, exposed = false, eof = false, outstanding = false, operationTimedOut = false;
-  bool rendererFault = false, paused = false;
+  bool rendererFault = false, desiredPaused = false, nativePaused = false, readStalled = false;
 };
 
 class Policy {
@@ -21,6 +21,7 @@ public:
   bool frameObserved(std::uint64_t generation, std::uint64_t loadAttempt, std::uint64_t frameSerial, std::int64_t nowMs);
   bool mayUnpause(const Sample& sample) const;
   void fail();
+  void suspendBaseline() { baseline_ = false; }
   Phase phase() const { return phase_; }
   std::int64_t deadlineMs() const { return deadline_; }
   bool attempted() const { return attempted_; }
@@ -37,6 +38,6 @@ private:
   std::int64_t lastPosition_ = -1, lastAdvanceTime_ = 0;
   std::int64_t lastSampleTime_ = 0;
   std::int64_t lastAttemptTime_ = 0;
-  bool attempted_ = false, baseline_ = false, baselineOutstanding_ = false, wasPaused_ = false;
+  bool attempted_ = false, baseline_ = false, baselineOutstanding_ = false, baselineSuppressed_ = false, wasPaused_ = false;
 };
 }

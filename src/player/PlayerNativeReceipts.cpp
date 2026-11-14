@@ -72,13 +72,13 @@ bool PlayerComponent::beginNativeReceipt(FixtureAsset asset, const QString& fixt
     const char* args[] = {"loadfile", path.constData(), "replace", "pause=yes", nullptr};
 #endif
     if (m_restoreDispatch) result = m_restoreDispatch(receiptTag | attempt, args);
-    else if (m_mpv && m_mpv->mpv()) result = mpv_command_async(m_mpv->mpv(), receiptTag | attempt, args);
+    else result = nativeAsyncCommand(receiptTag | attempt, args);
   } else if (m_receiptDispatch) {
     result = m_receiptDispatch(attempt, fixturePath);
   } else if (m_mpv && m_mpv->mpv()) {
     const auto path = fixturePath.toUtf8();
     const char* args[] = {"loadfile", path.constData(), "replace", nullptr};
-    result = mpv_command_async(m_mpv->mpv(), receiptTag | attempt, args);
+    result = nativeAsyncCommand(receiptTag | attempt, args);
   }
   m_nativeReceipts.submitted(result);
   return result >= 0;

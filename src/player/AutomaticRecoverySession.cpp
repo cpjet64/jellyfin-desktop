@@ -21,8 +21,13 @@ bool AutomaticRecoverySession::accept(Key key, std::int64_t entry)
 }
 bool AutomaticRecoverySession::position(Key key, std::int64_t entry, std::int64_t positionMs)
 {
-  if (!accepted_ || !same(candidate_.key, key) || entry != candidate_.entry || positionMs < 0) return false;
+  if (!accepted_ || !loaded_ || !same(candidate_.key, key) || entry != candidate_.entry || positionMs < 0) return false;
   candidate_.positionMs = positionMs; return true;
+}
+bool AutomaticRecoverySession::loaded(Key key, std::int64_t entry)
+{
+  if (!accepted_ || loaded_ || !same(candidate_.key, key) || entry != candidate_.entry) return false;
+  loaded_ = true; return true;
 }
 bool AutomaticRecoverySession::revise(Key previous, Key current, bool paused)
 {
@@ -31,12 +36,28 @@ bool AutomaticRecoverySession::revise(Key previous, Key current, bool paused)
   candidate_.key = current; candidate_.paused = paused; candidate_.positionMs = -1;
   return true;
 }
+bool AutomaticRecoverySession::tracks(Key current, const QVariant& audio, const QVariant& subtitle)
+{
+  if (!same(candidate_.key, current) || !accepted_ || !loaded_) return false;
+  candidate_.audio = audio; candidate_.subtitle = subtitle; return true;
+}
+bool AutomaticRecoverySession::replaceEntry(Key current, std::int64_t previous, std::int64_t entry, std::int64_t positionMs)
+{
+  if (!same(candidate_.key, current) || !accepted_ || !loaded_ || candidate_.entry != previous ||
+      entry <= 0 || entry == previous || positionMs < 0) return false;
+  candidate_.entry = entry; candidate_.positionMs = positionMs; return true;
+}
+bool AutomaticRecoverySession::selections(Key current, QVariant& audio, QVariant& subtitle) const
+{
+  if (!same(candidate_.key, current) || !accepted_) return false;
+  audio = candidate_.audio; subtitle = candidate_.subtitle; return true;
+}
 void AutomaticRecoverySession::invalidate()
 {
-  candidate_ = Snapshot{}; accepted_ = false;
+  candidate_ = Snapshot{}; accepted_ = false; loaded_ = false;
 }
 bool AutomaticRecoverySession::snapshot(Key current, Snapshot& result) const
 {
-  if (!accepted_ || !same(candidate_.key, current) || candidate_.entry <= 0 || candidate_.positionMs < 0) return false;
+  if (!accepted_ || !loaded_ || !same(candidate_.key, current) || candidate_.entry <= 0 || candidate_.positionMs < 0) return false;
   result = candidate_; return true;
 }
