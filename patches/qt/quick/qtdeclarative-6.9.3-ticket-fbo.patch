@@ -51,7 +51,7 @@ index cdae6fbe..47b8b86f 100644
 +        n->recoveryTextureGeneration = qtRecoveryIdentity();
 +#endif
 diff --git a/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp b/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
-index e0ca7c6d..6bb2b739 100644
+index e0ca7c6d..2d20d15b 100644
 --- a/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
 +++ b/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
 @@ -6,0 +7,4 @@
@@ -59,17 +59,22 @@ index e0ca7c6d..6bb2b739 100644
 +#include "../../recovery/QtRecoveryQuick_p.h"
 +#include <QtQuick/qsgtexturematerial.h>
 +#endif
-@@ -2215,0 +2220,4 @@ void Renderer::uploadBatch(Batch *b)
+@@ -2215,0 +2220,3 @@ void Renderer::uploadBatch(Batch *b)
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
-+            if (e->node->geometry()->vertexCount() > 0 && e->node->geometry()->indexCount() > 0)
-+                b->drawSets.last().addRecoveryNode(qtRecoveryNodeIdentity(e->node));
++            const int recoveryIndicesBefore = indicesInSet;
 +#endif
-@@ -2958,0 +2967,4 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -2216,0 +2224,5 @@ void Renderer::uploadBatch(Batch *b)
++#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
++            b->drawSets.last().addRecoveryContribution(qtRecoveryNodeIdentity(e->node),
++                                                       e->node->geometry()->vertexCount(),
++                                                       recoveryIndicesBefore, indicesInSet);
++#endif
+@@ -2958,0 +2971,4 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +    e->recoveryBoundTexture = nullptr;
 +    e->recoveryBoundRhiTexture = nullptr;
 +#endif
-@@ -3062,0 +3075,11 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3062,0 +3079,11 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +                static QSGOpaqueTextureMaterial opaqueRecoveryMaterial;
 +                static QSGTextureMaterial alphaRecoveryMaterial;
@@ -81,24 +86,24 @@ index e0ca7c6d..6bb2b739 100644
 +                    e->recoveryBoundRhiTexture = texture;
 +                }
 +#endif
-@@ -3075,0 +3099,5 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3075,0 +3103,5 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 +    updateShaderBindings(e, bindings, pd->ubufBinding);
 +}
 +
 +void Renderer::updateShaderBindings(Element *e, const QVarLengthArray<QRhiShaderResourceBinding, 8> &bindings, int ubufBinding)
 +{
-@@ -3136 +3164 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3136 +3168 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 -        if (pd->ubufBinding <= 0 || bindings.size() <= 1)
 +        if (ubufBinding <= 0 || bindings.size() <= 1)
-@@ -3144 +3172 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3144 +3176 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 -        if (!e->srb->create())
 +        if (!e->srb->create()) {
-@@ -3145,0 +3174,4 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3145,0 +3178,4 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +            e->recoveryBoundTexture = e->recoveryBoundRhiTexture = nullptr;
 +#endif
 +        }
-@@ -3366,0 +3399,7 @@ void Renderer::renderMergedBatch(PreparedRenderBatch *renderBatch, bool depthPos
+@@ -3366,0 +3403,7 @@ void Renderer::renderMergedBatch(PreparedRenderBatch *renderBatch, bool depthPos
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +        if (draw.indexCount > 0 && !draw.recoveryOverflow) {
 +            for (quint64 node : draw.recoveryNodes)
@@ -106,19 +111,19 @@ index e0ca7c6d..6bb2b739 100644
 +                                   !depthPostPass && m_renderMode != QSGRendererInterface::RenderMode3D);
 +        }
 +#endif
-@@ -3579,0 +3619,4 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
+@@ -3579,0 +3623,4 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +                qtRecoveryMarkDraw(qtRecoveryNodeIdentity(e->node), reinterpret_cast<uintptr_t>(renderTarget().rt), e->recoveryBoundTexture, e->recoveryBoundRhiTexture,
 +                                   !depthPostPass && m_renderMode != QSGRendererInterface::RenderMode3D);
 +#endif
-@@ -3583,0 +3627,5 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
+@@ -3583,0 +3631,5 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +            if (g->vertexCount() > 0)
 +                qtRecoveryMarkDraw(qtRecoveryNodeIdentity(e->node), reinterpret_cast<uintptr_t>(renderTarget().rt), e->recoveryBoundTexture, e->recoveryBoundRhiTexture,
 +                                   !depthPostPass && m_renderMode != QSGRendererInterface::RenderMode3D);
 +#endif
 diff --git a/src/quick/scenegraph/coreapi/qsgbatchrenderer_p.h b/src/quick/scenegraph/coreapi/qsgbatchrenderer_p.h
-index 1da4fb93..74addcad 100644
+index 1da4fb93..e46256f9 100644
 --- a/src/quick/scenegraph/coreapi/qsgbatchrenderer_p.h
 +++ b/src/quick/scenegraph/coreapi/qsgbatchrenderer_p.h
 @@ -29,0 +30 @@
@@ -128,10 +133,15 @@ index 1da4fb93..74addcad 100644
 +    const void *recoveryBoundTexture = nullptr;
 +    const void *recoveryBoundRhiTexture = nullptr;
 +#endif
-@@ -352,0 +358,18 @@ struct DrawSet
+@@ -352,0 +358,23 @@ struct DrawSet
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +    quint64 recoveryNodes[4] = {};
 +    bool recoveryOverflow = false;
++    void addRecoveryContribution(quint64 node, int vertices, int before, int after)
++    {
++        if (vertices > 0 && after > before)
++            addRecoveryNode(node);
++    }
 +    void addRecoveryNode(quint64 node)
 +    {
 +        if (!node)
@@ -147,7 +157,7 @@ index 1da4fb93..74addcad 100644
 +        recoveryOverflow = true;
 +    }
 +#endif
-@@ -822,0 +846,2 @@ private:
+@@ -822,0 +851,2 @@ private:
 +    void updateShaderBindings(Element *e, const QVarLengthArray<QRhiShaderResourceBinding, 8> &bindings,
 +                              int ubufBinding);
 diff --git a/src/quick/scenegraph/qsgthreadedrenderloop.cpp b/src/quick/scenegraph/qsgthreadedrenderloop.cpp

@@ -20,9 +20,14 @@ static bool contains(const DrawSet &set, quint64 id)
 int main()
 {
     DrawSet first(0, 0, 0), second(0, 0, 10);
-    first.addRecoveryNode(11);
-    second.addRecoveryNode(22);
+    // uploadMergedElement synthesizes indices for this nonindexed quad.
+    first.addRecoveryContribution(11, 4, 0, 6);
+    // An indexed quad contributes its uploaded indices to its own set.
+    second.addRecoveryContribution(22, 4, 0, 6);
+    first.addRecoveryContribution(77, 0, 6, 6);
+    first.addRecoveryContribution(88, 4, 6, 6);
     assert(contains(first, 11) && !contains(first, 22));
+    assert(!contains(first, 77) && !contains(first, 88));
     assert(contains(second, 22) && !contains(second, 11));
     DrawSet cached = second;
     assert(contains(cached, 22) && !cached.recoveryOverflow);
