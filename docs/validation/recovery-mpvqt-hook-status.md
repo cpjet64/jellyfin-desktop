@@ -32,6 +32,10 @@ Known blockers:
 - Usability requests have no cancellation interface; a nonresponsive render
   thread relies on the controller's deadline.
 
+Generation exchange source tests cover reset, stale failure and usability writes,
+and owner-fenced retirement. They are not registered or executed; real renderer
+and observer lifecycle behavior still needs integration testing.
+
 Qt 6.8's threaded loop emits frameSwapped even after an endFrame error; the
 signal does not identify a native render serial. See [Qt source](https://raw.githubusercontent.com/qt/qtdeclarative/6.8/src/quick/scenegraph/qsgthreadedrenderloop.cpp)
 and [Qt documentation](https://doc.qt.io/qt-6/qquickwindow.html).

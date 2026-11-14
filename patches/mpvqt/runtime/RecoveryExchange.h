@@ -22,7 +22,9 @@ struct RecoveryExchange {
     bool resultUsable = false;
     bool resultPending = false;
     bool ready = false;
+    quint64 readyGeneration = 0;
     bool contextFailurePending = false;
+    quint64 contextFailureGeneration = 0;
     bool framePending = false;
     quint64 frameGeneration = 0;
     RecoveryFrameObservationV1 frame{};
@@ -36,4 +38,56 @@ struct RecoveryExchange {
     std::deque<QtRecoverySubmissionV1> submissions;
     QtRecoverySubmissionV1 submission{};
     bool bootstrapSupported = false;
+
+    // Caller holds mutex for these operations.
+    bool owns(const std::shared_ptr<RendererRuntime::GenerationOwner> &candidate, quint64 id) const
+    {
+        return candidate && owner.lock() == candidate && generation == id;
+    }
+    void install(const std::shared_ptr<RendererRuntime::GenerationOwner> &candidate, quint64 id)
+    {
+        owner = candidate;
+        generation = id;
+        requestGeneration = requestId = resultGeneration = resultId = 0;
+        deadlineMs = 0;
+        resultUsable = resultPending = ready = contextFailurePending = framePending = false;
+        readyGeneration = contextFailureGeneration = frameGeneration = 0;
+        frame = {};
+        sourceFrameSerial = attempt = lastQtFrameSerial = 0;
+        attemptDeadlineMs = 0;
+        ticket = {};
+        ticketFrame = {};
+        ticketPending = bootstrapSupported = false;
+        submissions.clear();
+        submission = {};
+    }
+    bool recordFailure(const std::shared_ptr<RendererRuntime::GenerationOwner> &candidate, quint64 id)
+    {
+        if (!owns(candidate, id)) return false;
+        contextFailurePending = true;
+        contextFailureGeneration = id;
+        bootstrapSupported = false;
+        return true;
+    }
+    bool recordUsability(const std::shared_ptr<RendererRuntime::GenerationOwner> &candidate,
+                         quint64 id, bool usable)
+    {
+        if (!owns(candidate, id) || !requestId || requestGeneration != id) return false;
+        resultId = requestId;
+        resultGeneration = id;
+        resultUsable = usable;
+        resultPending = true;
+        requestId = 0;
+        return true;
+    }
+    template<typename Revoke>
+    bool retireIfCurrent(const std::shared_ptr<RendererRuntime::GenerationOwner> &candidate,
+                         quint64 id, Revoke revoke)
+    {
+        if (!owns(candidate, id)) return false;
+        ticketPending = false;
+        submissions.clear();
+        revoke();
+        return true;
+    }
 };
