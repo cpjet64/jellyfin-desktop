@@ -27,18 +27,20 @@ function(_verify_recovery_sources entries)
 endfunction()
 
 _verify_recovery_sources(_recovery_inputs)
-set(_recovery_patch "${CMAKE_SOURCE_DIR}/patches/mpvqt/0003-recovery-owner.patch")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_recovery_patch}")
-file(READ "${_recovery_patch}" _patch_contents)
-string(REPLACE "\r\n" "\n" _patch_contents "${_patch_contents}")
-set(_normalized_patch "${CMAKE_BINARY_DIR}/patched-mpvqt/0003-recovery-owner.patch")
-file(WRITE "${_normalized_patch}" "${_patch_contents}")
-execute_process(COMMAND "${CMAKE_COMMAND}" -E env "GIT_CEILING_DIRECTORIES=${CMAKE_BINARY_DIR}"
-  "${GIT_EXECUTABLE}" apply --no-index --unidiff-zero --whitespace=nowarn "${_normalized_patch}"
-  WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/patched-mpvqt" RESULT_VARIABLE _patch_result ERROR_VARIABLE _patch_error)
-if(NOT _patch_result EQUAL 0)
-  message(FATAL_ERROR "Unable to apply recovery MpvQt patch: ${_patch_error}")
-endif()
+foreach(_patch_name IN ITEMS 0003-recovery-owner.patch 0003-renderer-recovery.patch)
+  set(_recovery_patch "${CMAKE_SOURCE_DIR}/patches/mpvqt/${_patch_name}")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_recovery_patch}")
+  file(READ "${_recovery_patch}" _patch_contents)
+  string(REPLACE "\r\n" "\n" _patch_contents "${_patch_contents}")
+  set(_normalized_patch "${CMAKE_BINARY_DIR}/patched-mpvqt/${_patch_name}")
+  file(WRITE "${_normalized_patch}" "${_patch_contents}")
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env "GIT_CEILING_DIRECTORIES=${CMAKE_BINARY_DIR}"
+    "${GIT_EXECUTABLE}" apply --no-index --unidiff-zero --whitespace=nowarn "${_normalized_patch}"
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/patched-mpvqt" RESULT_VARIABLE _patch_result ERROR_VARIABLE _patch_error)
+  if(NOT _patch_result EQUAL 0)
+    message(FATAL_ERROR "Unable to apply recovery MpvQt patch ${_patch_name}: ${_patch_error}")
+  endif()
+endforeach()
 _verify_recovery_sources(_recovery_outputs)
 
 set(_controller_inputs

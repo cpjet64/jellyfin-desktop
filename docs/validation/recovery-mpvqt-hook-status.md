@@ -10,6 +10,8 @@ owner and provides a bounded generation/request usability exchange. Generation
 is published at renderer creation and synchronization before the initial ready
 notification; this ordering has not been validated against a running Qt loop.
 Context creation or rendering failure produces a typed blocked notification.
+The copied-source series applies the item and renderer patches in order, then
+the independent controller lease patch, with normalized output hashes retained.
 
 Known blockers:
 
