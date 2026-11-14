@@ -62,26 +62,26 @@ function Assert-PrivateAcl {
   }
 }
 function Pin-Inputs($pins) {
-  $pins.PinFile($driver,'b46274e2b5fc541a27093c870f49160f8235b0d8d2497ceaa546799d45dcc90e',(Get-Item -LiteralPath $driver).Length,$null)
-  $pins.PinFile($builder,'19dec0f9289936fb60c974c970a8e7ddacbce1671b7be9d03f9d41eeed52fe8a',(Get-Item -LiteralPath $builder).Length,$null)
-  $pins.PinFile($postcheck,'b0df5c916d8b1ea0a2f99a7975d5ad94820f089c8f8482ee9d3e803929d2f320',(Get-Item -LiteralPath $postcheck).Length,$null)
-  $pins.PinFile($interop,'fc754851846ebcea79b0f719c02602b8ad86e505272586b5cfd50148d3117a89',(Get-Item -LiteralPath $interop).Length,$null)
-  $pins.PinFile($PSCommandPath,$ControllerSHA256,(Get-Item -LiteralPath $PSCommandPath).Length,$null)
-  $pins.PinFile($python,'7ca24f26d6e3f463419ee4f537ddd3acd312c38fe45e678cce08572f26a8bd1a',106328,$null)
-  $pins.PinFile($helper,'7ae01dfd262a18bf863c057d570993b2c4dc529fcc03ac1e58d15f0dedb0ebd5',166400,$null)
-  $pins.PinFile($envFile,'1daa8974e1d37694f1067c92ab9839bab22d2f8a1d3fa844e0b2b58ea0c4512a',(Get-Item -LiteralPath $envFile).Length,$null)
-  $pins.PinFile($evidence,'672c7ae1298a59b7d37d7595cd7dd7f33fc5c3c90a591498e0ca6820464be020',(Get-Item -LiteralPath $evidence).Length,$null)
-  $pins.PinFile($manifest,'dbe55eb7c529d11386700a60dab96f56ab12bc7b3c74e6b0e55277fe6ca4b7e0',(Get-Item -LiteralPath $manifest).Length,$null)
+  $pins.PinFile($driver,'b46274e2b5fc541a27093c870f49160f8235b0d8d2497ceaa546799d45dcc90e',(Get-Item -LiteralPath $driver).Length,[System.Management.Automation.Language.NullString]::Value)
+  $pins.PinFile($builder,'19dec0f9289936fb60c974c970a8e7ddacbce1671b7be9d03f9d41eeed52fe8a',(Get-Item -LiteralPath $builder).Length,[System.Management.Automation.Language.NullString]::Value)
+  $pins.PinFile($postcheck,'b0df5c916d8b1ea0a2f99a7975d5ad94820f089c8f8482ee9d3e803929d2f320',(Get-Item -LiteralPath $postcheck).Length,[System.Management.Automation.Language.NullString]::Value)
+  $pins.PinFile($interop,'fc754851846ebcea79b0f719c02602b8ad86e505272586b5cfd50148d3117a89',(Get-Item -LiteralPath $interop).Length,[System.Management.Automation.Language.NullString]::Value)
+  $pins.PinFile($PSCommandPath,$ControllerSHA256,(Get-Item -LiteralPath $PSCommandPath).Length,[System.Management.Automation.Language.NullString]::Value)
+  $pins.PinFile($python,'7ca24f26d6e3f463419ee4f537ddd3acd312c38fe45e678cce08572f26a8bd1a',106328,[System.Management.Automation.Language.NullString]::Value)
+  $pins.PinFile($helper,'7ae01dfd262a18bf863c057d570993b2c4dc529fcc03ac1e58d15f0dedb0ebd5',166400,[System.Management.Automation.Language.NullString]::Value)
+  $pins.PinFile($envFile,'1daa8974e1d37694f1067c92ab9839bab22d2f8a1d3fa844e0b2b58ea0c4512a',(Get-Item -LiteralPath $envFile).Length,[System.Management.Automation.Language.NullString]::Value)
+  $pins.PinFile($evidence,'672c7ae1298a59b7d37d7595cd7dd7f33fc5c3c90a591498e0ca6820464be020',(Get-Item -LiteralPath $evidence).Length,[System.Management.Automation.Language.NullString]::Value)
+  $pins.PinFile($manifest,'dbe55eb7c529d11386700a60dab96f56ab12bc7b3c74e6b0e55277fe6ca4b7e0',(Get-Item -LiteralPath $manifest).Length,[System.Management.Automation.Language.NullString]::Value)
   $m = Get-Content -Raw -LiteralPath $manifest | ConvertFrom-Json
   if ($m.source_sha -cne 'd0bb016df169b663567e88fd5586ab7c008e9554' -or $m.internal_sha256 -cne '80b842ae0d7ad4c3384b9eacfb9c492962febebae449c90a2b18d6b1e4f25915' -or @($m.files).Count -ne 21) { throw 'Qualified manifest mismatch' }
-  foreach ($entry in $m.files) { $pins.PinFile((Join-Path $qualified $entry.path),$entry.sha256,$entry.bytes,$null) }
+  foreach ($entry in $m.files) { $pins.PinFile((Join-Path $qualified $entry.path),$entry.sha256,$entry.bytes,[System.Management.Automation.Language.NullString]::Value) }
   $r = Get-Content -Raw -LiteralPath $evidence | ConvertFrom-Json
   if ($r.identity.private_environment_digest -cne 'd9b37c10d4dd5d21ec86562737d8aea7dce17216e56733ae819b5dcfc4f3af01') { throw 'Environment observation mismatch' }
   foreach ($item in @($r.identity.compiler,$r.identity.telemetry) + @($r.identity.direct_inputs) + @($r.identity.support_tools)) {
     $id = ($item.file_id -join ':')
     $pins.PinFile($item.path,$item.sha256,$item.size,$id)
   }
-  $pins.PinFile("$proposal/cleanup-claim.rsp",'15d4a13278b38de63943cc4fc8776cbec79d44e4759a968d927ceb65f77de347',3129,$null)
+  $pins.PinFile("$proposal/cleanup-claim.rsp",'15d4a13278b38de63943cc4fc8776cbec79d44e4759a968d927ceb65f77de347',3129,[System.Management.Automation.Language.NullString]::Value)
   $pins.PinParents($root)
 }
 function Assert-ScratchParent {
