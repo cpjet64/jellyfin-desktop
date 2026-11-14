@@ -44,3 +44,10 @@ three owned-seek symbols from the same loaded module as ordinary mpv. When the
 complete capability is absent, use the existing V1 resolver for observation
 and ordinary commands; do not claim correlated seek completion. This is a
 source-only contract until the patch is built and independently validated.
+
+The subsequent epoch-test patch registers unit cases against the same private
+atomic helpers used by the core and render paths. These cases cover ordering,
+revocation, stale epochs, and exhaustion only. They do not exercise core-thread
+entry checks, demux failure, frame production, software rendering, or actual
+concurrent scheduling. Those require a separate headless libmpv integration
+harness with controlled media and scheduling.

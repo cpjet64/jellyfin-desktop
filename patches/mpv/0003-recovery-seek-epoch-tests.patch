@@ -1,0 +1,239 @@
+diff --git a/player/client.c b/player/client.c
+index e85351c..5f0eb10 100644
+--- a/player/client.c
++++ b/player/client.c
+@@ -1087,7 +1087,7 @@ static int run_async(mpv_handle *ctx, void (*fn)(void *fn_data), void *fn_data)
+ 
+ bool mp_client_recovery_epoch_matches(struct mp_client_api *api, uint64_t epoch)
+ {
+-    return epoch && atomic_load(&api->mpctx->recovery_seek_epoch) == (epoch | 1);
++    return recovery_epoch_applied(&api->mpctx->recovery_seek_epoch, epoch);
+ }
+ 
+ struct recovery_seek_request {
+@@ -1129,7 +1129,7 @@ int mpv_recovery_seek_async_v1(mpv_handle *ctx, uint64_t userdata,
+     int error = reserve_reply(ctx);
+     if (error < 0)
+         return error;
+-    uint64_t epoch = recovery_next_epoch(ctx->mpctx);
++    uint64_t epoch = recovery_epoch_next(&ctx->mpctx->recovery_seek_epoch);
+     struct recovery_seek_request *req = talloc_ptrtype(NULL, req);
+     *req = (struct recovery_seek_request){ctx->mpctx, ctx, userdata, epoch,
+                                          operation, entry, target_ms};
+@@ -1141,7 +1141,7 @@ int mpv_recovery_seek_cancel_v1(mpv_handle *ctx)
+ {
+     if (!ctx)
+         return MPV_ERROR_INVALID_PARAMETER;
+-    return recovery_next_epoch(ctx->mpctx) ? 0 : MPV_ERROR_GENERIC;
++    return recovery_epoch_next(&ctx->mpctx->recovery_seek_epoch) ? 0 : MPV_ERROR_GENERIC;
+ }
+ 
+ struct cmd_request {
+diff --git a/player/core.h b/player/core.h
+index bb2b4b4..9cc23c0 100644
+--- a/player/core.h
++++ b/player/core.h
+@@ -20,6 +20,7 @@
+ 
+ #include <stdatomic.h>
+ #include <stdbool.h>
++#include "recovery_seek_epoch.h"
+ 
+ #include "audio/aframe.h"
+ #include "clipboard/clipboard.h"
+@@ -492,20 +493,6 @@ typedef struct MPContext {
+     struct mp_als *als_state; // lazily initialized on first use
+ } MPContext;
+ 
+-/* Even values are pending epochs; odd values have claimed application. */
+-static inline uint64_t recovery_next_epoch(struct MPContext *mpctx)
+-{
+-    uint_fast64_t old = atomic_load(&mpctx->recovery_seek_epoch);
+-    for (;;) {
+-        if (old == UINT64_MAX)
+-            return 0;
+-        uint_fast64_t next = old >= UINT64_MAX - 2 ? UINT64_MAX :
+-            (old & ~(uint_fast64_t)1) + 2;
+-        if (atomic_compare_exchange_weak(&mpctx->recovery_seek_epoch, &old, next))
+-            return next == UINT64_MAX ? 0 : next;
+-    }
+-}
+-
+ // Contains information about an asynchronous work item, how it can be aborted,
+ // and when. All fields are protected by MPContext.abort_lock.
+ struct mp_abort_entry {
+diff --git a/player/playloop.c b/player/playloop.c
+index b6e23e2..ff942de 100644
+--- a/player/playloop.c
++++ b/player/playloop.c
+@@ -293,7 +293,7 @@ void reset_playback_state(struct MPContext *mpctx)
+     update_internal_pause_state(mpctx);
+     update_core_idle_state(mpctx);
+     if (mpctx->recovery_applying &&
+-        atomic_load(&mpctx->recovery_seek_epoch) == (mpctx->recovery_pending_epoch | 1)) {
++        recovery_epoch_applied(&mpctx->recovery_seek_epoch, mpctx->recovery_pending_epoch)) {
+         mpctx->recovery_applied_epoch = mpctx->recovery_pending_epoch;
+         mpctx->recovery_applied_operation = mpctx->recovery_pending_operation;
+     }
+@@ -477,7 +477,7 @@ void queue_seek(struct MPContext *mpctx, enum seek_type type, double amount,
+                 enum seek_precision exact, int flags)
+ {
+     if (!mpctx->recovery_owned_queue) {
+-        recovery_next_epoch(mpctx);
++        recovery_epoch_next(&mpctx->recovery_seek_epoch);
+         mpctx->recovery_pending_epoch = 0;
+         mpctx->recovery_applied_epoch = 0;
+         mpctx->recovery_applied_operation = 0;
+@@ -527,12 +527,10 @@ static bool recovery_claim_queued_seek(struct MPContext *mpctx)
+ {
+     if (!mpctx->recovery_pending_epoch)
+         return true;
+-    uint_fast64_t expected = mpctx->recovery_pending_epoch;
+     bool valid = mpctx->playing &&
+         mpctx->playing->id == mpctx->recovery_pending_entry &&
+         mpctx->stop_play == KEEP_PLAYING &&
+-        atomic_compare_exchange_strong(&mpctx->recovery_seek_epoch,
+-                                       &expected, expected | 1);
++        recovery_epoch_claim(&mpctx->recovery_seek_epoch, mpctx->recovery_pending_epoch);
+     if (valid)
+         mpctx->recovery_applying = true;
+     else
+@@ -1006,7 +1004,7 @@ static void handle_loop_file(struct MPContext *mpctx)
+ 
+ void seek_to_last_frame(struct MPContext *mpctx)
+ {
+-    recovery_next_epoch(mpctx);
++    recovery_epoch_next(&mpctx->recovery_seek_epoch);
+     if (!mpctx->vo_chain)
+         return;
+     if (mpctx->hrseek_lastframe) // exit if we already tried this
+diff --git a/player/recovery_seek_epoch.h b/player/recovery_seek_epoch.h
+new file mode 100644
+index 0000000..bfa3201
+--- /dev/null
++++ b/player/recovery_seek_epoch.h
+@@ -0,0 +1,35 @@
++#ifndef MP_RECOVERY_SEEK_EPOCH_H
++#define MP_RECOVERY_SEEK_EPOCH_H
++
++#include <stdbool.h>
++#include <stdatomic.h>
++#include <stdint.h>
++
++/* Even epochs are pending; the low bit marks an application claim. */
++static inline uint64_t recovery_epoch_next(atomic_uint_fast64_t *state)
++{
++    uint_fast64_t old = atomic_load(state);
++    for (;;) {
++        if (old == UINT64_MAX)
++            return 0;
++        uint_fast64_t next = old >= UINT64_MAX - 2 ? UINT64_MAX :
++            (old & ~(uint_fast64_t)1) + 2;
++        if (atomic_compare_exchange_weak(state, &old, next))
++            return next == UINT64_MAX ? 0 : next;
++    }
++}
++
++static inline bool recovery_epoch_claim(atomic_uint_fast64_t *state, uint64_t epoch)
++{
++    if (!epoch || (epoch & 1))
++        return false;
++    uint_fast64_t expected = epoch;
++    return atomic_compare_exchange_strong(state, &expected, epoch | 1);
++}
++
++static inline bool recovery_epoch_applied(atomic_uint_fast64_t *state, uint64_t epoch)
++{
++    return epoch && !(epoch & 1) && atomic_load(state) == (epoch | 1);
++}
++
++#endif
+diff --git a/player/video.c b/player/video.c
+index bacbcfc..a243bfe 100644
+--- a/player/video.c
++++ b/player/video.c
+@@ -100,7 +100,7 @@ static void vo_chain_reset_state(struct vo_chain *vo_c)
+ void reset_video_state(struct MPContext *mpctx)
+ {
+     if (!mpctx->recovery_applying)
+-        recovery_next_epoch(mpctx);
++        recovery_epoch_next(&mpctx->recovery_seek_epoch);
+     mpctx->recovery_applied_epoch = 0;
+     mpctx->recovery_applied_operation = 0;
+     if (mpctx->recovery_discontinuity < INT64_MAX)
+diff --git a/test/meson.build b/test/meson.build
+index 994dc68..e41e36d 100644
+--- a/test/meson.build
++++ b/test/meson.build
+@@ -73,6 +73,10 @@ img_utils = static_library('img-utils', 'img_utils.c', include_directories: incd
+                            dependencies: [libavcodec, libplacebo], objects: img_utils_objects)
+ 
+ # The actual tests.
++recovery_seek_epoch = executable('recovery-seek-epoch', 'recovery_seek_epoch.c',
++                                 include_directories: incdir)
++test('recovery-seek-epoch', recovery_seek_epoch)
++
+ chmap_files = [
+     'audio/chmap_avchannel.c',
+     'audio/chmap_sel.c',
+diff --git a/test/recovery_seek_epoch.c b/test/recovery_seek_epoch.c
+new file mode 100644
+index 0000000..58cfd42
+--- /dev/null
++++ b/test/recovery_seek_epoch.c
+@@ -0,0 +1,55 @@
++#include <stdlib.h>
++#include <stdint.h>
++#include "player/recovery_seek_epoch.h"
++
++#define CHECK(condition) do { if (!(condition)) abort(); } while (0)
++
++static void pending_cancel_and_supersession(void)
++{
++    atomic_uint_fast64_t state = ATOMIC_VAR_INIT(0);
++    uint64_t first = recovery_epoch_next(&state);
++    uint64_t replacement = recovery_epoch_next(&state);
++    CHECK(first && replacement && first != replacement);
++    CHECK(!recovery_epoch_claim(&state, first));
++    CHECK(recovery_epoch_claim(&state, replacement));
++    CHECK(recovery_epoch_applied(&state, replacement));
++    CHECK(recovery_epoch_next(&state));
++    CHECK(!recovery_epoch_applied(&state, replacement));
++    CHECK(!recovery_epoch_claim(&state, replacement));
++}
++
++static void application_and_cancel_order(void)
++{
++    atomic_uint_fast64_t state = ATOMIC_VAR_INIT(0);
++    uint64_t cancelled = recovery_epoch_next(&state);
++    CHECK(recovery_epoch_next(&state));
++    CHECK(!recovery_epoch_claim(&state, cancelled));
++    uint64_t claimed = recovery_epoch_next(&state);
++    CHECK(recovery_epoch_claim(&state, claimed));
++    CHECK(!recovery_epoch_claim(&state, claimed));
++    CHECK(recovery_epoch_applied(&state, claimed));
++    CHECK(recovery_epoch_next(&state));
++    CHECK(!recovery_epoch_applied(&state, claimed));
++    CHECK(!recovery_epoch_claim(&state, 0));
++    CHECK(!recovery_epoch_claim(&state, claimed | 1));
++}
++
++static void exhaustion_is_terminal(void)
++{
++    atomic_uint_fast64_t state = ATOMIC_VAR_INIT(UINT64_MAX - 3);
++    CHECK(recovery_epoch_claim(&state, UINT64_MAX - 3));
++    CHECK(recovery_epoch_applied(&state, UINT64_MAX - 3));
++    CHECK(!recovery_epoch_next(&state));
++    CHECK(atomic_load(&state) == UINT64_MAX);
++    CHECK(!recovery_epoch_applied(&state, UINT64_MAX - 3));
++    CHECK(!recovery_epoch_next(&state));
++    CHECK(!recovery_epoch_claim(&state, UINT64_MAX - 3));
++}
++
++int main(void)
++{
++    pending_cancel_and_supersession();
++    application_and_cancel_order();
++    exhaustion_is_terminal();
++    return 0;
++}
