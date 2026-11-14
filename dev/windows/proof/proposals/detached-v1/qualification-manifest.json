@@ -1,0 +1,422 @@
+{
+  "schema": 1,
+  "status": "UNEXECUTED corrected source candidate; pending independent review and Pro allocation; not qualified",
+  "source_sha": "d0bb016df169b663567e88fd5586ab7c008e9554",
+  "source_ref": "refs/heads/codex/reconcile-fixture-detached-20261114",
+  "base_sha": "ff831ccc7832d147f77dc4e69006ccda0190fa89",
+  "direct_parent_sha": "7204b4a37fbf0342b4a40d1dc836cac5eac38be7",
+  "tracked_blob_matches_raw": true,
+  "files": [
+    {
+      "path": "dev/windows/proof/build_only/README.md",
+      "bytes": 845,
+      "sha256": "3592dac5d531a500a255ad5e573b5f747e09331b96343f098742e2aaf0571079",
+      "git_blob": "0588724c1a45bb780d541d1d451716f330f672ae",
+      "raw_git_blob": "0588724c1a45bb780d541d1d451716f330f672ae",
+      "lines": 14
+    },
+    {
+      "path": "dev/windows/proof/build_only/__init__.py",
+      "bytes": 71,
+      "sha256": "46e3acf2aef078b230148ecc4aaf7fadca49e64bb0e37380174de4f703f2f3ae",
+      "git_blob": "4bba49b08185b08076f994393a7ebde41c8d1594",
+      "raw_git_blob": "4bba49b08185b08076f994393a7ebde41c8d1594",
+      "lines": 1
+    },
+    {
+      "path": "dev/windows/proof/build_only/fixture_child.py",
+      "bytes": 1333,
+      "sha256": "d7ce6a38efd1cb445bf4246d725a75643cec82f0fb7a2954ed174dbc6a58deac",
+      "git_blob": "d2b2deea6f4aae4a244e56aaad5c37798441d9f5",
+      "raw_git_blob": "d2b2deea6f4aae4a244e56aaad5c37798441d9f5",
+      "lines": 45
+    },
+    {
+      "path": "dev/windows/proof/build_only/fixture_policy.py",
+      "bytes": 2569,
+      "sha256": "0e6d7713408849b49eace2e5664b4455112ea64581781d0ead9a028127a77ac8",
+      "git_blob": "d3abb9107f49555cfb73ac916894e60564cca1ca",
+      "raw_git_blob": "d3abb9107f49555cfb73ac916894e60564cca1ca",
+      "lines": 57
+    },
+    {
+      "path": "dev/windows/proof/build_only/fixture_runner.py",
+      "bytes": 1584,
+      "sha256": "1d77aeddd22b6d7e925fbed920ce1c9283e3b089b53371f9e71914a6d38783b5",
+      "git_blob": "1dfb536ecea19837b974cb7a9d587c94c9d28af2",
+      "raw_git_blob": "1dfb536ecea19837b974cb7a9d587c94c9d28af2",
+      "lines": 45
+    },
+    {
+      "path": "dev/windows/proof/build_only/identity.py",
+      "bytes": 8627,
+      "sha256": "41e9889b23cf136e1d0e3b62dfa692ae6631af2a5464a1e9ed7eda99ebce4b46",
+      "git_blob": "8e15dbd6db2fecd5add15d468d95a506588be1dc",
+      "raw_git_blob": "8e15dbd6db2fecd5add15d468d95a506588be1dc",
+      "lines": 187
+    },
+    {
+      "path": "dev/windows/proof/build_only/lifecycle.py",
+      "bytes": 8298,
+      "sha256": "30d30cc4f06866e98af7f68c55ddfa1991dc4e975d130bed841872edf0b01597",
+      "git_blob": "55402afd9f3384745d83f976167f13c012d9f0e8",
+      "raw_git_blob": "55402afd9f3384745d83f976167f13c012d9f0e8",
+      "lines": 200
+    },
+    {
+      "path": "dev/windows/proof/build_only/policy.py",
+      "bytes": 7456,
+      "sha256": "c6582717402f996c840988f45e96b2ddda126a3ad81a22cfa369d1192623af87",
+      "git_blob": "a6ae1c1a621af412d63f1b37b92c84624e755d79",
+      "raw_git_blob": "a6ae1c1a621af412d63f1b37b92c84624e755d79",
+      "lines": 169
+    },
+    {
+      "path": "dev/windows/proof/build_only/receipt.py",
+      "bytes": 7868,
+      "sha256": "0358d02d191e7435df91df9ec2d28433b067c461f936e62f42a1ea53a3f5e4ff",
+      "git_blob": "0b5c5a54de03f7a06a640fc8d3fe603cf877e0ae",
+      "raw_git_blob": "0b5c5a54de03f7a06a640fc8d3fe603cf877e0ae",
+      "lines": 157
+    },
+    {
+      "path": "dev/windows/proof/build_only/receipt_file.py",
+      "bytes": 4182,
+      "sha256": "ba33bc5520bd3ae43fff1ca7ed268a51b730c5e89bd35d886519710e6603f56e",
+      "git_blob": "9bf846aab6d92cb968af76526f05d4efc7355156",
+      "raw_git_blob": "9bf846aab6d92cb968af76526f05d4efc7355156",
+      "lines": 116
+    },
+    {
+      "path": "dev/windows/proof/build_only/spawn.py",
+      "bytes": 9113,
+      "sha256": "7b350d66acd5a107d40da44c6121928a52835d4601cdb4e773a9e78687019abb",
+      "git_blob": "fd50f44682f938365209b9ec3ab1818060eaafa5",
+      "raw_git_blob": "fd50f44682f938365209b9ec3ab1818060eaafa5",
+      "lines": 231
+    },
+    {
+      "path": "dev/windows/proof/build_only/supervisor.py",
+      "bytes": 16964,
+      "sha256": "d1112fa11b5b00dfba6e3be3d3ff872fe36dba0b769d206a81f157653e7ea4cf",
+      "git_blob": "dcc6f4b2fc42ff75dbdaa8f6edd42893c6e072ae",
+      "raw_git_blob": "dcc6f4b2fc42ff75dbdaa8f6edd42893c6e072ae",
+      "lines": 401
+    },
+    {
+      "path": "dev/windows/proof/build_only/winapi.py",
+      "bytes": 9958,
+      "sha256": "a4dc2744cc769cea0fdc7e3ce0d46e97693d6c4ff0b16176194607d7d34d1018",
+      "git_blob": "44cd9c7c38b77a964446e24408d28df25bed6617",
+      "raw_git_blob": "44cd9c7c38b77a964446e24408d28df25bed6617",
+      "lines": 225
+    },
+    {
+      "path": "dev/windows/proof/qualification_startup.py",
+      "bytes": 2714,
+      "sha256": "dff1c95154ff064ed90a7ae97373c4df0be2c730cc775c561ab354e51997ac0f",
+      "git_blob": "ed73c222982284da0927939e7c7792e291f27c85",
+      "raw_git_blob": "ed73c222982284da0927939e7c7792e291f27c85",
+      "lines": 70
+    },
+    {
+      "path": "dev/windows/proof/residual-diagnostic.ps1",
+      "bytes": 13819,
+      "sha256": "dbca949417ae9cb5691ec75e6f33f4c0922f38816a0c1427ad2e9236b21ade9b",
+      "git_blob": "ee3b567a4cafb50e6a7569096a48fcbae426f7ef",
+      "raw_git_blob": "ee3b567a4cafb50e6a7569096a48fcbae426f7ef",
+      "lines": 190
+    },
+    {
+      "path": "dev/windows/proof/test_build_only_lifecycle.py",
+      "bytes": 18075,
+      "sha256": "04be36c5996d366487db6c89cad932a9866f158986404bd26d5c683233a61d26",
+      "git_blob": "4318a6e7751375518b6b2720516ab276299df57f",
+      "raw_git_blob": "4318a6e7751375518b6b2720516ab276299df57f",
+      "lines": 414
+    },
+    {
+      "path": "dev/windows/proof/test_build_only_native.py",
+      "bytes": 9876,
+      "sha256": "9c33e12f9dda3231da1a737a0d0810181d0d939a8cdcb39321a8d207988e55e5",
+      "git_blob": "b9cac832dc8d572d1d34677d41ea7273e4815c3b",
+      "raw_git_blob": "b9cac832dc8d572d1d34677d41ea7273e4815c3b",
+      "lines": 189
+    },
+    {
+      "path": "dev/windows/proof/test_build_only_policy.py",
+      "bytes": 3482,
+      "sha256": "1d4ce5ff07674b9c94156eab9a59dd036eaa62c12dde0c57ca3f47ad24d3eab7",
+      "git_blob": "8dcfb19664d81e567a57003167c3d3b61350b3a7",
+      "raw_git_blob": "8dcfb19664d81e567a57003167c3d3b61350b3a7",
+      "lines": 66
+    },
+    {
+      "path": "dev/windows/proof/test_build_only_receipt.py",
+      "bytes": 7644,
+      "sha256": "0c1cccc62fe6b968b19f2e6fc32783414507f6683f20b877b39163bbe836b494",
+      "git_blob": "a73366b983838d91ea311ada6a4bd2b3851f0162",
+      "raw_git_blob": "a73366b983838d91ea311ada6a4bd2b3851f0162",
+      "lines": 154
+    },
+    {
+      "path": "dev/windows/proof/test_build_only_spawn.py",
+      "bytes": 8787,
+      "sha256": "3ba06300c87cfe1aaf0133b6461707ba466b7130eacaa13ee68a2d04d96d38b9",
+      "git_blob": "c68e6c94a774a41836e6837c987d86c65b53d698",
+      "raw_git_blob": "c68e6c94a774a41836e6837c987d86c65b53d698",
+      "lines": 177
+    },
+    {
+      "path": "dev/windows/proof/test_qualification_startup.py",
+      "bytes": 3741,
+      "sha256": "a521e90d9a5e5b66e31b1cde6f8756b1ca809caa6acfc29a7101bc81ea1faf9e",
+      "git_blob": "cd325801f0195b80ebda1c118b0b9024a9b3c23e",
+      "raw_git_blob": "cd325801f0195b80ebda1c118b0b9024a9b3c23e",
+      "lines": 99
+    }
+  ],
+  "internal_digest_recipe": "SHA256 UTF-8 compact JSON array of [basename, lowercase sha256], no newline",
+  "internal_pairs": [
+    [
+      "__init__.py",
+      "46e3acf2aef078b230148ecc4aaf7fadca49e64bb0e37380174de4f703f2f3ae"
+    ],
+    [
+      "identity.py",
+      "41e9889b23cf136e1d0e3b62dfa692ae6631af2a5464a1e9ed7eda99ebce4b46"
+    ],
+    [
+      "lifecycle.py",
+      "30d30cc4f06866e98af7f68c55ddfa1991dc4e975d130bed841872edf0b01597"
+    ],
+    [
+      "policy.py",
+      "c6582717402f996c840988f45e96b2ddda126a3ad81a22cfa369d1192623af87"
+    ],
+    [
+      "receipt.py",
+      "0358d02d191e7435df91df9ec2d28433b067c461f936e62f42a1ea53a3f5e4ff"
+    ],
+    [
+      "receipt_file.py",
+      "ba33bc5520bd3ae43fff1ca7ed268a51b730c5e89bd35d886519710e6603f56e"
+    ],
+    [
+      "spawn.py",
+      "7b350d66acd5a107d40da44c6121928a52835d4601cdb4e773a9e78687019abb"
+    ],
+    [
+      "supervisor.py",
+      "d1112fa11b5b00dfba6e3be3d3ff872fe36dba0b769d206a81f157653e7ea4cf"
+    ],
+    [
+      "winapi.py",
+      "a4dc2744cc769cea0fdc7e3ce0d46e97693d6c4ff0b16176194607d7d34d1018"
+    ]
+  ],
+  "internal_sha256": "80b842ae0d7ad4c3384b9eacfb9c492962febebae449c90a2b18d6b1e4f25915",
+  "external_digest_recipe": "SHA256 UTF-8 compact JSON array of [relative path, lowercase sha256], git diff ordinal path order, no newline",
+  "external_pairs": [
+    [
+      "dev/windows/proof/build_only/README.md",
+      "3592dac5d531a500a255ad5e573b5f747e09331b96343f098742e2aaf0571079"
+    ],
+    [
+      "dev/windows/proof/build_only/__init__.py",
+      "46e3acf2aef078b230148ecc4aaf7fadca49e64bb0e37380174de4f703f2f3ae"
+    ],
+    [
+      "dev/windows/proof/build_only/fixture_child.py",
+      "d7ce6a38efd1cb445bf4246d725a75643cec82f0fb7a2954ed174dbc6a58deac"
+    ],
+    [
+      "dev/windows/proof/build_only/fixture_policy.py",
+      "0e6d7713408849b49eace2e5664b4455112ea64581781d0ead9a028127a77ac8"
+    ],
+    [
+      "dev/windows/proof/build_only/fixture_runner.py",
+      "1d77aeddd22b6d7e925fbed920ce1c9283e3b089b53371f9e71914a6d38783b5"
+    ],
+    [
+      "dev/windows/proof/build_only/identity.py",
+      "41e9889b23cf136e1d0e3b62dfa692ae6631af2a5464a1e9ed7eda99ebce4b46"
+    ],
+    [
+      "dev/windows/proof/build_only/lifecycle.py",
+      "30d30cc4f06866e98af7f68c55ddfa1991dc4e975d130bed841872edf0b01597"
+    ],
+    [
+      "dev/windows/proof/build_only/policy.py",
+      "c6582717402f996c840988f45e96b2ddda126a3ad81a22cfa369d1192623af87"
+    ],
+    [
+      "dev/windows/proof/build_only/receipt.py",
+      "0358d02d191e7435df91df9ec2d28433b067c461f936e62f42a1ea53a3f5e4ff"
+    ],
+    [
+      "dev/windows/proof/build_only/receipt_file.py",
+      "ba33bc5520bd3ae43fff1ca7ed268a51b730c5e89bd35d886519710e6603f56e"
+    ],
+    [
+      "dev/windows/proof/build_only/spawn.py",
+      "7b350d66acd5a107d40da44c6121928a52835d4601cdb4e773a9e78687019abb"
+    ],
+    [
+      "dev/windows/proof/build_only/supervisor.py",
+      "d1112fa11b5b00dfba6e3be3d3ff872fe36dba0b769d206a81f157653e7ea4cf"
+    ],
+    [
+      "dev/windows/proof/build_only/winapi.py",
+      "a4dc2744cc769cea0fdc7e3ce0d46e97693d6c4ff0b16176194607d7d34d1018"
+    ],
+    [
+      "dev/windows/proof/qualification_startup.py",
+      "dff1c95154ff064ed90a7ae97373c4df0be2c730cc775c561ab354e51997ac0f"
+    ],
+    [
+      "dev/windows/proof/residual-diagnostic.ps1",
+      "dbca949417ae9cb5691ec75e6f33f4c0922f38816a0c1427ad2e9236b21ade9b"
+    ],
+    [
+      "dev/windows/proof/test_build_only_lifecycle.py",
+      "04be36c5996d366487db6c89cad932a9866f158986404bd26d5c683233a61d26"
+    ],
+    [
+      "dev/windows/proof/test_build_only_native.py",
+      "9c33e12f9dda3231da1a737a0d0810181d0d939a8cdcb39321a8d207988e55e5"
+    ],
+    [
+      "dev/windows/proof/test_build_only_policy.py",
+      "1d4ce5ff07674b9c94156eab9a59dd036eaa62c12dde0c57ca3f47ad24d3eab7"
+    ],
+    [
+      "dev/windows/proof/test_build_only_receipt.py",
+      "0c1cccc62fe6b968b19f2e6fc32783414507f6683f20b877b39163bbe836b494"
+    ],
+    [
+      "dev/windows/proof/test_build_only_spawn.py",
+      "3ba06300c87cfe1aaf0133b6461707ba466b7130eacaa13ee68a2d04d96d38b9"
+    ],
+    [
+      "dev/windows/proof/test_qualification_startup.py",
+      "a521e90d9a5e5b66e31b1cde6f8756b1ca809caa6acfc29a7101bc81ea1faf9e"
+    ]
+  ],
+  "external_sha256": "42016ce3f5972c5cbcf19e7c1b0b86fcbea879dcf834e42add85670b8fa73e77",
+  "fixture_console_profile": {
+    "root_detached_modes": [
+      "natural",
+      "residual",
+      "rootfail"
+    ],
+    "child": "DETACHED_PROCESS with stdin/stdout/stderr DEVNULL and close_fds",
+    "production_root": "CREATE_NO_WINDOW unchanged",
+    "production_registry": "empty unchanged"
+  },
+  "python": {
+    "path": "C:/Python314/python.exe",
+    "sha256": "7ca24f26d6e3f463419ee4f537ddd3acd312c38fe45e678cce08572f26a8bd1a",
+    "bytes": 106328,
+    "product_version": "3.14.4"
+  },
+  "helper": {
+    "path": "E:/CursorAI/JellyfinDesktop/deps/worktrees/integration/deps/w1214-proof/job_launch_prod.exe",
+    "sha256": "7ae01dfd262a18bf863c057d570993b2c4dc529fcc03ac1e58d15f0dedb0ebd5"
+  },
+  "working_directory": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/dev/windows/proof",
+  "proposed_evidence_root": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/deps/fixture-detached-v1/qual-01",
+  "controller": {
+    "status": "candidate-bound controller proposals require independent review and allocation",
+    "hidden": true,
+    "use_shell_execute": false,
+    "create_no_window": true,
+    "stdio": "exclusive files and asynchronous drains",
+    "helper_timeout_ms": 180000,
+    "controller_budget_ms": 210000,
+    "controller_helper_wait_ms": 200000,
+    "cleanup_reserve_ms": 10000,
+    "pre_post": "exact source SHA, all raw blob/hash identities, clean status and executable pins"
+  },
+  "controllers": {
+    "pure": {
+      "path": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/deps/fixture-detached-v1/pure-controller.ps1",
+      "sha256": "add2a39941ce984720f5326756b096f91212ffd162d4010c137025994dfdca21"
+    },
+    "native": {
+      "path": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/deps/fixture-detached-v1/native-controller.ps1",
+      "sha256": "0e0c90280c74295e5db9082340dd09cf45b94fc597ca63671bb6293edfa34a01"
+    }
+  },
+  "pure": {
+    "arguments": [
+      "-B",
+      "-m",
+      "unittest",
+      "-v",
+      "test_build_only_policy",
+      "test_build_only_receipt",
+      "test_build_only_lifecycle",
+      "test_qualification_startup",
+      "test_build_only_spawn"
+    ],
+    "method_counts": {
+      "test_build_only_policy": 7,
+      "test_build_only_receipt": 11,
+      "test_build_only_lifecycle": 17,
+      "test_qualification_startup": 6,
+      "test_build_only_spawn": 7
+    },
+    "expected_methods": 48,
+    "expected_skips": 0,
+    "expected_failures": 0,
+    "expected_errors": 0,
+    "expected_exit": 0,
+    "native_qualification_environment": "absent"
+  },
+  "native": {
+    "arguments": [
+      "-B",
+      "-m",
+      "unittest",
+      "-v",
+      "test_build_only_native"
+    ],
+    "environment": {
+      "BUILD_ONLY_NATIVE_QUALIFY": "1",
+      "BUILD_ONLY_NATIVE_ROOT": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/deps/fixture-detached-v1/qual-01/native-cases",
+      "BUILD_ONLY_NATIVE_HELPER": "E:/CursorAI/JellyfinDesktop/deps/worktrees/integration/deps/w1214-proof/job_launch_prod.exe"
+    },
+    "diagnostic_selector": "absent: normal three scenarios",
+    "scenarios": [
+      "natural",
+      "residual",
+      "rootfail"
+    ],
+    "expected_methods": 1,
+    "expected_skips": 0,
+    "scenario_helper_timeout_ms": 25000,
+    "scenario_controller_wait_ms": 38000,
+    "root_deadline_ms": 4000,
+    "grace_ms": 100,
+    "cleanup_budget_ms": 10000,
+    "rootfail_expected_root_exit": 7,
+    "rootfail_expected_runner_exit": 1,
+    "output_hex": "666978747572650a",
+    "guard": "process-local error mode recorded and restored; WER invocation suppression applies to disposable fixture qualification only"
+  },
+  "receipt": {
+    "outer": "strict nine ordered fields, independently observed helper exit, root exit, timeout=0 active=0, six owned handles closed with no failures, proof_complete=1",
+    "inner": "strict scenario helper receipts and independently validated fixture build receipts",
+    "unknown_settlement": "failure, preserve exact evidence; do not retry"
+  },
+  "sequence": [
+    "independent source review and explicit allocation",
+    "one 48-method pure lane",
+    "only if authorized and pure succeeds, one bounded native lane",
+    "independent receipt and fixture evidence review"
+  ],
+  "prior_pure_pass_applies_to_candidate": false,
+  "native_run_performed": false,
+  "storage_failure": "stop dependent writes; no retry, relocation or cleanup"
+}
