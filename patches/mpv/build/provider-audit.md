@@ -1,0 +1,23 @@
+# Windows libmpv source-build provider audit
+
+Status: **incomplete input lock; not an executable build recipe**. No source build, toolchain installation, runner operation, or artifact validation has been performed.
+
+## Selected provider
+
+The proposed upstream provider is [shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake/tree/1f8d2e76255abc48f0456d9be99b4cab9c6566e6) commit `1f8d2e76255abc48f0456d9be99b4cab9c6566e6`, dated 2026-10-11, the latest commit returned before 2026-10-18 23:59:59 UTC. Its package list declares 106 names, including packaging targets; this is not a verified enabled dependency closure. The intended mpv input is `01e2533f3143b8940857ca419b0b367f583e05ca` with the bridge patch and upstream blob identities in `../source-identity.json`.
+
+This selection does not reconstruct or attest the existing SourceForge archives. If the missing inputs below are fixed independently, the resulting library is a new custom build, not a reproduction of those bytes.
+
+## Exact blockers
+
+1. The provider's `packages/ffmpeg.cmake`, `packages/libplacebo.cmake`, `packages/mpv.cmake` and `toolchain/mingw-w64.cmake` name Git repositories without immutable source commits. `UPDATE_COMMAND ""` prevents one later update step; it does not identify the initial clone. `packages/fast_float.cmake`, `packages/shaderc.cmake`, and `packages/vulkan.cmake` explicitly select moving `main` branches; `packages/glad.cmake` selects `glad2`. libplacebo replaces its bundled `glad` and `fast_float` directories with separately fetched trees. Each enabled source, transitive dependency, nested submodule, patch and archive therefore needs an independently verified immutable identity before a complete lock exists.
+2. `toolchain/rustup.cmake` runs the network `sh.rustup.rs` installer with `--default-toolchain nightly`, then `rustup update`. The required Rust compiler, host bootstrap, Windows targets, package-manager metadata and checksums are not pinned. The provider's `scripts/autobuild.sh` also invokes `ninja update`. A locked adaptation must replace these paths with verified workspace-local inputs and prohibit implicit updates.
+3. The actual selected dependency closure, host-tool bootstrap, CRT and compiler configuration, artifact dependency closure, and current playback feature baseline have not been established. For example, the historical FFmpeg recipe enables GPL and version 3, OpenSSL, libssh, SRT, libplacebo, multiple codecs, NVDEC/NVENC and AMF. These declarations are useful evidence, not proof of the features or license composition of the existing binaries or of a new build. The installed binaries and their dependency and feature manifests need independent comparison before equivalence can be claimed.
+
+The historical recipe does pin the GCC 14.4.0 source archive with SHA-512 `725ed8bdd43ef1726ffe8b5e8615a13e247fac9575b7626ae013a2975d000ea213212dc414b2f2631ac4785c1c8beca85555222faf9904d3b2fa6a3807a83a15`. This is one input, not a complete toolchain lock. Dated candidate Git revisions for FFmpeg, libplacebo and mingw-w64 are recorded in `provider-candidates.json` as investigation leads only; the recipe and existing archives do not prove those candidates were used together or are compatible.
+
+## Required locked adaptation and consumer boundary
+
+Resolve one complete feature-preserving source and host-tool closure, including licenses, archive hashes and bootstrap provenance; configure baseline x86-64 first and x86-64-v3 second from identical inputs with explicit target differences and no `-march=native`. A later authorized cross-build must use workspace-local pinned inputs and target-and-lock-keyed caches, never an implicit update. Its manifest must bind source, patch, toolchain, configuration, both DLLs, headers, import libraries, dependency closure and public/private export lists. Both variants must export the versioned bridge and required public mpv functions.
+
+The current `dev/windows/setup.bat` accepts an existing DLL based on existence, `dev/windows/ci-mpv.ps1` consumes prebuilt archives, and `CMakeModules/CompleteBundleWin.cmake.in` treats the fallback DLL as optional. They do not enforce the required future custom-artifact identity or verify the generated MSVC import library against actual exports. Until a real artifact manifest and its producer are specified together, these paths are unchanged; their present behavior is not bridge-capability evidence. A complete integration must fail closed on stale, absent or mismatched primary and fallback artifacts and exercise both loader branches during separately authorized Windows acceptance.

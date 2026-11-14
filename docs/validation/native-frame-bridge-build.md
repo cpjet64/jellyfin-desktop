@@ -12,6 +12,8 @@ Before production use, independently verify frame stamping and reset on load and
 
 The current Windows setup and CI obtain prebuilt libmpv archives; they do not define a source build of this pinned mpv revision. The compiler, Meson, Ninja, FFmpeg and other dependency versions, configure options, CPU baselines and dependency provenance for a replacement library are not established here. A reproducible binary recipe is therefore **blocked** until those inputs and an authorized Windows-capable build environment are selected and pinned. Do not copy the current binaries into a new package and label them bridge-capable, and do not assume one CPU build covers both the primary and fallback paths.
 
+The selected historical provider, concrete floating inputs and bounded unresolved items are recorded in [the provider audit](../../patches/mpv/build/provider-audit.md). This is an investigation record, not a complete lock or authority to run its update or build scripts.
+
 Once those inputs and execution are separately authorized:
 
 1. Create isolated source, build and staging directories. Record their locations and free-space headroom. Verify the full mpv commit and the source blobs and SHA-256 values in the manifest, then apply the pinned patch with a checked, recorded patch operation. Recheck the patched tree and preserve the exact patch and source identity record.
