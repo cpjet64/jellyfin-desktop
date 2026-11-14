@@ -160,6 +160,7 @@ void CoreOwner::maybeFinalize()
         const bool posted = QMetaObject::invokeMethod(owner->controller, [owner] {
             if (owner->admittedControl.load() || owner->liveGenerations.load() || owner->externalConsumers.load()) {
                 owner->finalizationQueued.store(false);
+                owner->maybeFinalize();
                 return;
             }
             mpv_terminate_destroy(owner->handle);
@@ -279,6 +280,7 @@ bool RetirementCoordinator::quarantine(const std::shared_ptr<GenerationOwner> &o
     if (!owner || retained != owner || quarantined()) return false;
     owner->revoke();
     owner->core->revokeControl();
+    owner->core->closeExternalWakeup();
     owner->blocked.store(true, std::memory_order_release);
     quarantined() = owner;
     retained.reset();
