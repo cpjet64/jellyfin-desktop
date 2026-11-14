@@ -104,9 +104,12 @@ static void positionAndTicketReplayBoundaries()
   Gate gate; auto s = submission(); CHECK(begin(gate));
   CHECK(gate.completeSubmission(key, 4, 9, s, 1));
   CHECK(!gate.completeSubmission(key, 4, 9, s, 2));
+  CHECK(gate.position(key, 4, 7, 10000, true, 9, 3));
+  CHECK(gate.ready(key, 4, 9, 3));
 
   Gate again; CHECK(begin(again));
-  CHECK(again.completeSubmission(key, 4, 9, s, 1));
+  // A failed Qt ticket emits no completion; a later ticket can submit the
+  // same valid post-seek source within the original attempt deadline.
   s.ticket.frame_serial++;
   CHECK(again.completeSubmission(key, 4, 9, s, 3));
   CHECK(again.position(key, 4, 7, 12000, true, 9, 4));
