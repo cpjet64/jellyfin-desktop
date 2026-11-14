@@ -25,6 +25,7 @@ void AutomaticRecoveryLoad::reply(std::uint64_t userdata, bool ok, std::int64_t 
 }
 void AutomaticRecoveryLoad::started(std::int64_t entry, std::int64_t nowMs)
 {
+  if (state_ == State::Accepted) { state_ = State::Failed; return; }
   if (state_ != State::Pending) return;
   if (nowMs < 0 || nowMs >= deadline_) { state_ = State::Expired; return; }
   if (startSeen_ || entry <= 0) { state_ = State::Failed; return; }
