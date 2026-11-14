@@ -17,6 +17,7 @@ private slots:
   void cancelledWaiterIsNotCalled();
   void completionBeforeRegistrationAllowsReservation();
   void quarantineWinsAdmission();
+  void failedReservationRetiresBeforeReadmission();
 private:
   bool adopt(quint64 token);
   std::shared_ptr<CoreOwner> owner_;
@@ -28,6 +29,23 @@ void RendererAdmissionTest::init()
 {
   const auto reservation = reserveCore(this, 1, [](auto, auto, auto) {});
   QCOMPARE(reservation.status, AdmissionStatus::Reserved);
+  if (QByteArray(QTest::currentTestFunction()) == "failedReservationRetiresBeforeReadmission") {
+    auto* worker = new QThread;
+    auto* controller = new MpvController(MpvController::EventMode::External);
+    auto* relay = new WakeRelay;
+    // Requires the nonfatal initialization patch's safe pre-init accessor.
+    QVERIFY(controller->mpv() == nullptr);
+    worker_ = worker;
+    controller->moveToThread(worker);
+    relay->moveToThread(worker);
+    worker->start();
+    QVERIFY(!CoreOwner::adoptReserved(reservation.token, nullptr, controller, worker, relay,
+                                      QCoreApplication::instance()));
+    owner_ = CoreOwner::adoptFailedReservation(reservation.token, controller, worker, relay,
+                                                QCoreApplication::instance());
+    QVERIFY(owner_);
+    return;
+  }
   QVERIFY(adopt(reservation.token));
 }
 
@@ -125,6 +143,26 @@ void RendererAdmissionTest::quarantineWinsAdmission()
   const auto next = reserveCore(this, 8, [](auto, auto, auto) {});
   QCOMPARE(next.status, AdmissionStatus::Quarantined);
   QVERIFY(owner_->faultQuarantined.load());
+}
+
+void RendererAdmissionTest::failedReservationRetiresBeforeReadmission()
+{
+  QVERIFY(owner_->failedInitialization);
+  QVERIFY(!owner_->acquireNative());
+  auto old = owner_;
+  int calls = 0; quint64 granted = 0;
+  const auto pending = reserveCore(this, 12, [&](AdmissionStatus status, quint64 token, quint64 revision) {
+    if (status == AdmissionStatus::Reserved && revision == 12) { ++calls; granted = token; }
+  });
+  QCOMPARE(pending.status, AdmissionStatus::Deferred);
+  QCoreApplication::processEvents();
+  QCOMPARE(calls, 0);
+  QVERIFY(owner_->requestFinalization());
+  QTRY_COMPARE_WITH_TIMEOUT(calls, 1, 15000);
+  QVERIFY(granted == pending.token);
+  QVERIFY(old->nativeDestroyed.load());
+  QVERIFY(worker_.isNull() || !worker_->isRunning());
+  cancelCoreReservation(granted);
 }
 
 QTEST_GUILESS_MAIN(RendererAdmissionTest)
