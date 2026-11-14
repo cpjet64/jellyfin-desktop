@@ -12,6 +12,13 @@ VCTIP_SHA256 = 'D591358C6AEE4B673562CA3B3A15C250E612708394FE3B44A7A7EDA2470570A5
 VCTIP_SIZE = 335288
 
 
+class RetainedHandlesError(OSError):
+    """Close failed; the caller must retain and resolve these exact handles."""
+    def __init__(self, message, handles):
+        super().__init__(message)
+        self.retained_handles = tuple(handles)
+
+
 class FilePin:
     def __init__(self, api, path, expected_sha256, expected_size=None):
         if os.name != 'nt':
@@ -93,14 +100,15 @@ class FilePin:
                 'sha256': self.sha256, 'size': self.size}
 
     def close(self):
-        failures = []
-        while self.handles:
+        failed = []
+        for handle in reversed(self.handles):
             try:
-                self.handles.pop().close()
-            except OSError as error:
-                failures.append(error)
-        if failures:
-            raise failures[0]
+                handle.close()
+            except OSError:
+                failed.append(handle)
+        self.handles = list(reversed(failed))
+        if failed:
+            raise RetainedHandlesError('file pin handle close failed', self.handles)
 
     def __enter__(self):
         return self

@@ -2,10 +2,20 @@
 import ctypes as C
 import os
 import subprocess
+import time
 
 from . import winapi as w
 
 CREATE_UNICODE_ENVIRONMENT = 0x400
+
+
+class LaunchFailure(OSError):
+    """Failed launch with ownership of any unresolved exact native handles."""
+    def __init__(self, message, root=None, retained_handles=(), job_unsettled=False):
+        super().__init__(message)
+        self.root = root
+        self.retained_handles = tuple(retained_handles)
+        self.job_unsettled = job_unsettled
 
 
 class RootProcess:
@@ -73,19 +83,19 @@ def _attributes(api, handles):
 
 
 def _create(api, job, executable, args, cwd, handles, env):
-    storage, values = _attributes(api, handles)
-    startup = w.STARTUPINFOEX()
-    startup.startup.cb = C.sizeof(startup)
-    startup.startup.flags = w.STARTF_USESTDHANDLES
-    startup.startup.stdin, startup.startup.stdout, startup.startup.stderr = (h.value for h in handles)
-    startup.attributes = C.cast(storage, C.c_void_p)
-    info = w.PROCESS_INFORMATION()
     command = C.create_unicode_buffer(subprocess.list2cmdline([executable, *args]))
     environment = _environment(env)
-    flags = w.CREATE_SUSPENDED | w.CREATE_NO_WINDOW | w.EXTENDED_STARTUPINFO_PRESENT
-    if environment is not None:
-        flags |= CREATE_UNICODE_ENVIRONMENT
+    storage, values = _attributes(api, handles)
     try:
+        startup = w.STARTUPINFOEX()
+        startup.startup.cb = C.sizeof(startup)
+        startup.startup.flags = w.STARTF_USESTDHANDLES
+        startup.startup.stdin, startup.startup.stdout, startup.startup.stderr = (h.value for h in handles)
+        startup.attributes = C.cast(storage, C.c_void_p)
+        info = w.PROCESS_INFORMATION()
+        flags = w.CREATE_SUSPENDED | w.CREATE_NO_WINDOW | w.EXTENDED_STARTUPINFO_PRESENT
+        if environment is not None:
+            flags |= CREATE_UNICODE_ENVIRONMENT
         api.check(api.k.CreateProcessW(executable, command, None, None, True, flags, environment, cwd,
                                        C.byref(startup.startup), C.byref(info)))
     finally:
@@ -93,19 +103,68 @@ def _create(api, job, executable, args, cwd, handles, env):
     process = w.Handle(api, info.process)
     thread = w.Handle(api, info.thread)
     root = RootProcess(api, process, thread, int(info.pid))
+    assigned = False
     try:
         api.check(api.k.AssignProcessToJobObject(job.value, process.value))
-        if api.k.ResumeThread(thread.value) == 0xFFFFFFFF:
-            raise C.WinError(C.get_last_error())
+        assigned = True
+        previous = api.k.ResumeThread(thread.value)
+        if previous != 1:
+            raise OSError(f'unexpected root suspend count: {previous}')
         return root
-    except BaseException:
+    except BaseException as original:
+        if assigned:
+            retained, unsettled = _emergency_settle(api, job, root)
+            raise LaunchFailure('assigned root launch failed', retained, (), unsettled) from original
+        settled = False
         try:
             api.terminate(process, 125)
-            if not api.wait(process, 10000):
-                raise OSError('failed root did not settle')
-        finally:
-            root.close()
-        raise
+        except OSError:
+            pass
+        try:
+            settled = api.wait(process, 10000)
+        except OSError:
+            pass
+        if settled:
+            try:
+                root.close()
+            except OSError as error:
+                raise LaunchFailure('failed root handle close', root=root, job_unsettled=True) from error
+            raise LaunchFailure('root launch failed and settled') from original
+        raise LaunchFailure('root launch failed; root settlement unknown', root=root, job_unsettled=True) from original
+
+
+def _close_handles(handles):
+    failed = []
+    for handle in reversed(handles):
+        try:
+            handle.close()
+        except OSError:
+            failed.append(handle)
+    return list(reversed(failed))
+
+
+def _emergency_settle(api, job, root):
+    deadline = time.monotonic() + 10
+    try:
+        api.terminate_job(job, 125)
+    except OSError:
+        pass
+    try:
+        remaining = max(0, int((deadline - time.monotonic()) * 1000))
+        if not root.wait(remaining):
+            return root, True
+        root.close()
+    except OSError:
+        return root, True
+    while time.monotonic() < deadline:
+        try:
+            active, _ = api.accounting(job)
+            if active == 0:
+                return None, False
+        except OSError:
+            return None, True
+        time.sleep(0.02)
+    return None, True
 
 
 def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, env=None):
@@ -116,26 +175,25 @@ def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, env=No
     attrs = w.SECURITY_ATTRIBUTES(C.sizeof(w.SECURITY_ATTRIBUTES), None, True)
     handles = []
     root = None
+    failure = None
     try:
         raw = api.k.CreateFileW('NUL', w.GENERIC_READ, w.FILE_SHARE_READ | 2, C.byref(attrs), w.OPEN_EXISTING, 0, None)
         handles.append(w.Handle(api, raw))
         handles.append(_duplicate(api, stdout_handle))
         handles.append(_duplicate(api, stderr_handle))
         root = _create(api, job, executable, list(args), cwd, handles, env)
+    except BaseException as error:
+        failure = error
     finally:
-        errors = []
-        while handles:
-            try:
-                handles.pop().close()
-            except OSError as error:
-                errors.append(error)
-        if errors:
-            if root is not None:
-                try:
-                    api.terminate_job(job, 125)
-                    if not root.wait(10000):
-                        raise OSError('root did not settle after handle close failure')
-                finally:
-                    root.close()
-            raise errors[0]
+        handles = _close_handles(handles)
+    if handles:
+        unsettled = False
+        if root is not None:
+            root, unsettled = _emergency_settle(api, job, root)
+        if isinstance(failure, LaunchFailure) and failure.root is not None:
+            root = failure.root
+            unsettled = True
+        raise LaunchFailure('inherited handle close failed', root, handles, unsettled) from failure
+    if failure is not None:
+        raise failure
     return root
