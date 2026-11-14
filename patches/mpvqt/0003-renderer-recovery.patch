@@ -1,0 +1,364 @@
+diff --git a/src/mpvrenderer.cpp b/src/mpvrenderer.cpp
+index 46a6a006..63f77990 100644
+--- a/src/mpvrenderer.cpp
++++ b/src/mpvrenderer.cpp
+@@ -15,0 +16,2 @@
++#include <atomic>
++#include <chrono>
+@@ -31 +33,112 @@ void on_mpv_redraw(void *ctx)
+-    QMetaObject::invokeMethod(static_cast<MpvAbstractItem *>(ctx), &MpvAbstractItem::update, Qt::QueuedConnection);
++    auto *owner = static_cast<RendererRuntime::GenerationOwner *>(ctx);
++    if (!owner->enterCallback()) return;
++    owner->notifyRenderUpdate();
++    owner->leaveCallback();
++}
++
++static qint64 steadyMilliseconds()
++{
++    return std::chrono::duration_cast<std::chrono::milliseconds>(
++        std::chrono::steady_clock::now().time_since_epoch()).count();
++}
++
++static bool sameFrame(const QtRecoveryFrameV1 &a, const QtRecoveryFrameV1 &b)
++{
++    return a.size == sizeof(a) && a.version == QT_RECOVERY_SUBMISSION_ABI_VERSION && !a.reserved &&
++        a.attempt == b.attempt && a.renderer_generation == b.renderer_generation &&
++        a.entry_id == b.entry_id && a.discontinuity_id == b.discontinuity_id &&
++        a.source_frame_serial == b.source_frame_serial && a.render_serial == b.render_serial &&
++        a.media_pts == b.media_pts && a.actual_render_fbo == b.actual_render_fbo;
++}
++
++static bool pollUnsupported(const std::shared_ptr<RendererRuntime::GenerationOwner> &generation,
++                            const std::shared_ptr<RecoveryExchange> &exchange,
++                            const std::shared_ptr<QtSubmissionBridge::Resolver> &resolver)
++{
++    QtRecoverySwapTicketV1 ticket{};
++    {
++        std::lock_guard<std::mutex> lock(exchange->mutex);
++        if (!exchange->owns(generation, generation->generation) || !exchange->bootstrapSupported) return false;
++        ticket = exchange->submission.ticket;
++    }
++    if (!resolver->takeUnsupported(ticket.window_lifetime, generation->generation,
++                                   ticket.scenegraph_generation)) return false;
++    bool notify = false;
++    {
++        std::lock_guard<std::mutex> lock(exchange->mutex);
++        if (exchange->owns(generation, generation->generation) && exchange->bootstrapSupported &&
++            exchange->submission.ticket.window_lifetime == ticket.window_lifetime &&
++            exchange->submission.ticket.scenegraph_generation == ticket.scenegraph_generation) {
++            exchange->bootstrapSupported = false;
++            exchange->sourceFrameSerial = 0;
++            exchange->submissions.clear();
++            exchange->capabilityFailurePending = true;
++            exchange->capabilityFailureGeneration = generation->generation;
++            notify = true;
++        }
++    }
++    if (notify) generation->notifyRenderUpdate();
++    return true;
++}
++
++static void takeSubmission(const std::shared_ptr<RendererRuntime::GenerationOwner> &generation,
++                           const std::shared_ptr<RecoveryExchange> &exchange,
++                           const std::shared_ptr<QtSubmissionBridge::Resolver> &resolver)
++{
++    if (pollUnsupported(generation, exchange, resolver)) return;
++    QtRecoverySwapTicketV1 ticket{};
++    QtRecoveryFrameV1 frame{};
++    quint64 operationId = 0;
++    {
++        std::lock_guard<std::mutex> lock(exchange->mutex);
++        if (!generation->observerAuthority.load() || exchange->owner.lock() != generation ||
++            !exchange->ticketPending) return;
++        if (exchange->attempt && steadyMilliseconds() >= exchange->attemptDeadlineMs) {
++            exchange->ticketPending = false;
++            return;
++        }
++        ticket = exchange->ticket;
++        frame = exchange->ticketFrame;
++        operationId = exchange->ticketOperationId;
++    }
++    {
++        std::lock_guard<std::mutex> lock(exchange->mutex);
++        if (exchange->submissions.size() >= 64) return;
++    }
++    QtRecoverySubmissionV1 submission{};
++    submission.size = sizeof(submission);
++    submission.version = QT_RECOVERY_SUBMISSION_ABI_VERSION;
++    if (!resolver->take(ticket.window_lifetime, generation->generation, frame.attempt, submission)) return;
++    if (submission.ticket.window_lifetime != ticket.window_lifetime ||
++        submission.ticket.scenegraph_generation != ticket.scenegraph_generation) {
++        std::lock_guard<std::mutex> lock(exchange->mutex);
++        if (exchange->owner.lock() == generation && sameFrame(exchange->ticketFrame, frame)) {
++            exchange->ticketPending = false;
++            exchange->submissions.clear();
++            exchange->bootstrapSupported = false;
++        }
++        return;
++    }
++    if (
++        submission.size != sizeof(submission) || submission.version != QT_RECOVERY_SUBMISSION_ABI_VERSION ||
++        submission.reserved || !submission.node_lifetime || !submission.texture_generation ||
++        !submission.fbo_content_serial || !submission.display_texture || !sameFrame(submission.frame, frame) ||
++        submission.ticket.frame_serial < ticket.frame_serial ||
++        submission.ticket.size != ticket.size || submission.ticket.version != ticket.version ||
++        !submission.ticket.render_thread || !submission.ticket.swapchain || !submission.ticket.render_target ||
++        !submission.ticket.surface || !submission.ticket.platform_context) return;
++    {
++        std::lock_guard<std::mutex> lock(exchange->mutex);
++        if (!generation->observerAuthority.load() || exchange->owner.lock() != generation ||
++            exchange->generation != generation->generation || exchange->attempt != frame.attempt ||
++            !exchange->ticketPending || !sameFrame(exchange->ticketFrame, frame) ||
++            exchange->ticketOperationId != operationId ||
++            submission.ticket.frame_serial <= exchange->lastQtFrameSerial || exchange->submissions.size() >= 64 ||
++            (frame.attempt && steadyMilliseconds() >= exchange->attemptDeadlineMs)) return;
++        exchange->lastQtFrameSerial = submission.ticket.frame_serial;
++        exchange->submission = submission;
++        exchange->submissions.push_back({submission, operationId});
++        exchange->sourceFrameSerial = submission.frame.source_frame_serial;
++        exchange->bootstrapSupported = true;
++    }
++    generation->notifyRenderUpdate();
+@@ -35 +147,0 @@ MpvRenderer::MpvRenderer(MpvAbstractItem *new_obj)
+-    : m_mpvAItem{new_obj}
+@@ -37 +149,87 @@ MpvRenderer::MpvRenderer(MpvAbstractItem *new_obj)
+-    m_mpvAItem->window()->setPersistentSceneGraph(true);
++    m_exchange = new_obj->d_ptr->exchange;
++    m_submissionResolver = std::make_shared<QtSubmissionBridge::Resolver>();
++    initializeGeneration(new_obj);
++}
++
++bool MpvRenderer::initializeGeneration(MpvAbstractItem *new_obj)
++{
++    if (m_generation) return true;
++    if (!new_obj->d_ptr->core) return false;
++    static std::atomic<quint64> nextGeneration{1};
++    auto generation = RendererRuntime::GenerationOwner::create(nextGeneration.fetch_add(1), new_obj->d_ptr->core);
++    if (generation && RendererRuntime::coordinator().retain(generation)) m_generation = std::move(generation);
++    else if (generation) generation->retireOnOriginalContext();
++    if (m_generation) {
++        std::lock_guard<std::mutex> lock(m_exchange->mutex);
++        m_exchange->install(m_generation, m_generation->generation);
++        new_obj->d_ptr->readySent = false;
++    }
++    if (auto *window = new_obj->window()) {
++        window->setPersistentSceneGraph(true);
++        if (m_generation) {
++            const auto generation = m_generation;
++            const auto exchange = m_exchange;
++            const auto resolver = m_submissionResolver;
++            m_frameEndConnection = QObject::connect(window, &QQuickWindow::afterFrameEnd, window,
++                [generation, exchange, resolver] { takeSubmission(generation, exchange, resolver); },
++                Qt::DirectConnection);
++        }
++    }
++    return static_cast<bool>(m_generation);
++}
++
++MpvRenderer::~MpvRenderer()
++{
++    if (!m_generation) return;
++    QObject::disconnect(m_frameEndConnection);
++    {
++        std::lock_guard<std::mutex> lock(m_exchange->mutex);
++        m_exchange->retireIfCurrent(m_generation, m_generation->generation,
++                                    [resolver = m_submissionResolver, window = m_windowLifetime] {
++            resolver->revoke(window);
++        });
++    }
++    if (m_generation->retireOnOriginalContext())
++        RendererRuntime::coordinator().releaseRetired(m_generation);
++    else
++        RendererRuntime::coordinator().quarantine(m_generation);
++}
++
++void MpvRenderer::synchronize(QQuickFramebufferObject *item)
++{
++    if (!m_generation && initializeGeneration(static_cast<MpvAbstractItem *>(item)))
++        invalidateFramebufferObject();
++    std::lock_guard<std::mutex> lock(m_exchange->mutex);
++    if (m_exchange->owner.lock() != m_generation) return;
++    m_exchange->generation = m_generation ? m_generation->generation : 0;
++}
++
++void MpvRenderer::acknowledgeUsability()
++{
++    if (!m_generation) return;
++    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
++        std::chrono::steady_clock::now().time_since_epoch()).count();
++    bool result = false;
++    {
++        std::lock_guard<std::mutex> lock(m_exchange->mutex);
++        if (!m_exchange->owns(m_generation, m_generation->generation) ||
++            !m_exchange->requestId || m_exchange->requestGeneration != m_generation->generation) return;
++        const bool usable =
++            now < m_exchange->deadlineMs && m_generation->context &&
++            m_generation->originalThread == QThread::currentThread() &&
++            m_generation->originalContext == QOpenGLContext::currentContext() &&
++            m_generation->originalContext && m_generation->originalContext->isValid() &&
++            !m_generation->blocked.load();
++        result = m_exchange->recordUsability(m_generation, m_generation->generation, usable);
++    }
++    if (result) m_generation->notifyRenderUpdate();
++}
++
++void MpvRenderer::reportContextFailure()
++{
++    if (!m_generation || m_generation->blocked.exchange(true)) return;
++    {
++        std::lock_guard<std::mutex> lock(m_exchange->mutex);
++        if (!m_exchange->recordFailure(m_generation, m_generation->generation)) return;
++    }
++    m_generation->notifyRenderUpdate();
+@@ -41,0 +240,7 @@ void MpvRenderer::render()
++    if (!m_generation || !m_generation->context) return;
++    if (!m_generation->originalContext || !m_generation->originalContext->isValid() ||
++        m_generation->originalContext != QOpenGLContext::currentContext() ||
++        m_generation->originalThread != QThread::currentThread()) {
++        reportContextFailure();
++        return;
++    }
+@@ -42,0 +248,5 @@ void MpvRenderer::render()
++    if (!fbo) {
++        reportContextFailure();
++        return;
++    }
++    acknowledgeUsability();
+@@ -60 +270,76 @@ void MpvRenderer::render()
+-    mpv_render_context_render(m_mpvAItem->d_ptr->m_mpv_gl, params);
++    quint64 attempt = 0;
++    qint64 attemptDeadline = 0;
++    bool currentOwner = false;
++    {
++        std::lock_guard<std::mutex> lock(m_exchange->mutex);
++        if (m_exchange->owner.lock() == m_generation) {
++            currentOwner = m_exchange->generation == m_generation->generation;
++            attempt = m_exchange->attempt;
++            attemptDeadline = m_exchange->attemptDeadlineMs;
++        }
++    }
++    quint64 operationId = 0;
++    const auto result = renderObserved(params, operationId);
++    if (result.error < 0) {
++        reportContextFailure();
++    } else if (currentOwner && result.capabilityAvailable && result.observation.valid == 1) {
++        publishNativeRecord(result, fbo->handle(), attempt, attemptDeadline, operationId);
++    }
++}
++
++RecoveryFrameBridge::RenderResult MpvRenderer::renderObserved(mpv_render_param *params, quint64 &operationId)
++{
++    operationId = 0;
++    if (!m_frameResolver.ownedSeekAvailable()) return m_frameResolver.render(m_generation->context, params);
++    const auto v2 = m_frameResolver.renderV2(m_generation->context, params);
++    RecoveryFrameBridge::RenderResult result{v2.error, v2.capabilityAvailable, {}};
++    if (v2.observation.valid == 1) {
++        const auto &source = v2.observation;
++        result.observation = {sizeof(RecoveryFrameObservationV1), RECOVERY_FRAME_OBSERVATION_VERSION,
++                              source.valid, source.reserved, source.playlist_entry_id,
++                              source.discontinuity_id, source.source_frame_serial, source.render_serial,
++                              source.media_pts};
++        operationId = source.operation_id;
++    }
++    return result;
++}
++
++void MpvRenderer::publishNativeRecord(const RecoveryFrameBridge::RenderResult &result, quint32 fbo,
++                                      quint64 attempt, qint64 attemptDeadline, quint64 operationId)
++{
++        QtRecoveryFrameV1 frame{};
++        frame.size = sizeof(frame);
++        frame.version = QT_RECOVERY_SUBMISSION_ABI_VERSION;
++        frame.attempt = attempt;
++        frame.renderer_generation = m_generation->generation;
++        frame.entry_id = result.observation.playlist_entry_id;
++        frame.discontinuity_id = result.observation.discontinuity_id;
++        frame.source_frame_serial = result.observation.source_frame_serial;
++        frame.render_serial = result.observation.render_serial;
++        frame.media_pts = result.observation.media_pts;
++        frame.actual_render_fbo = fbo;
++        QtRecoverySwapTicketV1 ticket{};
++        const bool registered = (!attempt || steadyMilliseconds() < attemptDeadline) &&
++            m_submissionResolver->publish(frame, ticket) &&
++            ticket.size == sizeof(ticket) && ticket.version == QT_RECOVERY_SWAP_ABI_VERSION &&
++            ticket.window_lifetime && ticket.scenegraph_generation && ticket.frame_serial;
++        bool published = false;
++        {
++            std::lock_guard<std::mutex> lock(m_exchange->mutex);
++            if (m_exchange->owner.lock() == m_generation &&
++                m_exchange->generation == m_generation->generation) {
++                m_exchange->frame = result.observation;
++                m_exchange->frameGeneration = m_generation->generation;
++                m_exchange->framePending = true;
++                if (registered && m_exchange->attempt == attempt &&
++                    (!attempt || steadyMilliseconds() < m_exchange->attemptDeadlineMs)) {
++                    m_exchange->ticket = ticket;
++                    m_exchange->ticketFrame = frame;
++                    m_exchange->ticketOperationId = operationId;
++                    m_exchange->ticketPending = true;
++                    m_windowLifetime = ticket.window_lifetime;
++                }
++                published = true;
++            }
++        }
++        if (published) m_generation->notifyRenderUpdate();
+@@ -66 +351 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-    if (!m_mpvAItem->d_ptr->m_mpv_gl) {
++    if (m_generation && !m_generation->context && !m_generation->blocked.load()) {
+@@ -90 +375,3 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-        int result = mpv_render_context_create(&m_mpvAItem->d_ptr->m_mpv_gl, m_mpvAItem->d_ptr->m_mpv, params);
++        auto native = m_generation->core->acquireNative();
++        if (!native) return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
++        int result = mpv_render_context_create(&m_generation->context, native.get(), params);
+@@ -92 +379,2 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-            qFatal("failed to initialize mpv GL context");
++            reportContextFailure();
++            return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
+@@ -95,2 +383,12 @@ QOpenGLFramebufferObject *MpvRenderer::createFramebufferObject(const QSize &size
+-        mpv_render_context_set_update_callback(m_mpvAItem->d_ptr->m_mpv_gl, on_mpv_redraw, m_mpvAItem);
+-        Q_EMIT m_mpvAItem->ready();
++        m_generation->contextEverCreated = true;
++        m_generation->originalThread = QThread::currentThread();
++        m_generation->originalContext = QOpenGLContext::currentContext();
++        mpv_render_context_set_update_callback(m_generation->context, on_mpv_redraw, m_generation.get());
++        {
++            std::lock_guard<std::mutex> lock(m_exchange->mutex);
++            if (m_exchange->owns(m_generation, m_generation->generation)) {
++                m_exchange->ready = true;
++                m_exchange->readyGeneration = m_generation->generation;
++            }
++        }
++        m_generation->notifyRenderUpdate();
+diff --git a/src/mpvrenderer.h b/src/mpvrenderer.h
+index 49b291ad..bc6cd2d3 100644
+--- a/src/mpvrenderer.h
++++ b/src/mpvrenderer.h
+@@ -10,0 +11,7 @@
++#include <memory>
++#include "RecoveryFrameBridge.h"
++#include "QtSubmissionBridge.h"
++#include <QMetaObject>
++
++namespace RendererRuntime { struct GenerationOwner; }
++struct RecoveryExchange;
+@@ -18,3 +25,2 @@ public:
+-    ~MpvRenderer() = default;
+-
+-    MpvAbstractItem *m_mpvAItem{nullptr};
++    ~MpvRenderer() override;
++    void synchronize(QQuickFramebufferObject *item) override;
+@@ -26,0 +33,14 @@ public:
++
++private:
++    std::shared_ptr<RendererRuntime::GenerationOwner> m_generation;
++    std::shared_ptr<RecoveryExchange> m_exchange;
++    RecoveryFrameBridge::Resolver m_frameResolver;
++    std::shared_ptr<QtSubmissionBridge::Resolver> m_submissionResolver;
++    QMetaObject::Connection m_frameEndConnection;
++    quint64 m_windowLifetime = 0;
++    bool initializeGeneration(MpvAbstractItem *item);
++    void acknowledgeUsability();
++    void reportContextFailure();
++    RecoveryFrameBridge::RenderResult renderObserved(mpv_render_param *params, quint64 &operationId);
++    void publishNativeRecord(const RecoveryFrameBridge::RenderResult &result, quint32 fbo,
++                             quint64 attempt, qint64 deadline, quint64 operationId);
