@@ -138,13 +138,27 @@ function Initialize-Run {
   Preflight-Inputs
   if ((Get-PSDrive E).Free -lt 20GB) { throw 'Insufficient storage' }
   if (Test-Path -LiteralPath $root) { throw 'Output root already exists' }
-  $parent = [IO.DirectoryInfo]::new([IO.Path]::GetDirectoryName($root))
-  while ($null -ne $parent) {
-    if (!$parent.Exists -or ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unsafe output ancestry' }
-    $parent=$parent.Parent
+  $expectedParent='E:/CursorAI/JellyfinDesktop/deps/worktrees/compiler-contract-v2-review-20261114/deps'
+  if ([IO.Path]::GetFullPath([IO.Path]::GetDirectoryName($root)) -ine [IO.Path]::GetFullPath($expectedParent)) { throw 'Unexpected output parent' }
+  $ancestor=[IO.DirectoryInfo]::new([IO.Path]::GetFullPath($v2))
+  while ($null -ne $ancestor) {
+    if (!$ancestor.Exists -or ($ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unsafe output ancestry' }
+    $ancestor=$ancestor.Parent
   }
   if ((Get-FileHash -LiteralPath $interop).Hash.ToLowerInvariant() -cne 'fc754851846ebcea79b0f719c02602b8ad86e505272586b5cfd50148d3117a89') { throw 'Interop mismatch' }
+  if (Test-Path -LiteralPath $expectedParent) { throw 'Existing output parent ownership unestablished' }
+  New-Item -ItemType Directory -Path $expectedParent -ErrorAction Stop | Out-Null
+  $script:createdParent=$expectedParent
+  $parent=Get-Item -LiteralPath $expectedParent -Force -ErrorAction Stop
+  if (!$parent.PSIsContainer -or ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unsafe created output parent' }
+  $ancestor=[IO.DirectoryInfo]::new([IO.Path]::GetFullPath($expectedParent))
+  while ($null -ne $ancestor) {
+    if (!$ancestor.Exists -or ($ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Output ancestry changed' }
+    $ancestor=$ancestor.Parent
+  }
+  Assert-Private $expectedParent
   New-Item -ItemType Directory -Path $root -ErrorAction Stop | Out-Null
+  $script:createdRoot=$root
   New-Item -ItemType Directory -Path "$root/host-temp" -ErrorAction Stop | Out-Null
   New-Item -ItemType Directory -Path "$root/pycache" -ErrorAction Stop | Out-Null
   foreach ($path in @($root,"$root/host-temp","$root/pycache")) { Assert-Private $path }
@@ -153,18 +167,24 @@ function Initialize-Run {
 $oldTemp=[Environment]::GetEnvironmentVariable('TEMP','Process')
 $oldTmp=[Environment]::GetEnvironmentVariable('TMP','Process')
 $pins=$null; $primary=$null; $cleanup=[Collections.Generic.List[string]]::new()
+$script:createdParent=$null; $script:createdRoot=$null
 try {
   Initialize-Run
   [Environment]::SetEnvironmentVariable('TEMP',"$root/host-temp",'Process')
   [Environment]::SetEnvironmentVariable('TMP',"$root/host-temp",'Process')
   if ($null -ne ('RetainedInputs' -as [type])) { throw 'Interop type already loaded' }
   $stream=[IO.File]::Open($interop,'Open','Read','Read')
+  $interopFailure=$null; $interopCloseFailure=$null
   try {
     $digest=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)).ToLowerInvariant()
     if ($digest -cne 'fc754851846ebcea79b0f719c02602b8ad86e505272586b5cfd50148d3117a89') { throw 'Interop changed' }
     $stream.Position=0; $reader=[IO.StreamReader]::new($stream)
     Add-Type -TypeDefinition ($reader.ReadToEnd())
-  } finally { $stream.Dispose() }
+  } catch { $interopFailure=$_ }
+  finally { try { $stream.Dispose() } catch { $interopCloseFailure=$_ } }
+  if ($null -ne $interopFailure -or $null -ne $interopCloseFailure) {
+    throw "Interop failed: primary=$interopFailure; close=$interopCloseFailure"
+  }
   $pins=[RetainedInputs]::new(); Pin-Inputs $pins; Verify-Sources; $pins.VerifyAll()
   if (@(Get-ChildItem -LiteralPath "$root/pycache" -Force).Count) { throw 'Cache not empty' }
   Invoke-Pure
@@ -178,10 +198,12 @@ finally {
   if ($null -ne $pins) { try { $pins.Dispose() } catch { $cleanup.Add("pin close: $_") } }
   try {
     [Environment]::SetEnvironmentVariable('TEMP',$oldTemp,'Process')
+    if ([Environment]::GetEnvironmentVariable('TEMP','Process') -cne $oldTemp) { throw 'TEMP restore mismatch' }
+  } catch { $cleanup.Add("TEMP restore: $_") }
+  try {
     [Environment]::SetEnvironmentVariable('TMP',$oldTmp,'Process')
-    if ([Environment]::GetEnvironmentVariable('TEMP','Process') -cne $oldTemp -or
-        [Environment]::GetEnvironmentVariable('TMP','Process') -cne $oldTmp) { throw 'Environment restore mismatch' }
-  } catch { $cleanup.Add("environment restore: $_") }
+    if ([Environment]::GetEnvironmentVariable('TMP','Process') -cne $oldTmp) { throw 'TMP restore mismatch' }
+  } catch { $cleanup.Add("TMP restore: $_") }
 }
-if ($null -ne $primary -or $cleanup.Count) { throw "Pure lane nonpass; primary=$primary cleanup=$($cleanup -join '; ')" }
+if ($null -ne $primary -or $cleanup.Count) { throw "Pure lane nonpass; parent=$script:createdParent root=$script:createdRoot primary=$primary cleanup=$($cleanup -join '; ')" }
 Write-Output 'Pure source suites passed; endpoint and native qualification remain unproved.'
