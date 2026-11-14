@@ -77,6 +77,23 @@ NativeLease CoreOwner::acquireNative()
     return NativeLease(shared_from_this());
 }
 
+bool CoreOwner::bindExternalConsumer()
+{
+    std::lock_guard<std::mutex> lock(postingMutex);
+    if (!commandAuthority.load() || externalConsumers.load() != 0) return false;
+    externalConsumers.store(1);
+    return true;
+}
+
+void CoreOwner::unbindExternalConsumer()
+{
+    {
+        std::lock_guard<std::mutex> lock(postingMutex);
+        externalConsumers.store(0);
+    }
+    maybeFinalize();
+}
+
 bool CoreOwner::postControl(std::function<void(mpv_handle *)> operation)
 {
     std::unique_lock<std::mutex> lock(postingMutex);
@@ -133,23 +150,31 @@ void CoreOwner::maybeFinalize()
 {
     if (!finalizationRequested.load(std::memory_order_acquire)) return;
     if (!wakeClosed.load(std::memory_order_acquire) || !handle || !controller || !worker || admittedControl.load() != 0 ||
-        liveGenerations.load(std::memory_order_acquire) != 0 || wakeCallbacks.load(std::memory_order_acquire) != 0)
+        liveGenerations.load(std::memory_order_acquire) != 0 || externalConsumers.load() != 0 ||
+        wakeCallbacks.load(std::memory_order_acquire) != 0)
         return;
     bool expected = false;
     if (!finalizationQueued.compare_exchange_strong(expected, true)) return;
     auto owner = shared_from_this();
-    const bool queued = QMetaObject::invokeMethod(controller, [owner] {
-        mpv_terminate_destroy(owner->handle);
-        owner->handle = nullptr;
-        owner->wakeRelay->deleteLater();
-        owner->controller->deleteLater();
-        QObject::connect(owner->worker, &QThread::finished, owner->worker, &QObject::deleteLater);
-        QObject::connect(owner->worker, &QThread::finished, [owner] {
-            std::lock_guard<std::mutex> lock(pendingMutex());
-            auto &pending = pendingCores();
-            pending.erase(std::remove(pending.begin(), pending.end(), owner), pending.end());
-        });
-        owner->worker->quit();
+    const bool queued = QMetaObject::invokeMethod(wakeRelay, [owner] {
+        const bool posted = QMetaObject::invokeMethod(owner->controller, [owner] {
+            if (owner->admittedControl.load() || owner->liveGenerations.load() || owner->externalConsumers.load()) {
+                owner->finalizationQueued.store(false);
+                return;
+            }
+            mpv_terminate_destroy(owner->handle);
+            owner->handle = nullptr;
+            owner->wakeRelay->deleteLater();
+            owner->controller->deleteLater();
+            QObject::connect(owner->worker, &QThread::finished, owner->worker, &QObject::deleteLater);
+            QObject::connect(owner->worker, &QThread::finished, [owner] {
+                std::lock_guard<std::mutex> lock(pendingMutex());
+                auto &pending = pendingCores();
+                pending.erase(std::remove(pending.begin(), pending.end(), owner), pending.end());
+            });
+            owner->worker->quit();
+        }, Qt::QueuedConnection);
+        if (!posted) owner->finalizationQueued.store(false);
     }, Qt::QueuedConnection);
     if (!queued) finalizationQueued.store(false, std::memory_order_release);
 }
@@ -158,6 +183,14 @@ GenerationOwner::GenerationOwner(quint64 id, std::shared_ptr<CoreOwner> coreLeas
     : generation(id), core(std::move(coreLease))
 {
     if (core) core->liveGenerations.fetch_add(1, std::memory_order_acq_rel);
+}
+
+std::shared_ptr<GenerationOwner> GenerationOwner::create(quint64 id, const std::shared_ptr<CoreOwner> &core)
+{
+    if (!id || !core) return {};
+    std::lock_guard<std::mutex> lock(core->postingMutex);
+    if (!core->commandAuthority.load()) return {};
+    return std::shared_ptr<GenerationOwner>(new GenerationOwner(id, core));
 }
 
 bool GenerationOwner::enterCallback()
@@ -245,7 +278,7 @@ bool RetirementCoordinator::quarantine(const std::shared_ptr<GenerationOwner> &o
     std::lock_guard<std::mutex> lock(mutex);
     if (!owner || retained != owner || quarantined()) return false;
     owner->revoke();
-    owner->core->commandAuthority.store(false);
+    owner->core->revokeControl();
     owner->blocked.store(true, std::memory_order_release);
     quarantined() = owner;
     retained.reset();

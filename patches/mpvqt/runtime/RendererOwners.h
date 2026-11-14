@@ -53,6 +53,7 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     std::atomic<bool> finalizationQueued{false};
     std::atomic<unsigned> admittedControl{0};
     std::atomic<unsigned> liveGenerations{0};
+    std::atomic<unsigned> externalConsumers{0};
     std::atomic<bool> wakeAdmission{false};
     std::atomic<bool> wakeClosed{false};
     std::atomic<unsigned> wakeCallbacks{0};
@@ -63,6 +64,8 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     void leaveControl();
     NativeLease acquireNative();
     bool postControl(std::function<void(mpv_handle *)> operation);
+    bool bindExternalConsumer();
+    void unbindExternalConsumer();
     void revokeControl();
     bool installExternalWakeup();
     void closeExternalWakeup();
@@ -73,7 +76,7 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
 };
 
 struct GenerationOwner : std::enable_shared_from_this<GenerationOwner> {
-    GenerationOwner(quint64 id, std::shared_ptr<CoreOwner> coreLease);
+    static std::shared_ptr<GenerationOwner> create(quint64 id, const std::shared_ptr<CoreOwner> &core);
     const quint64 generation;
     const std::shared_ptr<CoreOwner> core;
     std::atomic<bool> callbackAdmission{true};
@@ -91,6 +94,8 @@ struct GenerationOwner : std::enable_shared_from_this<GenerationOwner> {
     void revoke();
     void notifyRenderUpdate();
     bool retireOnOriginalContext();
+private:
+    GenerationOwner(quint64 id, std::shared_ptr<CoreOwner> coreLease);
 };
 
 // Coordinator retains live generations until retirement or quarantine.
