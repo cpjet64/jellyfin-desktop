@@ -34,9 +34,11 @@ provider CMake options are proposals that require validation against the fixed
 adapter. `CARGO_NET_OFFLINE` and `MESON_WRAP_MODE` alone do not prove that every
 nested invocation uses `--locked --offline` and `--wrap-mode=nodownload`; the
 adapter and authorized VM isolation must enforce those requirements. Tool
-hashes come from a separately approved review manifest. The supplied source
-object verifier, mpv copy operation, and module bootstrap are unresolved trust
-boundaries, not yet independently implemented or qualified; they must be bound
-to reviewed source before invoking this proposal. The adapter itself does not
+hashes come from the approved complete lock. The verifier integration and
+module bootstrap are unexecuted proposals requiring independent review.
+The proposed verifier compares task-owned source copies against Git bundle
+objects before adaptation. `bootstrap.py` checks the
+module bytes before importing them, but its own bytes and the Python interpreter
+must be authenticated by the caller before launch. The adapter itself does not
 remove every network fetch or materialize the four Rust archives. An authorized
 future VM run needs separate review after these gaps are closed.

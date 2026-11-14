@@ -41,7 +41,6 @@ def child_environment(workspace, tool_bin):
     return {"PATH": str(tool_bin), "HOME": str(root / "home"),
             "TMPDIR": str(root / "tmp"), "LC_ALL": "C", "TZ": "UTC",
             "CARGO_HOME": str(root / "cargo-home"), "CARGO_NET_OFFLINE": "true",
-            "RUSTUP_TOOLCHAIN": "nightly-2026-10-11",
             "MESON_WRAP_MODE": "nodownload", "GIT_TERMINAL_PROMPT": "0",
             "CCACHE_DISABLE": "1", "SCCACHE_DISABLE": "1",
             "CMAKE_BUILD_PARALLEL_LEVEL": "2"}
