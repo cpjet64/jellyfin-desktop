@@ -156,14 +156,18 @@ class TestRetirementClaim {
   static void cleanup_rejects_wrong_thread() {
     auto* graph = reinterpret_cast<FixtureGraph*>(static_cast<std::uintptr_t>(1));
     auto access = access_fixture(graph);
-    std::atomic<bool> rejected{false};
-    std::thread worker([&] {
-      rejected = !GraphAccessOps::beginCleanupForTest(access, 9) &&
-          !GraphAccessOps::cleanupGraphForTest(access) && !GraphAccessOps::containCleanupForTest(access);
-    });
-    worker.join(); CHECK(rejected.load());
+    std::atomic<bool> beginRejected{false};
+    std::thread worker([&] { beginRejected = !GraphAccessOps::beginCleanupForTest(access, 9); });
+    worker.join(); CHECK(beginRejected.load());
     CHECK(GraphAccessOps::beginCleanupForTest(access, 9) == graph);
+    std::atomic<bool> graphRejected{false}, containRejected{false};
+    std::thread cleanupWorker([&] {
+      graphRejected = !GraphAccessOps::cleanupGraphForTest(access);
+      containRejected = !GraphAccessOps::containCleanupForTest(access);
+    });
+    cleanupWorker.join(); CHECK(graphRejected.load()); CHECK(containRejected.load());
     CHECK(GraphAccessOps::cleanupGraphForTest(access) == graph);
+    CHECK(GraphAccessOps::containCleanupForTest(access));
   }
   static void repeated_cleanup_preserves_access() {
     auto* graph = reinterpret_cast<FixtureGraph*>(static_cast<std::uintptr_t>(1));
