@@ -23,7 +23,7 @@ class RolePin:
     path: str
     sha256: str
     size: int
-    version: str | None
+    version: str
     file_id: str
 
 
@@ -32,7 +32,7 @@ VCTIP = RolePin('vctip', TOOL + 'vctip.exe',
                 335288, '14.44.35229.0', '2555941978:196608:1477911')
 MSPDBSRV = RolePin('mspdbsrv', TOOL + 'mspdbsrv.exe',
                    '8ffbacfdbef90a79e8441d640bc8b4c86be02a2d9035ce87c5fa4f36dc3c70e1',
-                   186248, None, '2555941978:458752:1477178')
+                   186248, '14.44.35229.0', '2555941978:458752:1477178')
 
 
 @dataclass(frozen=True)
@@ -74,6 +74,10 @@ def validate_profile(profile: BuildProfile) -> BuildProfile:
         raise ValueError('invalid invocation endpoint')
     if profile.identity != 'cleanup-claim-cl-v2:' + profile.endpoint:
         raise ValueError('profile identity does not bind endpoint')
+    if (not isinstance(profile.residual_roles, tuple) or
+            any(not isinstance(item, RolePin) or not isinstance(item.version, str) or not item.version
+                for item in profile.residual_roles)):
+        raise ValueError('every production role requires an expected version')
     if profile.residual_roles != (VCTIP, MSPDBSRV):
         raise ValueError('profile must have exactly the two pinned roles')
     roles = profile.residual_roles

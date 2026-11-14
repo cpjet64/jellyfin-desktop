@@ -5,6 +5,12 @@ attempt is terminal NONPASS, and the existing fixture qualification covers only
 the old one-role contract. No compiler, endpoint probe, test, or worker setup is
 authorized by this proposal.
 
+The MSPDBSRV expected manifest version is `14.44.35229.0`, based on the
+coordinator's existing metadata observation and bound to the pinned SHA-256.
+The retained file pin checks bytes and file identity; it does not independently
+read a version resource or attest the process's mapped image bytes. Both role
+versions in this profile are expected manifest values, not such observations.
+
 The candidate profile binds the reviewed `/Zi /FS` response, VCTIP and the
 observed MSPDBSRV image, a fresh invocation-specific endpoint, the original
 seventeen environment names plus `_MSPDBSRV_ENDPOINT_`, and the resulting digest.

@@ -28,7 +28,7 @@ class ProfileTests(unittest.TestCase):
         self.assertIs(validate_profile(profile), profile)
         self.assertIsNone(validate_environment(profile, env))
         self.assertEqual(len(profile_hash(profile)), 64)
-        self.assertIsNone(MSPDBSRV.version)
+        self.assertEqual(MSPDBSRV.version, '14.44.35229.0')
 
     def test_duplicate_or_unknown_roles_rejected(self):
         profile, _ = sample()
@@ -41,6 +41,9 @@ class ProfileTests(unittest.TestCase):
         altered = replace(MSPDBSRV, file_id=VCTIP.file_id)
         with self.assertRaises(ValueError):
             validate_profile(replace(profile, residual_roles=(VCTIP, altered)))
+        for version in ('', None):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                validate_profile(replace(profile, residual_roles=(VCTIP, replace(MSPDBSRV, version=version))))
         policy = replace(profile.command_policy, grace_ms=1001)
         with self.assertRaises(ValueError):
             validate_profile(replace(profile, command_policy=policy))
