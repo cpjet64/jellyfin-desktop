@@ -8,6 +8,10 @@
 #error RecoveryFrameBridge requires the normal linked mpv API, not the C plugin symbol table
 #endif
 
+#ifndef JELLYFIN_VERIFIED_RECOVERY_KIT
+#define JELLYFIN_VERIFIED_RECOVERY_KIT 0
+#endif
+
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -34,6 +38,7 @@ namespace {
 
 constexpr const char *recoveryName = "mpv_render_context_render_recovery_v1";
 constexpr const char *standardName = "mpv_render_context_render";
+constexpr bool verifiedKit = JELLYFIN_VERIFIED_RECOVERY_KIT == 1;
 
 #if defined(_WIN32)
 HMODULE moduleForAddress(FARPROC address)
@@ -147,6 +152,8 @@ bool skipRequested(const mpv_render_param *params)
 
 Resolver::Resolver()
 {
+    if (!verifiedKit)
+        return;
     recoveryRender_ = resolveRecovery(moduleLease_);
     recoveryRenderV2_ = reinterpret_cast<RecoveryRenderV2>(resolveAdditional(moduleLease_, "mpv_render_context_render_recovery_v2"));
     recoverySeek_ = reinterpret_cast<RecoverySeekAsyncV1>(resolveAdditional(moduleLease_, "mpv_recovery_seek_async_v1"));
