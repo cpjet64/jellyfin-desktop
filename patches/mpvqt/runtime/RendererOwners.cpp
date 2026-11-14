@@ -47,8 +47,9 @@ AdmissionResult reserveCore(QObject *dispatcher, quint64 revision, AdmissionCont
     std::lock_guard<std::mutex> lock(slot.mutex);
     if (slot.core) return {AdmissionStatus::Quarantined, 0};
     if (slot.waiter) return {AdmissionStatus::Busy, 0};
-    const auto token = slot.next++;
-    if (!token || !slot.next) return {AdmissionStatus::Busy, 0};
+    if (!slot.next) return {AdmissionStatus::Busy, 0};
+    const auto token = slot.next;
+    ++slot.next; // Unsigned wrap leaves zero as the permanent exhausted state.
     if (!slot.active && !slot.reservation) {
         slot.reservation = token;
         return {AdmissionStatus::Reserved, token};
