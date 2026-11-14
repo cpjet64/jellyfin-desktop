@@ -129,6 +129,20 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(result["result"], "failed")
         self.assertTrue(api.emergency)
 
+    def test_root_signaled_but_observed_at_deadline_fails(self):
+        clock = Clock()
+
+        class LateRoot(Root):
+            def wait(self, timeout):
+                clock.now = 2.0
+                return True
+
+        api = FakeAPI([(0, 1)])
+        result = settle(api, object(), LateRoot(), Pin(), 2.0, clock=clock, pause=clock.pause)
+        self.assertEqual(result["result"], "failed")
+        self.assertEqual(api.terminated, [])
+        self.assertTrue(api.emergency)
+
     def test_unresolved_root_retains_handle(self):
         root = Root(signaled=False)
         api = FakeAPI([(0, 1)])

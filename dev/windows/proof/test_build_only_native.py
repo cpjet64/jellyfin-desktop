@@ -73,8 +73,7 @@ class NativeQualificationTests(unittest.TestCase):
         if not root.is_absolute() or not helper.is_absolute() or not root.is_dir():
             self.fail("explicit absolute qualification paths required")
         for mode in ("natural", "residual", "rootfail"):
-            with self.subTest(mode=mode):
-                self._case(root, helper, mode, make_policy, validate_receipt)
+            self._case(root, helper, mode, make_policy, validate_receipt)
 
     def _case(self, root, helper, mode, make_policy, validate_receipt):
         if _hash(helper) != HELPER_SHA:
