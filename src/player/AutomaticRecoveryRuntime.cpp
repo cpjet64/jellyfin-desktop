@@ -8,7 +8,7 @@ bool AutomaticRecoveryRuntime::submitUserLoad(const CommandDispatch& dispatch, K
     const QString& url, const QVariantMap& options, const QVariantMap& metadata,
     const QVariant& audio, const QVariant& subtitle, bool paused, std::int64_t nowMs)
 {
-  if (!dispatch || command.isEmpty() || nowMs < 0 || nowMs > std::numeric_limits<std::int64_t>::max() - 15000 ||
+  if (!dispatch || !eventEpoch_ || command.isEmpty() || nowMs < 0 || nowMs > std::numeric_limits<std::int64_t>::max() - 15000 ||
       sequence_ >= AutomaticRecoveryLoad::MaxSequence) return false;
   if (generation_ && generation_ != key.generation) invalidate();
   generation_ = key.generation;
@@ -33,6 +33,11 @@ void AutomaticRecoveryRuntime::observe(const mpv_event* event, Key current, std:
 {
   if (!event) return;
   if (!current.generation || current.generation != generation_) { invalidate(); return; }
+  if (event->event_id == MPV_EVENT_START_FILE || event->event_id == MPV_EVENT_END_FILE ||
+      event->event_id == MPV_EVENT_SEEK || event->event_id == MPV_EVENT_PLAYBACK_RESTART ||
+      event->event_id == MPV_EVENT_QUEUE_OVERFLOW || event->event_id == MPV_EVENT_SHUTDOWN)
+    advanceEpoch();
+  if (!eventEpoch_) { invalidate(); return; }
   if (event->event_id == MPV_EVENT_COMMAND_REPLY &&
       (event->reply_userdata & ~AutomaticRecoveryLoad::MaxSequence) == AutomaticRecoveryLoad::Tag) {
     const auto sequence = event->reply_userdata & AutomaticRecoveryLoad::MaxSequence;
@@ -52,7 +57,13 @@ void AutomaticRecoveryRuntime::observe(const mpv_event* event, Key current, std:
 }
 void AutomaticRecoveryRuntime::invalidate()
 {
-  queue_.clear(); generation_ = 0;
+  queue_.clear(); generation_ = 0; advanceEpoch();
+}
+void AutomaticRecoveryRuntime::userIntentChanged() { advanceEpoch(); }
+void AutomaticRecoveryRuntime::advanceEpoch()
+{
+  if (eventEpoch_ == std::numeric_limits<std::uint64_t>::max()) eventEpoch_ = 0;
+  else if (eventEpoch_) ++eventEpoch_;
 }
 bool AutomaticRecoveryRuntime::recordPosition(Key key, std::int64_t entry, std::int64_t positionMs, std::int64_t nowMs)
 { return queue_.position(key, entry, positionMs, nowMs); }
