@@ -1,0 +1,53 @@
+test_changed_files_and_stale_output_rejected (test_build_only_policy.BuildOnlyPolicyTests.test_changed_files_and_stale_output_rejected) ... ok
+test_changed_manifest_identity_rejected (test_build_only_policy.BuildOnlyPolicyTests.test_changed_manifest_identity_rejected) ... ok
+test_fixture_manifest (test_build_only_policy.BuildOnlyPolicyTests.test_fixture_manifest) ... ok
+test_missing_and_empty_are_distinct (test_build_only_policy.BuildOnlyPolicyTests.test_missing_and_empty_are_distinct) ... ok
+test_missing_environment_differs_from_injection (test_build_only_policy.BuildOnlyPolicyTests.test_missing_environment_differs_from_injection) ... ok
+test_native_diagnostic_selector (test_build_only_policy.BuildOnlyPolicyTests.test_native_diagnostic_selector) ... ok
+test_production_environment_coverage_required (test_build_only_policy.BuildOnlyPolicyTests.test_production_environment_coverage_required) ... ok
+test_boolean_sizes_and_zero_handles_rejected (test_build_only_receipt.ReceiptTests.test_boolean_sizes_and_zero_handles_rejected) ... ok
+test_closure_and_malformed (test_build_only_receipt.ReceiptTests.test_closure_and_malformed) ... ok
+test_duplicate_json_field (test_build_only_receipt.ReceiptTests.test_duplicate_json_field) ... ok
+test_early_natural_settlement (test_build_only_receipt.ReceiptTests.test_early_natural_settlement) ... ok
+test_emergency_and_bad_residual (test_build_only_receipt.ReceiptTests.test_emergency_and_bad_residual) ... ok
+test_failure_cases (test_build_only_receipt.ReceiptTests.test_failure_cases) ... ok
+test_fixture_rejected_for_production (test_build_only_receipt.ReceiptTests.test_fixture_rejected_for_production) ... ok
+test_invalid_counts_and_deadlines (test_build_only_receipt.ReceiptTests.test_invalid_counts_and_deadlines) ... ok
+test_late_after_grace_settlement (test_build_only_receipt.ReceiptTests.test_late_after_grace_settlement) ... ok
+test_natural_and_cleanup (test_build_only_receipt.ReceiptTests.test_natural_and_cleanup) ... ok
+test_reused_pid_requires_different_creation_time (test_build_only_receipt.ReceiptTests.test_reused_pid_requires_different_creation_time) ... ok
+test_expired_deadline_does_not_retry (test_build_only_lifecycle.LifecycleTests.test_expired_deadline_does_not_retry) ... ok
+test_final_accounting_and_handle_close_deadline_overrun (test_build_only_lifecycle.LifecycleTests.test_final_accounting_and_handle_close_deadline_overrun) ... ok
+test_invalid_identity_or_membership_never_targeted (test_build_only_lifecycle.LifecycleTests.test_invalid_identity_or_membership_never_targeted) ... ok
+test_natural (test_build_only_lifecycle.LifecycleTests.test_natural) ... ok
+test_new_association_before_or_after_intervention (test_build_only_lifecycle.LifecycleTests.test_new_association_before_or_after_intervention) ... ok
+test_primary_retained_error_survives_later_pin_close_error (test_build_only_lifecycle.LifecycleTests.test_primary_retained_error_survives_later_pin_close_error) ... ok
+test_real_retained_error_preserves_exact_objects_and_failure (test_build_only_lifecycle.LifecycleTests.test_real_retained_error_preserves_exact_objects_and_failure) ... ok
+test_root_fail_timeout_and_close_failure (test_build_only_lifecycle.LifecycleTests.test_root_fail_timeout_and_close_failure) ... ok
+test_root_observed_at_deadline_fails (test_build_only_lifecycle.LifecycleTests.test_root_observed_at_deadline_fails) ... ok
+test_root_signaled_but_observed_at_deadline_fails (test_build_only_lifecycle.LifecycleTests.test_root_signaled_but_observed_at_deadline_fails) ... ok
+test_secondary_failure_keeps_owner_and_unresolved_root (test_build_only_lifecycle.LifecycleTests.test_secondary_failure_keeps_owner_and_unresolved_root) ... ok
+test_single_retry_skips_closed_handles_and_keeps_failure_sticky (test_build_only_lifecycle.LifecycleTests.test_single_retry_skips_closed_handles_and_keeps_failure_sticky) ... ok
+test_supervision_records_retry_but_keeps_original_failure (test_build_only_lifecycle.LifecycleTests.test_supervision_records_retry_but_keeps_original_failure) ... ok
+test_targeted_cleanup_does_not_touch_unrelated (test_build_only_lifecycle.LifecycleTests.test_targeted_cleanup_does_not_touch_unrelated) ... ok
+test_terminate_failure_and_wait_timeout (test_build_only_lifecycle.LifecycleTests.test_terminate_failure_and_wait_timeout) ... ok
+test_transient_association_during_classification (test_build_only_lifecycle.LifecycleTests.test_transient_association_during_classification) ... ok
+test_unresolved_root_retains_handle (test_build_only_lifecycle.LifecycleTests.test_unresolved_root_retains_handle) ... ok
+test_body_failure_restores_without_restoration_record (test_qualification_startup.QuietErrorUITests.test_body_failure_restores_without_restoration_record) ... ok
+test_existing_bits_are_preserved (test_qualification_startup.QuietErrorUITests.test_existing_bits_are_preserved) ... ok
+test_existing_start_evidence_stops_and_restores (test_qualification_startup.QuietErrorUITests.test_existing_start_evidence_stops_and_restores) ... ok
+test_nonnative_constructor_rejects (test_qualification_startup.QuietErrorUITests.test_nonnative_constructor_rejects) ... ok
+test_readback_rejection_restores_without_evidence (test_qualification_startup.QuietErrorUITests.test_readback_rejection_restores_without_evidence) ... ok
+test_zero_previous_and_restoration_evidence (test_qualification_startup.QuietErrorUITests.test_zero_previous_and_restoration_evidence) ... ok
+test_command_inspection_precedes_launch_selection (test_build_only_spawn.LaunchSelectionTests.test_command_inspection_precedes_launch_selection) ... ok
+test_failed_root_verification_never_resumes (test_build_only_spawn.LaunchSelectionTests.test_failed_root_verification_never_resumes) ... ok
+test_fixture_child_exact_detached_vector_and_null_handles (test_build_only_spawn.LaunchSelectionTests.test_fixture_child_exact_detached_vector_and_null_handles) ... ok
+test_fixture_launch_uses_detached_and_allowlisted_handles (test_build_only_spawn.LaunchSelectionTests.test_fixture_launch_uses_detached_and_allowlisted_handles) ... ok
+test_only_validated_fixture_modes_select_detached_launch (test_build_only_spawn.LaunchSelectionTests.test_only_validated_fixture_modes_select_detached_launch) ... ok
+test_production_launch_flags_remain_unchanged (test_build_only_spawn.LaunchSelectionTests.test_production_launch_flags_remain_unchanged) ... ok
+test_production_selects_existing_launch_and_registry_stays_empty (test_build_only_spawn.LaunchSelectionTests.test_production_selects_existing_launch_and_registry_stays_empty) ... ok
+
+----------------------------------------------------------------------
+Ran 48 tests in 0.014s
+
+OK

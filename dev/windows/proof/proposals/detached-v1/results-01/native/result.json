@@ -1,0 +1,42 @@
+{
+  "source_before": "d0bb016df169b663567e88fd5586ab7c008e9554",
+  "source_after": "d0bb016df169b663567e88fd5586ab7c008e9554",
+  "helper_pid": 44732,
+  "helper_exit": 0,
+  "started_utc": "2026-11-14T08:09:17.2394110Z",
+  "ended_utc": "2026-11-14T08:09:18.1440837Z",
+  "elapsed_ms": 2150,
+  "executable": "E:/CursorAI/JellyfinDesktop/deps/worktrees/integration/deps/w1214-proof/job_launch_prod.exe",
+  "arguments": [
+    "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/deps/fixture-detached-v1/qual-01/native/outer.receipt",
+    "180000",
+    "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/dev/windows/proof",
+    "C:/Python314/python.exe",
+    "-B",
+    "-m",
+    "unittest",
+    "-v",
+    "test_build_only_native"
+  ],
+  "controller_sha256": "0e0c90280c74295e5db9082340dd09cf45b94fc597ca63671bb6293edfa34a01",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "34eb958420fb8f6e825647e1a711f02ceb2feb46377601f77cb013146be4ea68",
+  "receipt_sha256": "aabe227121ca9c644fe5c0489bc8686fa877025b96c3e480de5a4a05b4688f73",
+  "receipt": [
+    "receipt_version=1",
+    "root_pid=106608",
+    "root_exit=0",
+    "timeout=0 active=0",
+    "handles_before=74 handles_after=79 measured=1",
+    "owned_opened=6 owned_closed=6 close_failed=0",
+    "handles_complete=1",
+    "final_result=0",
+    "proof_complete=1"
+  ],
+  "methods": 1,
+  "skips": 0,
+  "failures": 0,
+  "errors": 0,
+  "manifest_sha256": "dbe55eb7c529d11386700a60dab96f56ab12bc7b3c74e6b0e55277fe6ca4b7e0",
+  "pure_result_sha256": "f5291d79fc9eae31e1eea1f72500cae9ede7c65c33a11efe40683c906b0f3084"
+}

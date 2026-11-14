@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "scope": "Immutable copies of completed fixture qualification evidence; not product acceptance",
+  "candidate_source_sha": "d0bb016df169b663567e88fd5586ab7c008e9554",
+  "controller_publication_parent": "bcac7b9a2e45c00771f9a3a0db8da4b6936a9e26",
+  "pure_controller_sha256": "add2a39941ce984720f5326756b096f91212ffd162d4010c137025994dfdca21",
+  "native_controller_sha256": "0e0c90280c74295e5db9082340dd09cf45b94fc597ca63671bb6293edfa34a01",
+  "qualification_manifest_sha256": "dbe55eb7c529d11386700a60dab96f56ab12bc7b3c74e6b0e55277fe6ca4b7e0",
+  "rootfail": "Expected fixture root exit 7 and runner exit 1; retained failure receipt is not build success",
+  "files": [
+    {
+      "path": "pure/result.json",
+      "sha256": "f5291d79fc9eae31e1eea1f72500cae9ede7c65c33a11efe40683c906b0f3084",
+      "bytes": 1748
+    },
+    {
+      "path": "pure/stderr.log",
+      "sha256": "0d5dc946cf88d7f53b4067a6b39abf0909d3edadff9315de9214f0f1dd58d512",
+      "bytes": 6711
+    },
+    {
+      "path": "pure/outer.receipt",
+      "sha256": "a47f47984e4f026c32813e06354bf77bae87f4644e1784ecdba00c4056d9a16c",
+      "bytes": 206
+    },
+    {
+      "path": "native/result.json",
+      "sha256": "0d76b2de544bb6a90988d5d71b830192b17d70f6706b3d073d6d9c409e4c116e",
+      "bytes": 1712
+    },
+    {
+      "path": "native/stderr.log",
+      "sha256": "34eb958420fb8f6e825647e1a711f02ceb2feb46377601f77cb013146be4ea68",
+      "bytes": 206
+    },
+    {
+      "path": "native/outer.receipt",
+      "sha256": "aabe227121ca9c644fe5c0489bc8686fa877025b96c3e480de5a4a05b4688f73",
+      "bytes": 207
+    },
+    {
+      "path": "native-cases/natural/build.receipt",
+      "sha256": "52c5b1f53a3c6fe780580258495711d57243219d5d21a5010571cbf9ff857e17",
+      "bytes": 2841
+    },
+    {
+      "path": "native-cases/natural/strict.receipt",
+      "sha256": "e36456567d0dc5615bf95366009fb1cc6155436b00a5d8741e64216da9314492",
+      "bytes": 206
+    },
+    {
+      "path": "native-cases/residual/build.receipt",
+      "sha256": "a64bddc5e6798eaf02b5740362789b3e31cd26a595db66cdf2f8eab66d66ba07",
+      "bytes": 3160
+    },
+    {
+      "path": "native-cases/residual/strict.receipt",
+      "sha256": "808e2d322defed459ae722afd57f4aa8a6679b456c5ad41853c13680bf723d55",
+      "bytes": 206
+    },
+    {
+      "path": "native-cases/rootfail/build.receipt",
+      "sha256": "c75d73b3c841ef58d1db5e102c26694f9ac9ab39e626a4f2bb2a493d00669d5f",
+      "bytes": 968
+    },
+    {
+      "path": "native-cases/rootfail/strict.receipt",
+      "sha256": "6dc08a95ab54667332b6e3dde41e4dccffde4dc43b806580d748facfb73f5a80",
+      "bytes": 206
+    },
+    {
+      "path": "native-cases/error-ui-start.json",
+      "sha256": "925be93815b1db5e7796b2d2a493933e5483226d689ed8a97f35e7921212f0f2",
+      "bytes": 174
+    },
+    {
+      "path": "native-cases/error-ui-restored.json",
+      "sha256": "14f28ae3bb380bbbf722fca8b68c98b8baa6e3815904bc785977dfde624884d1",
+      "bytes": 29
+    }
+  ]
+}

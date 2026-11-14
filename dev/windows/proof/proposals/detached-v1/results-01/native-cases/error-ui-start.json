@@ -1,0 +1,7 @@
+{
+  "effective_mask": 32771,
+  "previous_mask": 32769,
+  "requested_bits": 3,
+  "scope": "disposable-fixture-qualification",
+  "wer_invocation_suppression_requested": true
+}
