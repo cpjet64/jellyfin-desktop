@@ -60,7 +60,7 @@ function Assert-PrivateAcl {
   }
 }
 function Pin-Inputs($pins) {
-  $pins.PinFile($driver,'781b3c088d9183c0b02861807c631ffdd04a0aa7401058360c9722a97f2a72d2',(Get-Item -LiteralPath $driver).Length,$null)
+  $pins.PinFile($driver,'b46274e2b5fc541a27093c870f49160f8235b0d8d2497ceaa546799d45dcc90e',(Get-Item -LiteralPath $driver).Length,$null)
   $pins.PinFile($builder,'19dec0f9289936fb60c974c970a8e7ddacbce1671b7be9d03f9d41eeed52fe8a',(Get-Item -LiteralPath $builder).Length,$null)
   $pins.PinFile($postcheck,'506b7ab9ec55546262d737698b84cd1d5cf7c07655d682f2ac2523dd84bd0088',(Get-Item -LiteralPath $postcheck).Length,$null)
   $pins.PinFile($interop,'76c97bc07ada9c4f8335a23b4eb12ded531a83b72c11d78eda9a85a39934cbaa',(Get-Item -LiteralPath $interop).Length,$null)
@@ -92,10 +92,10 @@ function Assert-ScratchParent {
 function Get-FailurePostchecks($pins) {
   $state = [ordered]@{pins='unavailable';source='unknown';private_acl='unknown';outer_receipt='unavailable'}
   if ($null -ne $pins) {
-    try { $pins.VerifyAll(); $state.pins = 'pass' } catch { $state.pins = 'failed' }
+    try { $pins.VerifyAll(); $state.pins = 'pass' } catch { $state.pins = 'failed'; Add-CleanupError 'pin postcheck' $_ }
   }
-  try { Check-Sources; $state.source = 'pass' } catch { $state.source = 'failed' }
-  try { Assert-PrivateAcl; $state.private_acl = 'pass' } catch { $state.private_acl = 'failed' }
+  try { Check-Sources; $state.source = 'pass' } catch { $state.source = 'failed'; Add-CleanupError 'source postcheck' $_ }
+  try { Assert-PrivateAcl; $state.private_acl = 'pass' } catch { $state.private_acl = 'failed'; Add-CleanupError 'ACL postcheck' $_ }
   if (Test-Path -LiteralPath "$root/outer.receipt" -PathType Leaf) {
     try { $null = Check-Receipt "$root/outer.receipt"; $state.outer_receipt = 'strict_success' }
     catch { $state.outer_receipt = 'nonpass_or_unreadable' }
@@ -280,8 +280,13 @@ function Load-RetainedInterop {
 }
 function Write-Record($path, $record) {
   $bytes = [Text.UTF8Encoding]::new($false).GetBytes((ConvertTo-Json -InputObject $record -Depth 10) + "`n")
+  $priorErrors = $script:audit.secondary.Count
   $file = [IO.File]::Open($path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
-  try { $file.Write($bytes,0,$bytes.Length); $file.Flush($true) } finally { $file.Dispose() }
+  $failure = $null
+  try { $file.Write($bytes,0,$bytes.Length); $file.Flush($true) } catch { $failure = $_ }
+  finally { try { $file.Dispose() } catch { Add-CleanupError 'record close' $_ } }
+  if ($null -ne $failure) { throw $failure }
+  if ($script:audit.secondary.Count -ne $priorErrors) { throw 'Record close failed' }
 }
 function Restore-ControllerEnvironment {
   if (!$script:audit.envSaved) { return }
