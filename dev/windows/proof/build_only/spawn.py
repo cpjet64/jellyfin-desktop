@@ -82,7 +82,7 @@ def _attributes(api, handles):
     return storage, values
 
 
-def _create(api, job, executable, args, cwd, handles, env):
+def _create(api, job, executable, args, cwd, handles, env, root_verifier):
     command = C.create_unicode_buffer(subprocess.list2cmdline([executable, *args]))
     environment = _environment(env)
     storage, values = _attributes(api, handles)
@@ -107,6 +107,7 @@ def _create(api, job, executable, args, cwd, handles, env):
     try:
         api.check(api.k.AssignProcessToJobObject(job.value, process.value))
         assigned = True
+        root_verifier(process, job)
         previous = api.k.ResumeThread(thread.value)
         if previous != 1:
             raise OSError(f'unexpected root suspend count: {previous}')
@@ -167,11 +168,13 @@ def _emergency_settle(api, job, root):
     return None, True
 
 
-def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, env=None):
+def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_verifier, env=None):
     if os.name != 'nt':
         raise OSError('Windows is required')
     if not os.path.isabs(executable) or not os.path.isabs(cwd):
         raise ValueError('absolute executable and working directory required')
+    if not callable(root_verifier):
+        raise ValueError('root verifier is required')
     attrs = w.SECURITY_ATTRIBUTES(C.sizeof(w.SECURITY_ATTRIBUTES), None, True)
     handles = []
     root = None
@@ -181,7 +184,7 @@ def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, env=No
         handles.append(w.Handle(api, raw))
         handles.append(_duplicate(api, stdout_handle))
         handles.append(_duplicate(api, stderr_handle))
-        root = _create(api, job, executable, list(args), cwd, handles, env)
+        root = _create(api, job, executable, list(args), cwd, handles, env, root_verifier)
     except BaseException as error:
         failure = error
     finally:
