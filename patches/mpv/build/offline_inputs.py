@@ -7,10 +7,12 @@ prove that a Git bundle contains the declared commit or nested source graph.
 import argparse
 import hashlib
 import re
+import subprocess
 import sys
 from pathlib import Path
 
-from recovery_lock_preflight import BUILD, RUST_COMPONENTS, parse_object, verify
+from recovery_lock_preflight import BUILD, ROOT, RUST_COMPONENTS, parse_object, verify
+from offline_git import verify_bundle
 
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -77,7 +79,7 @@ def verify_materials(lock, root, inventory):
         raise ValueError("Rust and Cargo material set is incomplete")
 
 
-def verify_inventory(lock, root, inventory):
+def check_plain_root(root):
     current = root.absolute()
     while True:
         info = current.lstat()
@@ -86,6 +88,12 @@ def verify_inventory(lock, root, inventory):
         if current.parent == current:
             break
         current = current.parent
+
+
+def verify_inventory(lock, root, inventory, git, checks):
+    check_plain_root(root)
+    check_plain_root(checks)
+    check_plain_root(git)
     if inventory.get("schema_version") != 1:
         raise ValueError("unsupported input inventory")
     expected = {item["name"]: item for item in lock["sources"]}
@@ -112,7 +120,20 @@ def verify_inventory(lock, root, inventory):
                 if locked.get(algorithm) and file_hash(source, algorithm) != locked[algorithm]:
                     raise ValueError(f"archive differs from source lock: {name}")
         elif locked["kind"] == "git":
-            raise ValueError(f"Git object and submodule verification is not implemented: {name}")
+            if locked.get("bundle_sha256") != record["sha256"]:
+                raise ValueError(f"bundle identity differs from source lock: {name}")
+            links, selected = locked.get("gitlinks"), locked.get("submodules")
+            if not isinstance(links, dict) or not isinstance(selected, dict) or set(selected) != set(links):
+                raise ValueError(f"unmapped Git submodule: {name}")
+            for subpath, source_name in selected.items():
+                child = expected.get(source_name, {})
+                if child.get("kind") != "git" or child.get("commit") != links[subpath]:
+                    raise ValueError(f"submodule source identity differs: {name}/{subpath}")
+            suffix = hashlib.sha256(name.encode("utf-8")).hexdigest()
+            verify_bundle(git, lock["host_tools"]["git"]["sha256"], source,
+                          checks / suffix, locked)
+            if file_hash(source) != record["sha256"]:
+                raise ValueError(f"bundle changed during verification: {name}")
         else:
             raise ValueError(f"unsupported source kind: {name}")
         names.add(name)
@@ -128,19 +149,25 @@ def main():
     parser.add_argument("--inventory", required=True, type=Path)
     parser.add_argument("--inventory-sha256", required=True)
     parser.add_argument("--inputs", required=True, type=Path)
+    parser.add_argument("--git", required=True, type=Path)
+    parser.add_argument("--checks", required=True, type=Path)
     args = parser.parse_args()
     try:
+        if not all(path.is_absolute() for path in (args.inputs, args.checks, args.git)):
+            raise ValueError("input, check and Git paths must be absolute")
+        args.checks.resolve(strict=True).relative_to((ROOT / "deps").resolve(strict=True))
         lock = verify(args.lock, args.approved_sha256)
         payload = args.inventory.read_bytes()
         if not SHA256.fullmatch(args.inventory_sha256) or hashlib.sha256(payload).hexdigest() != args.inventory_sha256:
             raise ValueError("inventory identity differs from approved digest")
         inventory = parse_object(payload)
+        check_plain_root(args.inputs)
         verify_materials(lock, args.inputs, inventory)
-        verify_inventory(lock, args.inputs, inventory)
-    except (OSError, ValueError, KeyError, TypeError) as error:
+        verify_inventory(lock, args.inputs, inventory, args.git, args.checks)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"Offline input byte verification failed: {error}", file=sys.stderr)
         return 1
-    print("Staged input bytes match the approved inventory; source identities still require verification.")
+    print("Staged bytes and selected Git tree identities checked; complete input closure requires review.")
     return 0
 
 
