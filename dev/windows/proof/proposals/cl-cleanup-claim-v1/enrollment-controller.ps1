@@ -110,36 +110,7 @@ function Test-StorageFailure($failure) {
   }
   return $false
 }
-Check-Sources
-Assert-PrivateAcl
-if ((Get-PSDrive E).Free -lt 20GB) { throw 'Insufficient storage; stop' }
-if (Test-Path -LiteralPath $root) { throw 'Output root is not fresh' }
-Assert-ScratchParent
-New-Item -ItemType Directory -Path $root | Out-Null
-$hostScratch = Join-Path $root 'host-temp'
-New-Item -ItemType Directory -Path $hostScratch | Out-Null
-$previousTemp = [Environment]::GetEnvironmentVariable('TEMP','Process')
-$previousTmp = [Environment]::GetEnvironmentVariable('TMP','Process')
-[Environment]::SetEnvironmentVariable('TEMP',$hostScratch,'Process')
-[Environment]::SetEnvironmentVariable('TMP',$hostScratch,'Process')
-$pins = $null
-try {
-$csStream = [IO.File]::Open($interop,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
-try {
-  $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($csStream)).ToLowerInvariant()
-  if ($digest -cne '76c97bc07ada9c4f8335a23b4eb12ded531a83b72c11d78eda9a85a39934cbaa') { throw 'Interop identity mismatch' }
-  $csStream.Position = 0
-  $reader = [IO.StreamReader]::new($csStream)
-  $source = $reader.ReadToEnd()
-  Add-Type -TypeDefinition $source
-} finally { $csStream.Dispose() }
-$pins = [RetainedInputs]::new()
-$primary = $null
-try {
-  Pin-Inputs $pins
-  $pins.PinParents("$root/placeholder")
-  Check-Sources
-  foreach ($name in @('temp','roaming','local')) { New-Item -ItemType Directory -Path (Join-Path $root $name) | Out-Null }
+function Invoke-CompileHelper {
   $argsList = @("$root/outer.receipt",'180000',"$qualified/dev/windows/proof",$python,'-B',$driver)
   $psi = [Diagnostics.ProcessStartInfo]::new()
   $psi.FileName = $helper; $psi.WorkingDirectory = "$qualified/dev/windows/proof"
@@ -177,6 +148,9 @@ try {
   } finally { $out.Dispose() }
   if (Test-StorageFailure '') { throw 'Storage failure or oversized log; preserve evidence and stop' }
   if ($exit -ne 0) { throw 'Helper nonpass; retain evidence' }
+  return @{pid=$helperPid;exit=$exit;elapsed=$watch.ElapsedMilliseconds;argv=$argsList}
+}
+function Read-DiscoveryResult($pins, $run) {
   $receipt = @(Check-Receipt "$root/outer.receipt")
   $pins.VerifyAll()
   Check-Sources
@@ -199,10 +173,43 @@ try {
     [ordered]@{path=[IO.Path]::GetRelativePath($root,$_.FullName);bytes=$_.Length;
       sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
   })
-  $record = [ordered]@{schema='cleanup-claim-discovery-v1';source=$ReviewedSourceSHA;
-    helper_pid=$helperPid;helper_exit=$exit;elapsed_ms=$watch.ElapsedMilliseconds;argv=$argsList;
+  return [ordered]@{schema='cleanup-claim-discovery-v1';source=$ReviewedSourceSHA;
+    helper_pid=$run.pid;helper_exit=$run.exit;elapsed_ms=$run.elapsed;argv=$run.argv;
     outer_receipt=$receipt;build_result=$build.result;files=$inventory;postcompile_dependency_identities=$dependencies;
     limitations='Discovery only; generated include tree, implicit CWD behavior and dependency closure remain unqualified'}
+}
+Check-Sources
+Assert-PrivateAcl
+if ((Get-PSDrive E).Free -lt 20GB) { throw 'Insufficient storage; stop' }
+if (Test-Path -LiteralPath $root) { throw 'Output root is not fresh' }
+Assert-ScratchParent
+New-Item -ItemType Directory -Path $root | Out-Null
+$hostScratch = Join-Path $root 'host-temp'
+New-Item -ItemType Directory -Path $hostScratch | Out-Null
+$previousTemp = [Environment]::GetEnvironmentVariable('TEMP','Process')
+$previousTmp = [Environment]::GetEnvironmentVariable('TMP','Process')
+[Environment]::SetEnvironmentVariable('TEMP',$hostScratch,'Process')
+[Environment]::SetEnvironmentVariable('TMP',$hostScratch,'Process')
+$pins = $null
+try {
+$csStream = [IO.File]::Open($interop,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+try {
+  $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($csStream)).ToLowerInvariant()
+  if ($digest -cne '76c97bc07ada9c4f8335a23b4eb12ded531a83b72c11d78eda9a85a39934cbaa') { throw 'Interop identity mismatch' }
+  $csStream.Position = 0
+  $reader = [IO.StreamReader]::new($csStream)
+  $source = $reader.ReadToEnd()
+  Add-Type -TypeDefinition $source
+} finally { $csStream.Dispose() }
+$pins = [RetainedInputs]::new()
+$primary = $null
+try {
+  Pin-Inputs $pins
+  $pins.PinParents("$root/placeholder")
+  Check-Sources
+  foreach ($name in @('temp','roaming','local')) { New-Item -ItemType Directory -Path (Join-Path $root $name) | Out-Null }
+  $run = Invoke-CompileHelper
+  $record = Read-DiscoveryResult $pins $run
   $successBytes = [Text.UTF8Encoding]::new($false).GetBytes((ConvertTo-Json -InputObject $record -Depth 8) + "`n")
 } catch {
   $primary = $_
@@ -229,7 +236,7 @@ try {
 }
 $summary = [IO.File]::Open("$root/result.json",[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
 try { $summary.Write($successBytes,0,$successBytes.Length); $summary.Flush($true) } finally { $summary.Dispose() }
-Write-Output "Discovery compile settled; helper=$helperPid; source=$ReviewedSourceSHA; dependencies require review"
+Write-Output "Discovery compile settled; helper=$($run.pid); source=$ReviewedSourceSHA; dependencies require review"
 } finally {
   [Environment]::SetEnvironmentVariable('TEMP',$previousTemp,'Process')
   [Environment]::SetEnvironmentVariable('TMP',$previousTmp,'Process')
