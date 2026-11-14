@@ -22,6 +22,7 @@ struct RecoveryExchange {
     bool ready = false;
     bool contextFailurePending = false;
     bool framePending = false;
+    quint64 frameGeneration = 0;
     RecoveryFrameObservationV1 frame{};
     quint64 sourceFrameSerial = 0;
 };

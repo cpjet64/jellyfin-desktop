@@ -16,8 +16,10 @@ Known blockers:
   owner on the controller thread. Its coverage and shutdown races require
   independent review and validation; raw handle getters remain borrowed.
 - The optional native bridge exposes selected-render records and source serials
-  when available. Exact Qt submission/swap attribution is absent. No callback
-  or unrelated swap establishes a qualifying presented frame.
+  when available. The exchange stores the producing generation with each record
+  and rejects records from a superseded owner. Exact Qt submission/swap
+  attribution is absent; any future ticket must also match the render serial.
+  No callback or unrelated swap establishes a qualifying presented frame.
 - Lost-context quarantine currently occurs without an owned stop request and
   acknowledgement, so audio can continue.
 - Adopt-failure fallback queues cleanup on the worker; failed queueing retains
