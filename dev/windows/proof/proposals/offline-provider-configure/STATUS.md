@@ -5,6 +5,19 @@ been verified. They remove the floating Rust installation/update and the
 configure-time ExternalProject download, extraction, and patch. They are
 source proposals, not an executable producer or an authorized configure.
 
+`adapter.py` proposes a callable `apply(provider_root, prestage_root, lock,
+overlay_root, destination)` for a future reviewed preparation phase. Its lock
+requires exactly provider, rust and components fields; the four component
+records each require a contained path, size and SHA-256. It checks the two
+original files and the two overlay byte hashes, rejects links and reparse
+points, and creates a new copy. It does not authenticate the entire provider
+tree, the staged module include graph, every Rust standard library file, or
+the remaining dependency closure. The caller must provide immutable inputs
+and exclusive access throughout the operation; path checks alone do not
+prevent concurrent replacement races. Failed copies may leave a partial
+destination for explicit inspection. Neither the adapter nor its tests has
+been executed.
+
 | Original path | Git blob | SHA-256 |
 | --- | --- | --- |
 | toolchain/rustup.cmake | 088936428c2a9a552bb9f2dd8969ba70b3bd9f7a | 5ec4d394c320716e66215f0c83d62733e603a2e5d2e97e2bed7ebc427e8cf57f |
