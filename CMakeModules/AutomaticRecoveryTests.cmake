@@ -73,6 +73,15 @@ target_link_libraries(test_automatic_recovery_owned_seek PRIVATE Qt6::Core)
 add_test(NAME test_automatic_recovery_owned_seek COMMAND test_automatic_recovery_owned_seek)
 set_tests_properties(test_automatic_recovery_owned_seek PROPERTIES TIMEOUT 60)
 
+add_executable(test_ordinary_load_selection
+  "${CMAKE_SOURCE_DIR}/tests/test_ordinary_load_selection.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/OrdinaryLoadSelection.cpp")
+target_include_directories(test_ordinary_load_selection PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_compile_features(test_ordinary_load_selection PRIVATE cxx_std_17)
+target_link_libraries(test_ordinary_load_selection PRIVATE Qt6::Core)
+add_test(NAME test_ordinary_load_selection COMMAND test_ordinary_load_selection)
+set_tests_properties(test_ordinary_load_selection PROPERTIES TIMEOUT 60)
+
 if(USE_STATIC_MPVQT AND MPVQT_EXTERNAL_EVENTS AND NOT MPVQT_C2_DIAGNOSTIC_ONLY)
   add_executable(test_mpvqt_recovery_exchange "${CMAKE_SOURCE_DIR}/tests/test_mpvqt_recovery_exchange.cpp")
   target_include_directories(test_mpvqt_recovery_exchange PRIVATE "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime" "${MPV_INCLUDE_DIR}")
