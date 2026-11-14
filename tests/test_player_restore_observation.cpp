@@ -2,6 +2,7 @@
 #include "player_test_cache.h"
 #include <QtTest/QtTest>
 #ifdef HEALTHY_COPIED_SOURCE_TEST
+#include <RestartWire.h>
 #include <restore_test_fixture.h>
 #endif
 
@@ -211,8 +212,14 @@ void TestPlayerRestoreObservation::diagnosticReplacement(int mode)
   reply(player, 2, "NR1|1|42|yes|yes|3|yes|no|no");
   QVERIFY(!player.nativePostSeekObservationCurrent());
   if (mode == 2) {
-    QByteArray response; QVERIFY(!fixture.cancel(2, 5, response));
-    QCOMPARE(player.m_mpvGeneration, generation); QCOMPARE(fixture.state()->stops, 0u);
+    const FixtureRestart::CancelResult expected{fixture.grant().run, 5, fixture.grant().grant,
+        fixture.grant().revision, 2, key.host, key.core, key.revision, key.attempt,
+        FixtureRestart::CancelOutcome::Failed, FixtureRestart::CancelFailure::CleanupUnconfirmed};
+    const auto stops = fixture.state()->stops;
+    QByteArray response; QVERIFY(fixture.cancel(2, 5, response));
+    QCOMPARE(response, FixtureRestart::encodeCancelResult(expected));
+    QCOMPARE(player.m_mpvGeneration, generation); QCOMPARE(fixture.state()->stops, stops);
+    QCOMPARE(stops, 0u); QVERIFY(!player.nativePostSeekObservationCurrent());
   }
 }
 void TestPlayerRestoreObservation::diagnosticStopReplacement() { diagnosticReplacement(0); }
