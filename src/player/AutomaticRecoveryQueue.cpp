@@ -35,12 +35,18 @@ bool AutomaticRecoveryQueue::observeTime(std::int64_t nowMs)
 void AutomaticRecoveryQueue::start(std::int64_t entry, std::int64_t nowMs)
 {
   if (!observeTime(nowMs)) return;
+  if (startedEntry_) {
+    for (auto it = pending_.begin(); it != pending_.end();) {
+      if (!it->second.entry || it->second.entry == startedEntry_) it = pending_.erase(it);
+      else ++it;
+    }
+  }
   active_.invalidate(); startedEntry_ = entry > 0 ? entry : 0; loaded_ = false;
 }
 void AutomaticRecoveryQueue::loaded(std::int64_t nowMs)
 {
   if (!observeTime(nowMs)) return;
-  if (!startedEntry_ || loaded_) { active_.invalidate(); startedEntry_ = 0; loaded_ = false; return; }
+  if (!startedEntry_ || loaded_) { clear(); return; }
   loaded_ = true; promote();
 }
 void AutomaticRecoveryQueue::promote()
@@ -56,10 +62,13 @@ void AutomaticRecoveryQueue::promote()
 void AutomaticRecoveryQueue::end(std::int64_t entry, std::int64_t nowMs)
 {
   if (!observeTime(nowMs)) return;
+  const bool endedUnmatchedStart = startedEntry_ && (entry <= 0 || entry == startedEntry_);
   if (entry <= 0 || entry == active_.entry()) active_.invalidate();
   if (entry <= 0 || entry == startedEntry_) { startedEntry_ = 0; loaded_ = false; }
   for (auto it = pending_.begin(); it != pending_.end();) {
-    if (entry <= 0 || it->second.entry == entry) it = pending_.erase(it); else ++it;
+    if (entry <= 0 || it->second.entry == entry || (endedUnmatchedStart && !it->second.entry))
+      it = pending_.erase(it);
+    else ++it;
   }
 }
 bool AutomaticRecoveryQueue::position(Key key, std::int64_t entry, std::int64_t positionMs, std::int64_t nowMs)
