@@ -51,6 +51,7 @@ QString PlayerComponent::configureAudioPassthrough(const QString& deviceType)
 void PlayerComponent::userCommand(QString command)
 {
   if (!intentControlThread()) return;
+  if (!cancelRecoverySeekBeforeIntent()) return;
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
   recoveryIntentChanged(false);
   if (!m_mpv) return;

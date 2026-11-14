@@ -10,7 +10,6 @@
 #include "PlayerComponentRecovery.h"
 #include <atomic>
 #include <memory>
-#include <mutex>
 #endif
 
 #ifdef MPVQT_RECOVERY_RUNTIME
@@ -25,17 +24,7 @@ public:
   enum class Status { Reserved, Posted, Continued, PostFailed, NativeRejected };
   PendingHook(std::shared_ptr<RendererRuntime::CoreOwner> core, RendererRuntime::NativeLease lease, Operation operation)
       : core_(std::move(core)), lease_(std::move(lease)), operation_(std::move(operation)) {}
-  static void dispose(PendingHook* pending) {
-    if (pending->containUnresolved()) { delete pending; return; }
-    // Unexpected owner-invariant failure: retain one existing operation, not
-    // one allocation per hook. Its lease fences the same revoked core.
-    static std::mutex mutex;
-    static PendingHook* retained = nullptr;
-    std::lock_guard<std::mutex> lock(mutex);
-    if (!retained) { retained = pending; return; }
-    if (retained->core_ == pending->core_) { delete pending; return; }
-    qFatal("Two distinct cores violated the unresolved-hook ownership invariant");
-  }
+  ~PendingHook() { containUnresolved(); }
   void setQuitConnection(const QMetaObject::Connection& connection) { quitConnection_ = connection; }
   void dispatch() {
     if (dispatched_.exchange(true)) return;
@@ -52,12 +41,10 @@ public:
     }
   }
 private:
-  bool containUnresolved() {
-    if (!lease_.get()) return true;
-    if (core_->blockUnresolvedHook()) { core_->revokeControl(); lease_ = {}; return true; }
-    core_->revokeControl();
-    qCritical() << "Unresolved hook could not enter the bounded core quarantine";
-    return false;
+  void containUnresolved() {
+    if (!lease_.get()) return;
+    lease_.contain();
+    lease_ = {};
   }
   std::shared_ptr<RendererRuntime::CoreOwner> core_;
   RendererRuntime::NativeLease lease_;
@@ -73,7 +60,7 @@ std::shared_ptr<PendingHook> reserveHook(const std::shared_ptr<RendererRuntime::
   if (!owner || !operation) return {};
   auto lease = owner->acquireNative();
   if (!lease.get()) return {};
-  auto pending = std::shared_ptr<PendingHook>(new PendingHook(owner, std::move(lease), std::move(operation)), PendingHook::dispose);
+  auto pending = std::make_shared<PendingHook>(owner, std::move(lease), std::move(operation));
   if (auto* app = QCoreApplication::instance())
     pending->setQuitConnection(QObject::connect(app, &QCoreApplication::aboutToQuit, app,
       [pending] { pending->dispatch(); }, Qt::DirectConnection));
@@ -156,6 +143,7 @@ void PlayerComponent::releaseMpvController(MpvController* controller)
   if (QThread::currentThread() != thread())
     qFatal("MpvQt event consumer must be released on the PlayerComponent thread");
   if (m_mpv != controller) return;
+  cancelRecoverySeekBeforeIntent();
   invalidateNativeReceipt();
   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
   releaseRecovery();

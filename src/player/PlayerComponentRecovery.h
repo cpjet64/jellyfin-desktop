@@ -3,6 +3,7 @@
 #include "AutomaticRecoveryFrameGate.h"
 #include "AutomaticRecoveryLoad.h"
 #include "AutomaticRecoveryObservation.h"
+#include "AutomaticRecoveryOwnedSeek.h"
 #include "AutomaticRecoveryPolicy.h"
 #include "AutomaticRecoveryReadStall.h"
 #include "AutomaticRecoveryRuntime.h"
@@ -27,7 +28,7 @@ public:
   void drain();
   bool queue(const QStringList& command, const QString& url, const QVariantMap& options,
              const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle);
-  void userChanged(bool clear);
+  bool userChanged(bool clear);
   bool ownsEnd(const mpv_event* event) const;
   bool restoring() const { return restoring_; }
   bool recoveryPreloadAllowed() const;
@@ -38,6 +39,9 @@ public:
   void beginUserReplacement() { replacedEntry_ = runtime_.activeEntry(); }
   RendererRuntime::NativeLease acquireNative() const;
   std::shared_ptr<RendererRuntime::CoreOwner> coreOwner() const { return core_; }
+  void prepareOwnedSeek(std::int64_t targetMs);
+  int dispatchOwnedSeek(std::int64_t targetMs);
+  bool cancelBeforeIntent() { return cancelOwnedSeek(); }
 private:
   void tick();
   void event(const mpv_event* event, std::int64_t now);
@@ -60,6 +64,13 @@ private:
   bool qualifiedReadStall(AutomaticRecoverySession::Key key, const AutomaticRecoveryObservation::Result& result,
                           std::int64_t now, bool movingVideo);
   void recordSourceFrame(std::uint64_t generation, const RecoveryFrameObservationV1& frame);
+  void checkOwnedSeek(std::int64_t now);
+  bool cancelOwnedSeek();
+  void seekReply(const mpv_event* event, std::int64_t now);
+  void seekPosition(const AutomaticRecoveryObservation::Result& result, std::int64_t now);
+  void seekSubmission(const AutomaticRecoveryOwnedSeek::Submission& submission, std::int64_t now);
+  void seekQtSubmission(std::uint64_t generation, const QtRecoverySubmissionV1& submission, std::uint64_t operationId);
+  void beginSeekRecovery(AutomaticRecoveryOwnedSeek::State reason, std::int64_t now);
   static std::int64_t nowMs();
   PlayerComponent* player_;
   QPointer<MpvVideoItem> item_;
@@ -70,6 +81,10 @@ private:
   AutomaticRecoveryObservation observation_;
   AutomaticRecovery::Policy policy_;
   AutomaticRecoveryReadStall readStall_;
+  AutomaticRecoveryOwnedSeek ownedSeek_;
+  AutomaticRecoverySession::Snapshot seekCheckpoint_;
+  AutomaticRecoveryObservation::Result lastObservation_;
+  AutomaticRecoveryObservation::Result seekPriorObservation_;
   AutomaticRecoverySession::Snapshot saved_;
   AutomaticRecoveryLoad recoveryLoad_;
   AutomaticRecoveryFrameGate frameGate_;
@@ -85,6 +100,9 @@ private:
   std::int64_t transitionDeadline_ = 0;
   std::uint64_t lastSource_ = 0;
   std::uint64_t sourceGeneration_ = 0, sourceEntry_ = 0, sourceFirst_ = 0;
+  std::uint64_t sourceDiscontinuity_ = 0, seekOperationSequence_ = 0, seekReplySequence_ = 0;
+  std::uint64_t seekWindowLifetime_ = 0, seekSceneGeneration_ = 0;
+  AutomaticRecoveryOwnedSeek::State seekTimeoutReason_ = AutomaticRecoveryOwnedSeek::State::Empty;
   std::uint64_t sourceEpoch_ = 0;
   std::uint64_t startSerial_ = 0, hookStart_ = 0, hookRevision_ = 0, hookBinding_ = 0, hookAttempt_ = 0;
   std::uint64_t deferredStart_ = 0, deferredRevision_ = 0, deferredBinding_ = 0, deferredAttempt_ = 0;
@@ -100,5 +118,6 @@ private:
   bool submissionPending_ = false;
   bool recoveryTracksApplied_ = false;
   bool replacementTransition_ = false;
+  bool seekPrepared_ = false, nativeSeekArmed_ = false, seekCancellationFailed_ = false;
 };
 #endif

@@ -44,6 +44,12 @@ bool PlayerComponentRecovery::bind()
   connect(item_, &MpvVideoItem::recoveryFrameSubmission, this,
           [this](quint64 generation, QtRecoverySubmissionV1 result) { submission(generation, result); });
 #endif
+#ifdef MPVQT_OWNED_SEEK_API
+  connect(item_, &MpvVideoItem::recoveryFrameSubmissionOperation, this,
+          [this](quint64 generation, QtRecoverySubmissionV1 value, quint64 operationId) {
+            seekQtSubmission(generation, value, operationId);
+          });
+#endif
   bound_ = true; timer_.start(); return true;
 }
 void PlayerComponentRecovery::shutdown()
@@ -68,8 +74,12 @@ bool PlayerComponentRecovery::queue(const QStringList& command, const QString& u
     return mpv_command_async(lease.get(), id, args);
   }, key, command, url, options, metadata, audio, subtitle, !options.value("autoplay").toBool(), nowMs());
 }
-void PlayerComponentRecovery::userChanged(bool clear)
+bool PlayerComponentRecovery::userChanged(bool clear)
 {
+  const bool cancelled = cancelOwnedSeek();
+#ifdef MPVQT_OWNED_SEEK_API
+  if (item_) item_->refreshRecoveryBootstrap();
+#endif
   clearFrameAttempt();
   const auto previous = runtime_.activeKey();
   runtime_.userIntentChanged(); observation_.invalidate(); observationPending_ = awaitingUsability_ = false;
@@ -83,12 +93,13 @@ void PlayerComponentRecovery::userChanged(bool clear)
   replacementTransition_ = false;
   pauseId_ = unpauseId_ = 0;
   deferredEntry_ = 0;
-  if (clear) { runtime_.invalidate(); return; }
+  if (clear) { seekPrepared_ = false; runtime_.invalidate(); return cancelled; }
   const auto intent = player_->m_playbackIntent.snapshot();
-  if (intent.desired == PlaybackIntent::Desired::Stopped || intent.desired == PlaybackIntent::Desired::Exiting) return;
+  if (intent.desired == PlaybackIntent::Desired::Stopped || intent.desired == PlaybackIntent::Desired::Exiting) return cancelled;
   const AutomaticRecoverySession::Key current{previous.session, intent.revision, player_->m_mpvGeneration};
   if (runtime_.reviseActive(previous, current, intent.desired == PlaybackIntent::Desired::Paused))
     runtime_.updateTracks(current, player_->m_currentAudioStream, player_->m_currentSubtitleStream);
+  return cancelled;
 }
 void PlayerComponentRecovery::drain()
 {
@@ -102,7 +113,7 @@ void PlayerComponentRecovery::drain()
     event(native, nowMs());
     player_->observeNativeReceipt(native);
     if (native->event_id == MPV_EVENT_END_FILE && !internalEnd) {
-      player_->m_playbackIntent.invalidate(PlaybackIntent::Reason::UnattributedEvent); userChanged(true);
+      cancelOwnedSeek(); player_->m_playbackIntent.invalidate(PlaybackIntent::Reason::UnattributedEvent); userChanged(true);
     }
     if (internalEnd) {
       const auto* end = static_cast<const mpv_event_end_file*>(native->data);
