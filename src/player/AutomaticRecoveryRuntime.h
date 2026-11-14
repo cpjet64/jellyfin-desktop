@@ -1,6 +1,6 @@
 #pragma once
 #include "AutomaticRecoveryLoad.h"
-#include "AutomaticRecoverySession.h"
+#include "AutomaticRecoveryQueue.h"
 #include <QStringList>
 #include <functional>
 #include <mpv/client.h>
@@ -17,12 +17,6 @@ public:
   void observe(const mpv_event* event, Key current, std::int64_t nowMs);
   void invalidate();
 private:
-  void settle(Key current, std::int64_t nowMs);
-  void discardQueued();
-  AutomaticRecoverySession activeSession_, queuedSession_;
-  AutomaticRecoveryLoad load_;
-  Key key_;
-  std::uint64_t sequence_ = 0;
-  std::int64_t startedEntry_ = 0, deadline_ = 0;
-  bool loaded_ = false, matched_ = false, installed_ = false;
+  AutomaticRecoveryQueue queue_;
+  std::uint64_t sequence_ = 0, generation_ = 0;
 };

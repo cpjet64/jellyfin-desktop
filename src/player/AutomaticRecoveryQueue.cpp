@@ -23,6 +23,7 @@ bool AutomaticRecoveryQueue::reply(std::uint64_t sequence, std::int64_t entry, s
   if (!item.session.accept(item.key, entry)) { pending_.erase(it); return false; }
   item.entry = entry; promote(); return true;
 }
+void AutomaticRecoveryQueue::reject(std::uint64_t sequence) { pending_.erase(sequence); }
 bool AutomaticRecoveryQueue::observeTime(std::int64_t nowMs)
 {
   if (nowMs < 0 || nowMs < lastEventTime_) { clear(); return false; }

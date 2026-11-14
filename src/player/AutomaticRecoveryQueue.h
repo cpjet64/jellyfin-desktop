@@ -10,6 +10,7 @@ public:
   using Snapshot = AutomaticRecoverySession::Snapshot;
   bool enqueue(std::uint64_t sequence, Key key, const Snapshot& recipe, std::int64_t deadlineMs);
   bool reply(std::uint64_t sequence, std::int64_t entry, std::int64_t nowMs);
+  void reject(std::uint64_t sequence);
   void start(std::int64_t entry, std::int64_t nowMs);
   void loaded(std::int64_t nowMs);
   void end(std::int64_t entry, std::int64_t nowMs);
