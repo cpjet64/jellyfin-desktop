@@ -107,17 +107,17 @@ public sealed class RetainedInputs : IDisposable {
         return size + ":" + id + ":" + digest;
     }
     public void Dispose() {
-        Exception failure = null;
+        var failures = new List<Exception>();
         for (int i = handles.Count - 1; i >= 0; --i) {
             var handle = handles[i];
             if (handle.IsClosed || handle.IsInvalid) continue;
             if (!CloseHandle(handle.DangerousGetHandle())) {
-                if (failure == null) failure = new Win32Exception();
+                failures.Add(new Win32Exception(Marshal.GetLastWin32Error(), "Retained handle close failed at index " + i));
                 continue;
             }
             handle.SetHandleAsInvalid();
             handle.Dispose();
         }
-        if (failure != null) throw new IOException("Retained handle close failed", failure);
+        if (failures.Count != 0) throw new AggregateException("Retained handle close failures", failures);
     }
 }

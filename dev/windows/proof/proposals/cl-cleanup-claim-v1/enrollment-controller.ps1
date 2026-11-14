@@ -37,6 +37,8 @@ function Check-Sources {
   }
 }
 function Check-Receipt($path) {
+  $item = Get-Item -LiteralPath $path -Force
+  if ($item.Length -gt 1024 -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unsafe outer receipt' }
   $lines = @(Get-Content -LiteralPath $path)
   if ($lines.Count -ne 9 -or $lines[0] -cne 'receipt_version=1' -or $lines[1] -notmatch '^root_pid=[1-9][0-9]*$' -or
       $lines[2] -cne 'root_exit=0' -or $lines[3] -cne 'timeout=0 active=0' -or
@@ -62,8 +64,8 @@ function Assert-PrivateAcl {
 function Pin-Inputs($pins) {
   $pins.PinFile($driver,'b46274e2b5fc541a27093c870f49160f8235b0d8d2497ceaa546799d45dcc90e',(Get-Item -LiteralPath $driver).Length,$null)
   $pins.PinFile($builder,'19dec0f9289936fb60c974c970a8e7ddacbce1671b7be9d03f9d41eeed52fe8a',(Get-Item -LiteralPath $builder).Length,$null)
-  $pins.PinFile($postcheck,'506b7ab9ec55546262d737698b84cd1d5cf7c07655d682f2ac2523dd84bd0088',(Get-Item -LiteralPath $postcheck).Length,$null)
-  $pins.PinFile($interop,'76c97bc07ada9c4f8335a23b4eb12ded531a83b72c11d78eda9a85a39934cbaa',(Get-Item -LiteralPath $interop).Length,$null)
+  $pins.PinFile($postcheck,'b0df5c916d8b1ea0a2f99a7975d5ad94820f089c8f8482ee9d3e803929d2f320',(Get-Item -LiteralPath $postcheck).Length,$null)
+  $pins.PinFile($interop,'fc754851846ebcea79b0f719c02602b8ad86e505272586b5cfd50148d3117a89',(Get-Item -LiteralPath $interop).Length,$null)
   $pins.PinFile($PSCommandPath,$ControllerSHA256,(Get-Item -LiteralPath $PSCommandPath).Length,$null)
   $pins.PinFile($python,'7ca24f26d6e3f463419ee4f537ddd3acd312c38fe45e678cce08572f26a8bd1a',106328,$null)
   $pins.PinFile($helper,'7ae01dfd262a18bf863c057d570993b2c4dc529fcc03ac1e58d15f0dedb0ebd5',166400,$null)
@@ -103,7 +105,7 @@ function Get-FailurePostchecks($pins) {
   return $state
 }
 function Test-StorageFailure($failure) {
-  $pattern = '(?i)no space left|disk full|not enough (space|storage)|quota exceeded|errno 28|winerror 112|0x80070070'
+  $pattern = '(?i)no space left|disk full|not enough (space|storage)|quota exceeded|errno["\s:]+28\b|winerror["\s:]+(?:39|112|1816)\b|hresult["\s:]+-2147024784\b|0x80070070'
   if ($failure.ToString() -match $pattern) { return $true }
   $pending = [Collections.Generic.Stack[Exception]]::new()
   if ($failure.Exception -is [Exception]) { $pending.Push($failure.Exception) }
@@ -211,7 +213,7 @@ function Get-ScratchInventory {
         sha256=(Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()})
     }
   }
-  return ,$files.ToArray()
+  return $files.ToArray()
 }
 function Read-DiscoveryResult($pins, $run, $postrun, $receipt, $postreceipt) {
   $pins.VerifyAll()
@@ -241,6 +243,7 @@ function Read-DiscoveryResult($pins, $run, $postrun, $receipt, $postreceipt) {
   return [ordered]@{schema='cleanup-claim-discovery-v1';source=$ReviewedSourceSHA;
     helper_pid=$run.pid;helper_exit=$run.exit;elapsed_ms=$run.elapsed;argv=$run.argv;
     outer_receipt=$receipt;postcheck_helper_pid=$postrun.pid;postcheck_helper_exit=$postrun.exit;
+    postcheck_argv=$postrun.argv;postcheck_elapsed_ms=$postrun.elapsed;
     postcheck_receipt=$postreceipt;validated_receipt=$validated;files=$inventory;postcompile_dependency_identities=$dependencies;
     limitations='Discovery only; generated include tree, implicit CWD behavior and dependency closure remain unqualified'}
 }
@@ -269,7 +272,7 @@ function Load-RetainedInterop {
   $failure = $null
   try {
     $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)).ToLowerInvariant()
-    if ($digest -cne '76c97bc07ada9c4f8335a23b4eb12ded531a83b72c11d78eda9a85a39934cbaa') { throw 'Interop identity mismatch' }
+    if ($digest -cne 'fc754851846ebcea79b0f719c02602b8ad86e505272586b5cfd50148d3117a89') { throw 'Interop identity mismatch' }
     $stream.Position = 0
     $reader = [IO.StreamReader]::new($stream)
     Add-Type -TypeDefinition ($reader.ReadToEnd())
