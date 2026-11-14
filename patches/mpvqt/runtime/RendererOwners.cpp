@@ -108,6 +108,29 @@ bool CoreOwner::postControl(std::function<void(mpv_handle *)> operation)
     return queued;
 }
 
+void CoreOwner::requestQuarantineStop()
+{
+    bool expected = false;
+    if (!quarantineStopStarted.compare_exchange_strong(expected, true)) return;
+    auto owner = shared_from_this();
+    std::unique_lock<std::mutex> lock(postingMutex);
+    const bool admitted = controller && enterControl();
+    bool queued = false;
+    if (admitted) {
+        queued = QMetaObject::invokeMethod(controller, [owner] {
+            struct Leave { std::shared_ptr<CoreOwner> owner; ~Leave() { owner->leaveControl(); } } guard{owner};
+            const char *args[] = {"stop", nullptr};
+            const int result = mpv_command_async(owner->handle, quarantineStopUserdata, args);
+            owner->quarantineStopNativeResult.store(result, std::memory_order_release);
+        }, Qt::QueuedConnection);
+    }
+    commandAuthority.store(false);
+    lock.unlock();
+    if (admitted && !queued) leaveControl();
+    quarantineStopQueue.store(queued ? QuarantineStopQueue::Queued : QuarantineStopQueue::Rejected,
+                              std::memory_order_release);
+}
+
 void CoreOwner::revokeControl()
 {
     std::lock_guard<std::mutex> lock(postingMutex);
@@ -287,6 +310,7 @@ bool RetirementCoordinator::quarantine(const std::shared_ptr<GenerationOwner> &o
     std::lock_guard<std::mutex> lock(mutex);
     if (!owner || retained != owner || quarantined()) return false;
     owner->revoke();
+    owner->core->requestQuarantineStop();
     owner->core->revokeControl();
     owner->core->closeExternalWakeup();
     owner->blocked.store(true, std::memory_order_release);

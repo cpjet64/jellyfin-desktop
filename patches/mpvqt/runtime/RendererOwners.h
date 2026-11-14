@@ -44,6 +44,9 @@ signals:
 
 // Native destruction is explicit and must be dispatched after external fences.
 struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
+    enum class QuarantineStopQueue { NotRequested, Queued, Rejected };
+    static constexpr uint64_t quarantineStopUserdata = uint64_t{7} << 61;
+    static constexpr int stopResultPending = 1;
     mpv_handle *handle = nullptr;
     MpvController *controller = nullptr; // owned until explicit finalization
     QThread *worker = nullptr; // owned until explicit finalization
@@ -59,6 +62,9 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     std::atomic<unsigned> wakeCallbacks{0};
     std::mutex postingMutex;
     std::mutex wakeRegistrationMutex;
+    std::atomic<bool> quarantineStopStarted{false};
+    std::atomic<QuarantineStopQueue> quarantineStopQueue{QuarantineStopQueue::NotRequested};
+    std::atomic<int> quarantineStopNativeResult{stopResultPending};
 
     bool enterControl();
     void leaveControl();
@@ -70,6 +76,7 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     bool installExternalWakeup();
     void closeExternalWakeup();
     bool requestFinalization();
+    void requestQuarantineStop();
     void maybeFinalize();
     static std::shared_ptr<CoreOwner> adopt(mpv_handle *handle, MpvController *controller,
                                             QThread *worker, WakeRelay *relay);
