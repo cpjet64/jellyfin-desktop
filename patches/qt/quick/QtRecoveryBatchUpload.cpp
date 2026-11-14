@@ -2,6 +2,7 @@
 #include <cstring>
 #if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 #include "QtRecoveryQuick_p.h"
+#include "QtRecoveryPrimitive_p.h"
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -51,7 +52,7 @@ void Renderer::uploadRecoveryMergedBatch(Batch *b, QSGGeometry *g)
         uploadMergedElement(e, b->positionAttribute, &vertexData, &zData, &indexData, iBasePtr, &indicesInSet);
 #if defined(Q_OS_WIN) && QT_CONFIG(opengl)
         b->drawSets.last().addRecoveryContribution(qtRecoveryNodeIdentity(e->node),
-                                                   e->node->geometry()->vertexCount(),
+                                                   qtRecoveryHasDrawablePrimitive(e->node->geometry()),
                                                    recoveryIndicesBefore, indicesInSet);
 #endif
         e = e->nextInBatch;

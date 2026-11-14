@@ -19,9 +19,9 @@ struct DrawSet
 #if defined(Q_OS_WIN) && QT_CONFIG(opengl)
     quint64 recoveryNodes[4] = {};
     bool recoveryOverflow = false;
-    void addRecoveryContribution(quint64 node, int vertices, int before, int after)
+    void addRecoveryContribution(quint64 node, bool drawable, int before, int after)
     {
-        if (vertices > 0 && after > before)
+        if (drawable && after > before)
             addRecoveryNode(node);
     }
     void addRecoveryNode(quint64 node)

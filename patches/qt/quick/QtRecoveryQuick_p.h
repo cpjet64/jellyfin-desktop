@@ -16,6 +16,6 @@ void qtRecoveryUnregisterNode(const void *node, uint64_t lifetime);
 void qtRecoveryInvalidateNode(uint64_t lifetime);
 uint64_t qtRecoveryNodeIdentity(const void *node);
 void qtRecoveryMarkDraw(uint64_t nodeLifetime, uintptr_t renderTarget, const void *boundTexture, const void *boundRhiTexture,
-                        bool normalColorPass);
+                        int sampleCount, bool normalColorPass);
 
 #endif

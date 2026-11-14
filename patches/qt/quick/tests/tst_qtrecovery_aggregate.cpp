@@ -4,6 +4,7 @@
 #include <QtQuick/QSGTexture>
 #include <cassert>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 
 #undef assert
@@ -34,7 +35,7 @@ struct Fixture {
         assert(copied.frame_serial == ticket.frame_serial);
         qtRecoveryFboEnd(16, 19, &texture);
     }
-    void draw() { qtRecoveryMarkDraw(life, ticket.render_target, &texture, texture.rhiTexture(), true); }
+    void draw() { qtRecoveryMarkDraw(life, ticket.render_target, &texture, texture.rhiTexture(), 1, true); }
     void swap(int ok = 1) { qt_recovery_swap_report_v1(ticket.surface, ticket.platform_context, 1, 1, ok); }
     bool take(uint64_t attempt = 9) {
         QtRecoverySubmissionV1 result{};
@@ -72,13 +73,18 @@ static void swapFailures()
 static void badDraws()
 {
     Fixture f; Texture other; f.begin(); f.publish(); f.swap(); qtRecoveryFinish(true, false); assert(!f.take());
-    f.begin(); qtRecoveryMarkDraw(f.life, f.ticket.render_target + 1, &f.texture, f.texture.rhiTexture(), true);
+    f.begin(); qtRecoveryMarkDraw(f.life, f.ticket.render_target + 1, &f.texture, f.texture.rhiTexture(), 1, true);
     f.swap(); qtRecoveryFinish(true, false); assert(!f.take());
-    f.begin(); qtRecoveryMarkDraw(f.life, f.ticket.render_target, &other, other.rhiTexture(), true);
+    f.begin(); qtRecoveryMarkDraw(f.life, f.ticket.render_target, &other, other.rhiTexture(), 1, true);
     f.swap(); qtRecoveryFinish(true, false); assert(!f.take());
-    f.begin(); qtRecoveryMarkDraw(f.life, f.ticket.render_target, &f.texture, nullptr, true);
+    f.begin(); qtRecoveryMarkDraw(f.life, f.ticket.render_target, &f.texture, nullptr, 1, true);
     f.swap(); qtRecoveryFinish(true, false); assert(!f.take());
-    f.begin(); qtRecoveryMarkDraw(f.life, f.ticket.render_target, &f.texture, f.texture.rhiTexture(), false);
+    f.begin(); qtRecoveryMarkDraw(f.life, f.ticket.render_target, &f.texture,
+                                  reinterpret_cast<void *>(uintptr_t(99)), 1, true);
+    f.swap(); qtRecoveryFinish(true, false); assert(!f.take());
+    f.begin(); qtRecoveryMarkDraw(f.life, f.ticket.render_target, &f.texture, f.texture.rhiTexture(), 1, false);
+    f.swap(); qtRecoveryFinish(true, false); assert(!f.take());
+    f.begin(); qtRecoveryMarkDraw(f.life, f.ticket.render_target, &f.texture, f.texture.rhiTexture(), 4, true);
     f.swap(); qtRecoveryFinish(true, false); assert(!f.take());
 }
 
@@ -133,6 +139,7 @@ static void invalidNativeFrame()
 
 int main()
 {
+    assert(std::strcmp(qt_recovery_quick_bound_gui_source_id_v1(), qt_recovery_swap_source_id_v1()) == 0);
     successAndReuse(); zeroAttemptReadiness(); swapFailures(); badDraws(); revocationAndReuse();
     invalidFboAndResolve();
     invalidNativeFrame();

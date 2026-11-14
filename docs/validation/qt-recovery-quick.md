@@ -31,8 +31,8 @@ for the current LF bytes are:
 
 | Patch | SHA-256 |
 | --- | --- |
-| `qtdeclarative-6.9.3-ticket-fbo.patch` | `efb8ae00aa96ec78f9c618b7e7498b072417014d3ad004b88d9107fbf2df0b45` |
-| `qtdeclarative-6.9.3-batch-renderer.patch` | `18f64d8b67e702cd9407f49776bd982f0152f616f34b34290a22be03e85e8acd` |
+| `qtdeclarative-6.9.3-ticket-fbo.patch` | `6768d03fbc074e7f8350a3881764c25ed2aed253ae2faf2998a85ee09c5cef0f` |
+| `qtdeclarative-6.9.3-batch-renderer.patch` | `3e91f995f2a839d053c03c049d1a0dde993e67d6c52a1cc3f47e778af00f7249` |
 
 The threaded loop begins the frame before synchronization and calls `endFrame`
 after rendering. A failed begin can still emit `afterFrameEnd`; a failed end can
@@ -45,13 +45,16 @@ The candidate retains bounded node identities with each uploaded merged draw
 set and records nonempty draw calls against the expected render target. It
 checks the standard texture material's selected QSG and QRhi texture bindings
 against the registered display texture and retains attributed content across
-tickets. Multisample resolves fail closed: the upstream resolve operation
+tickets. Draw qualification requires a nondegenerate standard textured triangle
+and a single-sample window target. Multisample resolves fail closed: the upstream resolve operation
 returns no result from which this adapter can establish successful transfer.
 The helper test exercises the actual Quick aggregation and QtGui swap bridge
 with synthetic identities, including zero-attempt readiness, failed swaps and
 retained-frame reuse. A separate source test exercises the batch renderer's
 draw-set membership storage and overflow. The actual renderer draw and
 material-binding integration remain untested; integration review remains open.
+`qt_recovery_quick_bound_gui_source_id_v1` exposes the linked Gui bridge identity
+for consumer verification.
 
 The publication boundary rejects out-of-range identity and timestamp values
 before retaining a native frame. The added negative source cases have not been

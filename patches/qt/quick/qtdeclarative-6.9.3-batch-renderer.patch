@@ -1,13 +1,14 @@
 diff --git a/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp b/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
-index e0ca7c6d..dfad0d05 100644
+index e0ca7c6d..c296e810 100644
 --- a/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
 +++ b/src/quick/scenegraph/coreapi/qsgbatchrenderer.cpp
-@@ -6,0 +7,4 @@
+@@ -6,0 +7,5 @@
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +#include "../../recovery/QtRecoveryQuick_p.h"
++#include "../../recovery/QtRecoveryPrimitive_p.h"
 +#include <QtQuick/qsgtexturematerial.h>
 +#endif
-@@ -2084,0 +2089,34 @@ QMatrix4x4 qsg_matrixForRoot(Node *node)
+@@ -2084,0 +2090,34 @@ QMatrix4x4 qsg_matrixForRoot(Node *node)
 +bool Renderer::countRecoveryBatch(Batch *b, QSGGeometry *g, int &unmergedIndexSize)
 +{
 +    // Figure out how much memory we need...
@@ -42,11 +43,11 @@ index e0ca7c6d..dfad0d05 100644
 +    return true;
 +}
 +
-@@ -2120,3 +2157,0 @@ void Renderer::uploadBatch(Batch *b)
+@@ -2120,3 +2158,0 @@ void Renderer::uploadBatch(Batch *b)
 -    // Figure out how much memory we need...
 -    b->vertexCount = 0;
 -    b->indexCount = 0;
-@@ -2124,23 +2159 @@ void Renderer::uploadBatch(Batch *b)
+@@ -2124,23 +2160 @@ void Renderer::uploadBatch(Batch *b)
 -    Element *e = b->first;
 -
 -    // Merged batches always do indexed draw calls. Non-indexed geometry gets
@@ -71,7 +72,7 @@ index e0ca7c6d..dfad0d05 100644
 -    // this is a broken usecase which we do not care to optimize for...
 -    if (b->vertexCount == 0 || (b->merged && b->indexCount == 0))
 +    if (!countRecoveryBatch(b, g, unmergedIndexSize))
-@@ -2178,78 +2191,4 @@ void Renderer::uploadBatch(Batch *b)
+@@ -2178,78 +2192,4 @@ void Renderer::uploadBatch(Batch *b)
 -    if (b->merged) {
 -        char *vertexData = b->vbo.data;
 -        char *zData = vertexData + b->vertexCount * g->sizeOfVertex();
@@ -154,7 +155,7 @@ index e0ca7c6d..dfad0d05 100644
 +        uploadRecoveryMergedBatch(b, g);
 +    else
 +        uploadRecoveryUnmergedBatch(b);
-@@ -2257,62 +2196,2 @@ void Renderer::uploadBatch(Batch *b)
+@@ -2257,62 +2197,2 @@ void Renderer::uploadBatch(Batch *b)
 -    if (Q_UNLIKELY(debug_upload())) {
 -        const char *vd = b->vbo.data;
 -        qDebug() << "  -- Vertex Data, count:" << b->vertexCount << " - " << g->sizeOfVertex() << "bytes/vertex";
@@ -219,7 +220,7 @@ index e0ca7c6d..dfad0d05 100644
 -    }
 +    if (Q_UNLIKELY(debug_upload()))
 +        qsgRecoveryDumpUpload(b, g, useDepthBuffer(), m_uint32IndexForRhi, size_of_type);
-@@ -2950,8 +2829,4 @@ static void materialToRendererGraphicsState(GraphicsState *dst,
+@@ -2950,8 +2830,4 @@ static void materialToRendererGraphicsState(GraphicsState *dst,
 -void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 -                                         QSGMaterialShader::RenderState &renderState,
 -                                         QSGMaterial *material,
@@ -232,14 +233,14 @@ index e0ca7c6d..dfad0d05 100644
 +                                      QSGMaterialShader::RenderState &renderState, QSGMaterial *material,
 +                                      const Batch *batch, int ubufOffset, int ubufRegionSize,
 +                                      char *directUpdatePtr, QVarLengthArray<QRhiShaderResourceBinding, 8> &bindings)
-@@ -2959,6 +2833,0 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -2959,6 +2834,0 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 -    m_current_resource_update_batch = m_resourceUpdates;
 -
 -    QSGMaterialShader *shader = sms->materialShader;
 -    QSGMaterialShaderPrivate *pd = QSGMaterialShaderPrivate::get(shader);
 -    QVarLengthArray<QRhiShaderResourceBinding, 8> bindings;
 -
-@@ -2983,0 +2853,58 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -2983,0 +2854,58 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 +}
 +
 +void Renderer::updateRecoverySamplers(QSGMaterialShaderPrivate *pd, int binding,
@@ -298,7 +299,7 @@ index e0ca7c6d..dfad0d05 100644
 +    collectRecoveryUniform(shader, pd, renderState, material, batch, ubufOffset, ubufRegionSize,
 +                           directUpdatePtr, bindings);
 +
-@@ -3013,31 +2940,2 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3013,31 +2941,2 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 -        if (nextTex != prevTex || hasDirtySamplerOptions) {
 -
 -            // The QSGTexture, and so the sampler parameters, may have changed.
@@ -332,7 +333,7 @@ index e0ca7c6d..dfad0d05 100644
 -        }
 +        if (nextTex != prevTex || hasDirtySamplerOptions)
 +            updateRecoverySamplers(pd, binding, nextTex, isAnisotropic);
-@@ -3062,0 +2961,11 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3062,0 +2962,11 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +                static QSGOpaqueTextureMaterial opaqueRecoveryMaterial;
 +                static QSGTextureMaterial alphaRecoveryMaterial;
@@ -344,40 +345,44 @@ index e0ca7c6d..dfad0d05 100644
 +                    e->recoveryBoundRhiTexture = texture;
 +                }
 +#endif
-@@ -3075,0 +2985,5 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3075,0 +2986,5 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 +    updateShaderBindings(e, bindings, pd->ubufBinding);
 +}
 +
 +void Renderer::updateShaderBindings(Element *e, const QVarLengthArray<QRhiShaderResourceBinding, 8> &bindings, int ubufBinding)
 +{
-@@ -3136 +3050 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3136 +3051 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 -        if (pd->ubufBinding <= 0 || bindings.size() <= 1)
 +        if (ubufBinding <= 0 || bindings.size() <= 1)
-@@ -3144 +3058 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3144 +3059 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 -        if (!e->srb->create())
 +        if (!e->srb->create()) {
-@@ -3145,0 +3060,5 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
+@@ -3145,0 +3061,5 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +            e->recoveryBoundTexture = nullptr;
 +            e->recoveryBoundRhiTexture = nullptr;
 +#endif
 +        }
-@@ -3366,0 +3286,7 @@ void Renderer::renderMergedBatch(PreparedRenderBatch *renderBatch, bool depthPos
+@@ -3366,0 +3287,8 @@ void Renderer::renderMergedBatch(PreparedRenderBatch *renderBatch, bool depthPos
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
 +        if (draw.indexCount > 0 && !draw.recoveryOverflow) {
 +            for (quint64 node : draw.recoveryNodes)
 +                qtRecoveryMarkDraw(node, reinterpret_cast<uintptr_t>(renderTarget().rt), e->recoveryBoundTexture, e->recoveryBoundRhiTexture,
++                                   renderTarget().rt ? renderTarget().rt->sampleCount() : 0,
 +                                   !depthPostPass && m_renderMode != QSGRendererInterface::RenderMode3D);
 +        }
 +#endif
-@@ -3579,0 +3506,4 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
+@@ -3579,0 +3508,6 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
-+                qtRecoveryMarkDraw(qtRecoveryNodeIdentity(e->node), reinterpret_cast<uintptr_t>(renderTarget().rt), e->recoveryBoundTexture, e->recoveryBoundRhiTexture,
++                if (qtRecoveryHasDrawablePrimitive(g))
++                    qtRecoveryMarkDraw(qtRecoveryNodeIdentity(e->node), reinterpret_cast<uintptr_t>(renderTarget().rt), e->recoveryBoundTexture, e->recoveryBoundRhiTexture,
++                                   renderTarget().rt ? renderTarget().rt->sampleCount() : 0,
 +                                   !depthPostPass && m_renderMode != QSGRendererInterface::RenderMode3D);
 +#endif
-@@ -3583,0 +3514,5 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
+@@ -3583,0 +3518,6 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
 +#if defined(Q_OS_WIN) && QT_CONFIG(opengl)
-+            if (g->vertexCount() > 0)
++            if (g->vertexCount() > 0 && qtRecoveryHasDrawablePrimitive(g))
 +                qtRecoveryMarkDraw(qtRecoveryNodeIdentity(e->node), reinterpret_cast<uintptr_t>(renderTarget().rt), e->recoveryBoundTexture, e->recoveryBoundRhiTexture,
++                                   renderTarget().rt ? renderTarget().rt->sampleCount() : 0,
 +                                   !depthPostPass && m_renderMode != QSGRendererInterface::RenderMode3D);
 +#endif
