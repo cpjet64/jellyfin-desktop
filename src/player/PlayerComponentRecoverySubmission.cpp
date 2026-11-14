@@ -45,6 +45,7 @@ void PlayerComponentRecovery::submission(std::uint64_t generation, const QtRecov
   if (!frameGateActive_) {
     pendingSubmission_ = value; pendingSubmissionEpoch_ = runtime_.eventEpoch(); submissionPending_ = true; return;
   }
+  if (frameGate_.completed()) return;
   if (runtime_.eventEpoch() != frameEpoch_ ||
       !frameGate_.completeSubmission(saved_.key, attempt_, frameEpoch_, value, now)) { failRestore(); return; }
   verifiedSource_ = value.frame.source_frame_serial;

@@ -57,6 +57,8 @@ bool AutomaticRecoveryFrameGate::validSubmission(const QtRecoverySubmissionV1& s
 bool AutomaticRecoveryFrameGate::completeSubmission(Key key, std::uint64_t attempt, std::uint64_t epoch,
                                                      const QtRecoverySubmissionV1& s, std::int64_t now)
 {
+  // A completed ticket is consumed once; later packets cannot replace it.
+  if (completed_) return false;
   if (!matches(key, attempt, epoch, now) || !validSubmission(s) || !attempt || s.frame.attempt != attempt ||
       s.frame.renderer_generation != rendererGeneration_ || s.ticket.window_lifetime != windowLifetime_ ||
       s.ticket.scenegraph_generation != sceneGeneration_) { invalidate(); return false; }
