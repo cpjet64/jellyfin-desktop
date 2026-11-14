@@ -30,7 +30,7 @@ bool HealthyRestoreTestFixture::replyLoad(qint64 entry, bool startFirst, bool wi
   mpv_node_list list{}; list.num = 1; list.keys = fields; list.values = &value;
   mpv_event_command command{}; command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
   mpv_event reply{}; reply.event_id = MPV_EVENT_COMMAND_REPLY; reply.error = error;
-  reply.reply_userdata = (quint64{1} << 63) | graph_->session_->attempt; reply.data = &command;
+  reply.reply_userdata = player.m_receiptUserdata; reply.data = &command;
   mpv_event_start_file start{}; start.playlist_entry_id = entry;
   mpv_event started{}; started.event_id = MPV_EVENT_START_FILE; started.data = &start;
   if (withStart && startFirst) player.observeNativeReceipt(&started);
@@ -49,7 +49,7 @@ bool HealthyRestoreTestFixture::observe(quint64 id, qint64 entry, const QByteArr
   QByteArray text = "NR1|1|" + QByteArray::number(entry) + "|yes|yes|" + position + "|yes|no|no";
   mpv_event_command command{}; command.result.format = MPV_FORMAT_STRING; command.result.u.string = text.data();
   mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY;
-  event.reply_userdata = (quint64{1} << 62) | id; event.data = &command;
+  event.reply_userdata = player.m_nativeObservation.userdata; event.data = &command;
   player.observeNativeReceipt(&event);
   return player.m_nativeObservation.valid;
 }
@@ -89,7 +89,7 @@ void HealthyRestoreTestFixture::replySeekAndRestart(int error, bool restartFirst
   mpv_event restarted{}; restarted.event_id = MPV_EVENT_PLAYBACK_RESTART;
   if (restart && restartFirst) player.observeNativeReceipt(&restarted);
   mpv_event reply{}; reply.event_id = MPV_EVENT_COMMAND_REPLY; reply.error = error;
-  reply.reply_userdata = (quint64{1} << 61) | graph_->session_->attempt;
+  reply.reply_userdata = player.m_nativeRestore.seekUserdata;
   player.observeNativeReceipt(&reply);
   if (restart && !restartFirst) player.observeNativeReceipt(&restarted);
 }

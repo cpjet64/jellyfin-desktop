@@ -1,4 +1,5 @@
 #include "player/AutomaticRecoveryOwnedSeek.h"
+#include "player/RecoveryIdentity.h"
 #include <cstdio>
 #include <cstdlib>
 
@@ -145,6 +146,23 @@ static void staleOrWrongScopeCannotRevokeFreshPosition()
   }
 }
 
+static void oldActorReplyCannotCompleteNewOwnedSeek()
+{
+  auto oldOp = operation(), currentOp = operation();
+  oldOp.replyId = RecoveryIdentity::take(RecoveryIdentity::Domain::SeekReply);
+  currentOp.replyId = RecoveryIdentity::take(RecoveryIdentity::Domain::SeekReply);
+  CHECK(oldOp.replyId && currentOp.replyId && oldOp.replyId != currentOp.replyId);
+  Seek oldActor, currentActor;
+  CHECK(oldActor.begin(oldOp));
+  CHECK(currentActor.begin(currentOp));
+  currentActor.reply(oldOp.replyId, 0, 150);
+  currentActor.position(position(), 200);
+  currentActor.submission(submission(), 201);
+  CHECK(currentActor.poll(key, 202) == State::Pending);
+  currentActor.reply(currentOp.replyId, 0, 203);
+  CHECK(currentActor.poll(key, 204) == State::Complete);
+}
+
 int main()
 {
   replyAloneDoesNotProveSeek();
@@ -155,4 +173,5 @@ int main()
   targetNotPriorCheckpointQualifiesPosition();
   newerContradictoryNativeStateRevokesOldPosition();
   staleOrWrongScopeCannotRevokeFreshPosition();
+  oldActorReplyCannotCompleteNewOwnedSeek();
 }

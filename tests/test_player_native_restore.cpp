@@ -26,7 +26,8 @@ void TestPlayerNativeRestore::loadReplyAndStart(PlayerComponent& player, quint64
   mpv_node_list list{}; list.num = 1; list.keys = fields; list.values = &value;
   mpv_event_command command{}; command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
   mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY;
-  event.reply_userdata = (quint64{1} << 63) | attempt; event.data = &command;
+  event.reply_userdata = attempt == player.m_nativeReceipts.snapshot().key.attempt
+      ? player.m_receiptUserdata : (player.m_receiptUserdata ^ quint64{1}); event.data = &command;
   player.observeNativeReceipt(&event);
   mpv_event_start_file start{}; start.playlist_entry_id = entry;
   event.event_id = MPV_EVENT_START_FILE; event.data = &start;
@@ -56,7 +57,8 @@ void TestPlayerNativeRestore::observationReply(PlayerComponent& player, quint64 
   command.result.u.string = const_cast<char*>(text.constData());
   mpv_event event{};
   event.event_id = MPV_EVENT_COMMAND_REPLY;
-  event.reply_userdata = (quint64{1} << 62) | id;
+  event.reply_userdata = id == player.m_nativeObservation.id
+      ? player.m_nativeObservation.userdata : (player.m_nativeObservation.userdata ^ quint64{1});
   event.error = error;
   event.data = &command;
   player.observeNativeReceipt(&event);
@@ -70,7 +72,7 @@ void TestPlayerNativeRestore::actualObservationBoundary()
   bool commandMatches = false;
   player.m_observationDispatch = [&](quint64 id, const char** args) {
     ++calls;
-    commandMatches = id == ((quint64{1} << 62) | 7) && QByteArray(args[0]) == "expand-text" &&
+    commandMatches = id != 0 && id == player.m_nativeObservation.userdata && QByteArray(args[0]) == "expand-text" &&
                      QByteArray(args[1]) == NativePlaybackObservation::expression();
     return 0;
   };
@@ -143,7 +145,7 @@ void TestPlayerNativeRestore::pausedLoadAndExactSeek()
   mpv_event event{}; event.event_id = MPV_EVENT_PLAYBACK_RESTART;
   player.observeNativeReceipt(&event);
   QVERIFY(!player.m_nativeRestore.restarted);
-  event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 61) | 2;
+  event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = player.m_nativeRestore.seekUserdata;
   player.observeNativeReceipt(&event);
   QVERIFY(player.m_nativeRestore.seekReply && player.m_nativeRestore.seekOk);
   event.event_id = MPV_EVENT_PLAYBACK_RESTART;
@@ -334,7 +336,7 @@ void TestPlayerNativeRestore::reorderedLoadAndNativeConsumption()
   char field[] = "playlist_entry_id"; char* fields[] = {field};
   mpv_node_list list{}; list.num = 1; list.keys = fields; list.values = &value;
   mpv_event_command command{}; command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
-  event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 63) | 2; event.data = &command;
+  event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = player.m_receiptUserdata; event.data = &command;
   player.observeNativeReceipt(&event);
   const auto key = player.m_nativeReceipts.snapshot().key;
   QVERIFY(player.m_nativeReceipts.snapshot().started);
@@ -377,7 +379,7 @@ void TestPlayerNativeRestore::cancellationDuringSeek()
 #else
   player.cancelNativeRestore();
 #endif
-  mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 61) | 2;
+  mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = player.m_nativeRestore.seekUserdata;
   player.observeNativeReceipt(&event);
   QVERIFY(player.m_nativeRestore.cancelled && player.m_nativeRestore.seekReply);
   event.event_id = MPV_EVENT_PLAYBACK_RESTART;
@@ -439,7 +441,7 @@ void TestPlayerNativeRestore::reentrantCancellationAndSeekFailure()
   QVERIFY(cleanupStarted);
 #endif
   QVERIFY(player.m_nativeRestore.cancelled && player.m_nativeRestore.seekPending);
-  mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 61) | 2;
+  mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = player.m_nativeRestore.seekUserdata;
   event.error = -1;
   player.observeNativeReceipt(&event);
   QVERIFY(player.m_nativeRestore.seekReply && !player.m_nativeRestore.seekOk);

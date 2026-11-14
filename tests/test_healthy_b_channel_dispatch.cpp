@@ -169,7 +169,7 @@ class TestHealthyGraphArm {
       CHECK(result && state_->dispatches == 1);
       const auto& command = state_->commands[0];
       CHECK(command.size() >= 4 && command.front() == "loadfile" && command.back() == "pause=yes");
-      CHECK(state_->commandIds[0] == ((quint64{1} << 63) | key.attempt));
+      CHECK(state_->commandIds[0] != 0 && state_->commandIds[0] == player.m_receiptUserdata);
       return;
     }
     CHECK(!result && state_->dispatches == 0);
@@ -190,7 +190,7 @@ class TestHealthyGraphArm {
     QByteArray text = "NR1|1|42|yes|yes|0.000|yes|no|no";
     mpv_event_command command{}; command.result.format = MPV_FORMAT_STRING; command.result.u.string = text.data();
     mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY;
-    event.reply_userdata = (quint64{1} << 62) | 1; event.data = &command;
+    event.reply_userdata = player.m_nativeObservation.userdata; event.data = &command;
     player.observeNativeReceipt(&event);
     CHECK(player.m_nativeObservation.valid && player.m_nativeObservation.paused);
   }
@@ -217,7 +217,7 @@ class TestHealthyGraphArm {
       CHECK(result && state_->dispatches == 2);
       const auto& command = state_->commands[1];
       CHECK(command.size() == 3 && command[0] == "seek" && command[1] == "3.000" && command[2] == "absolute+exact");
-      CHECK(state_->commandIds[1] == ((quint64{1} << 61) | key.attempt));
+      CHECK(state_->commandIds[1] != 0 && state_->commandIds[1] == player.m_nativeRestore.seekUserdata);
       return;
     }
     CHECK(!result && state_->dispatches == 1);
@@ -250,7 +250,7 @@ class TestHealthyGraphArm {
     mpv_event_command command{}; command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
     mpv_event reply{}; reply.event_id = MPV_EVENT_COMMAND_REPLY; reply.error = successfulReply ? 0 : -1;
     if (successfulReply) reply.data = &command;
-    reply.reply_userdata = (quint64{1} << 63) | key.attempt;
+    reply.reply_userdata = state_->commandIds[0];
     player.observeNativeReceipt(&reply);
     const auto settled = player.m_nativeReceipts.snapshot();
     CHECK(settled.key.host == key.host && settled.key.core == key.core &&

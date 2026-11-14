@@ -146,6 +146,21 @@ static void ambiguousPlayingEntriesAreRejected()
   CHECK(!h.observation.take(key, 1, 2, result));
 }
 
+static void previousObjectReplyCannotSatisfyNewBatch()
+{
+  Harness old, current; Playlist list(7);
+  CHECK(old.observation.begin(key, 7, 1, 0, old.dispatch));
+  CHECK(current.observation.begin(key, 7, 1, 0, current.dispatch));
+  CHECK(old.requests[0].id != current.requests[0].id);
+  const auto real = current.requests[0].id;
+  current.requests[0].id = old.requests[0].id;
+  current.respond(0, MPV_FORMAT_NODE, &list.node, 1);
+  CHECK(current.requests.size() == 1);
+  current.requests[0].id = real;
+  current.respond(0, MPV_FORMAT_NODE, &list.node, 2);
+  CHECK(current.requests.size() == 7);
+}
+
 int main()
 {
   matchingBracketsAndTypedPayload();
@@ -154,4 +169,5 @@ int main()
   staleOrDuplicateRepliesDoNotAuthorize();
   laterPlaylistMustStillSelectSameUniqueEntry();
   ambiguousPlayingEntriesAreRejected();
+  previousObjectReplyCannotSatisfyNewBatch();
 }

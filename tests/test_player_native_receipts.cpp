@@ -34,7 +34,9 @@ void TestPlayerNativeReceipts::reply(PlayerComponent& player, quint64 attempt, q
   mpv_event_command command{};
   command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
   mpv_event event{};
-  event.event_id = MPV_EVENT_COMMAND_REPLY; event.reply_userdata = (quint64{1} << 63) | attempt;
+  event.event_id = MPV_EVENT_COMMAND_REPLY;
+  event.reply_userdata = attempt == player.m_nativeReceipts.snapshot().key.attempt
+      ? player.m_receiptUserdata : (player.m_receiptUserdata ^ quint64{1});
   event.error = error; event.data = &command;
   player.observeNativeReceipt(&event);
 }

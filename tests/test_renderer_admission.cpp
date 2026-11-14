@@ -20,6 +20,7 @@ private slots:
   void quarantineWinsAdmission();
   void failedReservationRetiresBeforeReadmission();
   void internalWakeBeforeBindingIsDrained();
+  void sameCoreConsumerCanRebindAndDrain();
 private:
   bool adopt(quint64 token, bool internal = false);
   std::shared_ptr<CoreOwner> owner_;
@@ -192,6 +193,51 @@ void RendererAdmissionTest::internalWakeBeforeBindingIsDrained()
   bool sawPause = false;
   for (const auto& args : changed) if (args.at(0).toString() == QStringLiteral("pause")) sawPause = true;
   QVERIFY(sawPause);
+  lease = {};
+}
+
+void RendererAdmissionTest::sameCoreConsumerCanRebindAndDrain()
+{
+  QVERIFY(owner_->bindExternalConsumer());
+  int firstWakes = 0;
+  QObject first;
+  auto firstConnection = connect(owner_->wakeRelay, &WakeRelay::nativeEventsAvailable, &first, [&] {
+    ++firstWakes;
+    auto lease = owner_->acquireNative();
+    if (!lease) return;
+    while (mpv_wait_event(lease.get(), 0)->event_id != MPV_EVENT_NONE) {}
+  }, Qt::QueuedConnection);
+  QVERIFY(owner_->installExternalWakeup());
+  QTRY_VERIFY_WITH_TIMEOUT(firstWakes > 0, 15000);
+  disconnect(firstConnection);
+  owner_->unbindExternalConsumer();
+  QVERIFY(owner_->wakeAdmission.load());
+  QVERIFY(!owner_->wakeClosed.load());
+
+  auto lease = owner_->acquireNative();
+  QVERIFY(lease);
+  QCOMPARE(mpv_observe_property(lease.get(), 71, "pause", MPV_FORMAT_FLAG), 0);
+  QVERIFY(owner_->bindExternalConsumer());
+  bool sawPause = false, sawVolume = false;
+  QObject second;
+  const auto drain = [&] {
+    auto current = owner_->acquireNative();
+    if (!current) return;
+    for (;;) {
+      const auto* event = mpv_wait_event(current.get(), 0);
+      if (event->event_id == MPV_EVENT_NONE) break;
+      if (event->event_id == MPV_EVENT_PROPERTY_CHANGE && event->reply_userdata == 71) sawPause = true;
+      if (event->event_id == MPV_EVENT_PROPERTY_CHANGE && event->reply_userdata == 72) sawVolume = true;
+    }
+  };
+  auto secondConnection = connect(owner_->wakeRelay, &WakeRelay::nativeEventsAvailable, &second, drain,
+                                  Qt::QueuedConnection);
+  drain(); // Binding must drain work already queued for the same native core.
+  QTRY_VERIFY_WITH_TIMEOUT(sawPause, 15000);
+  QCOMPARE(mpv_observe_property(lease.get(), 72, "volume", MPV_FORMAT_DOUBLE), 0);
+  QTRY_VERIFY_WITH_TIMEOUT(sawVolume, 15000);
+  disconnect(secondConnection);
+  owner_->unbindExternalConsumer();
   lease = {};
 }
 

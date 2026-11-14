@@ -45,7 +45,7 @@ void TestRestartChildPlayer::freezesNativeEvidenceBeforeInternalStop()
   command.result.u.string = observation.data();
   mpv_event event{};
   event.event_id = MPV_EVENT_COMMAND_REPLY;
-  event.reply_userdata = (quint64{1} << 62) | 7;
+  event.reply_userdata = player.m_nativeObservation.userdata;
   event.data = &command;
   player.observeNativeReceipt(&event);
   FixtureRestart::Grant binding{1, 2, 3, hash, 0, false};
@@ -105,7 +105,7 @@ void TestRestartChildPlayer::staleEvidenceNeverStopsNewIntent()
     mpv_event_command command{}; command.result.format = MPV_FORMAT_STRING;
     QByteArray observation("NR1|1|42|yes|yes|3|no|no|no"); command.result.u.string = observation.data();
     mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY;
-    event.reply_userdata = (quint64{1} << 62) | 7; event.data = &command;
+    event.reply_userdata = player.m_nativeObservation.userdata; event.data = &command;
     player.observeNativeReceipt(&event);
     int evidenceChannel, controlChannel;
     FixtureRestart::RestartSourcePlayer source(adapter, &evidenceChannel, &controlChannel, {1, 2, 3, hash, 0, false});

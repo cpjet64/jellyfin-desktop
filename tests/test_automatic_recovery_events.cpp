@@ -101,9 +101,45 @@ static void malformedReplyAndEndDoNotAuthorize()
   CHECK(!runtime.snapshot(key, snapshot));
 }
 
+static void entrylessOrdinarySuccessDoesNotAuthorizeRecovery()
+{
+  Runtime runtime;
+  const Key key{1, 1, 1};
+  const auto id = submit(runtime, key, 0);
+  mpv_event_command result{};
+  result.result.format = MPV_FORMAT_NONE;
+  mpv_event replyEvent{};
+  replyEvent.event_id = MPV_EVENT_COMMAND_REPLY; replyEvent.reply_userdata = id; replyEvent.data = &result;
+  runtime.observe(&replyEvent, key, 1);
+  start(runtime, key, 7, 2);
+  event(runtime, key, MPV_EVENT_FILE_LOADED, 3);
+  AutomaticRecoverySession::Snapshot snapshot;
+  CHECK(!runtime.recordPosition(key, 7, 1000, 4));
+  CHECK(!runtime.snapshot(key, snapshot));
+}
+
+static void oldActorReplyCannotAuthorizeNewActor()
+{
+  Runtime oldActor, currentActor;
+  const Key key{1, 1, 1};
+  const auto oldId = submit(oldActor, key, 0);
+  const auto currentId = submit(currentActor, key, 0);
+  CHECK(oldId != currentId);
+  start(currentActor, key, 7, 1);
+  event(currentActor, key, MPV_EVENT_FILE_LOADED, 2);
+  reply(currentActor, key, oldId, 7, 3);
+  AutomaticRecoverySession::Snapshot snapshot;
+  CHECK(!currentActor.snapshot(key, snapshot));
+  reply(currentActor, key, currentId, 7, 4);
+  CHECK(currentActor.recordPosition(key, 7, 1000, 5));
+  CHECK(currentActor.snapshot(key, snapshot));
+}
+
 int main()
 {
   pendingQueuePreservesCurrentAndPromotesMatchingEntry();
   duplicateLoadAndEpochChangesRevokeOldAuthority();
   malformedReplyAndEndDoNotAuthorize();
+  entrylessOrdinarySuccessDoesNotAuthorizeRecovery();
+  oldActorReplyCannotAuthorizeNewActor();
 }

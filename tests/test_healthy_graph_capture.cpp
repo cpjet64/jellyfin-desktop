@@ -165,7 +165,7 @@ class TestHealthyGraphCapture {
     QByteArray text = "NR1|1|42|yes|yes|" + position + "|yes|no|no";
     mpv_event_command command{}; command.result.format = MPV_FORMAT_STRING; command.result.u.string = text.data();
     mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY;
-    event.reply_userdata = (quint64{1} << 62) | id; event.data = &command;
+    event.reply_userdata = player.m_nativeObservation.userdata; event.data = &command;
     player.observeNativeReceipt(&event);
     CHECK(player.m_nativeObservation.valid && player.m_nativeObservation.paused);
   }
@@ -195,7 +195,7 @@ class TestHealthyGraphCapture {
     auto& player = *graph_->player_;
     CHECK(player.dispatchNativeRestoreSeek());
     mpv_event event{}; event.event_id = MPV_EVENT_COMMAND_REPLY;
-    event.reply_userdata = (quint64{1} << 61) | player.m_nativeRestore.key.attempt; player.observeNativeReceipt(&event);
+    event.reply_userdata = player.m_nativeRestore.seekUserdata; player.observeNativeReceipt(&event);
     event = {}; event.event_id = MPV_EVENT_PLAYBACK_RESTART; player.observeNativeReceipt(&event);
   }
   void sampleHold()

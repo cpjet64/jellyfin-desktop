@@ -104,7 +104,7 @@ void TestHealthyRestoreCleanup::loadReply(PlayerComponent& player, qint64 entry)
   mpv_node_list list{}; list.num = 1; list.keys = names; list.values = &node;
   mpv_event_command command{}; command.result.format = MPV_FORMAT_NODE_MAP; command.result.u.list = &list;
   mpv_event value{}; value.event_id = MPV_EVENT_COMMAND_REPLY;
-  value.reply_userdata = (quint64{1} << 63) | player.m_nativeRestore.key.attempt; value.data = &command;
+  value.reply_userdata = player.m_receiptUserdata; value.data = &command;
   event(player, value);
 }
 
@@ -117,7 +117,9 @@ void TestHealthyRestoreCleanup::start(PlayerComponent& player, qint64 entry)
 void TestHealthyRestoreCleanup::reply(PlayerComponent& player, quint64 tag, int error)
 {
   mpv_event value{}; value.event_id = MPV_EVENT_COMMAND_REPLY;
-  value.reply_userdata = tag | player.m_nativeRestore.key.attempt; value.error = error; event(player, value);
+  value.reply_userdata = tag == (quint64{1} << 61) ? player.m_nativeRestore.seekUserdata
+                                                  : (tag | player.m_nativeRestore.key.attempt);
+  value.error = error; event(player, value);
 }
 
 void TestHealthyRestoreCleanup::end(PlayerComponent& player, qint64 entry, mpv_end_file_reason reason)

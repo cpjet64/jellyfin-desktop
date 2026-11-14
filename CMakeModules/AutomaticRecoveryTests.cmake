@@ -26,6 +26,7 @@ set_tests_properties(test_automatic_recovery_native PROPERTIES TIMEOUT 60)
 
 add_executable(test_automatic_recovery_events
   "${CMAKE_SOURCE_DIR}/tests/test_automatic_recovery_events.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/RecoveryIdentity.cpp"
   "${CMAKE_SOURCE_DIR}/src/player/AutomaticRecoveryNative.cpp"
   "${CMAKE_SOURCE_DIR}/src/player/AutomaticRecoverySession.cpp"
   "${CMAKE_SOURCE_DIR}/src/player/AutomaticRecoveryQueue.cpp"
@@ -38,6 +39,7 @@ set_tests_properties(test_automatic_recovery_events PROPERTIES TIMEOUT 60)
 
 add_executable(test_automatic_recovery_observation
   "${CMAKE_SOURCE_DIR}/tests/test_automatic_recovery_observation.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/RecoveryIdentity.cpp"
   "${CMAKE_SOURCE_DIR}/src/player/AutomaticRecoveryObservation.cpp"
   "${CMAKE_SOURCE_DIR}/src/player/AutomaticRecoveryNative.cpp")
 target_include_directories(test_automatic_recovery_observation PRIVATE "${CMAKE_SOURCE_DIR}/src" "${MPV_INCLUDE_DIR}")
@@ -66,12 +68,33 @@ set_tests_properties(test_automatic_recovery_read_stall PROPERTIES TIMEOUT 60)
 
 add_executable(test_automatic_recovery_owned_seek
   "${CMAKE_SOURCE_DIR}/tests/test_automatic_recovery_owned_seek.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/RecoveryIdentity.cpp"
   "${CMAKE_SOURCE_DIR}/src/player/AutomaticRecoveryOwnedSeek.cpp")
 target_include_directories(test_automatic_recovery_owned_seek PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_compile_features(test_automatic_recovery_owned_seek PRIVATE cxx_std_17)
 target_link_libraries(test_automatic_recovery_owned_seek PRIVATE Qt6::Core)
 add_test(NAME test_automatic_recovery_owned_seek COMMAND test_automatic_recovery_owned_seek)
 set_tests_properties(test_automatic_recovery_owned_seek PROPERTIES TIMEOUT 60)
+
+add_executable(test_ordinary_load_selection
+  "${CMAKE_SOURCE_DIR}/tests/test_ordinary_load_selection.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/OrdinaryLoadSelection.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/OrdinaryLoadLedger.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/OrdinaryReplacementEnd.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/OrdinaryPlaylist.cpp")
+target_include_directories(test_ordinary_load_selection PRIVATE "${CMAKE_SOURCE_DIR}/src" "${MPV_INCLUDE_DIR}")
+target_compile_features(test_ordinary_load_selection PRIVATE cxx_std_17)
+target_link_libraries(test_ordinary_load_selection PRIVATE Qt6::Core)
+add_test(NAME test_ordinary_load_selection COMMAND test_ordinary_load_selection)
+set_tests_properties(test_ordinary_load_selection PROPERTIES TIMEOUT 60)
+
+add_executable(test_recovery_identity
+  "${CMAKE_SOURCE_DIR}/tests/test_recovery_identity.cpp"
+  "${CMAKE_SOURCE_DIR}/src/player/RecoveryIdentity.cpp")
+target_include_directories(test_recovery_identity PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_compile_features(test_recovery_identity PRIVATE cxx_std_17)
+add_test(NAME test_recovery_identity COMMAND test_recovery_identity)
+set_tests_properties(test_recovery_identity PROPERTIES TIMEOUT 60)
 
 if(USE_STATIC_MPVQT AND MPVQT_EXTERNAL_EVENTS AND NOT MPVQT_C2_DIAGNOSTIC_ONLY)
   add_executable(test_mpvqt_recovery_exchange "${CMAKE_SOURCE_DIR}/tests/test_mpvqt_recovery_exchange.cpp")
@@ -84,7 +107,7 @@ if(USE_STATIC_MPVQT AND MPVQT_EXTERNAL_EVENTS AND NOT MPVQT_C2_DIAGNOSTIC_ONLY)
   target_include_directories(test_renderer_admission PRIVATE "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime" "${MPV_INCLUDE_DIR}")
   target_compile_features(test_renderer_admission PRIVATE cxx_std_17)
   target_link_libraries(test_renderer_admission PRIVATE MpvQt Qt6::Core Qt6::Test)
-  foreach(case delayedFinalizationReservesOnce cancelledWaiterIsNotCalled completionBeforeRegistrationAllowsReservation quarantineWinsAdmission failedReservationRetiresBeforeReadmission internalWakeBeforeBindingIsDrained)
+  foreach(case delayedFinalizationReservesOnce cancelledWaiterIsNotCalled completionBeforeRegistrationAllowsReservation quarantineWinsAdmission failedReservationRetiresBeforeReadmission internalWakeBeforeBindingIsDrained sameCoreConsumerCanRebindAndDrain)
     add_test(NAME renderer_admission_${case} COMMAND test_renderer_admission ${case})
     set_tests_properties(renderer_admission_${case} PROPERTIES TIMEOUT 60)
   endforeach()
