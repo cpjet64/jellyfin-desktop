@@ -5,12 +5,12 @@
 #include <limits>
 #include <utility>
 
-bool AutomaticRecoveryRuntime::submitUserLoad(mpv_handle* core, Key key, const QStringList& command,
+bool AutomaticRecoveryRuntime::submitUserLoad(const CommandDispatch& dispatch, Key key, const QStringList& command,
     const QString& url, const QVariantMap& options, const QVariantMap& metadata,
     const QVariant& audio, const QVariant& subtitle, bool paused, std::int64_t nowMs)
 {
   discardQueued();
-  if (!core || command.isEmpty() || nowMs < 0 || nowMs > std::numeric_limits<std::int64_t>::max() - 15000 ||
+  if (!dispatch || command.isEmpty() || nowMs < 0 || nowMs > std::numeric_limits<std::int64_t>::max() - 15000 ||
       sequence_ >= AutomaticRecoveryLoad::MaxSequence) return false;
   key_ = key;
   deadline_ = nowMs + 15000;
@@ -23,7 +23,9 @@ bool AutomaticRecoveryRuntime::submitUserLoad(mpv_handle* core, Key key, const Q
   args.reserve(bytes.size() + 1);
   for (const auto& part : bytes) args.push_back(part.constData());
   args.push_back(nullptr);
-  if (mpv_command_async(core, load_.userdata(), args.data()) < 0) { discardQueued(); return false; }
+  try {
+    if (dispatch(load_.userdata(), args.data()) < 0) { discardQueued(); return false; }
+  } catch (...) { discardQueued(); return false; }
   return true;
 }
 void AutomaticRecoveryRuntime::observe(const mpv_event* event, Key current, std::int64_t nowMs)
