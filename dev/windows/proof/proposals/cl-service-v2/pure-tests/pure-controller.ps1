@@ -91,10 +91,36 @@ function Assert-Private($path) {
   $user=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
   $allowed=@($user,'S-1-5-18','S-1-5-32-544'); $acl=Get-Acl -LiteralPath $path
   if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -cne $user) { throw 'Output owner mismatch' }
-  $write=[Security.AccessControl.FileSystemRights]::Write -bor [Security.AccessControl.FileSystemRights]::Delete -bor [Security.AccessControl.FileSystemRights]::ChangePermissions
-  foreach ($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) {
-    if ($rule.AccessControlType -eq 'Allow' -and $rule.IdentityReference.Value -cnotin $allowed -and ($rule.FileSystemRights -band $write)) { throw 'Output writable by another principal' }
+  if (!$acl.AreAccessRulesProtected) { throw 'Output ACL inheritance not protected' }
+  $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+  if ($rules.Count -ne 3) { throw 'Unexpected output ACL rule count' }
+  $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  foreach ($rule in $rules) {
+    if ($rule.IdentityReference.Value -cnotin $allowed -or !$seen.Add($rule.IdentityReference.Value) -or
+        $rule.AccessControlType -ne 'Allow' -or $rule.IsInherited -or
+        ($rule.FileSystemRights -band [Security.AccessControl.FileSystemRights]::FullControl) -ne [Security.AccessControl.FileSystemRights]::FullControl -or
+        $rule.InheritanceFlags -ne ([Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit) -or
+        $rule.PropagationFlags -ne [Security.AccessControl.PropagationFlags]::None) { throw 'Unexpected output ACL rule' }
   }
+}
+function Set-NewPrivate($path) {
+  $allowed=@($script:createdParent,$script:createdRoot,"$root/host-temp","$root/pycache")
+  if ($path -cnotin $allowed -or !$script:createdPaths.Contains($path)) { throw 'Directory ownership not established' }
+  $item=Get-Item -LiteralPath $path -Force -ErrorAction Stop
+  if (!$item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+      [IO.Path]::GetFullPath($item.FullName) -ine [IO.Path]::GetFullPath($path)) { throw 'Unsafe task directory' }
+  $user=[Security.Principal.WindowsIdentity]::GetCurrent().User
+  $acl=[Security.AccessControl.DirectorySecurity]::new()
+  $acl.SetOwner($user); $acl.SetAccessRuleProtection($true,$false)
+  $inherit=[Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit
+  foreach ($sid in @($user.Value,'S-1-5-18','S-1-5-32-544')) {
+    $identity=[Security.Principal.SecurityIdentifier]::new($sid)
+    $rule=[Security.AccessControl.FileSystemAccessRule]::new($identity,[Security.AccessControl.FileSystemRights]::FullControl,
+      $inherit,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow)
+    $acl.AddAccessRule($rule)
+  }
+  Set-Acl -LiteralPath $path -AclObject $acl -ErrorAction Stop
+  Assert-Private $path
 }
 function Invoke-Pure {
   $psi = [Diagnostics.ProcessStartInfo]::new()
@@ -149,6 +175,7 @@ function Initialize-Run {
   if (Test-Path -LiteralPath $expectedParent) { throw 'Existing output parent ownership unestablished' }
   New-Item -ItemType Directory -Path $expectedParent -ErrorAction Stop | Out-Null
   $script:createdParent=$expectedParent
+  $null=$script:createdPaths.Add($expectedParent)
   $parent=Get-Item -LiteralPath $expectedParent -Force -ErrorAction Stop
   if (!$parent.PSIsContainer -or ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unsafe created output parent' }
   $ancestor=[IO.DirectoryInfo]::new([IO.Path]::GetFullPath($expectedParent))
@@ -156,18 +183,22 @@ function Initialize-Run {
     if (!$ancestor.Exists -or ($ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Output ancestry changed' }
     $ancestor=$ancestor.Parent
   }
-  Assert-Private $expectedParent
+  Set-NewPrivate $expectedParent
   New-Item -ItemType Directory -Path $root -ErrorAction Stop | Out-Null
   $script:createdRoot=$root
+  $null=$script:createdPaths.Add($root); Set-NewPrivate $root
   New-Item -ItemType Directory -Path "$root/host-temp" -ErrorAction Stop | Out-Null
+  $null=$script:createdPaths.Add("$root/host-temp"); Set-NewPrivate "$root/host-temp"
   New-Item -ItemType Directory -Path "$root/pycache" -ErrorAction Stop | Out-Null
-  foreach ($path in @($root,"$root/host-temp","$root/pycache")) { Assert-Private $path }
+  $null=$script:createdPaths.Add("$root/pycache"); Set-NewPrivate "$root/pycache"
+  foreach ($path in @($expectedParent,$root,"$root/host-temp","$root/pycache")) { Assert-Private $path }
 }
 
 $oldTemp=[Environment]::GetEnvironmentVariable('TEMP','Process')
 $oldTmp=[Environment]::GetEnvironmentVariable('TMP','Process')
 $pins=$null; $primary=$null; $cleanup=[Collections.Generic.List[string]]::new()
 $script:createdParent=$null; $script:createdRoot=$null
+$script:createdPaths=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 try {
   Initialize-Run
   [Environment]::SetEnvironmentVariable('TEMP',"$root/host-temp",'Process')
