@@ -126,13 +126,20 @@ class NativeQualificationTests(unittest.TestCase):
     def test_private_job_cases(self):
         from build_only.fixture_policy import make_policy
         from build_only.receipt import validate_receipt
+        from build_only.qualification_startup import quiet_error_ui
 
         root = Path(os.environ["BUILD_ONLY_NATIVE_ROOT"])
         helper = Path(os.environ["BUILD_ONLY_NATIVE_HELPER"])
         if not root.is_absolute() or not helper.is_absolute() or not root.is_dir():
             self.fail("explicit absolute qualification paths required")
-        for mode in ("natural", "residual", "rootfail"):
-            self._case(root, helper, mode, make_policy, validate_receipt)
+        project_deps = Path(__file__).resolve().parents[3] / "deps"
+        if not root.resolve().is_relative_to(project_deps) or any(root.iterdir()):
+            self.fail("fresh project-local qualification directory required")
+        if not helper.is_file() or _hash(helper) != HELPER_SHA:
+            self.fail("outer helper identity mismatch")
+        with quiet_error_ui(root):
+            for mode in ("natural", "residual", "rootfail"):
+                self._case(root, helper, mode, make_policy, validate_receipt)
 
     def _case(self, root, helper, mode, make_policy, validate_receipt):
         if _hash(helper) != HELPER_SHA:
