@@ -1,0 +1,15 @@
+{
+  "schema": "cleanup-claim-discovery-failed-v1",
+  "source": "d28900c94849c87928b2c03faf0e01e19aab2a52",
+  "stage": "compile",
+  "reason": "Helper nonpass; retain evidence",
+  "secondary": [],
+  "postchecks": {
+    "pins": "pass",
+    "source": "pass",
+    "private_acl": "pass",
+    "outer_receipt": "nonpass_or_unreadable"
+  },
+  "settlement": "helper started; settlement requires strict receipt",
+  "task_parent_created": true
+}

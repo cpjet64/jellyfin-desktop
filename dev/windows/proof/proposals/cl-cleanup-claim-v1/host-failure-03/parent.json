@@ -1,0 +1,29 @@
+{
+  "schema": "reviewed-discovery-host-v1",
+  "allocation": "38f6bb4a-a93c-567d-b90a-0a752512e6cd",
+  "source": "d28900c94849c87928b2c03faf0e01e19aab2a52",
+  "host_executable": "C:/Program Files/WindowsApps/OpenAI.CodexPrimaryRuntime.v26-1112-611-0_26.1112.611.0_x64__3k8sg7r9htsxt/dependencies/native/powershell/pwsh.exe",
+  "arguments": [
+    "-NoLogo",
+    "-NoProfile",
+    "-NonInteractive",
+    "-WindowStyle",
+    "Hidden",
+    "-File",
+    "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/dev/windows/proof/proposals/cl-cleanup-claim-v1/enrollment-controller.ps1",
+    "-ReviewedSourceSHA",
+    "d28900c94849c87928b2c03faf0e01e19aab2a52",
+    "-ControllerSHA256",
+    "f4a5972cbcac08d2a306b1a112b89435f6678fb27f9d8507098209de2c25019f"
+  ],
+  "host_pid": 79156,
+  "creation_utc": "2026-11-14T12:12:19.0878982Z",
+  "start_utc": "2026-11-14T12:12:19.0854999Z",
+  "end_utc": "2026-11-14T12:12:25.8572096Z",
+  "exit": 1,
+  "forced_termination": false,
+  "elapsed_ms": 6776,
+  "host_process_disposed": true,
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "807a2afd2ec66584a187f358ac51f1b5909ba9b7a2d3567528cc38714e6299a2"
+}

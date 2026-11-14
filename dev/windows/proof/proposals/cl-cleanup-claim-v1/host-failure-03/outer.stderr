@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "E:\CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/dev/windows/proof\build_only\supervisor.py", line 328, in _supervise_owned
+    _run_job(api, policy, env, started, state, handoff)
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/dev/windows/proof\build_only\supervisor.py", line 290, in _run_job
+    raise RuntimeError('private job settlement failed')
+RuntimeError: private job settlement failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\CursorAI\JellyfinDesktop\deps\worktrees\reconcile-build-policy-20261113\dev\windows\proof\proposals\cl-cleanup-claim-v1\enrollment-driver.py", line 83, in <module>
+    main()
+    ~~~~^^
+  File "E:\CursorAI\JellyfinDesktop\deps\worktrees\reconcile-build-policy-20261113\dev\windows\proof\proposals\cl-cleanup-claim-v1\enrollment-driver.py", line 79, in main
+    production(policy.identity, ROOT + '/build.receipt')
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/dev/windows/proof\build_only\supervisor.py", line 369, in production
+    return _supervise(policy, receipt_path)
+  File "E:\CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/dev/windows/proof\build_only\supervisor.py", line 359, in _supervise
+    return _supervise_owned(policy, receipt_path, handoff)
+  File "E:\CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-20261114/dev/windows/proof\build_only\supervisor.py", line 352, in _supervise_owned
+    raise RuntimeError('build-only supervision failed') from failure
+RuntimeError: build-only supervision failed

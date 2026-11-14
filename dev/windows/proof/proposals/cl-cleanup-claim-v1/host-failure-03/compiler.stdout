@@ -1,0 +1,539 @@
+test_healthy_cleanup_claim.cpp
+Note: including file: E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\healthy_restart\graph_access.h
+Note: including file:  E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\healthy_restart\graph.h
+Note: including file:   E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\healthy_restart\async_stop.h
+Note: including file:    C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\array
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\yvals_core.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vcruntime.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\sal.h
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\concurrencysal.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vadefs.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xkeycheck.h
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xutility
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\yvals.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\crtdbg.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt.h
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vcruntime_new_debug.h
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vcruntime_new.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\crtdefs.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\use_ansi.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\__msvc_iter_core.hpp
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\utility
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\initializer_list
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\cstddef
+Note: including file:          C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\stddef.h
+Note: including file:          C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xtr1common
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\type_traits
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\cstdint
+Note: including file:          C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\stdint.h
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\cstring
+Note: including file:          C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\string.h
+Note: including file:           C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_memory.h
+Note: including file:            C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_memcpy_s.h
+Note: including file:             C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\errno.h
+Note: including file:             C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vcruntime_string.h
+Note: including file:           C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_wstring.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\climits
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\limits.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\cstdlib
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\math.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_math.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\stdlib.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_malloc.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_search.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_wstdlib.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\cwchar
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\cstdio
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\stdio.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_wstdio.h
+Note: including file:          C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_stdio_config.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\wchar.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_wconio.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_wctype.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_wdirect.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_wio.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_share.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_wprocess.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_wtime.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\sys/stat.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\sys/types.h
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\intrin.h
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\intrin0.inl.h
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\setjmp.h
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\immintrin.h
+Note: including file:          C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\wmmintrin.h
+Note: including file:           C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\nmmintrin.h
+Note: including file:            C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\smmintrin.h
+Note: including file:             C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\tmmintrin.h
+Note: including file:              C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\pmmintrin.h
+Note: including file:               C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\emmintrin.h
+Note: including file:                C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xmmintrin.h
+Note: including file:                 C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\mmintrin.h
+Note: including file:                 C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\malloc.h
+Note: including file:          C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\zmmintrin.h
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\ammintrin.h
+Note: including file:    C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\functional
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\exception
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vcruntime_exception.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\eh.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_terminate.h
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\tuple
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\typeinfo
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vcruntime_typeinfo.h
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xmemory
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\limits
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\cfloat
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\float.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\intrin0.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\new
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xatomic.h
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\unordered_map
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xhash
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\cmath
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\list
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xpolymorphic_allocator.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vector
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\__msvc_bit_utils.hpp
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\__msvc_sanitizer_annotate_container.hpp
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xbit_ops.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xnode_handle.h
+Note: including file:    C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\optional
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xsmf_control.h
+Note: including file:   E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\healthy_restart\lifetime_qt.h
+Note: including file:    E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\healthy_restart\lifetime.h
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\atomic
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xthreads.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\__msvc_threads_core.hpp
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xtimec.h
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\ctime
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\time.h
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\memory
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\iosfwd
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\mutex
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\__msvc_chrono.hpp
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\ratio
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\system_error
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\__msvc_system_error_abi.hpp
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\cerrno
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\stdexcept
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xstring
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\__msvc_string_view.hpp
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xcall_once.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xerrc.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\thread
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\process.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_startup.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\math.h
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vcruntime_startup.h
+Note: including file:     E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\healthy_restart\retirement_claim.h
+Note: including file:   E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\healthy_restart\owner.h
+Note: including file:   E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\healthy_restart\failure_cause.h
+Note: including file:   E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\fixture_restart/RestartChild.h
+Note: including file:    E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\fixture_restart\RestartWire.h
+Note: including file:     E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\fixture_restart\RestartBroker.h
+Note: including file:      E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore\QByteArray
+Note: including file:       E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore\qbytearray.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qrefcount.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qatomic.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qbasicatomic.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qatomic_cxx11.h
+Note: including file:            E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qgenericatomic.h
+Note: including file:             E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:              E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qprocessordetection.h
+Note: including file:              E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qsystemdetection.h
+Note: including file:              E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtconfiginclude.h
+Note: including file:               C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\version
+Note: including file:               E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qconfig.h
+Note: including file:               E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtcore-config.h
+Note: including file:             E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtconfigmacros.h
+Note: including file:              E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtdeprecationdefinitions.h
+Note: including file:               E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:              E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtversionchecks.h
+Note: including file:              C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\assert.h
+Note: including file:             E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtypes.h
+Note: including file:              E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qprocessordetection.h
+Note: including file:              E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qsystemdetection.h
+Note: including file:              E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qassert.h
+Note: including file:               E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:               E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtcoreexports.h
+Note: including file:                E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:                E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtdeprecationmarkers.h
+Note: including file:                 E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtclasshelpermacros.h
+Note: including file:                 E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:               E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtnoop.h
+Note: including file:            E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qyieldcpu.h
+Note: including file:             E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:             E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qprocessordetection.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qnamespace.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qglobal.h
+Note: including file:          C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\assert.h
+Note: including file:          C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\stdbool.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtcoreglobal.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtpreprocessorsupport.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qsystemdetection.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qprocessordetection.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtversion.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtypeinfo.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcontainerfwd.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qsysinfo.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qprocessordetection.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qlogging.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qflags.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompare_impl.h
+Note: including file:            E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:           C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\algorithm
+Note: including file:            C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\__msvc_heap_algorithms.hpp
+Note: including file:            C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\__msvc_minmax.hpp
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qconstructormacros.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qdarwinhelpers.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qexceptionhandling.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qforeach.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qttypetraits.h
+Note: including file:            C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\variant
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qfunctionpointer.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qglobalstatic.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qmalloc.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qminmax.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qnumeric.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qoverload.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qswap.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtenvironmentvariables.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtresource.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qttranslation.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qversiontagging.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompare.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstdlibdetection.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcomparehelpers.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/q20type_traits.h
+Note: including file:            E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:            E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qsystemdetection.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtmetamacros.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qarraydata.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qpair.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qarraydatapointer.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qarraydataops.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcontainertools_impl.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qxptype_traits.h
+Note: including file:            E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcompilerdetection.h
+Note: including file:           C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\iterator
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcontainertools_impl.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/q20functional.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/q20memory.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/q17memory.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qbytearrayalgorithms.h
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\stdarg.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qbytearrayview.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringfwd.h
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\string
+Note: including file:          C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\cctype
+Note: including file:           C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\ctype.h
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\string_view
+Note: including file:      E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore\QString
+Note: including file:       E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore\qstring.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qchar.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringview.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qchar.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringview.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringfwd.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringliteral.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringalgorithms.h
+Note: including file:           E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringfwd.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qlatin1stringview.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qchar.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringfwd.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qanystringview.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qutf8stringview.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringfwd.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringtokenizer.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringbuilder.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstring.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringconverter.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringconverter_base.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringfwd.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstring.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringbuilder.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstring.h
+Note: including file:      E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore\QtGlobal
+Note: including file:   E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore\QPointer
+Note: including file:    E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore\qpointer.h
+Note: including file:     E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qsharedpointer.h
+Note: including file:      E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qshareddata.h
+Note: including file:       E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qhashfunctions.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringfwd.h
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\numeric
+Note: including file:      E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qsharedpointer_impl.h
+Note: including file:       E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qmetatype.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qdatastream.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qscopedpointer.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qiodevicebase.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qfloat16.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qmath.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qalgorithms.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtformat_impl.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qsystemdetection.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qiterable.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qmetacontainer.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcontainerinfo.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qtaggedpointer.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qobjectdefs.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qobjectdefs_impl.h
+Note: including file:          E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qfunctionaltools_impl.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qscopeguard.h
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\map
+Note: including file:         C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xtree
+Note: including file:   E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\healthy_restart\module_gate.h
+Note: including file:    E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\healthy_restart\module_identity_win.h
+Note: including file:     E:\CursorAI\JellyfinDesktop\deps\worktrees\automatic-recovery-review\tests\healthy_restart\module_identity.h
+Note: including file:     C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\windows.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\winapifamily.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\winpackagefamily.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\sdkddkver.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\excpt.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\windef.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\minwindef.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\specstrings.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\specstrings_strict.h
+Note: including file:          C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\specstrings_undef.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\driverspecs.h
+Note: including file:          C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\sdv_driverspecs.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winnt.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\kernelspecs.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\basetsd.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\guiddef.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack4.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack4.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack4.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack2.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack2.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack2.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack8.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\apiset.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\ktmtypes.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winbase.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\apisetcconv.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\minwinbase.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\apiquery2.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\processenv.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\fileapifromapp.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\fileapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\debugapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\utilapiset.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\handleapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\errhandlingapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\fibersapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\namedpipeapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\profileapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\heapapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\ioapiset.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\synchapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\interlockedapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\processthreadsapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\sysinfoapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\memoryapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\enclaveapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\threadpoollegacyapiset.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\threadpoolapiset.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\jobapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\jobapi2.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\wow64apiset.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\libloaderapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\securitybaseapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\namespaceapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\systemtopologyapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\processtopologyapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\securityappcontainer.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\realtimeapiset.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\winerror.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\timezoneapi.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\wingdi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack2.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack2.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack4.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack4.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winuser.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack2.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\tvout.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winnls.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\datetimeapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\stringapiset.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winnls.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\wincon.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\wincontypes.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\consoleapi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\consoleapi2.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\consoleapi3.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winver.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\verrsrc.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winreg.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\reason.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winnetwk.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\wnnc.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\cderr.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\dde.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\ddeml.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\dlgs.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\lzexpand.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmsystem.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmsyscom.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mciapi.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmsyscom.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmiscapi.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmsyscom.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmiscapi2.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmsyscom.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\playsoundapi.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmsyscom.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmeapi.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmsyscom.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\timeapi.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmsyscom.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\joystickapi.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mmsyscom.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\nb30.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\rpc.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack8.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\rpcdce.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\rpcdcep.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\rpcnsi.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\rpcnterr.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\rpcasync.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack8.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\shellapi.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winperf.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack8.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winsock.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\inaddr.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\wincrypt.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\bcrypt.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\ncrypt.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\dpapi.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winefs.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winscard.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\wtypes.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\rpcndr.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack8.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\rpcnsip.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\rpcsal.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\wtypesbase.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\guiddef.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winioctl.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack1.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\winsmcrd.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winspool.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\prsht.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack8.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\ole2.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack8.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\objbase.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack8.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\combaseapi.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack8.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\unknwnbase.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\objidlbase.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\guiddef.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\cguid.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\coml2api.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\objidl.h
+Note: including file:          C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\unknwn.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\propidlbase.h
+Note: including file:          C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\oaidl.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\urlmon.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\oleidl.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\servprov.h
+Note: including file:         C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\msxml.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\propidl.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\oleauto.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\pshpack8.h
+Note: including file:        C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\poppack.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\commdlg.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\prsht.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\shared\stralign.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\winsvc.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\mcx.h
+Note: including file:      C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\imm.h
+Note: including file:       C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\um\ime_cmodes.h
+Note: including file: E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore\QCoreApplication
+Note: including file:  E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore\qcoreapplication.h
+Note: including file:   E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcoreevent.h
+Note: including file:    E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qbasictimer.h
+Note: including file:     E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qabstracteventdispatcher.h
+Note: including file:      E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qobject.h
+Note: including file:       E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qlist.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qiterator.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcontainertools_impl.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcontainertools_impl.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qbytearraylist.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qlist.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringlist.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qlist.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcontainertools_impl.h
+Note: including file:         E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qstringmatcher.h
+Note: including file:       E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qobject_impl.h
+Note: including file:       E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qbindingstorage.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\chrono
+Note: including file:        C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xfilesystem_abi.h
+Note: including file:      E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qeventloop.h
+Note: including file:       E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qdeadlinetimer.h
+Note: including file:        E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qelapsedtimer.h
+Note: including file:   E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qnativeinterface.h
+Note: including file:   E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcoreapplication_platform.h
+Note: including file:    E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore/qcoreapplication.h
+Note: including file: E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore\QThread
+Note: including file:  E:\CursorAI\JellyfinDesktop\dev\windows\deps\qt\6.9.3\msvc2022_64\include\QtCore\qthread.h
+Note: including file:   C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\future
+Note: including file:    C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\condition_variable
+Note: including file:    C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\ppltasks.h
+Note: including file:     C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\pplwin.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\pplinterface.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\ppltaskscheduler.h
+Note: including file:       C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\crtdefs.h
+Note: including file:      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\pplcancellation_token.h

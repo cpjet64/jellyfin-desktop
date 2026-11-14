@@ -1,0 +1,71 @@
+{
+  "schema": "discovery-host-failure-copy-v1",
+  "source_sha": "d28900c94849c87928b2c03faf0e01e19aab2a52",
+  "allocation": "38f6bb4a",
+  "scope": "compiler exited zero; supervisor settlement failed; postcheck not run",
+  "files": [
+    {
+      "path": "parent.json",
+      "bytes": 1240,
+      "sha256": "ddb0248fd683051492d4c476cfb2324c6be91a2699be153da6ac138c769e235f"
+    },
+    {
+      "path": "host.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "host.stderr",
+      "bytes": 705,
+      "sha256": "807a2afd2ec66584a187f358ac51f1b5909ba9b7a2d3567528cc38714e6299a2"
+    },
+    {
+      "path": "failure.json",
+      "bytes": 448,
+      "sha256": "b790046dc6e9ae24f6ccd2303889f0d8fbc70531d5f0129ccd3680d1251d2682"
+    },
+    {
+      "path": "outer.receipt",
+      "bytes": 206,
+      "sha256": "2c343e784cd46aeca59ca90c0bbb1ecc439504e939814f40d6891573507f6050"
+    },
+    {
+      "path": "outer.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "outer.stderr",
+      "bytes": 1865,
+      "sha256": "3c41f5786d5d26e23508c197e5303479f3afa1c9c99844477e1148bd1f53135a"
+    },
+    {
+      "path": "build.receipt",
+      "bytes": 2165,
+      "sha256": "0df11ee6120b93030c2505b339a9757c37043d20b2a895fc517454e93a8b03b4"
+    },
+    {
+      "path": "compiler.stdout",
+      "bytes": 64770,
+      "sha256": "4ab949355703ff5b4e66dac21853e7d9afb04e61c746e900c195fb0fcb63f58a"
+    },
+    {
+      "path": "compiler.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "output_metadata": [
+    {
+      "name": "cleanup_claim.obj",
+      "bytes": 1434569,
+      "sha256": "2ad3872d6ece99cc50774d5f10b8ef53cc3f8da2e118a13f29f7575578c171d0"
+    },
+    {
+      "name": "cleanup_claim-compile.pdb",
+      "bytes": 1716224,
+      "sha256": "65ffcdc764a539c48452918fb3ea98d2ec1e7db1f1a6454f82e5ff64789b4446"
+    }
+  ],
+  "compiler_log_observation": "538 include lines, zero compiler error or warning lines, empty compiler stderr"
+}
