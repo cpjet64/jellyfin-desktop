@@ -44,6 +44,22 @@ public:
     pending_.push_back(std::move(event));
   }
 
+  void commandReplyEntry(std::uint64_t userdata, std::int64_t entry)
+  {
+    auto event = std::make_unique<Event>();
+    event->entryValue.format = MPV_FORMAT_INT64;
+    event->entryValue.u.int64 = entry;
+    event->entryMap.num = 1;
+    event->entryMap.keys = event->entryKeys;
+    event->entryMap.values = &event->entryValue;
+    event->command.result.format = MPV_FORMAT_NODE_MAP;
+    event->command.result.u.list = &event->entryMap;
+    event->value.event_id = MPV_EVENT_COMMAND_REPLY;
+    event->value.reply_userdata = userdata;
+    event->value.data = &event->command;
+    pending_.push_back(std::move(event));
+  }
+
   void fileLoaded()
   {
     auto event = std::make_unique<Event>();
@@ -113,6 +129,15 @@ public:
     pending_.push_back(std::move(event));
   }
 
+  void playlistError(std::uint64_t userdata)
+  {
+    auto event = std::make_unique<Event>();
+    event->value.event_id = MPV_EVENT_GET_PROPERTY_REPLY;
+    event->value.reply_userdata = userdata;
+    event->value.error = MPV_ERROR_PROPERTY_UNAVAILABLE;
+    pending_.push_back(std::move(event));
+  }
+
   mpv_event* next()
   {
     current_.reset();
@@ -135,6 +160,10 @@ private:
     mpv_event_start_file start{};
     mpv_event_end_file end{};
     mpv_event_command command{};
+    char entryKey[18] = "playlist_entry_id";
+    char* entryKeys[1] = {entryKey};
+    mpv_node entryValue{};
+    mpv_node_list entryMap{};
     char hookName[9] = "hook_run", hookNumber[2] = "2";
     std::string hookToken;
     char* hookArgs[3]{};
