@@ -87,11 +87,12 @@ struct CoreOwner : std::enable_shared_from_this<CoreOwner> {
     void closeExternalWakeup();
     bool requestFinalization();
     void requestQuarantineStop();
-    void blockUnresolvedHook();
     void maybeFinalize();
     static std::shared_ptr<CoreOwner> adoptReserved(quint64 token, mpv_handle *handle,
         MpvController *controller, QThread *worker, WakeRelay *relay);
 private:
+    friend class NativeLease;
+    void blockUnresolvedHook();
     CoreOwner() = default;
 };
 
