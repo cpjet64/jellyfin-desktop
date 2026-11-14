@@ -16,6 +16,8 @@ public:
   void end(std::int64_t entry, std::int64_t nowMs);
   bool position(Key key, std::int64_t entry, std::int64_t positionMs, std::int64_t nowMs);
   bool snapshot(Key current, Snapshot& output) const;
+  Key activeKey() const { return active_.key(); }
+  std::int64_t activeEntry() const { return active_.entry(); }
   void clear();
 private:
   struct Pending { Key key; AutomaticRecoverySession session; std::int64_t deadline = 0, entry = 0; };

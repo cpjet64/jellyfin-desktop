@@ -15,6 +15,11 @@ public:
                       const QVariantMap& options, const QVariantMap& metadata,
                       const QVariant& audio, const QVariant& subtitle, bool paused, std::int64_t nowMs);
   void observe(const mpv_event* event, Key current, std::int64_t nowMs);
+  Key activeKey() const { return queue_.activeKey(); }
+  std::int64_t activeEntry() const { return queue_.activeEntry(); }
+  // The caller must supply only a completed, epoch-bracketed native observation.
+  bool recordPosition(Key key, std::int64_t entry, std::int64_t positionMs, std::int64_t nowMs);
+  bool snapshot(Key current, AutomaticRecoverySession::Snapshot& output) const;
   void invalidate();
 private:
   AutomaticRecoveryQueue queue_;

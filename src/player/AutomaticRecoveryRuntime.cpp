@@ -54,3 +54,7 @@ void AutomaticRecoveryRuntime::invalidate()
 {
   queue_.clear(); generation_ = 0;
 }
+bool AutomaticRecoveryRuntime::recordPosition(Key key, std::int64_t entry, std::int64_t positionMs, std::int64_t nowMs)
+{ return queue_.position(key, entry, positionMs, nowMs); }
+bool AutomaticRecoveryRuntime::snapshot(Key current, AutomaticRecoverySession::Snapshot& output) const
+{ return queue_.snapshot(current, output); }
