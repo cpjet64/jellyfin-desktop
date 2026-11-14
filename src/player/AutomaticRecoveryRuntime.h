@@ -22,6 +22,7 @@ public:
   // The caller must supply only a completed, epoch-bracketed native observation.
   bool recordPosition(Key key, std::int64_t entry, std::int64_t positionMs, std::int64_t nowMs);
   bool snapshot(Key current, AutomaticRecoverySession::Snapshot& output) const;
+  bool takeTimeout(Key current, std::int64_t nowMs, std::uint64_t& sequence);
   void invalidate();
 private:
   void advanceEpoch();

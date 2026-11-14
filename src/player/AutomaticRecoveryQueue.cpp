@@ -16,6 +16,7 @@ bool AutomaticRecoveryQueue::reply(std::uint64_t sequence, std::int64_t entry, s
   const auto it = pending_.find(sequence);
   if (it == pending_.end()) return false;
   auto& item = it->second;
+  if (item.expired) return false;
   if (item.entry || entry <= 0 || nowMs < 0 || nowMs >= item.deadline) { pending_.erase(it); return false; }
   for (const auto& other : pending_) {
     if (other.first != sequence && other.second.entry == entry) { pending_.erase(it); return false; }
@@ -23,14 +24,17 @@ bool AutomaticRecoveryQueue::reply(std::uint64_t sequence, std::int64_t entry, s
   if (!item.session.accept(item.key, entry)) { pending_.erase(it); return false; }
   item.entry = entry; promote(); return true;
 }
-void AutomaticRecoveryQueue::reject(std::uint64_t sequence) { pending_.erase(sequence); }
+void AutomaticRecoveryQueue::reject(std::uint64_t sequence)
+{
+  const auto it = pending_.find(sequence);
+  if (it != pending_.end() && !it->second.expired) pending_.erase(it);
+}
 bool AutomaticRecoveryQueue::observeTime(std::int64_t nowMs)
 {
   if (nowMs < 0 || nowMs < lastEventTime_) { clear(); return false; }
   lastEventTime_ = nowMs;
-  for (auto it = pending_.begin(); it != pending_.end();) {
-    if (!it->second.entry && nowMs >= it->second.deadline) it = pending_.erase(it); else ++it;
-  }
+  for (auto& item : pending_)
+    if (!item.second.entry && nowMs >= item.second.deadline) item.second.expired = true;
   return true;
 }
 void AutomaticRecoveryQueue::start(std::int64_t entry, std::int64_t nowMs)
@@ -76,6 +80,15 @@ bool AutomaticRecoveryQueue::position(Key key, std::int64_t entry, std::int64_t 
 { return observeTime(nowMs) && active_.position(key, entry, positionMs); }
 bool AutomaticRecoveryQueue::snapshot(Key current, Snapshot& output) const
 { return active_.snapshot(current, output); }
+bool AutomaticRecoveryQueue::poll(std::int64_t nowMs) { return observeTime(nowMs); }
+bool AutomaticRecoveryQueue::takeExpired(Expired& output)
+{
+  for (auto it = pending_.begin(); it != pending_.end(); ++it) {
+    if (!it->second.expired) continue;
+    output = {it->first, it->second.key}; pending_.erase(it); return true;
+  }
+  return false;
+}
 void AutomaticRecoveryQueue::clear()
 {
   pending_.clear(); active_.invalidate(); startedEntry_ = 0; loaded_ = false;

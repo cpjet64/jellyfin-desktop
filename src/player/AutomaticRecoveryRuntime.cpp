@@ -38,6 +38,7 @@ void AutomaticRecoveryRuntime::observe(const mpv_event* event, Key current, std:
       event->event_id == MPV_EVENT_QUEUE_OVERFLOW || event->event_id == MPV_EVENT_SHUTDOWN)
     advanceEpoch();
   if (!eventEpoch_) { invalidate(); return; }
+  if (!queue_.poll(nowMs)) { invalidate(); return; }
   if (event->event_id == MPV_EVENT_COMMAND_REPLY &&
       (event->reply_userdata & ~AutomaticRecoveryLoad::MaxSequence) == AutomaticRecoveryLoad::Tag) {
     const auto sequence = event->reply_userdata & AutomaticRecoveryLoad::MaxSequence;
@@ -69,3 +70,15 @@ bool AutomaticRecoveryRuntime::recordPosition(Key key, std::int64_t entry, std::
 { return queue_.position(key, entry, positionMs, nowMs); }
 bool AutomaticRecoveryRuntime::snapshot(Key current, AutomaticRecoverySession::Snapshot& output) const
 { return queue_.snapshot(current, output); }
+bool AutomaticRecoveryRuntime::takeTimeout(Key current, std::int64_t nowMs, std::uint64_t& sequence)
+{
+  if (!current.session || !current.revision || !current.generation || current.generation != generation_ ||
+      !queue_.poll(nowMs)) return false;
+  AutomaticRecoveryQueue::Expired expired;
+  while (queue_.takeExpired(expired)) {
+    if (expired.key.session != current.session || expired.key.revision != current.revision ||
+        expired.key.generation != current.generation) continue;
+    sequence = expired.sequence; return true;
+  }
+  return false;
+}
