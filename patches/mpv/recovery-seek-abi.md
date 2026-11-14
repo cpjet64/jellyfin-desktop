@@ -45,6 +45,13 @@ complete capability is absent, use the existing V1 resolver for observation
 and ordinary commands; do not claim correlated seek completion. This is a
 source-only contract until the patch is built and independently validated.
 
+The application resolver discovers private V1, V2 and seek symbols only when
+`JELLYFIN_VERIFIED_RECOVERY_KIT` is defined as numeric 1 by the verified build
+configuration. An absent flag or any other value disables private discovery
+and leaves ordinary rendering available. The flag alone does not establish
+capability: each required symbol must still resolve from the same loaded mpv
+module and returned observations must pass the existing validation.
+
 The subsequent epoch-test patch registers unit cases against the same private
 atomic helpers used by the core and render paths. These cases cover ordering,
 revocation, stale epochs, and exhaustion only. They do not exercise core-thread
