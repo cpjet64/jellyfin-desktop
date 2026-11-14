@@ -40,7 +40,7 @@ bool PlayerComponent::requestNativeObservation(PlaybackNativeReceipts::Key key, 
   const char* args[] = {"expand-text", NativePlaybackObservation::expression(), nullptr};
   int result = -1;
   if (m_observationDispatch) result = m_observationDispatch(observationTag | id, args);
-  else if (m_mpv && m_mpv->mpv()) result = mpv_command_async(m_mpv->mpv(), observationTag | id, args);
+  else result = nativeAsyncCommand(observationTag | id, args);
   m_nativeObservation.accepted = result >= 0;
   if (result < 0) m_nativeObservation.pending = false;
   return result >= 0;

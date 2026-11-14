@@ -349,12 +349,15 @@ private:
   void handleMpvEvent(mpv_event *event);
   void setupMpvEvents();
   void finishMpvEventSetup();
-  bool applyPreloadedStreams();
+  bool applyPreloadedStreams(const QString& hookToken);
   bool setupRecovery();
   void releaseRecovery();
   void recoveryIntentChanged(bool clear);
   void recoveryUserReplacement();
   void noteQueueIntent(bool paused);
+  int nativeCall(const std::function<int(mpv_handle*)>& operation) const;
+  int nativeAsyncCommand(quint64 id, const char** args) const;
+  QString nativeOsd(const QString& property) const;
   bool dispatchPlayerLoad(const QStringList& command, const QString& url, const QVariantMap& options,
                           const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle);
   void subscribeMpvSettings();

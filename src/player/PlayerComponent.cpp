@@ -98,7 +98,7 @@ void PlayerComponent::initializeMpv()
   // MpvQt already called mpv_initialize(), so mpv is ready
   // Properties that needed to be set before init were set in MpvVideoItem constructor
 
-  mpv_request_log_messages(m_mpv->mpv(), "terminal-default");
+  nativeCall([](mpv_handle* handle) { return mpv_request_log_messages(handle, "terminal-default"); });
   m_mpv->setProperty("msg-level", "all=v");
 
   setupMpvEvents();
@@ -190,15 +190,15 @@ void PlayerComponent::initializeMpv()
   // if (mpv_initialize(m_mpv) < 0)
   //   throw FatalException(tr("Failed to initialize mpv."));
 
-  mpv_observe_property(m_mpv->mpv(), 0, "pause", MPV_FORMAT_FLAG);
-  mpv_observe_property(m_mpv->mpv(), 0, "core-idle", MPV_FORMAT_FLAG);
-  mpv_observe_property(m_mpv->mpv(), 0, "cache-buffering-state", MPV_FORMAT_INT64);
-  mpv_observe_property(m_mpv->mpv(), 0, "playback-time", MPV_FORMAT_DOUBLE);
-  mpv_observe_property(m_mpv->mpv(), 0, "vo-configured", MPV_FORMAT_FLAG);
-  mpv_observe_property(m_mpv->mpv(), 0, "duration", MPV_FORMAT_DOUBLE);
-  mpv_observe_property(m_mpv->mpv(), 0, "audio-device-list", MPV_FORMAT_NODE);
-  mpv_observe_property(m_mpv->mpv(), 0, "video-dec-params", MPV_FORMAT_NODE);
-  mpv_observe_property(m_mpv->mpv(), 0, "demuxer-cache-state", MPV_FORMAT_NODE);
+  nativeCall([](mpv_handle* h) { return mpv_observe_property(h, 0, "pause", MPV_FORMAT_FLAG); });
+  nativeCall([](mpv_handle* h) { return mpv_observe_property(h, 0, "core-idle", MPV_FORMAT_FLAG); });
+  nativeCall([](mpv_handle* h) { return mpv_observe_property(h, 0, "cache-buffering-state", MPV_FORMAT_INT64); });
+  nativeCall([](mpv_handle* h) { return mpv_observe_property(h, 0, "playback-time", MPV_FORMAT_DOUBLE); });
+  nativeCall([](mpv_handle* h) { return mpv_observe_property(h, 0, "vo-configured", MPV_FORMAT_FLAG); });
+  nativeCall([](mpv_handle* h) { return mpv_observe_property(h, 0, "duration", MPV_FORMAT_DOUBLE); });
+  nativeCall([](mpv_handle* h) { return mpv_observe_property(h, 0, "audio-device-list", MPV_FORMAT_NODE); });
+  nativeCall([](mpv_handle* h) { return mpv_observe_property(h, 0, "video-dec-params", MPV_FORMAT_NODE); });
+  nativeCall([](mpv_handle* h) { return mpv_observe_property(h, 0, "demuxer-cache-state", MPV_FORMAT_NODE); });
 
   // Setup a hook with the ID 1, which is run during the file is loaded.
   // Used to delay playback start for display framerate switching.
@@ -209,8 +209,8 @@ void PlayerComponent::initializeMpv()
   m_mpv->command( QStringList() << "hook-add" << "on_load" << "1" << "0");
   m_mpv->command( QStringList() << "hook-add" << "on_preloaded" << "2" << "0");
 #else
-  mpv_hook_add(m_mpv->mpv(), 1, "on_load", 0);
-  mpv_hook_add(m_mpv->mpv(), 2, "on_preloaded", 0);
+  nativeCall([](mpv_handle* h) { return mpv_hook_add(h, 1, "on_load", 0); });
+  nativeCall([](mpv_handle* h) { return mpv_hook_add(h, 2, "on_preloaded", 0); });
 #endif
 
   updateAudioDeviceList();
@@ -561,7 +561,7 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       // Used to initialize stream selections.
       if (!strcmp(msg->args[1], "2"))
       {
-        if (!applyPreloadedStreams()) break;
+        (void)applyPreloadedStreams(resumeId);
         m_mpv->command( QStringList() << "hook-ack" << resumeId);
         break;
       }
@@ -580,8 +580,8 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       }
       if (!strcmp(hook->name, "on_preloaded"))
       {
-        if (!applyPreloadedStreams()) break;
-        mpv_hook_continue(m_mpv->mpv(), id);
+        (void)applyPreloadedStreams(QString::number(id));
+        nativeCall([id](mpv_handle* handle) { return mpv_hook_continue(handle, id); });
         break;
       }
       break;
@@ -1285,20 +1285,7 @@ void PlayerComponent::updateConfiguration()
 
 /////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////
-static QString get_mpv_osd(mpv_handle *ctx, const QString& property)
-{
-  char *s = mpv_get_property_osd_string(ctx, property.toUtf8().data());
-  if (!s)
-    return "-";
-  QString r = QString::fromUtf8(s);
-  mpv_free(s);
-  if (r.size() > 400)
-    r = r.mid(0, 400) + "...";
-  Log::CensorAuthTokens(r);
-  return r;
-}
-
-#define MPV_PROPERTY(p) get_mpv_osd(m_mpv->mpv(), p)
+#define MPV_PROPERTY(p) nativeOsd(p)
 #define MPV_PROPERTY_BOOL(p) (m_mpv->getProperty(p).toBool())
 
 /////////////////////////////////////////////////////////////////////////////////////////

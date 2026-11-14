@@ -4,6 +4,10 @@
 #include <MpvController>
 #include <QDebug>
 #include <QThread>
+#include <QCoreApplication>
+#ifdef MPVQT_RECOVERY_RUNTIME
+#include "PlayerComponentRecovery.h"
+#endif
 
 #ifndef MPVQT_RECOVERY_RUNTIME
 namespace {
@@ -109,7 +113,9 @@ void PlayerComponent::scheduleMpvHook(const std::function<void()>& resume)
   }
   const int pause = SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, "refreshrate.delay").toInt() * 1000;
   qInfo() << "waiting" << pause << "msec after rate switch before loading";
-#ifdef MPVQT_EXTERNAL_EVENTS
+#ifdef MPVQT_RECOVERY_RUNTIME
+  QTimer::singleShot(pause, QCoreApplication::instance(), resume);
+#elif defined(MPVQT_EXTERNAL_EVENTS)
   QTimer::singleShot(pause, this, resume);
 #else
   QTimer::singleShot(pause, resume);
@@ -118,6 +124,17 @@ void PlayerComponent::scheduleMpvHook(const std::function<void()>& resume)
 
 void PlayerComponent::scheduleMpvHook(const QString& resumeId)
 {
+#ifdef MPVQT_RECOVERY_RUNTIME
+  const auto owner = m_recovery ? m_recovery->coreOwner() : nullptr;
+  if (!owner) return;
+  const auto id = resumeId.toUtf8();
+  scheduleMpvHook(std::function<void()>([owner, id] {
+    auto lease = owner->acquireNative();
+    if (!lease.get()) return;
+    const char* args[] = {"hook-ack", id.constData(), nullptr};
+    mpv_command(lease.get(), args);
+  }));
+#else
 #ifdef MPVQT_EXTERNAL_EVENTS
   const auto generation = m_mpvGeneration;
 #endif
@@ -128,11 +145,20 @@ void PlayerComponent::scheduleMpvHook(const QString& resumeId)
     qInfo() << "resuming loading";
     m_mpv->command(QStringList() << "hook-ack" << resumeId);
   }));
+#endif
 }
 
 #if MPV_CLIENT_API_VERSION >= MPV_MAKE_VERSION(1, 100)
 void PlayerComponent::scheduleMpvHook(uint64_t id)
 {
+#ifdef MPVQT_RECOVERY_RUNTIME
+  const auto owner = m_recovery ? m_recovery->coreOwner() : nullptr;
+  if (!owner) return;
+  scheduleMpvHook(std::function<void()>([owner, id] {
+    auto lease = owner->acquireNative();
+    if (lease.get()) mpv_hook_continue(lease.get(), id);
+  }));
+#else
 #ifdef MPVQT_C2_DIAGNOSTIC_ONLY
   m_c2LastScheduledHookId = id;
 #endif
@@ -152,5 +178,6 @@ void PlayerComponent::scheduleMpvHook(uint64_t id)
     mpv_hook_continue(m_mpv->mpv(), id);
 #endif
   }));
+#endif
 }
 #endif

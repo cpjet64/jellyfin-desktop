@@ -6,6 +6,7 @@
 #include "system/WebClientFaultGuard.h"
 #include <QQuickWindow>
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 void PlayerComponentRecovery::recordSourceFrame(std::uint64_t generation, const RecoveryFrameObservationV1& frame)
@@ -27,8 +28,29 @@ void PlayerComponentRecovery::recordSourceFrame(std::uint64_t generation, const 
 
 void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
 {
-  if (native && native->event_id == MPV_EVENT_START_FILE && native->data)
+  if (native && native->event_id == MPV_EVENT_START_FILE && native->data) {
     lastStartedEntry_ = static_cast<const mpv_event_start_file*>(native->data)->playlist_entry_id;
+    ++startSerial_;
+  }
+  bool hookEvent = false;
+  hookTokenValid_ = false;
+  if (native && native->event_id == MPV_EVENT_CLIENT_MESSAGE && native->data) {
+    const auto* message = static_cast<const mpv_event_client_message*>(native->data);
+    hookEvent = message->num_args >= 3 && message->args && message->args[0] && message->args[1] && message->args[2] &&
+        !std::strcmp(message->args[0], "hook_run") && !std::strcmp(message->args[1], "2");
+    if (hookEvent) hookToken_ = QString::fromUtf8(message->args[2]);
+  }
+#if MPV_CLIENT_API_VERSION >= MPV_MAKE_VERSION(1, 100)
+  if (native && native->event_id == MPV_EVENT_HOOK && native->data) {
+    const auto* hook = static_cast<const mpv_event_hook*>(native->data);
+    hookEvent = hook->name && !std::strcmp(hook->name, "on_preloaded"); hookToken_ = QString::number(hook->id);
+  }
+#endif
+  if (hookEvent) {
+    hookTokenValid_ = true;
+    hookStart_ = startSerial_; hookEntry_ = lastStartedEntry_; hookBinding_ = player_->m_mpvGeneration;
+    hookRevision_ = player_->m_playbackIntent.snapshot().revision; hookAttempt_ = restoring_ ? attempt_ : 0;
+  }
   if (native && native->event_id == MPV_EVENT_END_FILE && native->data &&
       static_cast<const mpv_event_end_file*>(native->data)->playlist_entry_id == replacedEntry_) replacedEntry_ = 0;
   if (restoring_) {
@@ -46,6 +68,7 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
   const auto active = runtime_.activeKey();
   const AutomaticRecoverySession::Key current{active.session, intent.revision, player_->m_mpvGeneration};
   runtime_.observe(native, current, now);
+  applyDeferredTracks();
   if (!observationPending_ || !core_) return;
   const auto dispatch = [this](std::uint64_t id, const char* name, mpv_format format) {
     auto lease = core_->acquireNative();

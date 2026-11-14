@@ -86,6 +86,17 @@ bool AutomaticRecoveryQueue::updateTracks(Key current, const QVariant& audio, co
 { return active_.tracks(current, audio, subtitle); }
 bool AutomaticRecoveryQueue::replaceActiveEntry(Key current, std::int64_t previous, std::int64_t entry, std::int64_t positionMs)
 { return active_.replaceEntry(current, previous, entry, positionMs); }
+bool AutomaticRecoveryQueue::selections(std::int64_t entry, Key current, QVariant& audio, QVariant& subtitle) const
+{
+  const auto activeKey = active_.key();
+  if (entry == active_.entry() && activeKey.revision == current.revision && activeKey.generation == current.generation)
+    return active_.selections(activeKey, audio, subtitle);
+  for (const auto& pending : pending_)
+    if (pending.second.entry == entry && !pending.second.expired &&
+        pending.second.key.revision == current.revision && pending.second.key.generation == current.generation)
+      return pending.second.session.selections(pending.second.key, audio, subtitle);
+  return false;
+}
 bool AutomaticRecoveryQueue::poll(std::int64_t nowMs) { return observeTime(nowMs); }
 bool AutomaticRecoveryQueue::takeExpired(Expired& output)
 {

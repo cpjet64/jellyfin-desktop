@@ -90,7 +90,7 @@ bool PlayerComponent::dispatchNativeRestoreSeek()
   const char* args[] = {"seek", position.constData(), "absolute+exact", nullptr};
   int result = -1;
   if (m_restoreDispatch) result = m_restoreDispatch(seekTag | key.attempt, args);
-  else if (m_mpv && m_mpv->mpv()) result = mpv_command_async(m_mpv->mpv(), seekTag | key.attempt, args);
+  else result = nativeAsyncCommand(seekTag | key.attempt, args);
   m_nativeRestore.seekAccepted = result >= 0;
   m_nativeRestore.seekError = result;
   if (result < 0) { m_nativeRestore.seekPending = false; m_nativeRestore.failed = true; }

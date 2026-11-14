@@ -97,7 +97,9 @@ PlayerComponent::NativeStopResult PlayerComponent::stopMpv()
 {
   if (m_stopDispatch) return m_stopDispatch();
   if (!m_mpv || !m_mpv->mpv()) return {NativeStopResult::Status::Unavailable, 0};
-  return checkedStop(m_mpv->mpv(), mpv_command);
+  NativeStopResult result{NativeStopResult::Status::Unavailable, 0};
+  nativeCall([&](mpv_handle* handle) { result = checkedStop(handle, mpv_command); return 0; });
+  return result;
 }
 
 PlayerComponent::NativeStopResult PlayerComponent::checkedStop(mpv_handle* handle, int (*command)(mpv_handle*, const char**))

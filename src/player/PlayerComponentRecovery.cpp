@@ -74,12 +74,15 @@ void PlayerComponentRecovery::userChanged(bool clear)
 {
   const auto previous = runtime_.activeKey();
   runtime_.userIntentChanged(); observation_.invalidate(); observationPending_ = awaitingUsability_ = false;
+  if (restoring_ && recoveryLoad_.startedEntry() > 0) cancelledRecoveryEntry_ = recoveryLoad_.startedEntry();
   frameGate_.invalidate(); recoveryLoad_.invalidate(); policy_.fail();
   frameGateActive_ = positionReady_ = recoveryLoaded_ = false;
   restoring_ = loadDispatched_ = resumePending_ = completed_ = false;
   recoveryRestarted_ = false; verifiedSource_ = 0;
+  recoveryTracksApplied_ = false;
   replacementTransition_ = false;
   pauseId_ = unpauseId_ = 0;
+  deferredEntry_ = 0;
   if (clear) { runtime_.invalidate(); return; }
   const auto intent = player_->m_playbackIntent.snapshot();
   if (intent.desired == PlaybackIntent::Desired::Stopped || intent.desired == PlaybackIntent::Desired::Exiting) return;

@@ -97,6 +97,8 @@ bool AutomaticRecoveryRuntime::updateTracks(Key current, const QVariant& audio, 
 { return queue_.updateTracks(current, audio, subtitle); }
 bool AutomaticRecoveryRuntime::replaceActiveEntry(Key current, std::int64_t previous, std::int64_t entry, std::int64_t positionMs)
 { return queue_.replaceActiveEntry(current, previous, entry, positionMs); }
+bool AutomaticRecoveryRuntime::selections(std::int64_t entry, Key current, QVariant& audio, QVariant& subtitle) const
+{ return queue_.selections(entry, current, audio, subtitle); }
 std::uint64_t AutomaticRecoveryRuntime::reserveSequence()
 {
   if (sequence_ >= AutomaticRecoveryLoad::MaxSequence) return 0;

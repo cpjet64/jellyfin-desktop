@@ -31,8 +31,12 @@ public:
   bool restoring() const { return restoring_; }
   bool recoveryPreloadAllowed() const;
   bool prepareRecoveryPreload();
+  bool preparePreload(const QString& hookToken);
+  void finishPreload();
+  void applyDeferredTracks();
   void beginUserReplacement() { replacedEntry_ = runtime_.activeEntry(); }
   RendererRuntime::NativeLease acquireNative() const;
+  std::shared_ptr<RendererRuntime::CoreOwner> coreOwner() const { return core_; }
 private:
   void tick();
   void event(const mpv_event* event, std::int64_t now);
@@ -73,11 +77,18 @@ private:
   std::uint64_t lastSource_ = 0;
   std::uint64_t sourceGeneration_ = 0, sourceEntry_ = 0, sourceFirst_ = 0;
   std::uint64_t sourceEpoch_ = 0;
+  std::uint64_t startSerial_ = 0, hookStart_ = 0, hookRevision_ = 0, hookBinding_ = 0, hookAttempt_ = 0;
+  std::uint64_t deferredStart_ = 0, deferredRevision_ = 0, deferredBinding_ = 0, deferredAttempt_ = 0;
+  std::int64_t hookEntry_ = 0, deferredEntry_ = 0;
+  std::int64_t cancelledRecoveryEntry_ = 0;
+  QString hookToken_;
+  bool hookTokenValid_ = false;
   AutomaticRecoveryObservation::Result observationResult_;
   bool recoveryLoaded_ = false, frameGateActive_ = false, positionReady_ = false, observationRecovery_ = false;
   bool bound_ = false, observationPending_ = false, awaitingUsability_ = false;
   bool restoring_ = false, loadDispatched_ = false, resumePending_ = false, completed_ = false;
   bool recoveryRestarted_ = false;
+  bool recoveryTracksApplied_ = false;
   bool replacementTransition_ = false;
 };
 #endif

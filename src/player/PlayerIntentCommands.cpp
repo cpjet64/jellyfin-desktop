@@ -190,7 +190,8 @@ PlayerComponent::NativeSeekResult PlayerComponent::requestNativeSeek(qint64 mill
   const auto revision = m_playbackIntent.snapshot().revision;
   if (WebClientFaultGuard::instance().rendererLost() || !m_mpv || !m_mpv->mpv() || milliseconds < 0)
     { m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable); return {NativeSeekResult::Status::Unavailable, 0}; }
-  const auto result = checkedSeek(m_mpv->mpv(), milliseconds, mpv_command);
+  NativeSeekResult result{NativeSeekResult::Status::Unavailable, 0};
+  nativeCall([&](mpv_handle* handle) { result = checkedSeek(handle, milliseconds, mpv_command); return 0; });
   m_playbackIntent.dispatch(revision, result.status == NativeSeekResult::Status::Accepted ?
     PlaybackIntent::Dispatch::NativeAccepted : PlaybackIntent::Dispatch::NativeRejected);
   return result;
