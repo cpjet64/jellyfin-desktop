@@ -289,6 +289,37 @@ static void invalidRevisionAndRetrogradeTimeFailClosed()
   }
 }
 
+static void backwardsClockOrPositionResetsStall()
+{
+  Policy clock;
+  auto s = sample();
+  CHECK(clock.observe(s) == Action::None);
+  s.nowMs = 4000;
+  s.positionMs = 2;
+  CHECK(clock.observe(s) == Action::None);
+  s.nowMs = 3900;
+  s.positionMs = 1;
+  CHECK(clock.observe(s) == Action::None);
+  s.nowMs = 5000;
+  s.positionMs = 2;
+  CHECK(clock.observe(s) == Action::None);
+  CHECK(!clock.attempted());
+
+  Policy position;
+  s = sample();
+  CHECK(position.observe(s) == Action::None);
+  s.nowMs = 4000;
+  s.positionMs = 2;
+  CHECK(position.observe(s) == Action::None);
+  s.nowMs = 4500;
+  s.positionMs = 1; // Above the baseline but behind the latest position.
+  CHECK(position.observe(s) == Action::None);
+  s.nowMs = 5000;
+  s.positionMs = 2;
+  CHECK(position.observe(s) == Action::None);
+  CHECK(!position.attempted());
+}
+
 int main()
 {
   stallRequiresFullEligibleInterval();
@@ -305,4 +336,5 @@ int main()
   reloadRequiresNewAttributableFrame();
   reloadRejectsOldFrameOrWrongAttempt();
   invalidRevisionAndRetrogradeTimeFailClosed();
+  backwardsClockOrPositionResetsStall();
 }
