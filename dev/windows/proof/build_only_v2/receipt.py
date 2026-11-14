@@ -1,10 +1,11 @@
 """Strict v2 receipt consumer; production admission remains deliberately closed."""
 from dataclasses import asdict
 import json
+import ntpath
 
 from build_only.receipt import (_keys, _number, _object, _sha,
                                 _validate_command, _validate_outputs)
-from .profile import profile_hash, validate_profile
+from .profile import admit_production, profile_hash, validate_profile
 
 FIELDS = ("schema", "source", "profile", "endpoint", "env_digest", "command",
           "root", "deadlines", "pins", "baseline", "before", "final",
@@ -13,10 +14,15 @@ FIELDS = ("schema", "source", "profile", "endpoint", "env_digest", "command",
 
 
 def validate_receipt(raw, *, expected_profile, expected_source, observed_exit,
-                     observed_receipt_closed, production=True):
+                     observed_receipt_closed):
     """Validate only against independently supplied profile and outer observations."""
-    if production:
-        raise ValueError("production endpoint isolation has not been qualified")
+    admit_production(expected_profile)
+    return _validate_fields(raw, expected_profile=expected_profile, expected_source=expected_source,
+                            observed_exit=observed_exit, observed_receipt_closed=observed_receipt_closed)
+
+
+def _validate_fields(raw, *, expected_profile, expected_source, observed_exit, observed_receipt_closed):
+    """Field-level checks only; this function never certifies production admission."""
     validate_profile(expected_profile)
     record = json.loads(raw, object_pairs_hook=_object)
     _keys(record, FIELDS)
@@ -104,10 +110,13 @@ def _validate_member(item, expected, root, roles, pids):
     _keys(item, ("pid", "role", "identity", "member", "action", "signaled", "closed"))
     _number(item["pid"], 1)
     identity = item["identity"]
-    _keys(identity, ("creation_time", "path", "sha256", "size", "version", "file_id"))
+    _keys(identity, ("creation_time", "process_path", "retained_final_path", "sha256", "size", "file_id", "expected_version"))
     _number(identity["creation_time"], 1)
     _number(identity["size"], 1)
-    matches = [pin for pin in expected if pin == {"role": item["role"], **{k: identity[k] for k in identity if k != "creation_time"}}]
+    matches = [pin for pin in expected if pin["role"] == item["role"] and
+               all(pin[key] == identity[key] for key in ("sha256", "size", "file_id")) and
+               pin["version"] == identity["expected_version"] and
+               _path(pin["path"]) == _path(identity["process_path"]) == _path(identity["retained_final_path"])]
     if (len(matches) != 1 or item["role"] in roles or item["pid"] in pids
             or (item["pid"], identity["creation_time"]) == (root["pid"], root["creation_time"])
             or item["member"] is not True or item["action"] not in ("terminate", "already_exited")
@@ -115,3 +124,13 @@ def _validate_member(item, expected, root, roles, pids):
         raise ValueError("unverified or unclosed residual")
     roles.add(item["role"])
     pids.add(item["pid"])
+
+
+def _path(value):
+    if not isinstance(value, str) or not value:
+        raise ValueError("invalid observed path")
+    if value.startswith("\\\\?\\UNC\\"):
+        value = "\\\\" + value[8:]
+    elif value.startswith("\\\\?\\"):
+        value = value[4:]
+    return ntpath.normcase(ntpath.normpath(value))
