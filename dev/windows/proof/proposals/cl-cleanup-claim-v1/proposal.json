@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "status": "SOURCE PROPOSAL ONLY; NOT ENROLLED, EXECUTED, OR APPROVED FOR BUILD",
+  "purpose": "One fresh compile of test_healthy_cleanup_claim.cpp; no link or test execution",
+  "supervisor_fixture_qualification": {
+    "source_sha": "d0bb016df169b663567e88fd5586ab7c008e9554",
+    "internal_nine_sha256": "80b842ae0d7ad4c3384b9eacfb9c492962febebae449c90a2b18d6b1e4f25915",
+    "pure_result_sha256": "f5291d79fc9eae31e1eea1f72500cae9ede7c65c33a11efe40683c906b0f3084",
+    "native_result_sha256": "0d76b2de544bb6a90988d5d71b830192b17d70f6706b3d073d6d9c409e4c116e",
+    "scope": "Fixture qualification only; not compiler or production enrollment proof"
+  },
+  "candidate": {
+    "worktree": "E:/CursorAI/JellyfinDesktop/deps/worktrees/automatic-recovery-review",
+    "ref": "refs/heads/codex/automatic-recovery-review-20261114",
+    "sha": "4453818fcdeae3152fd07f29031ec6f3eb3b1670",
+    "tree": "c0d6a8d1d67a581b2757a2a5a8b6d132dd4d3fd9",
+    "source": "tests/test_healthy_cleanup_claim.cpp",
+    "source_bytes": 13354,
+    "source_sha256": "6aa7104f360c64650bb245adda927d8f97ec6cdee0c27a642016b3610e0aa0c0"
+  },
+  "retained_build_graph": {
+    "worktree": "E:/CursorAI/JellyfinDesktop/deps/worktrees/integration",
+    "head": "ff831ccc7832d147f77dc4e69006ccda0190fa89",
+    "cwd": "E:/CursorAI/JellyfinDesktop/deps/worktrees/integration/deps/w1192-healthy-build",
+    "build_ninja_sha256": "69d9e758f36c7f34e668f81dbb6188625d028e0ad2b2ea4921623b72779e7a77",
+    "rules_ninja_sha256": "f6cbaa8fe2a527fea0ab5f2492885dc7bb5766ce8ac3dfd1d46b68ea3cdcc331",
+    "cmake_cache_sha256": "625cb4063f6f30547c2e84614d0ac6bb48ba108a0fd98fd973d6b67bf78abc1d",
+    "freshness": "Historical graph and generated include directory are not proven current or complete."
+  },
+  "compiler": {
+    "path": "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe",
+    "command_form": "cl_response",
+    "file_version": "19.44.35229.0",
+    "bytes": 677776,
+    "sha256": "fe251ef50a1545b1b0835ee17b1e785459712b38d79e45b5c1d3d28970a36619"
+  },
+  "telemetry": {
+    "path": "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/vctip.exe",
+    "file_version": "14.44.35229.0",
+    "bytes": 335288,
+    "sha256": "d591358c6aee4b673562ca3b3a15c250e612708394fe3b44a7a7eda2470570a5"
+  },
+  "response": {
+    "path": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/dev/windows/proof/proposals/cl-cleanup-claim-v1/cleanup-claim.rsp",
+    "bytes": 3129,
+    "sha256": "15d4a13278b38de63943cc4fc8776cbec79d44e4759a968d927ceb65f77de347",
+    "compiler_argument_count": 67,
+    "origin": "claim.stdout line 3, split only at whitespace after verifying the captured line has no quotes",
+    "preserved": "Every captured compiler option and order, including /showIncludes; no nested response files",
+    "substitutions": ["candidate tests include root", "candidate healthy_restart include root", "candidate source", "fresh /Fo object", "fresh /Fd PDB"],
+    "argv": ["@E:\\CursorAI\\JellyfinDesktop\\deps\\worktrees\\reconcile-build-policy-20261113\\dev\\windows\\proof\\proposals\\cl-cleanup-claim-v1\\cleanup-claim.rsp"]
+  },
+  "fresh_output_root": "E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/deps/enrollment-cl-claim-20261114-01",
+  "planned_outputs": ["cleanup_claim.obj", "cleanup_claim-compile.pdb"],
+  "planned_evidence": ["compiler.stdout", "compiler.stderr", "build.receipt", "outer.receipt"],
+  "environment": {
+    "private_snapshot": "E:/CursorAI/JellyfinDesktop/deps/reconcile-20261113/build-metadata-01/env-private/environment-private.json",
+    "private_snapshot_sha256": "1daa8974e1d37694f1067c92ab9839bab22d2f8a1d3fa844e0b2b58ea0c4512a",
+    "canonical_selected_environment_sha256": "4cf96fc6dfc8d9306c0503bb39f72a8cc0035ff17fd0ea86d42f3dca24adc377",
+    "names_casefold_order": ["_CL_", "_LINK_", "APPDATA", "CL", "HEALTHY_TEST_SOURCE", "INCLUDE", "JELLYFIN_TEST_OWNED_ROOT", "LIB", "LIBPATH", "LINK", "LOCALAPPDATA", "MPVQT_TEST_SOURCE", "PATH", "QT_QPA_PLATFORM", "SystemRoot", "TEMP", "TMP"],
+    "basis": "ACL and exact file hash verified; digest derived privately using policy.environment_digest semantics; values are not published.",
+    "replay": "Existing supervisor copies the ambient environment; exact private 17-name replay and task-owned scratch safety are not yet implemented or established."
+  },
+  "observed_inputs_not_a_complete_dependency_lock": [
+    {"path": "tests/healthy_restart/graph_access.h", "bytes": 1934, "sha256": "d4b7add947cbb05c6e3af90fe537b2313448616fe681c423b1fe7c5bd69790cc"},
+    {"path": "tests/healthy_restart/graph.h", "bytes": 9829, "sha256": "3a94edb03479badd1a41c8396635bec12b32877b733534339f5e7a027b80356e"},
+    {"path": "tests/fixture_restart/RestartChild.h", "bytes": 2639, "sha256": "9bde6a30863693d7a5cdffa73713fbdd74990be4bf6b452e1723505646f489bf"},
+    {"path": "E:/CursorAI/JellyfinDesktop/dev/windows/deps/qt/6.9.3/msvc2022_64/include/QtCore/qcoreapplication.h", "bytes": 9831, "sha256": "063d81c5392b5489660fdfb70f2c96bf9a3130533738a81a936a4cb71991c3d5"},
+    {"path": "E:/CursorAI/JellyfinDesktop/dev/windows/deps/qt/6.9.3/msvc2022_64/include/QtCore/qthread.h", "bytes": 6815, "sha256": "a9bc5fd6887774f6a695d626e69e40ca1af1fe4d8097d5d66d1c7dc52971ea15"},
+    {"path": "C:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/um/Windows.h", "bytes": 7511, "sha256": "b337d661d03a4abefb7b86a2742ce1ad5d19b57cd8b858bd13e7bbcc1dbeeaaa"},
+    {"path": "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/include/atomic", "bytes": 125337, "sha256": "76a3e00e57e342f26eb5db7a0e38002b0f5db850ac2fe33d026733bf8217b4b4"},
+    {"path": "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/include/chrono", "bytes": 275223, "sha256": "8af902a185268ba20756a2c4b5fb309c80e03c2a6fe3f166c67c3eb3aa6ffc4d"}
+  ],
+  "captured_provenance": {
+    "metadata_summary_sha256": "352caf9ccf690a2f5bcb150a5cace74011007c1ee227b4aded2d97687ce70df2",
+    "claim_stdout_sha256": "ee12918aee45de7406fd43ab7305f34b079867f7feb2649ed70830080d52f16c",
+    "prior_proposal_manifest_sha256": "ccc616a285f43dfba24054f7410c75057cf8cbeaf72e7665839f883d61bb1c6e",
+    "prior_proposal_response_sha256": "82bbfac90cc92aac285cb1f048a65bfb508a77f4bdd4e2f9a95b1fcc23bdeebc"
+  },
+  "remaining_required_inputs": [
+    "Current exact VCTIP volume serial and file index for policy.telemetry_file_id; existing pinned telemetry metadata does not contain them.",
+    "Complete transitive candidate, generated, Qt, MSVC and Windows SDK header/tool dependency identities and retained graph freshness; /showIncludes has not been run for this proposal.",
+    "A private, exact 17-name environment replay boundary and proof that TEMP, TMP, APPDATA and LOCALAPPDATA writes are task-owned; if an overlay is needed, bind the resulting canonical digest rather than reuse the frozen digest.",
+    "Independent review of actual CL response-file argument parsing and all potential side outputs; no compiler or test may run without separately allocated authority.",
+    "A reviewed production source enrollment binding these concrete inputs, the final private environment and package digest; the current production registry remains empty."
+  ]
+}
