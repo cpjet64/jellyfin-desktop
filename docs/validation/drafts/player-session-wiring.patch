@@ -1,0 +1,61 @@
+diff --git a/src/player/CMakeLists.txt b/src/player/CMakeLists.txt
+index a8034ab4..27a21068 100644
+--- a/src/player/CMakeLists.txt
++++ b/src/player/CMakeLists.txt
+@@ -2,0 +3 @@ add_sources(PlaybackIntent.cpp PlaybackIntent.h PlaybackCheckpoint.cpp PlaybackC
++add_sources(AutomaticRecoverySession.cpp AutomaticRecoverySession.h)
+diff --git a/src/player/PlayerComponent.h b/src/player/PlayerComponent.h
+index 3c39505a..ee2ae279 100644
+--- a/src/player/PlayerComponent.h
++++ b/src/player/PlayerComponent.h
+@@ -17,0 +18 @@
++#include "AutomaticRecoverySession.h"
+@@ -314,0 +316 @@ private:
++  AutomaticRecoverySession m_automaticRecoverySession;
+diff --git a/src/player/PlayerComponentCommands.cpp b/src/player/PlayerComponentCommands.cpp
+index d6815b8f..96996729 100644
+--- a/src/player/PlayerComponentCommands.cpp
++++ b/src/player/PlayerComponentCommands.cpp
+@@ -14,0 +15 @@ bool PlayerComponent::load(const QString& url, const QVariantMap& options, const
++  m_automaticRecoverySession.invalidate();
+@@ -30,0 +32,6 @@ bool PlayerComponent::load(const QString& url, const QVariantMap& options, const
++#ifdef MPVQT_EXTERNAL_EVENTS
++  const auto intent = m_playbackIntent.snapshot();
++  if (m_mpv && m_mpvGeneration && intent.request && intent.revision)
++    m_automaticRecoverySession.begin({intent.request, intent.revision, m_mpvGeneration}, url, options,
++                                    metadata, audioStream, subtitleStream, !options.value("autoplay").toBool());
++#endif
+@@ -36,0 +44 @@ void PlayerComponent::stop()
++  if (!m_replacementStop) m_automaticRecoverySession.invalidate();
+@@ -69,0 +78 @@ PlayerComponent::NativeStopResult PlayerComponent::requestNativeStop()
++  m_automaticRecoverySession.invalidate();
+diff --git a/src/player/PlayerIntentCommands.cpp b/src/player/PlayerIntentCommands.cpp
+index 770ef4ba..b458a07b 100644
+--- a/src/player/PlayerIntentCommands.cpp
++++ b/src/player/PlayerIntentCommands.cpp
+@@ -133,0 +134,3 @@ void PlayerComponent::play()
++#ifdef MPVQT_EXTERNAL_EVENTS
++  const auto previous = m_playbackIntent.snapshot();
++#endif
+@@ -135,0 +139,4 @@ void PlayerComponent::play()
++#ifdef MPVQT_EXTERNAL_EVENTS
++  m_automaticRecoverySession.revise({previous.request, previous.revision, m_mpvGeneration},
++                                   {previous.request, revision, m_mpvGeneration}, false);
++#endif
+@@ -148,0 +156,3 @@ void PlayerComponent::pause()
++#ifdef MPVQT_EXTERNAL_EVENTS
++  const auto previous = m_playbackIntent.snapshot();
++#endif
+@@ -150,0 +161,4 @@ void PlayerComponent::pause()
++#ifdef MPVQT_EXTERNAL_EVENTS
++  m_automaticRecoverySession.revise({previous.request, previous.revision, m_mpvGeneration},
++                                   {previous.request, revision, m_mpvGeneration}, true);
++#endif
+@@ -163,0 +178 @@ void PlayerComponent::seekTo(qint64 ms)
++  m_automaticRecoverySession.invalidate();
+@@ -179,0 +195 @@ PlayerComponent::NativeSeekResult PlayerComponent::requestNativeSeek(qint64 mill
++  m_automaticRecoverySession.invalidate();
+@@ -201,0 +218 @@ void PlayerComponent::setSubtitleStream(const QVariant &subtitleStream)
++  m_automaticRecoverySession.invalidate();
+@@ -209,0 +227 @@ void PlayerComponent::setAudioStream(const QVariant &audioStream)
++  m_automaticRecoverySession.invalidate();
