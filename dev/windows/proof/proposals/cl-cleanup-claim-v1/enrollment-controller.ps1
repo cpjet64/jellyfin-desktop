@@ -78,10 +78,52 @@ function Pin-Inputs($pins) {
   $pins.PinFile("$proposal/cleanup-claim.rsp",'15d4a13278b38de63943cc4fc8776cbec79d44e4759a968d927ceb65f77de347',3129,$null)
   $pins.PinParents($root)
 }
+function Assert-ScratchParent {
+  $parent = [IO.DirectoryInfo]::new([IO.Path]::GetDirectoryName($root))
+  while ($null -ne $parent) {
+    if (!$parent.Exists -or ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unsafe scratch parent' }
+    $parent = $parent.Parent
+  }
+}
+function Get-FailurePostchecks($pins) {
+  $state = [ordered]@{pins='unavailable';source='unknown';private_acl='unknown';outer_receipt='unavailable'}
+  if ($null -ne $pins) {
+    try { $pins.VerifyAll(); $state.pins = 'pass' } catch { $state.pins = 'failed' }
+  }
+  try { Check-Sources; $state.source = 'pass' } catch { $state.source = 'failed' }
+  try { Assert-PrivateAcl; $state.private_acl = 'pass' } catch { $state.private_acl = 'failed' }
+  if (Test-Path -LiteralPath "$root/outer.receipt" -PathType Leaf) {
+    try { $null = Check-Receipt "$root/outer.receipt"; $state.outer_receipt = 'strict_success' }
+    catch { $state.outer_receipt = 'nonpass_or_unreadable' }
+  }
+  return $state
+}
+function Test-StorageFailure($failure) {
+  $pattern = '(?i)no space left|disk full|not enough (space|storage)|quota exceeded|errno 28|winerror 112|0x80070070'
+  if ($failure.ToString() -match $pattern) { return $true }
+  foreach ($name in @('outer.stdout','outer.stderr','compiler.stdout','compiler.stderr')) {
+    $path = Join-Path $root $name
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+      if ((Get-Item -LiteralPath $path).Length -gt 4MB) { return $true }
+      foreach ($line in [IO.File]::ReadLines($path)) { if ($line -match $pattern) { return $true } }
+    }
+  }
+  return $false
+}
 Check-Sources
 Assert-PrivateAcl
 if ((Get-PSDrive E).Free -lt 20GB) { throw 'Insufficient storage; stop' }
 if (Test-Path -LiteralPath $root) { throw 'Output root is not fresh' }
+Assert-ScratchParent
+New-Item -ItemType Directory -Path $root | Out-Null
+$hostScratch = Join-Path $root 'host-temp'
+New-Item -ItemType Directory -Path $hostScratch | Out-Null
+$previousTemp = [Environment]::GetEnvironmentVariable('TEMP','Process')
+$previousTmp = [Environment]::GetEnvironmentVariable('TMP','Process')
+[Environment]::SetEnvironmentVariable('TEMP',$hostScratch,'Process')
+[Environment]::SetEnvironmentVariable('TMP',$hostScratch,'Process')
+$pins = $null
+try {
 $csStream = [IO.File]::Open($interop,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
 try {
   $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($csStream)).ToLowerInvariant()
@@ -92,10 +134,11 @@ try {
   Add-Type -TypeDefinition $source
 } finally { $csStream.Dispose() }
 $pins = [RetainedInputs]::new()
+$primary = $null
 try {
   Pin-Inputs $pins
+  $pins.PinParents("$root/placeholder")
   Check-Sources
-  New-Item -ItemType Directory -Path $root | Out-Null
   foreach ($name in @('temp','roaming','local')) { New-Item -ItemType Directory -Path (Join-Path $root $name) | Out-Null }
   $argsList = @("$root/outer.receipt",'180000',"$qualified/dev/windows/proof",$python,'-B',$driver)
   $psi = [Diagnostics.ProcessStartInfo]::new()
@@ -132,6 +175,7 @@ try {
       }
     } finally { $err.Dispose() }
   } finally { $out.Dispose() }
+  if (Test-StorageFailure '') { throw 'Storage failure or oversized log; preserve evidence and stop' }
   if ($exit -ne 0) { throw 'Helper nonpass; retain evidence' }
   $receipt = @(Check-Receipt "$root/outer.receipt")
   $pins.VerifyAll()
@@ -159,8 +203,34 @@ try {
     helper_pid=$helperPid;helper_exit=$exit;elapsed_ms=$watch.ElapsedMilliseconds;argv=$argsList;
     outer_receipt=$receipt;build_result=$build.result;files=$inventory;postcompile_dependency_identities=$dependencies;
     limitations='Discovery only; generated include tree, implicit CWD behavior and dependency closure remain unqualified'}
-  $bytes = [Text.UTF8Encoding]::new($false).GetBytes((ConvertTo-Json -InputObject $record -Depth 8) + "`n")
-  $summary = [IO.File]::Open("$root/result.json",[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
-  try { $summary.Write($bytes,0,$bytes.Length); $summary.Flush($true) } finally { $summary.Dispose() }
-  Write-Output "Discovery compile settled; helper=$helperPid; source=$ReviewedSourceSHA; dependencies require review"
-} finally { $pins.Dispose() }
+  $successBytes = [Text.UTF8Encoding]::new($false).GetBytes((ConvertTo-Json -InputObject $record -Depth 8) + "`n")
+} catch {
+  $primary = $_
+  $postchecks = Get-FailurePostchecks $pins
+  $storageFailure = $true
+  try { $storageFailure = Test-StorageFailure $primary } catch { $storageFailure = $true }
+  if (!$storageFailure) {
+    try {
+      $failure = [ordered]@{schema='cleanup-claim-discovery-failed-v1';source=$ReviewedSourceSHA;
+        reason=$primary.ToString();postchecks=$postchecks;settlement='see retained outer receipt; no success implied'}
+      $data = [Text.UTF8Encoding]::new($false).GetBytes((ConvertTo-Json -InputObject $failure -Depth 5) + "`n")
+      $failureFile = [IO.File]::Open("$root/failure.json",[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+      try { $failureFile.Write($data,0,$data.Length); $failureFile.Flush($true) } finally { $failureFile.Dispose() }
+    } catch { Write-Warning 'Failure evidence write failed; original error retained' }
+  }
+  throw $primary
+} finally {
+  if ($null -ne $pins) {
+    try { $pins.Dispose() } catch {
+      if ($null -eq $primary) { throw }
+      Write-Warning 'Retained handle close failed; original error retained'
+    }
+  }
+}
+$summary = [IO.File]::Open("$root/result.json",[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+try { $summary.Write($successBytes,0,$successBytes.Length); $summary.Flush($true) } finally { $summary.Dispose() }
+Write-Output "Discovery compile settled; helper=$helperPid; source=$ReviewedSourceSHA; dependencies require review"
+} finally {
+  [Environment]::SetEnvironmentVariable('TEMP',$previousTemp,'Process')
+  [Environment]::SetEnvironmentVariable('TMP',$previousTmp,'Process')
+}
