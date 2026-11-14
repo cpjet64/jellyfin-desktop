@@ -11,11 +11,12 @@ CREATE_UNICODE_ENVIRONMENT = 0x400
 
 class LaunchFailure(OSError):
     """Failed launch with ownership of any unresolved exact native handles."""
-    def __init__(self, message, root=None, retained_handles=(), job_unsettled=False):
+    def __init__(self, message, root=None, retained_handles=(), job_unsettled=False, cleanup_deadline=None):
         super().__init__(message)
         self.root = root
         self.retained_handles = tuple(retained_handles)
         self.job_unsettled = job_unsettled
+        self.cleanup_deadline = cleanup_deadline
 
 
 class RootProcess:
@@ -113,45 +114,56 @@ def _create(api, job, executable, args, cwd, handles, env, root_verifier):
             raise OSError(f'unexpected root suspend count: {previous}')
         return root
     except BaseException as original:
+        deadline = time.monotonic() + 10
         if assigned:
-            retained, unsettled = _emergency_settle(api, job, root)
-            raise LaunchFailure('assigned root launch failed', retained, (), unsettled) from original
+            retained, unsettled = _emergency_settle(api, job, root, deadline)
+            raise LaunchFailure('assigned root launch failed', retained, (), unsettled, deadline) from original
         settled = False
         try:
             api.terminate(process, 125)
         except OSError:
             pass
         try:
-            settled = api.wait(process, 10000)
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                settled = api.wait(process, max(0, int(remaining * 1000)))
         except OSError:
             pass
         if settled:
             try:
                 root.close()
             except OSError as error:
-                raise LaunchFailure('failed root handle close', root=root, job_unsettled=True) from error
-            raise LaunchFailure('root launch failed and settled') from original
-        raise LaunchFailure('root launch failed; root settlement unknown', root=root, job_unsettled=True) from original
+                raise LaunchFailure('failed root handle close', root=root, job_unsettled=True,
+                                    cleanup_deadline=deadline) from error
+            raise LaunchFailure('root launch failed and settled', cleanup_deadline=deadline) from original
+        raise LaunchFailure('root launch failed; root settlement unknown', root=root, job_unsettled=True,
+                            cleanup_deadline=deadline) from original
 
 
-def _close_handles(handles):
+def _close_handles(handles, deadline):
     failed = []
     for handle in reversed(handles):
         try:
             handle.close()
         except OSError:
+            if deadline is None:
+                deadline = time.monotonic() + 10
             failed.append(handle)
-    return list(reversed(failed))
+    return list(reversed(failed)), deadline
 
 
-def _emergency_settle(api, job, root):
-    deadline = time.monotonic() + 10
+def _emergency_settle(api, job, root, deadline):
+    if time.monotonic() >= deadline:
+        return root, True
     try:
         api.terminate_job(job, 125)
     except OSError:
         pass
     try:
-        remaining = max(0, int((deadline - time.monotonic()) * 1000))
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return root, True
+        remaining = max(0, int(remaining * 1000))
         if not root.wait(remaining):
             return root, True
         root.close()
@@ -164,7 +176,7 @@ def _emergency_settle(api, job, root):
                 return None, False
         except OSError:
             return None, True
-        time.sleep(0.02)
+        time.sleep(min(0.02, max(0, deadline - time.monotonic())))
     return None, True
 
 
@@ -179,6 +191,7 @@ def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_v
     handles = []
     root = None
     failure = None
+    deadline = None
     try:
         raw = api.k.CreateFileW('NUL', w.GENERIC_READ, w.FILE_SHARE_READ | 2, C.byref(attrs), w.OPEN_EXISTING, 0, None)
         handles.append(w.Handle(api, raw))
@@ -187,12 +200,13 @@ def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_v
         root = _create(api, job, executable, list(args), cwd, handles, env, root_verifier)
     except BaseException as error:
         failure = error
+        deadline = error.cleanup_deadline if isinstance(error, LaunchFailure) else time.monotonic() + 10
     finally:
-        handles = _close_handles(handles)
+        handles, deadline = _close_handles(handles, deadline)
     if handles:
         unsettled = False
         if root is not None:
-            root, unsettled = _emergency_settle(api, job, root)
+            root, unsettled = _emergency_settle(api, job, root, deadline)
         if isinstance(failure, LaunchFailure):
             unsettled = unsettled or failure.job_unsettled
             if failure.root is not None:
@@ -200,7 +214,9 @@ def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_v
             for handle in failure.retained_handles:
                 if not any(handle is existing for existing in handles):
                     handles.append(handle)
-        raise LaunchFailure('inherited handle close failed', root, handles, unsettled) from failure
+        raise LaunchFailure('inherited handle close failed', root, handles, unsettled, deadline) from failure
     if failure is not None:
-        raise failure
+        if isinstance(failure, LaunchFailure):
+            raise failure
+        raise LaunchFailure('launch preparation failed', cleanup_deadline=deadline) from failure
     return root
