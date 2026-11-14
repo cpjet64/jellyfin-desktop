@@ -1,0 +1,57 @@
+diff --git a/src/gui/CMakeLists.txt b/src/gui/CMakeLists.txt
+--- a/src/gui/CMakeLists.txt
++++ b/src/gui/CMakeLists.txt
+@@ -64,7 +64,9 @@ qt_internal_add_module(Gui
+         Qt::Network
+     QMAKE_MODULE_CONFIG "${qmake_module_config}"
++    PRIVATE_HEADER_FILTERS ".*QtRecoveryAbi[.]h"
+     SOURCES
+         compat/removed_api.cpp
++        recovery/QtRecoverySwap.cpp recovery/QtRecoveryAbi.h
+         image/qabstractfileiconengine.cpp image/qabstractfileiconengine_p.h
+         image/qabstractfileiconprovider.cpp image/qabstractfileiconprovider.h image/qabstractfileiconprovider_p.h
+         image/qbitmap.cpp image/qbitmap.h
+diff --git a/src/plugins/platforms/windows/qwindowsglcontext.cpp b/src/plugins/platforms/windows/qwindowsglcontext.cpp
+--- a/src/plugins/platforms/windows/qwindowsglcontext.cpp
++++ b/src/plugins/platforms/windows/qwindowsglcontext.cpp
+@@ -14,3 +14,4 @@
+ #include <qpa/qplatformnativeinterface.h>
+ #include <private/qsystemlibrary_p.h>
++#include "../../../gui/recovery/QtRecoveryAbi.h"
+ #include <algorithm>
+@@ -1248,5 +1249,21 @@ void QWindowsGLContext::swapBuffers(QPlatformSurface *surface)
+-    if (const QOpenGLContextData *contextData = findByHWND(m_windowContexts, handleOf(surface)))
+-        QOpenGLStaticContext::opengl32.swapBuffers(contextData->hdc);
+-    else
++    if (const QOpenGLContextData *contextData = findByHWND(m_windowContexts, handleOf(surface))) {
++        PIXELFORMATDESCRIPTOR descriptor{};
++        const int format = GetPixelFormat(contextData->hdc);
++        const bool described = format && DescribePixelFormat(contextData->hdc, format,
++                                                               sizeof(descriptor), &descriptor);
++        const bool doubleBuffered = described && (descriptor.dwFlags & PFD_DOUBLEBUFFER)
++                && (descriptor.dwFlags & PFD_DRAW_TO_WINDOW);
++        const bool current = QOpenGLStaticContext::opengl32.wglGetCurrentContext
++                && QOpenGLStaticContext::opengl32.wglGetCurrentDC
++                && QOpenGLStaticContext::opengl32.wglGetCurrentContext()
++                    == contextData->renderingContext
++                && QOpenGLStaticContext::opengl32.wglGetCurrentDC() == contextData->hdc;
++        const BOOL result = QOpenGLStaticContext::opengl32.swapBuffers(contextData->hdc);
++        qt_recovery_swap_report_v1(reinterpret_cast<uintptr_t>(surface->surface()),
++                                   reinterpret_cast<uintptr_t>(static_cast<QPlatformOpenGLContext *>(this)),
++                                   current && !QOpenGLStaticContext::opengl32.moduleIsNotOpengl32(),
++                                   doubleBuffered, result != FALSE);
++    } else {
+         qWarning("%s: Cannot find window %p", __FUNCTION__, handleOf(surface));
++    }
+ }
+diff --git a/tests/auto/gui/kernel/CMakeLists.txt b/tests/auto/gui/kernel/CMakeLists.txt
+--- a/tests/auto/gui/kernel/CMakeLists.txt
++++ b/tests/auto/gui/kernel/CMakeLists.txt
+@@ -29,6 +29,7 @@ add_subdirectory(qpalette)
+ add_subdirectory(qscreen)
+ add_subdirectory(qsurfaceformat)
+ add_subdirectory(qwindow)
++add_subdirectory(qtrecoveryswap)
+ if(QT_FEATURE_private_tests)
+     add_subdirectory(qguiapplication)
+ endif()
