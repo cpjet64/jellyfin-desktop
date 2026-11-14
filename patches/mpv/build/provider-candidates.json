@@ -1,0 +1,17 @@
+{
+  "status": "investigation only; not a complete lock or historical artifact provenance",
+  "provider": {
+    "repository": "https://github.com/shinchiro/mpv-winbuild-cmake",
+    "commit": "1f8d2e76255abc48f0456d9be99b4cab9c6566e6",
+    "commit_utc": "2026-10-11T06:03:09Z",
+    "selection_cutoff_utc": "2026-10-18T23:59:59Z",
+    "declared_package_names": 106
+  },
+  "required_mpv_commit": "01e2533f3143b8940857ca419b0b367f583e05ca",
+  "candidate_revisions_at_provider_time": [
+    {"repository":"https://github.com/FFmpeg/FFmpeg","commit":"b5902e69c71bf556958f9fded99d1bcea2d7298c","commit_utc":"2026-10-11T02:37:58Z"},
+    {"repository":"https://github.com/haasn/libplacebo","commit":"1dd022687b9ac1dd996855b51433bf770ae76aab","commit_utc":"2026-10-10T14:48:29Z"},
+    {"repository":"https://github.com/mingw-w64/mingw-w64","commit":"3ad495b55f0524c61fa3d02dbd0cdeceabb0c038","commit_utc":"2026-10-09T12:50:26Z"}
+  ],
+  "unresolved": ["complete enabled dependency and submodule closure", "archive checksums and patch set", "Rust nightly and host-tool bootstrap", "compiler CRT and target options", "existing artifact feature and dependency baseline", "producer and consumer manifest contract"]
+}
