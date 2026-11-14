@@ -17,37 +17,50 @@ capabilities as blocked; never infer a safe retirement from a missing context.
 
 ## Automatic recovery acceptance plan
 
-Evaluate the current user session every 500 ms. A stalled eligible, outstanding
-video operation needs five seconds without frame progress while the playback
-clock advances; an attributable operation
-timeout or renderer fault may trigger directly. Pause, loading, seeking,
-buffering, an unexposed window, audio-only media, EOF, and reset suppress the
-stall timer and reset its baseline. One attempt is allowed per user session,
-including its recovery load, with one overall 15-second deadline. A failure is
-sticky; a second fault must not start a loop. Stop, exit, new item, newer seek
-or track selection, and stale generation or replies cannot revive old intent.
-Restore paused first; only a fresh replacement-generation frame can permit an
-authorized return to playing. A failed retirement or restoration cannot be
-acknowledged as successful. Preserve authenticated loads without putting
-credentials or authenticated URLs into logs or persistent evidence.
+Evaluate the current user session every 500 ms. A qualified moving-video stall
+requires five seconds without source-frame progress while the playback clock
+advances. Pause, loading, seeking, buffering, an unexposed or hidden window,
+audio-only media, EOF, reset, and sparse or still images suppress this stall
+timer and reset its baseline. An attributable operation timeout or qualified
+stall selects one owned reload only if the original render thread and context
+produce a bounded usability acknowledgement. Lost context or failure to obtain
+that acknowledgement within the existing 15-second attempt deadline is
+blocked graphics recovery. One attempt is allowed per user-created session;
+internal pause and load commands do not change intent revision or rearm it.
 
-The working interpretation, pending technical review before
-execution, allows an operation-timeout reload to retain a usable renderer
-generation. It still requires a newly attributable accepted load and a newer
-post-seek frame. A renderer retirement and recreation requires a new renderer
-generation; do not invent one for a same-renderer reload.
+Preserve desired user pause separately from temporary native recovery pause.
+Stop, exit, new item, newer seek or track selection, and stale replies cannot
+revive old intent. Load paused at the captured target with precise seeking,
+require the matching accepted native entry, its scoped file-loaded sequence,
+fresh seekability, pause and position observations, then an attributed newer
+native source frame rendered and associated with its Qt submission. Resume
+only if the latest user intent still requests playing. A usable renderer may
+retain its generation across reload; native load/entry, attempt and frame
+identities must still be new and attributable. Do not invent an explicit seek
+reply. A failed or unrun retirement cannot be acknowledged as successful.
+Preserve authenticated loads and tracks without placing credentials or
+authenticated URLs in logs or persistent evidence.
+
+If the original context is unavailable, retain one process-lifetime
+quarantined core and renderer generation, revoke its authority, request an
+owned stop where possible, and refuse competing playback or further replacement.
+Quarantine is containment, not restored playback or a fix for full context loss.
 
 Before hands-on acceptance, record the exact package version, source identity,
 artifact hash, machine, GPU, driver, display and server configuration. Generate
 a local clip with moving recognizable content and audio; retain its generation
 recipe and hash. Inject each fault through the actual adapter and renderer path,
-not a direct recovery call or synthetic frame. Run three fresh playing sessions
-with attributable timeouts and three fresh playing sessions with stalled or
-renderer faults, one paused session, Stop and new-item cancellation, and a
-failed or repeated-fault case. Record each trigger, observed sequence, timing,
+not a direct recovery call or synthetic frame. Require five consecutive
+successful recoveries for each selected deterministic timeout and moving-video
+stall fault class, plus paused, Stop, new-item, cancellation, and failed or
+repeated-fault cases. Use the normally enabled controller; no manual minimize,
+wake, or restore action may cause recovery. Record each trigger, observed sequence, timing,
 outcome and teardown. Playing acceptance requires recognizably different
 post-fault frames, advancing position, and expected audio. Paused acceptance
-requires the correct picture, position and paused state. Screenshots alone,
+requires the correct picture, position and paused state. Predeclare a maximum
+absolute restored-position error of two seconds for this clip and do not widen
+it after execution. Record audio ownership and verify no competing playback.
+Screenshots alone,
 blackness, audio alone, a configured video output, and fake frames do not prove
 visible recovery. Record native Linux and macOS headless regressions separately;
 they do not substitute for installed visible-video acceptance. The legacy
