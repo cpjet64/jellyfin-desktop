@@ -1,0 +1,139 @@
+diff --git a/src/player/CMakeLists.txt b/src/player/CMakeLists.txt
+index a8034ab4..27a21068 100644
+--- a/src/player/CMakeLists.txt
++++ b/src/player/CMakeLists.txt
+@@ -1,5 +1,6 @@
+ add_sources(PlayerComponent.cpp PlayerComponentCommands.cpp PlayerIntentCommands.cpp PlayerComponent.h PlayerMpvEvents.cpp PlayerReleasedState.cpp)
+ add_sources(PlaybackIntent.cpp PlaybackIntent.h PlaybackCheckpoint.cpp PlaybackCheckpoint.h)
++add_sources(AutomaticRecoverySession.cpp AutomaticRecoverySession.h)
+ add_sources(PlaybackNativeReceipts.cpp PlaybackNativeReceipts.h PlayerNativeReceipts.cpp)
+ add_sources(NativePlaybackObservation.cpp NativePlaybackObservation.h PlayerNativeObservation.cpp PlayerNativeRestore.cpp)
+ add_sources(AlbumArtProvider.cpp AlbumArtProvider.h)
+diff --git a/src/player/PlayerComponent.h b/src/player/PlayerComponent.h
+index 3c39505a..ee2ae279 100644
+--- a/src/player/PlayerComponent.h
++++ b/src/player/PlayerComponent.h
+@@ -15,6 +15,7 @@
+ #include "ComponentManager.h"
+ #include "QtHelper.h"
+ #include "PlaybackIntent.h"
++#include "AutomaticRecoverySession.h"
+ #include "PlaybackNativeReceipts.h"
+ #include "NativePlaybackObservation.h"
+ 
+@@ -312,6 +313,7 @@ private:
+   bool intentControlThread() const;
+   PlaybackCheckpoint makePlaybackCheckpoint() const;
+   PlaybackIntent m_playbackIntent;
++  AutomaticRecoverySession m_automaticRecoverySession;
+   bool m_replacementLoad = false;
+   bool m_replacementStop = false;
+ #ifdef MPVQT_C2_DIAGNOSTIC_ONLY
+diff --git a/src/player/PlayerComponentCommands.cpp b/src/player/PlayerComponentCommands.cpp
+index d6815b8f..96996729 100644
+--- a/src/player/PlayerComponentCommands.cpp
++++ b/src/player/PlayerComponentCommands.cpp
+@@ -12,6 +12,7 @@ bool PlayerComponent::load(const QString& url, const QVariantMap& options, const
+                            const QVariant& audioStream, const QVariant& subtitleStream)
+ {
+   if (!intentControlThread()) return false;
++  m_automaticRecoverySession.invalidate();
+   invalidateNativeReceipt();
+ #ifdef PLAYER_INTENT_DIAGNOSTIC_ONLY
+   PlayerIntentObservation::Scope observed(PlayerIntentObservation::Kind::LoadEnter);
+@@ -28,12 +29,19 @@ bool PlayerComponent::load(const QString& url, const QVariantMap& options, const
+     stop();
+   }
+   queueMedia(url, options, metadata, audioStream, subtitleStream);
++#ifdef MPVQT_EXTERNAL_EVENTS
++  const auto intent = m_playbackIntent.snapshot();
++  if (m_mpv && m_mpvGeneration && intent.request && intent.revision)
++    m_automaticRecoverySession.begin({intent.request, intent.revision, m_mpvGeneration}, url, options,
++                                    metadata, audioStream, subtitleStream, !options.value("autoplay").toBool());
++#endif
+   return true;
+ }
+ 
+ void PlayerComponent::stop()
+ {
+   if (!intentControlThread()) return;
++  if (!m_replacementStop) m_automaticRecoverySession.invalidate();
+   if (!m_replacementStop) invalidateNativeReceipt();
+   if (!m_replacementStop) m_playbackIntent.stop(PlaybackIntent::Reason::WebStopUnclassified);
+   const auto revision = m_playbackIntent.snapshot().revision;
+@@ -67,6 +75,7 @@ void PlayerComponent::stop()
+ PlayerComponent::NativeStopResult PlayerComponent::requestNativeStop()
+ {
+   if (!intentControlThread()) return {NativeStopResult::Status::Unavailable, 0};
++  m_automaticRecoverySession.invalidate();
+   invalidateNativeReceipt();
+   m_playbackIntent.stop(PlaybackIntent::Reason::NativeStop);
+   const auto revision = m_playbackIntent.snapshot().revision;
+diff --git a/src/player/PlayerIntentCommands.cpp b/src/player/PlayerIntentCommands.cpp
+index 770ef4ba..b458a07b 100644
+--- a/src/player/PlayerIntentCommands.cpp
++++ b/src/player/PlayerIntentCommands.cpp
+@@ -131,8 +131,15 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
+ void PlayerComponent::play()
+ {
+   if (!intentControlThread()) return;
++#ifdef MPVQT_EXTERNAL_EVENTS
++  const auto previous = m_playbackIntent.snapshot();
++#endif
+   m_playbackIntent.resume();
+   const auto revision = m_playbackIntent.snapshot().revision;
++#ifdef MPVQT_EXTERNAL_EVENTS
++  m_automaticRecoverySession.revise({previous.request, previous.revision, m_mpvGeneration},
++                                   {previous.request, revision, m_mpvGeneration}, false);
++#endif
+   if (!m_mpv) {
+     m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
+     qWarning() << "PlayerComponent::play: mpv not initialized yet";
+@@ -146,8 +153,15 @@ void PlayerComponent::play()
+ void PlayerComponent::pause()
+ {
+   if (!intentControlThread()) return;
++#ifdef MPVQT_EXTERNAL_EVENTS
++  const auto previous = m_playbackIntent.snapshot();
++#endif
+   m_playbackIntent.pause();
+   const auto revision = m_playbackIntent.snapshot().revision;
++#ifdef MPVQT_EXTERNAL_EVENTS
++  m_automaticRecoverySession.revise({previous.request, previous.revision, m_mpvGeneration},
++                                   {previous.request, revision, m_mpvGeneration}, true);
++#endif
+   if (!m_mpv) {
+     m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Unavailable);
+     qWarning() << "PlayerComponent::pause: mpv not initialized yet";
+@@ -161,6 +175,7 @@ void PlayerComponent::pause()
+ void PlayerComponent::seekTo(qint64 ms)
+ {
+   if (!intentControlThread()) return;
++  m_automaticRecoverySession.invalidate();
+   m_playbackIntent.seek(ms);
+   const auto revision = m_playbackIntent.snapshot().revision;
+   if (!m_mpv) {
+@@ -177,6 +192,7 @@ void PlayerComponent::seekTo(qint64 ms)
+ PlayerComponent::NativeSeekResult PlayerComponent::requestNativeSeek(qint64 milliseconds)
+ {
+   if (QThread::currentThread() != thread()) return {NativeSeekResult::Status::Unavailable, 0};
++  m_automaticRecoverySession.invalidate();
+   m_playbackIntent.seek(milliseconds);
+   const auto revision = m_playbackIntent.snapshot().revision;
+   if (WebClientFaultGuard::instance().rendererLost() || !m_mpv || !m_mpv->mpv() || milliseconds < 0)
+@@ -199,6 +215,7 @@ PlayerComponent::NativeSeekResult PlayerComponent::checkedSeek(mpv_handle* handl
+ void PlayerComponent::setSubtitleStream(const QVariant &subtitleStream)
+ {
+   if (!intentControlThread()) return;
++  m_automaticRecoverySession.invalidate();
+   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
+   m_currentSubtitleStream = subtitleStream;
+   reselectStream(m_currentSubtitleStream, MediaType::Subtitle);
+@@ -207,6 +224,7 @@ void PlayerComponent::setSubtitleStream(const QVariant &subtitleStream)
+ void PlayerComponent::setAudioStream(const QVariant &audioStream)
+ {
+   if (!intentControlThread()) return;
++  m_automaticRecoverySession.invalidate();
+   m_playbackIntent.invalidate(PlaybackIntent::Reason::UnsupportedCommand);
+   m_currentAudioStream = audioStream;
+   reselectStream(m_currentAudioStream, MediaType::Audio);
