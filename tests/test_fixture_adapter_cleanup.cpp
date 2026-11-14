@@ -36,6 +36,8 @@ void TestRestartChildPlayer::actualArmAndNoLoadCleanup()
   };
   auto gate = std::make_shared<FixtureRestart::ChildGate>(&player, 100);
   FixtureRestartAdapter adapter(player, *gate, 7, 2, 9, digest(), [] { return qint64(10); });
+  QCOMPARE(adapter.armActual().status, FixtureRestart::RestartChild::ArmResult::Status::Unknown);
+  QVERIFY(!player.m_nativeRestore.armed);
   QVERIFY(adapter.bindCleanupGate(gate, 100));
   using Child = FixtureRestart::RestartChild;
   Child::ArmResult armed;
