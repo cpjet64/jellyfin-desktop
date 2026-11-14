@@ -109,10 +109,10 @@ index b6e23e2..ff942de 100644
      if (mpctx->hrseek_lastframe) // exit if we already tried this
 diff --git a/player/recovery_seek_epoch.h b/player/recovery_seek_epoch.h
 new file mode 100644
-index 0000000..bfa3201
+index 0000000..aa7c644
 --- /dev/null
 +++ b/player/recovery_seek_epoch.h
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,36 @@
 +#ifndef MP_RECOVERY_SEEK_EPOCH_H
 +#define MP_RECOVERY_SEEK_EPOCH_H
 +
@@ -136,7 +136,7 @@ index 0000000..bfa3201
 +
 +static inline bool recovery_epoch_claim(atomic_uint_fast64_t *state, uint64_t epoch)
 +{
-+    if (!epoch || (epoch & 1))
++    if (!epoch || epoch >= UINT64_MAX - 1 || (epoch & 1))
 +        return false;
 +    uint_fast64_t expected = epoch;
 +    return atomic_compare_exchange_strong(state, &expected, epoch | 1);
@@ -144,7 +144,8 @@ index 0000000..bfa3201
 +
 +static inline bool recovery_epoch_applied(atomic_uint_fast64_t *state, uint64_t epoch)
 +{
-+    return epoch && !(epoch & 1) && atomic_load(state) == (epoch | 1);
++    return epoch && epoch < UINT64_MAX - 1 && !(epoch & 1) &&
++           atomic_load(state) == (epoch | 1);
 +}
 +
 +#endif
@@ -178,10 +179,10 @@ index 994dc68..e41e36d 100644
      'audio/chmap_sel.c',
 diff --git a/test/recovery_seek_epoch.c b/test/recovery_seek_epoch.c
 new file mode 100644
-index 0000000..58cfd42
+index 0000000..f6bf52f
 --- /dev/null
 +++ b/test/recovery_seek_epoch.c
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,56 @@
 +#include <stdlib.h>
 +#include <stdint.h>
 +#include "player/recovery_seek_epoch.h"
@@ -225,6 +226,7 @@ index 0000000..58cfd42
 +    CHECK(recovery_epoch_applied(&state, UINT64_MAX - 3));
 +    CHECK(!recovery_epoch_next(&state));
 +    CHECK(atomic_load(&state) == UINT64_MAX);
++    CHECK(!recovery_epoch_applied(&state, UINT64_MAX - 1));
 +    CHECK(!recovery_epoch_applied(&state, UINT64_MAX - 3));
 +    CHECK(!recovery_epoch_next(&state));
 +    CHECK(!recovery_epoch_claim(&state, UINT64_MAX - 3));
