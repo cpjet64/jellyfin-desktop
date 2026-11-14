@@ -1,5 +1,6 @@
 """One fixed discovery compile; source proposal, not an execution grant."""
 import json
+import importlib.util
 import ntpath
 import os
 import sys
@@ -8,7 +9,6 @@ PROOF = 'E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-fixture-detached-2
 ROOT = 'E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/deps/enrollment-cl-claim-20261114-01'
 BASE = 'E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/dev/windows/proof/proposals/cl-cleanup-claim-v1'
 PRIVATE = 'E:/CursorAI/JellyfinDesktop/deps/reconcile-20261113/build-metadata-01/env-private/environment-private.json'
-TOOL = 'C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/'
 NAMES = ('_CL_', '_LINK_', 'APPDATA', 'CL', 'HEALTHY_TEST_SOURCE', 'INCLUDE',
          'JELLYFIN_TEST_OWNED_ROOT', 'LIB', 'LIBPATH', 'LINK', 'LOCALAPPDATA',
          'MPVQT_TEST_SOURCE', 'PATH', 'QT_QPA_PLATFORM', 'SystemRoot', 'TEMP', 'TMP')
@@ -60,7 +60,7 @@ def main():
         raise SystemExit('Windows and zero arguments required')
     sys.path.insert(0, PROOF)
     from build_only.identity import FilePin
-    from build_only.policy import CommandIdentity, Policy, PRODUCTION_POLICIES, environment_digest
+    from build_only.policy import PRODUCTION_POLICIES, environment_digest
     from build_only.supervisor import production
     from build_only.winapi import WinAPI
     api = WinAPI()
@@ -69,24 +69,14 @@ def main():
     _replay(FilePin, api, environment_digest)
     if api.opened != api.closed or api.close_failed:
         raise RuntimeError('environment pin did not close')
-    response = BASE.replace('/', '\\') + r'\cleanup-claim.rsp'
-    command = CommandIdentity(
-        executable=TOOL + 'cl.exe', executable_sha256='fe251ef50a1545b1b0835ee17b1e785459712b38d79e45b5c1d3d28970a36619',
-        executable_size=677776, args=('@' + response,), cwd=ROOT,
-        stdout=ROOT + '/compiler.stdout', stderr=ROOT + '/compiler.stderr', response_path=response,
-        response_sha256='15d4a13278b38de63943cc4fc8776cbec79d44e4759a968d927ceb65f77de347',
-        outputs=(ROOT + '/cleanup_claim.obj', ROOT + '/cleanup_claim-compile.pdb'),
-        env_digest=FINAL_ENV, env_names=NAMES)
-    name = 'cleanup-claim-cl-20261114'
-    policy = Policy(identity=name, kind='production', command_form='cl_response',
-        source_sha256='80b842ae0d7ad4c3384b9eacfb9c492962febebae449c90a2b18d6b1e4f25915',
-        telemetry_path=TOOL + 'vctip.exe', telemetry_sha256='d591358c6aee4b673562ca3b3a15c250e612708394fe3b44a7a7eda2470570a5',
-        telemetry_size=335288, telemetry_version='14.44.35229.0',
-        telemetry_file_id='2555941978:196608:1477911', command=command, deadline_ms=60000, grace_ms=1000)
+    spec = importlib.util.spec_from_file_location('enrollment_policy', BASE + '/enrollment_policy.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    policy = module.build_policy()
     if PRODUCTION_POLICIES:
         raise RuntimeError('production registry must start empty')
-    PRODUCTION_POLICIES[name] = policy
-    production(name, ROOT + '/build.receipt')
+    PRODUCTION_POLICIES[policy.identity] = policy
+    production(policy.identity, ROOT + '/build.receipt')
 
 
 if __name__ == '__main__':
