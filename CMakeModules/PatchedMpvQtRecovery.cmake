@@ -6,10 +6,10 @@ set(_recovery_inputs
   "mpvrenderer.cpp|b519e71867813e8bcb73ef4353df1d32700e0ca988575c1e2f4017c1d1d1b798"
   "mpvrenderer.h|a35f52d0d4641db2c4bb03d0ced7ba40864f6e6b471b2cb42cc3e7068dda919f")
 set(_recovery_outputs
-  "mpvabstractitem.cpp|b20770291d821f9c37bf1e1fccc343febcc02358bb71209a5c797acc50f0e973"
-  "mpvabstractitem.h|cb38fc80ceae719cff9d43b689934141e5eef9d1d51213b3b0c65b088feef523"
-  "mpvabstractitem_p.h|b159706537fcc31159dc54509621e50fbb4d597897390f1b42c7092c73cc9d37"
-  "mpvrenderer.cpp|45ad456405cecca8108848f4e5e550f1585fed47ea93070a12390afb70b91206"
+  "mpvabstractitem.cpp|4ca0194875ae970928540c33fd1c79dce7c951568a32833d0f11ee8d597d5b31"
+  "mpvabstractitem.h|0f1141465176ef506dc34923917288cc238143f0fc2988b2fcae5429f1ea55f3"
+  "mpvabstractitem_p.h|c4efdd58681eea6fe7760f23f45c67b0a69395d6470361a920aeb9b6feedb2cb"
+  "mpvrenderer.cpp|3d0b18b4b7718e0bafab20279ba850537697408eb33ce77d57846b281e60aff2"
   "mpvrenderer.h|77bd03874e8e420fc09eba17a45d1b2359249227f42bee258fbaa0ea2d807fbb")
 
 function(_verify_recovery_sources entries)
@@ -47,8 +47,8 @@ set(_controller_inputs
   "mpvcontroller.cpp|9dd28536d4e3241f3983281b1609669fbf10335c966315f4028352e130d83ec0"
   "mpvcontroller.h|42cf9e3126308bbcce4ba62b8d6f3a4cbba734806ed422c0e160f8cb5ad009e0")
 set(_controller_outputs
-  "mpvcontroller.cpp|b9de4c9d7aaa6bdda85786e40ab0a6a4a085933e5e002bbd225963262322234e"
-  "mpvcontroller.h|5c254bdc8f3623448951099af3ff9a4aa789c3b7ea55cf3b11d1c7a5ac813569")
+  "mpvcontroller.cpp|8d47b2f7b6a76613c0a180962ec73f131a35958802fe8947672440fd3458f56a"
+  "mpvcontroller.h|d0b9c60aa0bdd8f1bb6667006ab7e13bace5287e9662d75d56b550e5cacd15bd")
 _verify_recovery_sources(_controller_inputs)
 set(_controller_patch "${CMAKE_SOURCE_DIR}/patches/mpvqt/0004-controller-native-lease.patch")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_controller_patch}")

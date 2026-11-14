@@ -31,6 +31,9 @@ HMODULE moduleForAddress(FARPROC address)
 
 Resolver::Resolver()
 {
+#if !defined(JELLYFIN_VERIFIED_RECOVERY_KIT) || !JELLYFIN_VERIFIED_RECOVERY_KIT
+    return;
+#endif
     if (sizeof(uintptr_t) != 8) return;
 #if defined(_WIN32)
     const auto anchor = reinterpret_cast<FARPROC>(&QQuickWindow::setGraphicsApi);

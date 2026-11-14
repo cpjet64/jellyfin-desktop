@@ -1,14 +1,30 @@
 diff --git a/src/mpvcontroller.cpp b/src/mpvcontroller.cpp
-index aff81be7..e2486a92 100644
+index aff81be7..859f5697 100644
 --- a/src/mpvcontroller.cpp
 +++ b/src/mpvcontroller.cpp
 @@ -8,0 +9 @@
 +#include "RendererOwners.h"
-@@ -200,2 +201,14 @@ void MpvController::init()
+@@ -180,0 +182,6 @@ void MpvController::init()
++    (void)initializeRecovery();
++}
++
++bool MpvController::initializeRecovery()
++{
++    if (d_ptr) return false;
+@@ -188 +195 @@ void MpvController::init()
+-        qFatal("could not create mpv context");
++        return false;
+@@ -191 +198,3 @@ void MpvController::init()
+-        qFatal("could not initialize mpv context");
++        mpv_destroy(d_ptr->m_mpv);
++        d_ptr->m_mpv = nullptr;
++        return false;
+@@ -200,2 +209,15 @@ void MpvController::init()
 -    setProperty(QStringLiteral("include"), configPath);
 -    setProperty(QStringLiteral("vo"), QStringLiteral("libmpv"));
 +    mpv_set_property_string(d_ptr->m_mpv, "include", configPath.toUtf8().constData());
 +    mpv_set_property_string(d_ptr->m_mpv, "vo", "libmpv");
++    return true;
 +}
 +
 +void MpvController::bindRecoveryCore(std::weak_ptr<RendererRuntime::CoreOwner> owner)
@@ -21,21 +37,21 @@ index aff81be7..e2486a92 100644
 +{
 +    std::lock_guard<std::mutex> lock(m_recoveryMutex);
 +    return m_recoveryCore.lock();
-@@ -211,2 +224,4 @@ void MpvController::eventHandler()
+@@ -211,2 +233,4 @@ void MpvController::eventHandler()
 -    while (m_eventMode == EventMode::Internal && d_ptr->m_mpv) {
 -        mpv_event *event = mpv_wait_event(d_ptr->m_mpv, 0);
 +    auto owner = recoveryOwner();
 +    auto lease = owner ? owner->acquireNative() : RendererRuntime::NativeLease{};
 +    while (m_eventMode == EventMode::Internal && lease) {
 +        mpv_event *event = mpv_wait_event(lease.get(), 0);
-@@ -215,0 +231,6 @@ void MpvController::eventHandler()
+@@ -215,0 +240,6 @@ void MpvController::eventHandler()
 +        dispatchEvent(event);
 +    }
 +}
 +
 +void MpvController::dispatchEvent(mpv_event *event)
 +{
-@@ -262,0 +284,22 @@ void MpvController::eventHandler()
+@@ -262,0 +293,22 @@ void MpvController::eventHandler()
 +            dispatchPropertyChange(prop);
 +            break;
 +        }
@@ -58,7 +74,7 @@ index aff81be7..e2486a92 100644
 +
 +void MpvController::dispatchPropertyChange(mpv_event_property *prop)
 +{
-@@ -288,18 +330,0 @@ void MpvController::eventHandler()
+@@ -288,18 +339,0 @@ void MpvController::eventHandler()
 -            break;
 -        }
 -        case MPV_EVENT_NONE:
@@ -77,69 +93,73 @@ index aff81be7..e2486a92 100644
 -            break;
 -        }
 -    }
-@@ -315 +340,3 @@ void MpvController::observeProperty(const QString &property, mpv_format format,
+@@ -310 +344 @@ mpv_handle *MpvController::mpv() const
+-    return d_ptr->m_mpv;
++    return d_ptr ? d_ptr->m_mpv : nullptr;
+@@ -315 +349,3 @@ void MpvController::observeProperty(const QString &property, mpv_format format,
 -    mpv_observe_property(mpv(), id, property.toUtf8().data(), format);
 +    auto owner = recoveryOwner();
 +    auto lease = owner ? owner->acquireNative() : RendererRuntime::NativeLease{};
 +    if (lease) mpv_observe_property(lease.get(), id, property.toUtf8().data(), format);
-@@ -320 +347,3 @@ int MpvController::unobserveProperty(uint64_t id)
+@@ -320 +356,3 @@ int MpvController::unobserveProperty(uint64_t id)
 -    return mpv_unobserve_property(mpv(), id);
 +    auto owner = recoveryOwner();
 +    auto lease = owner ? owner->acquireNative() : RendererRuntime::NativeLease{};
 +    return lease ? mpv_unobserve_property(lease.get(), id) : MPV_ERROR_UNINITIALIZED;
-@@ -324,0 +354,3 @@ int MpvController::setProperty(const QString &property, const QVariant &value)
+@@ -324,0 +363,3 @@ int MpvController::setProperty(const QString &property, const QVariant &value)
 +    auto owner = recoveryOwner();
 +    auto lease = owner ? owner->acquireNative() : RendererRuntime::NativeLease{};
 +    if (!lease) return MPV_ERROR_UNINITIALIZED;
-@@ -327 +359 @@ int MpvController::setProperty(const QString &property, const QVariant &value)
+@@ -327 +368 @@ int MpvController::setProperty(const QString &property, const QVariant &value)
 -    return mpv_set_property(d_ptr->m_mpv, property.toUtf8().constData(), MPV_FORMAT_NODE, &node);
 +    return mpv_set_property(lease.get(), property.toUtf8().constData(), MPV_FORMAT_NODE, &node);
-@@ -331,0 +364,3 @@ int MpvController::setPropertyAsync(const QString &property, const QVariant &val
+@@ -331,0 +373,3 @@ int MpvController::setPropertyAsync(const QString &property, const QVariant &val
 +    auto owner = recoveryOwner();
 +    auto lease = owner ? owner->acquireNative() : RendererRuntime::NativeLease{};
 +    if (!lease) return MPV_ERROR_UNINITIALIZED;
-@@ -334 +369 @@ int MpvController::setPropertyAsync(const QString &property, const QVariant &val
+@@ -334 +378 @@ int MpvController::setPropertyAsync(const QString &property, const QVariant &val
 -    int err = mpv_set_property_async(d_ptr->m_mpv, id, property.toUtf8().constData(), MPV_FORMAT_NODE, &node);
 +    int err = mpv_set_property_async(lease.get(), id, property.toUtf8().constData(), MPV_FORMAT_NODE, &node);
-@@ -339,0 +375,3 @@ QVariant MpvController::getProperty(const QString &property)
+@@ -339,0 +384,3 @@ QVariant MpvController::getProperty(const QString &property)
 +    auto owner = recoveryOwner();
 +    auto lease = owner ? owner->acquireNative() : RendererRuntime::NativeLease{};
 +    if (!lease) return QVariant::fromValue(ErrorReturn(MPV_ERROR_UNINITIALIZED));
-@@ -341 +379 @@ QVariant MpvController::getProperty(const QString &property)
+@@ -341 +388 @@ QVariant MpvController::getProperty(const QString &property)
 -    int err = mpv_get_property(d_ptr->m_mpv, property.toUtf8().constData(), MPV_FORMAT_NODE, &node);
 +    int err = mpv_get_property(lease.get(), property.toUtf8().constData(), MPV_FORMAT_NODE, &node);
-@@ -351 +389,4 @@ int MpvController::getPropertyAsync(const QString &property, int id)
+@@ -351 +398,4 @@ int MpvController::getPropertyAsync(const QString &property, int id)
 -    int err = mpv_get_property_async(d_ptr->m_mpv, id, property.toUtf8().constData(), MPV_FORMAT_NODE);
 +    auto owner = recoveryOwner();
 +    auto lease = owner ? owner->acquireNative() : RendererRuntime::NativeLease{};
 +    if (!lease) return MPV_ERROR_UNINITIALIZED;
 +    int err = mpv_get_property_async(lease.get(), id, property.toUtf8().constData(), MPV_FORMAT_NODE);
-@@ -356,0 +398,3 @@ QVariant MpvController::command(const QVariant &params)
+@@ -356,0 +407,3 @@ QVariant MpvController::command(const QVariant &params)
 +    auto owner = recoveryOwner();
 +    auto lease = owner ? owner->acquireNative() : RendererRuntime::NativeLease{};
 +    if (!lease) return QVariant::fromValue(ErrorReturn(MPV_ERROR_UNINITIALIZED));
-@@ -360 +404 @@ QVariant MpvController::command(const QVariant &params)
+@@ -360 +413 @@ QVariant MpvController::command(const QVariant &params)
 -    int err = mpv_command_node(d_ptr->m_mpv, &node, &result);
 +    int err = mpv_command_node(lease.get(), &node, &result);
-@@ -370,0 +415,3 @@ int MpvController::commandAsync(const QVariant &params, int id)
+@@ -370,0 +424,3 @@ int MpvController::commandAsync(const QVariant &params, int id)
 +    auto owner = recoveryOwner();
 +    auto lease = owner ? owner->acquireNative() : RendererRuntime::NativeLease{};
 +    if (!lease) return MPV_ERROR_UNINITIALIZED;
-@@ -373 +420 @@ int MpvController::commandAsync(const QVariant &params, int id)
+@@ -373 +429 @@ int MpvController::commandAsync(const QVariant &params, int id)
 -    return mpv_command_node_async(d_ptr->m_mpv, id, &node);
 +    return mpv_command_node_async(lease.get(), id, &node);
 diff --git a/src/mpvcontroller.h b/src/mpvcontroller.h
-index d8b28838..32ae3ee1 100644
+index d8b28838..d199cdb6 100644
 --- a/src/mpvcontroller.h
 +++ b/src/mpvcontroller.h
 @@ -19,0 +20 @@
 +#include <mutex>
 @@ -21,0 +23 @@ class MpvControllerPrivate;
 +namespace RendererRuntime { struct CoreOwner; }
-@@ -79,0 +82,2 @@ public:
+@@ -79,0 +82,3 @@ public:
 +    // Borrowed only; callers must hold a native lease after binding.
 +    void bindRecoveryCore(std::weak_ptr<RendererRuntime::CoreOwner> owner);
-@@ -82,0 +87,5 @@ private:
++    bool initializeRecovery();
+@@ -82,0 +88,5 @@ private:
 +    std::weak_ptr<RendererRuntime::CoreOwner> m_recoveryCore;
 +    mutable std::mutex m_recoveryMutex;
 +    std::shared_ptr<RendererRuntime::CoreOwner> recoveryOwner() const;
