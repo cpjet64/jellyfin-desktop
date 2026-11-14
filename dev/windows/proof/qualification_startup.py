@@ -39,7 +39,7 @@ def _write_evidence(path, record):
 
 @contextmanager
 def quiet_error_ui(evidence_root, api=None):
-    """Suppress specified process error dialogs for the body, then restore the prior mode."""
+    """Apply fixture-qualification error mode, including WER invocation suppression."""
     root = Path(evidence_root)
     if not root.is_absolute() or not root.is_dir():
         raise ValueError('an existing absolute evidence directory is required')
@@ -57,7 +57,7 @@ def quiet_error_ui(evidence_root, api=None):
             raise OSError('process error mode verification failed')
         _write_evidence(root / 'error-ui-start.json', {
             'previous_mask': previous, 'effective_mask': effective, 'requested_bits': REQUESTED,
-            'wer_fault_dialog_suppression_requested': True,
+            'wer_invocation_suppression_requested': True, 'scope': 'disposable-fixture-qualification',
         })
         yield
         completed = True

@@ -1,13 +1,10 @@
-import json
 import os
 from pathlib import Path
-import sys
-import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from dev.windows.proof.qualification_startup import NativeErrorMode, REQUESTED, quiet_error_ui
+import qualification_startup
+from qualification_startup import NativeErrorMode, REQUESTED, quiet_error_ui
 
 
 class FakeMode:
@@ -30,19 +27,31 @@ class FakeMode:
 
 class QuietErrorUITests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name).resolve()
+        project = Path(__file__).resolve().parents[3]
+        self.root = project / 'deps' / 'qualification-startup-unit'
+        self.records = {}
+        writer = patch.object(qualification_startup, '_write_evidence', side_effect=self.write_record)
+        directory = patch.object(Path, 'is_dir', return_value=True)
+        writer.start()
+        directory.start()
+        self.addCleanup(writer.stop)
+        self.addCleanup(directory.stop)
+
+    def write_record(self, path, record):
+        if path in self.records:
+            raise FileExistsError(str(path))
+        self.records[path] = dict(record)
 
     def test_zero_previous_and_restoration_evidence(self):
         api = FakeMode()
         with quiet_error_ui(self.root, api):
             self.assertEqual(api.mode, REQUESTED)
-            record = json.loads((self.root / 'error-ui-start.json').read_text())
+            record = self.records[self.root / 'error-ui-start.json']
             self.assertEqual(record['previous_mask'], 0)
-            self.assertTrue(record['wer_fault_dialog_suppression_requested'])
+            self.assertTrue(record['wer_invocation_suppression_requested'])
+            self.assertEqual(record['scope'], 'disposable-fixture-qualification')
         self.assertEqual(api.mode, 0)
-        self.assertEqual(json.loads((self.root / 'error-ui-restored.json').read_text())['restored_mask'], 0)
+        self.assertEqual(self.records[self.root / 'error-ui-restored.json']['restored_mask'], 0)
 
     def test_existing_bits_are_preserved(self):
         api = FakeMode(0x40)
@@ -57,8 +66,8 @@ class QuietErrorUITests(unittest.TestCase):
             with quiet_error_ui(self.root, api):
                 self.fail('body must not run')
         self.assertEqual(api.mode, 0)
-        self.assertFalse((self.root / 'error-ui-start.json').exists())
-        self.assertFalse((self.root / 'error-ui-restored.json').exists())
+        self.assertNotIn(self.root / 'error-ui-start.json', self.records)
+        self.assertNotIn(self.root / 'error-ui-restored.json', self.records)
 
     def test_body_failure_restores_without_restoration_record(self):
         api = FakeMode(0x40)
@@ -66,19 +75,19 @@ class QuietErrorUITests(unittest.TestCase):
             with quiet_error_ui(self.root, api):
                 raise RuntimeError('body')
         self.assertEqual(api.mode, 0x40)
-        self.assertTrue((self.root / 'error-ui-start.json').exists())
-        self.assertFalse((self.root / 'error-ui-restored.json').exists())
+        self.assertIn(self.root / 'error-ui-start.json', self.records)
+        self.assertNotIn(self.root / 'error-ui-restored.json', self.records)
 
     def test_existing_start_evidence_stops_and_restores(self):
         start = self.root / 'error-ui-start.json'
-        start.write_bytes(b'preserve')
+        self.records[start] = {'existing': 'preserve'}
         api = FakeMode()
         with self.assertRaises(FileExistsError):
             with quiet_error_ui(self.root, api):
                 self.fail('body must not run')
         self.assertEqual(api.mode, 0)
-        self.assertEqual(start.read_bytes(), b'preserve')
-        self.assertFalse((self.root / 'error-ui-restored.json').exists())
+        self.assertEqual(self.records[start], {'existing': 'preserve'})
+        self.assertNotIn(self.root / 'error-ui-restored.json', self.records)
 
     def test_nonnative_constructor_rejects(self):
         with patch.object(os, 'name', 'posix'):
