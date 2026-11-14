@@ -2,6 +2,7 @@
 #include <atomic>
 #include <cmath>
 #include <limits>
+#include <QtQuick/QSGTexture>
 
 namespace {
 std::atomic<uint64_t> nextIdentity{1};
@@ -10,11 +11,28 @@ struct State {
     QtRecoveryFrameV1 frame{};
     uint64_t node = 0, texture = 0, content = 0;
     uint32_t renderFbo = 0, displayTexture = 0;
-    bool active = false, inFbo = false, published = false, associated = false, drew = false;
+    bool active = false, inFbo = false, published = false, associated = false, drew = false, ambiguous = false;
 };
 thread_local State state;
-struct NodeRegistration { const void *node = nullptr; uint64_t lifetime = 0; };
+thread_local QtRecoverySubmissionV1 completed{};
+struct NodeRegistration {
+    const void *node = nullptr;
+    uint64_t lifetime = 0, window = 0, scene = 0;
+    const void *textureWrapper = nullptr;
+    QtRecoveryFrameV1 frame{};
+    uint64_t textureGeneration = 0, content = 0;
+    uint32_t displayTexture = 0;
+};
 thread_local NodeRegistration nodes[32];
+
+NodeRegistration *findNode(uint64_t lifetime)
+{
+    for (auto &entry : nodes) {
+        if (entry.node && entry.lifetime == lifetime)
+            return &entry;
+    }
+    return nullptr;
+}
 }
 
 void qtRecoveryRegisterNode(const void *node, uint64_t lifetime)
@@ -27,14 +45,31 @@ void qtRecoveryRegisterNode(const void *node, uint64_t lifetime)
     }
     for (auto &entry : nodes) {
         if (!entry.node) {
-            entry = {node, lifetime};
+            entry.node = node;
+            entry.lifetime = lifetime;
             return;
         }
     }
 }
 
+void qtRecoveryInvalidateNode(uint64_t lifetime)
+{
+    if (completed.node_lifetime == lifetime)
+        completed = {};
+    if (NodeRegistration *entry = findNode(lifetime)) {
+        entry->window = entry->scene = entry->textureGeneration = entry->content = 0;
+        entry->displayTexture = 0;
+        entry->textureWrapper = nullptr;
+        entry->frame = {};
+    }
+    if (state.node == lifetime)
+        qtRecoveryFboAbort();
+}
+
 void qtRecoveryUnregisterNode(const void *node, uint64_t lifetime)
 {
+    if (completed.node_lifetime == lifetime)
+        completed = {};
     for (auto &entry : nodes) {
         if (entry.node == node && entry.lifetime == lifetime) {
             entry = {};
@@ -54,11 +89,25 @@ uint64_t qtRecoveryNodeIdentity(const void *node)
     return 0;
 }
 
-void qtRecoveryMarkDraw(uint64_t nodeLifetime, uintptr_t renderTarget, bool normalColorPass)
+void qtRecoveryMarkDraw(uint64_t nodeLifetime, uintptr_t renderTarget, const void *boundTexture, const void *boundRhiTexture,
+                        bool normalColorPass)
 {
-    if (state.active && state.associated && normalColorPass && nodeLifetime
-        && nodeLifetime == state.node && renderTarget == state.ticket.render_target)
-        state.drew = true;
+    const NodeRegistration *entry = findNode(nodeLifetime);
+    if (!state.active || !entry || !normalColorPass || !entry->content || !boundTexture || !boundRhiTexture
+        || entry->textureWrapper != boundTexture || entry->window != state.ticket.window_lifetime
+        || entry->scene != state.ticket.scenegraph_generation || renderTarget != state.ticket.render_target
+        || static_cast<const QSGTexture *>(boundTexture)->rhiTexture() != boundRhiTexture)
+        return;
+    if (state.drew && state.node != nodeLifetime) {
+        state.ambiguous = true;
+        return;
+    }
+    state.node = nodeLifetime;
+    state.frame = entry->frame;
+    state.texture = entry->textureGeneration;
+    state.content = entry->content;
+    state.displayTexture = entry->displayTexture;
+    state.associated = state.drew = true;
 }
 
 uint64_t qtRecoveryIdentity()
@@ -74,6 +123,7 @@ uint64_t qtRecoveryIdentity()
 bool qtRecoveryBegin(const QtRecoverySwapTicketV1 &ticket)
 {
     qtRecoveryAbort();
+    completed = {};
     if (!ticket.window_lifetime || !ticket.scenegraph_generation || !ticket.frame_serial
         || !qt_recovery_swap_begin_v1(&ticket))
         return false;
@@ -91,15 +141,25 @@ void qtRecoveryAbort()
 
 void qtRecoveryFinish(bool endSucceeded, bool skipPresent)
 {
-    if (state.active)
-        qt_recovery_swap_finish_v1(&state.ticket, endSucceeded, skipPresent);
-    // Draw-use proof is not implemented in this source unit. Never publish a
-    // completion based only on the FBO and native swap observations.
+    const bool swapSucceeded = state.active
+            && qt_recovery_swap_finish_v1(&state.ticket, endSucceeded, skipPresent);
+    if (swapSucceeded && endSucceeded && !skipPresent && state.associated && state.drew
+        && !state.ambiguous && state.frame.attempt && state.content && state.texture && state.displayTexture) {
+        completed.size = sizeof(completed);
+        completed.version = QT_RECOVERY_SUBMISSION_ABI_VERSION;
+        completed.ticket = state.ticket;
+        completed.frame = state.frame;
+        completed.node_lifetime = state.node;
+        completed.texture_generation = state.texture;
+        completed.fbo_content_serial = state.content;
+        completed.display_texture = state.displayTexture;
+    }
     state = {};
 }
 
 void qtRecoveryFboBegin(uint32_t fbo, uint64_t nodeLifetime)
 {
+    qtRecoveryInvalidateNode(nodeLifetime);
     if (!state.active || state.inFbo || !fbo || !nodeLifetime) {
         qtRecoveryFboAbort();
         return;
@@ -118,9 +178,10 @@ void qtRecoveryFboAbort()
     state.displayTexture = 0;
 }
 
-void qtRecoveryFboEnd(uint32_t displayTexture, uint64_t textureGeneration)
+void qtRecoveryFboEnd(uint32_t displayTexture, uint64_t textureGeneration, const void *textureWrapper)
 {
-    if (!state.inFbo || !state.published || !displayTexture || !textureGeneration) {
+    NodeRegistration *entry = findNode(state.node);
+    if (!state.inFbo || !state.published || !displayTexture || !textureGeneration || !textureWrapper || !entry) {
         qtRecoveryFboAbort();
         return;
     }
@@ -129,6 +190,15 @@ void qtRecoveryFboEnd(uint32_t displayTexture, uint64_t textureGeneration)
     state.texture = textureGeneration;
     state.content = qtRecoveryIdentity();
     state.associated = state.content != 0;
+    if (state.associated) {
+        entry->window = state.ticket.window_lifetime;
+        entry->scene = state.ticket.scenegraph_generation;
+        entry->frame = state.frame;
+        entry->textureWrapper = textureWrapper;
+        entry->textureGeneration = textureGeneration;
+        entry->displayTexture = displayTexture;
+        entry->content = state.content;
+    }
 }
 
 extern "C" int qt_recovery_publish_native_frame_v1(const QtRecoveryFrameV1 *frame,
@@ -153,15 +223,26 @@ extern "C" const char *qt_recovery_quick_source_id_v1()
     return QT_RECOVERY_QUICK_SOURCE_ID;
 }
 
-extern "C" int qt_recovery_take_submission_v1(uint64_t, uint64_t, uint64_t,
-                                               QtRecoverySubmissionV1 *)
+extern "C" int qt_recovery_take_submission_v1(uint64_t window, uint64_t renderer, uint64_t attempt,
+                                               QtRecoverySubmissionV1 *result)
 {
-    // Capability remains unavailable until recorded main-pass draw proof joins.
-    return 0;
+    if (!result || result->size != sizeof(*result) || result->version != QT_RECOVERY_SUBMISSION_ABI_VERSION
+        || !attempt || completed.ticket.window_lifetime != window
+        || completed.frame.renderer_generation != renderer || completed.frame.attempt != attempt)
+        return 0;
+    *result = completed;
+    completed = {};
+    return 1;
 }
 
 extern "C" void qt_recovery_revoke_v1(uint64_t windowLifetime)
 {
+    if (completed.ticket.window_lifetime == windowLifetime)
+        completed = {};
+    for (auto &entry : nodes) {
+        if (entry.window == windowLifetime)
+            qtRecoveryInvalidateNode(entry.lifetime);
+    }
     if (state.active && state.ticket.window_lifetime == windowLifetime)
         qtRecoveryAbort();
 }

@@ -9,6 +9,7 @@ private slots:
     void missingScopeRejectsPublication();
     void missingDrawRejectsCompletion();
     void revokeUnknownWindowIsHarmless();
+    void malformedCallsAreRejected();
 };
 
 void RecoveryUnavailable::missingScopeRejectsPublication()
@@ -35,6 +36,17 @@ void RecoveryUnavailable::revokeUnknownWindowIsHarmless()
     qt_recovery_revoke_v1(1);
     QtRecoverySubmissionV1 result{};
     QCOMPARE(qt_recovery_take_submission_v1(1, 1, 1, &result), 0);
+}
+
+void RecoveryUnavailable::malformedCallsAreRejected()
+{
+    QtRecoveryFrameV1 frame{};
+    QtRecoverySwapTicketV1 ticket{};
+    QCOMPARE(qt_recovery_publish_native_frame_v1(nullptr, &ticket), 0);
+    QCOMPARE(qt_recovery_publish_native_frame_v1(&frame, nullptr), 0);
+    QtRecoverySubmissionV1 result{};
+    QCOMPARE(qt_recovery_take_submission_v1(0, 0, 0, nullptr), 0);
+    QCOMPARE(qt_recovery_take_submission_v1(0, 0, 0, &result), 0);
 }
 
 QTEST_APPLESS_MAIN(RecoveryUnavailable)

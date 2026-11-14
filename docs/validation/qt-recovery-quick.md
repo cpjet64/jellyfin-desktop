@@ -13,9 +13,9 @@ identify the individual unmodified source files retrieved from that commit.
 | `src/quick/scenegraph/coreapi/qsgbatchrenderer_p.h` | `e45f68c55591f2f5365424cbd0b2b947ba2cb59cc4ad228d9e4ac7f4590c9d4c` |
 
 This is a source identity record, not evidence that a patched Qt was built or
-installed. The source slice adds ticket, FBO and draw-recording hooks, but
-complete draw-use proof and its negative tests remain outstanding. Submission
-consumption always fails closed; these files do not establish capability.
+installed. The source candidate adds ticket, FBO, draw-recording and private
+completion hooks, but has not been compiled, tested, or independently reviewed.
+It does not establish runtime capability or a successful frame submission.
 
 Apply `patches/qt/quick/qtdeclarative-6.9.3-ticket-fbo.patch` with
 `git apply --unidiff-zero` at the pinned
@@ -31,9 +31,10 @@ The FBO node performs its optional multisample resolve before scene rendering;
 the resolved texture, when present, is the display texture. The batch renderer
 can retain uploaded batches across frames, so merged node membership must be
 retained with the corresponding draw set and invalidated with its upload data.
-The current source retains bounded node identities with each uploaded merged
-draw set and records nonempty draw calls against the expected render target.
-This is not yet sufficient to establish that the active material samples the
-registered texture, or that effect and layer paths are excluded. It also does
-not yet retain a valid paused frame across new tickets. These gaps must be
-closed before enabling completion.
+The candidate retains bounded node identities with each uploaded merged draw
+set and records nonempty draw calls against the expected render target. It
+checks the standard texture material's selected QSG and QRhi texture bindings
+against the registered display texture and retains attributed content across
+tickets. Multisample resolves fail closed: the upstream resolve operation
+returns no result from which this adapter can establish successful transfer.
+The required full negative-test source and integration review remain open.
