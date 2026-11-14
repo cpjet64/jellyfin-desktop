@@ -94,6 +94,9 @@ private:
                          const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle,
                          AutomaticRecoverySession::Key key);
   bool flushOrdinaryLoad(bool allowSelection);
+  void tickOrdinaryPreparation(std::int64_t now);
+  void failOrdinaryPreparation(bool timeout);
+  bool ordinaryPreparationCurrent() const;
   static std::int64_t nowMs();
   PlayerComponent* player_;
   QPointer<MpvVideoItem> item_;
@@ -115,8 +118,9 @@ private:
     QVariantMap options, metadata;
     QVariant audio, subtitle;
     std::uint64_t queryId = 0, beforeStart = 0;
-    std::int64_t deadlineMs = 0;
-    bool pending = false;
+    std::int64_t deadlineMs = 0, nextAttemptMs = 0;
+    unsigned attempts = 0;
+    bool pending = false, waiting = false;
   } ordinaryLoad_;
   struct OrdinaryPreferences {
     std::uint64_t epoch = 0, request = 0, binding = 0, revision = 0;

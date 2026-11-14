@@ -12,7 +12,8 @@ public:
   enum class ChangeKind { Revoke, Pause, Resume, Audio, Subtitle };
   enum class Reason { Initial, LegacyUnclassified, WebStopUnclassified, NativeStop,
                       RendererLost, UnattributedEvent, UnsupportedCommand, CounterExhausted, Exiting };
-  enum class Dispatch { None, GuardRejected, Queued, NativeAccepted, NativeRejected, Unavailable };
+  enum class Dispatch { None, GuardRejected, Queued, NativeAccepted, NativeRejected, Unavailable,
+                        PreparationUnavailable, PreparationTimeout };
   enum class Admission { None, Unclassified, Accepted, Rejected };
   enum class Observation { Unknown };
   struct Snapshot {

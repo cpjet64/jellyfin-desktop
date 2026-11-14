@@ -76,11 +76,50 @@ bool PlayerComponentRecovery::beginOrdinaryLoad(const QStringList& command, cons
   ordinaryLoad_.options.insert("autoplay", !ordinaryPreferences_.paused);
   ordinaryLoad_.beforeStart = startSerial_; ordinaryLoad_.pending = true;
   const auto now = clockNow();
-  if (now < 0 || now > std::numeric_limits<std::int64_t>::max() - 1500) return flushOrdinaryLoad(false);
-  ordinaryLoad_.deadlineMs = now + 1500; ordinaryLoad_.queryId = nextPlaylistQuery();
-  if (!ordinaryLoad_.queryId || ordinaryGet(ordinaryLoad_.queryId, "playlist", MPV_FORMAT_NODE) < 0)
-    return flushOrdinaryLoad(false);
+  if (now < 0 || now > std::numeric_limits<std::int64_t>::max() - 1500) {
+    failOrdinaryPreparation(false); return true;
+  }
+  ordinaryLoad_.deadlineMs = now + 1500; ordinaryLoad_.nextAttemptMs = now;
+  tickOrdinaryPreparation(now);
   return true;
+}
+
+bool PlayerComponentRecovery::ordinaryPreparationCurrent() const
+{
+  return ordinaryLoad_.pending && ordinaryPreferenceCurrent() && !startSerialExhausted_ &&
+      ordinaryLoad_.beforeStart == startSerial_ && ordinaryLedger_.available() &&
+      bound_ && (core_ || player_->recoveryTestMode());
+}
+
+void PlayerComponentRecovery::failOrdinaryPreparation(bool timeout)
+{
+  if (!ordinaryLoad_.pending) return;
+  const bool current = ordinaryPreferenceCurrent();
+  const auto request = ordinaryPreferences_.request;
+  const auto revision = ordinaryPreferences_.revision;
+  ordinaryLoad_ = {}; ordinaryPreferences_ = {}; ordinarySelection_.revoke(); ordinaryBeforeEntries_.clear();
+  ordinaryAfterId_ = 0; deferredEntry_ = 0; preferenceDeferred_ = false; replacementTransition_ = false;
+  if (!current) return;
+  player_->m_playbackIntent.dispatch(revision, timeout ? PlaybackIntent::Dispatch::PreparationTimeout :
+                                                        PlaybackIntent::Dispatch::PreparationUnavailable);
+  const QString reason = timeout ? "preparation-timeout" : "preparation-unavailable";
+  qWarning() << "Playback load preparation failed for request" << request << reason;
+  emit player_->loadPreparationFailed(request, reason);
+}
+
+void PlayerComponentRecovery::tickOrdinaryPreparation(std::int64_t now)
+{
+  if (!ordinaryLoad_.pending) return;
+  if (!ordinaryPreferenceCurrent()) { ordinaryLoad_ = {}; ordinaryPreferences_ = {}; return; }
+  if (now < 0 || !ordinaryPreparationCurrent()) { failOrdinaryPreparation(false); return; }
+  if (now >= ordinaryLoad_.deadlineMs) { failOrdinaryPreparation(true); return; }
+  if (ordinaryLoad_.waiting || now < ordinaryLoad_.nextAttemptMs) return;
+  if (ordinaryLoad_.attempts >= 3) { failOrdinaryPreparation(false); return; }
+  ordinaryLoad_.queryId = nextPlaylistQuery();
+  if (!ordinaryLoad_.queryId) { failOrdinaryPreparation(false); return; }
+  ++ordinaryLoad_.attempts; ordinaryLoad_.nextAttemptMs = now + 500;
+  ordinaryLoad_.waiting = ordinaryGet(ordinaryLoad_.queryId, "playlist", MPV_FORMAT_NODE) >= 0;
+  if (!ordinaryLoad_.waiting && ordinaryLoad_.attempts >= 3) failOrdinaryPreparation(false);
 }
 
 bool PlayerComponentRecovery::preserveOrdinaryPreference(PlaybackIntent::ChangeKind kind, const PlaybackIntent::Snapshot& intent)
@@ -129,20 +168,25 @@ bool PlayerComponentRecovery::flushOrdinaryLoad(bool allowSelection)
   if (!core_ && !player_->recoveryTestMode()) {
     ordinaryLoad_ = {}; ordinaryPreferences_.active = false; return false;
   }
-  auto load = ordinaryLoad_; ordinaryLoad_ = {};
+  const auto now = clockNow();
+  if (now < 0 || now >= ordinaryLoad_.deadlineMs || !ordinaryPreparationCurrent()) {
+    failOrdinaryPreparation(now >= ordinaryLoad_.deadlineMs); return false;
+  }
+  auto load = ordinaryLoad_;
   if (!setPauseOption(load.command, !load.options.value("autoplay").toBool())) {
-    ordinaryPreferences_.active = false; return false;
+    failOrdinaryPreparation(false); return false;
   }
   const auto current = player_->m_playbackIntent.snapshot();
   const bool qualified = allowSelection && !startSerialExhausted_ && ordinaryLedger_.available() &&
       load.beforeStart == startSerial_ && ordinaryPreferenceCurrent() &&
       current.revision == load.key.revision && player_->m_mpvGeneration == load.key.generation;
-  if (!qualified) {
-    ordinaryPreferences_.active = false; ordinaryBeforeEntries_.clear();
-    player_->m_playbackIntent.dispatch(load.key.revision, PlaybackIntent::Dispatch::NativeRejected);
-    return false;
+  if (!qualified) { failOrdinaryPreparation(false); return false; }
+  const auto admissionTime = clockNow();
+  if (admissionTime < 0 || admissionTime >= load.deadlineMs || !ordinaryPreparationCurrent()) {
+    failOrdinaryPreparation(admissionTime >= load.deadlineMs); return false;
   }
   ordinaryExpectedUrl_ = load.command.value(1);
+  ordinaryLoad_ = {};
   const bool accepted = runtime_.submitUserLoad([&](std::uint64_t id, const char** args) {
     const int result = ordinaryCommand(id, args);
     if (result >= 0) {
@@ -162,12 +206,21 @@ bool PlayerComponentRecovery::flushOrdinaryLoad(bool allowSelection)
 void PlayerComponentRecovery::ordinaryEvent(const mpv_event* event, std::int64_t now, bool ordinaryReplacementEnd)
 {
   if (!event) return;
-  if (ordinaryLoad_.pending && event->event_id == MPV_EVENT_GET_PROPERTY_REPLY &&
+  if (ordinaryLoad_.pending && ordinaryLoad_.waiting && event->event_id == MPV_EVENT_GET_PROPERTY_REPLY &&
       event->reply_userdata == ordinaryLoad_.queryId) {
+    ordinaryLoad_.waiting = false;
+    if (!ordinaryPreferenceCurrent()) { ordinaryLoad_ = {}; ordinaryPreferences_ = {}; return; }
+    if (now < 0 || now >= ordinaryLoad_.deadlineMs) { failOrdinaryPreparation(now >= ordinaryLoad_.deadlineMs); return; }
+    if (!ordinaryPreparationCurrent()) { failOrdinaryPreparation(false); return; }
+    if (event->error < 0) {
+      if (ordinaryLoad_.attempts >= 3) failOrdinaryPreparation(false);
+      return;
+    }
     const auto* playlist = playlistReply(event, ordinaryLoad_.queryId);
-    const bool valid = playlist && now >= 0 && now < ordinaryLoad_.deadlineMs &&
-        ordinaryLoad_.beforeStart == startSerial_ && OrdinaryPlaylist::entries(*playlist, ordinaryBeforeEntries_);
-    flushOrdinaryLoad(valid); return;
+    if (!playlist || !OrdinaryPlaylist::entries(*playlist, ordinaryBeforeEntries_)) {
+      failOrdinaryPreparation(false); return;
+    }
+    flushOrdinaryLoad(true); return;
   }
   if (ordinaryAfterId_ && event->event_id == MPV_EVENT_GET_PROPERTY_REPLY && event->reply_userdata == ordinaryAfterId_) {
     const auto* playlist = playlistReply(event, ordinaryAfterId_);

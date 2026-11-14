@@ -193,7 +193,8 @@ void PlayerComponentRecovery::drain()
     }
     if (internalEnd) {
       const auto* end = static_cast<const mpv_event_end_file*>(native->data);
-      if (!lastStartedEntry_ || lastStartedEntry_ == end->playlist_entry_id) {
+      if ((!ordinaryReplacementEnd || ordinaryLoad_.pending || ordinarySelection_.active()) &&
+          (!lastStartedEntry_ || lastStartedEntry_ == end->playlist_entry_id)) {
         player_->m_inPlayback = false; player_->m_playbackCanceled = false; player_->m_playbackError.clear();
         replacementTransition_ = true; transitionDeadline_ = restoring_ ? policy_.deadlineMs() : clockNow() + 15000;
       }

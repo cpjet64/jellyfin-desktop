@@ -209,6 +209,7 @@ Q_SIGNALS:
   void finished();                // playback finished successfully
   void canceled();                // playback was stopped (by user/via API)
   void error(const QString& msg); // playback stopped due to external error
+  void loadPreparationFailed(quint64 request, const QString& reason);
   // To be phased out. Raised on finished() and canceled().
   void stopped();                 // playback finished successfully, or was stopped with stop()
   void stateChanged(State newState, State oldState); // all state changes

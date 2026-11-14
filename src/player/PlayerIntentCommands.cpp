@@ -124,7 +124,9 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
   command << extraArgs;
 
   const bool dispatched = PLAYER_QUEUE_DISPATCH(dispatchPlayerLoad(command, url, options, metadata, audioStream, subtitleStream));
-  m_playbackIntent.dispatch(revision, dispatched ? PlaybackIntent::Dispatch::Queued : PlaybackIntent::Dispatch::NativeRejected);
+  const auto dispatch = m_playbackIntent.snapshot().dispatch;
+  if (dispatch != PlaybackIntent::Dispatch::PreparationUnavailable && dispatch != PlaybackIntent::Dispatch::PreparationTimeout)
+    m_playbackIntent.dispatch(revision, dispatched ? PlaybackIntent::Dispatch::Queued : PlaybackIntent::Dispatch::NativeRejected);
 
   QVariantMap jellyfinMetadata = metadata["metadata"].toMap();
   QUrl jellyfinBaseUrl = qurl.adjusted(QUrl::RemovePath | QUrl::RemoveQuery);
