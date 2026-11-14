@@ -37,10 +37,10 @@ Action Policy::observe(const Sample& sample)
     }
     lastAttemptTime_ = sample.nowMs; return Action::None;
   }
-  const bool eligible = sample.seekable && sample.video && !sample.loading && !sample.seeking &&
-      !sample.buffering && sample.visible && sample.exposed && !sample.eof;
+  const bool eligible = sample.seekable && sample.video && sample.visible && sample.exposed && !sample.eof;
   if (attempted_ || !eligible || !sample.generation) { baseline_ = false; return Action::None; }
-  const bool reset = !baseline_ || sample.paused || !sample.outstanding || sample.positionMs < 0 ||
+  const bool suppressed = sample.paused || sample.loading || sample.seeking || sample.buffering || !sample.movingVideo;
+  const bool reset = !baseline_ || suppressed || !sample.outstanding || sample.positionMs < 0 ||
       sample.nowMs < lastSampleTime_ || sample.positionMs < lastPosition_ || sample.frameSerial != baselineFrame_ ||
       sample.revision != baselineRevision_ || sample.generation != baselineGeneration_ ||
       sample.outstanding != baselineOutstanding_;
@@ -48,15 +48,16 @@ Action Policy::observe(const Sample& sample)
   if (sample.positionMs > lastPosition_) { lastPosition_ = sample.positionMs; lastAdvanceTime_ = sample.nowMs; }
   lastSampleTime_ = sample.nowMs;
   // The 1.5 second freshness window is a policy choice requiring runtime validation.
-  const bool stalled = !sample.paused && sample.outstanding && sample.positionMs > baselinePosition_ &&
+  const bool stalled = !suppressed && sample.outstanding && sample.positionMs > baselinePosition_ &&
       sample.nowMs - baselineTime_ >= 5000 && sample.nowMs >= lastAdvanceTime_ &&
       sample.nowMs - lastAdvanceTime_ <= 1500;
   if (!sample.operationTimedOut && !sample.rendererFault && !stalled) return Action::None;
   if (sample.nowMs > std::numeric_limits<std::int64_t>::max() - 15000) { fail(); return Action::Blocked; }
   attempted_ = true; revision_ = sample.revision; generation_ = sample.generation;
   replacement_ = 0; deadline_ = sample.nowMs + 15000; lastAttemptTime_ = sample.nowMs; wasPaused_ = sample.paused;
-  phase_ = sample.operationTimedOut && !sample.rendererFault && !stalled ? Phase::Reloading : Phase::Retiring;
-  return phase_ == Phase::Reloading ? Action::Reload : Action::Retire;
+  if (sample.rendererFault) { phase_ = Phase::Failed; return Action::Blocked; }
+  phase_ = Phase::Reloading;
+  return Action::Reload;
 }
 bool Policy::retired(std::uint64_t original, std::uint64_t replacement, std::int64_t now)
 {

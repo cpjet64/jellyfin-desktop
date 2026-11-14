@@ -7,7 +7,7 @@ enum class Phase { Idle, Reloading, Retiring, Restoring, WaitingFrame, Complete,
 struct Sample {
   std::int64_t nowMs = 0, positionMs = -1;
   std::uint64_t session = 0, revision = 0, generation = 0, frameSerial = 0;
-  bool seekable = false, video = false, loading = false, seeking = false, buffering = false;
+  bool seekable = false, video = false, movingVideo = false, loading = false, seeking = false, buffering = false;
   bool visible = false, exposed = false, eof = false, outstanding = false, operationTimedOut = false;
   bool rendererFault = false, paused = false;
 };
