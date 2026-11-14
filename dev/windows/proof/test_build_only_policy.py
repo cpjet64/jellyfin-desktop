@@ -17,6 +17,13 @@ def fixture_policy():
 
 
 class BuildOnlyPolicyTests(unittest.TestCase):
+    def test_native_diagnostic_selector(self):
+        from test_build_only_native import _selected_cases
+        self.assertEqual(_selected_cases(None), ("natural", "residual", "rootfail"))
+        self.assertEqual(_selected_cases("residual"), ("residual",))
+        with self.assertRaises(ValueError):
+            _selected_cases("other")
+
     def test_fixture_manifest(self):
         policy = fixture_policy()
         self.assertEqual(validate_command(policy, policy.command), policy.command)
