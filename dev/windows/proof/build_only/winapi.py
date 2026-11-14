@@ -187,6 +187,11 @@ class WinAPI:
         self.check(self.k.IsProcessInJob(process.value, job.value, C.byref(result)))
         return bool(result.value)
 
+    def in_any_job(self):
+        result = W.BOOL()
+        self.check(self.k.IsProcessInJob(self.k.GetCurrentProcess(), None, C.byref(result)))
+        return bool(result.value)
+
     def image_path(self, process):
         buffer = C.create_unicode_buffer(32768)
         size = DWORD(len(buffer))
