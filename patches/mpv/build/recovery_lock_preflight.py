@@ -98,6 +98,10 @@ def check_inputs(lock):
                 raise ValueError(f"archive hash not pinned: {name}")
         else:
             raise ValueError(f"unsupported source kind: {name}")
+    by_name = {item["name"]: item for item in sources}
+    for name, commit in (("provider", PROVIDER), ("mpv", MPV)):
+        if by_name.get(name, {}).get("kind") != "git" or by_name[name].get("commit") != commit:
+            raise ValueError(f"locked {name} source differs from approved commit")
     graph_path = BUILD / "feature-graph-candidate.json"
     graph_bytes = graph_path.read_bytes()
     if lock.get("candidate_graph_sha256") != hashlib.sha256(graph_bytes).hexdigest():

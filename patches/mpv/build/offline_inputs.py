@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from recovery_lock_preflight import BUILD, ROOT, RUST_COMPONENTS, parse_object, verify
-from offline_git import verify_bundle
+from offline_git import verify_bundle, verify_checkout
 
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -140,6 +140,28 @@ def verify_inventory(lock, root, inventory, git, checks):
         paths.add(path)
     if names != set(expected):
         raise ValueError("staged inventory does not cover the lock source list")
+
+
+def verify_source_checkout(lock, root, inventory, git, checkdir, name, checkout):
+    """Recheck one private checkout against its approved source bundle."""
+    if not all(path.is_absolute() for path in (root, git, checkdir, checkout)):
+        raise ValueError("verification paths must be absolute")
+    checkdir.parent.resolve(strict=True).relative_to(ROOT.resolve(strict=True))
+    checkout.resolve(strict=True).relative_to(ROOT.resolve(strict=True))
+    matches = [item for item in lock["sources"] if item.get("name") == name]
+    rows = [item for item in inventory["sources"] if item.get("name") == name]
+    if len(matches) != 1 or len(rows) != 1 or matches[0].get("kind") != "git":
+        raise ValueError("checkout source must name exactly one locked Git bundle")
+    check_plain_root(root)
+    check_plain_root(git)
+    check_plain_root(checkdir.parent)
+    bundle = plain_file(root, rows[0]["path"])
+    if rows[0].get("sha256") != matches[0].get("bundle_sha256"):
+        raise ValueError("checkout inventory bundle differs from lock")
+    if bundle.stat().st_size != rows[0].get("size"):
+        raise ValueError("checkout bundle size differs from inventory")
+    verify_checkout(git, lock["host_tools"]["git"]["sha256"], bundle,
+                    checkdir, matches[0], checkout)
 
 
 def main():
