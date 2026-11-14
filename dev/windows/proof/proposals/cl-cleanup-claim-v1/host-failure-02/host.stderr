@@ -1,0 +1,6 @@
+Write-Error: E:\CursorAI\JellyfinDesktop\deps\worktrees\reconcile-build-policy-20261113\dev\windows\proof\proposals\cl-cleanup-claim-v1\enrollment-controller.ps1:361
+Line |
+ 361 |    Write-Error ($failure | ConvertTo-Json -Depth 6 -Compress)
+     |    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     |
+     | {"schema":"cleanup-claim-discovery-failed-v1","source":"97ae4e481a35a4976fe21406b7681ab9d6a89eb0","stage":"pinning","reason":"Exception calling \"PinFile\" with \"4\" argument(s): \"File identity mismatch: E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/dev/windows/proof/proposals/cl-cleanup-claim-v1/enrollment-driver.py\"","secondary":["pin postcheck : Exception calling \"VerifyAll\" with \"0\" argument(s): \"File identity mismatch: E:/CursorAI/JellyfinDesktop/deps/worktrees/reconcile-build-policy-20261113/dev/windows/proof/proposals/cl-cleanup-claim-v1/enrollment-driver.py\""],"postchecks":{"pins":"failed","source":"pass","private_acl":"pass","outer_receipt":"unavailable"},"settlement":"helper not started; compiler not started","task_parent_created":true}

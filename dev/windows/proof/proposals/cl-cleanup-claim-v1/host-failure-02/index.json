@@ -1,0 +1,28 @@
+{
+  "schema": "discovery-host-failure-copy-v1",
+  "source_sha": "97ae4e481a35a4976fe21406b7681ab9d6a89eb0",
+  "allocation": "a28b4dc8",
+  "scope": "pinning failure before helper, compiler and postcheck; no receipt",
+  "files": [
+    {
+      "path": "parent.json",
+      "bytes": 1240,
+      "sha256": "7a513718e4c26a903f73d4d57d13b8e228d4d48f242afd9ca021cf2f9ef3863c"
+    },
+    {
+      "path": "host.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "host.stderr",
+      "bytes": 1126,
+      "sha256": "08b6ed6536311c65b4befcfbd86e27513a8e137175280fd4b4c0288f27f5e0a8"
+    },
+    {
+      "path": "failure.json",
+      "bytes": 879,
+      "sha256": "40f56e9aa895bb31d43cd88b9c7116a6449f6b57229d93cff89ca85dfbc9bccb"
+    }
+  ]
+}
