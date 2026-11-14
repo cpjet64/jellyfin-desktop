@@ -15,10 +15,11 @@ public:
   void invalidate();
 private:
   void settle(Key current, std::int64_t nowMs);
-  AutomaticRecoverySession session_;
+  void discardQueued();
+  AutomaticRecoverySession activeSession_, queuedSession_;
   AutomaticRecoveryLoad load_;
   Key key_;
   std::uint64_t sequence_ = 0;
   std::int64_t startedEntry_ = 0, deadline_ = 0;
-  bool loaded_ = false, installed_ = false;
+  bool loaded_ = false, matched_ = false, installed_ = false;
 };
