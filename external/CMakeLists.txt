@@ -35,6 +35,8 @@ if(USE_STATIC_MPVQT)
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RendererOwners.h"
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RecoveryFrameBridge.cpp"
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RecoveryFrameBridge.h"
+      "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/QtSubmissionBridge.cpp"
+      "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/QtSubmissionBridge.h"
       "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime/RecoveryExchange.h")
     target_include_directories(MpvQt PUBLIC "${CMAKE_SOURCE_DIR}/patches/mpvqt/runtime" "${CMAKE_SOURCE_DIR}/src/native")
     target_compile_definitions(MpvQt PUBLIC MPVQT_RECOVERY_RUNTIME)

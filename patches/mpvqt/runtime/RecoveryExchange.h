@@ -4,6 +4,7 @@
 #include <mutex>
 #include <memory>
 #include "RecoveryFrameObservation.h"
+#include "QtSubmissionBridge.h"
 
 namespace RendererRuntime { struct GenerationOwner; }
 
@@ -25,4 +26,12 @@ struct RecoveryExchange {
     quint64 frameGeneration = 0;
     RecoveryFrameObservationV1 frame{};
     quint64 sourceFrameSerial = 0;
+    quint64 attempt = 0;
+    qint64 attemptDeadlineMs = 0;
+    QtRecoverySwapTicketV1 ticket{};
+    QtRecoveryFrameV1 ticketFrame{};
+    bool ticketPending = false;
+    bool submissionPending = false;
+    QtRecoverySubmissionV1 submission{};
+    bool bootstrapSupported = false;
 };
