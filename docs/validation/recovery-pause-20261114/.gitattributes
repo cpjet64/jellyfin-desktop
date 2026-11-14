@@ -1,0 +1,3 @@
+host-observer.ps1 -text
+outer.receipt -text
+observed-load-not-implemented.patch -text whitespace=-blank-at-eol

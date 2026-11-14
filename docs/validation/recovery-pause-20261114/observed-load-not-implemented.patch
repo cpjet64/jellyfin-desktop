@@ -1,0 +1,21 @@
+diff --git a/src/player/PlayerComponent.h b/src/player/PlayerComponent.h
+index 935bbb12..a2ff7bfa 100644
+--- a/src/player/PlayerComponent.h
++++ b/src/player/PlayerComponent.h
+@@ -42,6 +42,8 @@ public:
+ 
+   // Deprecated. Corresponds to stop() + queueMedia().
+   Q_INVOKABLE bool load(const QString& url, const QVariantMap& options, const QVariantMap& metadata, const QVariant& audioStream = QVariant(), const QVariant& subtitleStream = QVariant());
++  Q_INVOKABLE bool loadObserved(const QString& token, const QString& url, const QVariantMap& options,
++                                const QVariantMap& metadata, const QVariant& audioStream, const QVariant& subtitleStream);
+ 
+   // Append a media item to the internal playlist. If nothing is played yet, the
+   // newly appended item will start playing immediately.
+@@ -210,6 +212,7 @@ Q_SIGNALS:
+   void canceled();                // playback was stopped (by user/via API)
+   void error(const QString& msg); // playback stopped due to external error
+   void loadPreparationFailed(quint64 request, const QString& reason);
++  void observedLoadPreparationFailed(const QString& token, const QString& reason);
+   // To be phased out. Raised on finished() and canceled().
+   void stopped();                 // playback finished successfully, or was stopped with stop()
+   void stateChanged(State newState, State oldState); // all state changes

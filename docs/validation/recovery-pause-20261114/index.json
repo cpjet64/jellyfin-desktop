@@ -1,0 +1,37 @@
+[
+  {
+    "size": 1391,
+    "name": "observed-load-not-implemented.patch",
+    "sha256": "8a8e6858daeea748bd46ecaecac37eb89ed16fce5595202b4b1c53dd60f442fc"
+  },
+  {
+    "size": 2551,
+    "name": "host-observer.ps1",
+    "sha256": "c0ff4767cdbcfc0cee2e55cf97e39431cf99a0ccb8d18a44975c383b2fb4cd8f"
+  },
+  {
+    "size": 0,
+    "name": "host.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "size": 0,
+    "name": "host.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "size": 0,
+    "name": "child.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "size": 0,
+    "name": "child.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "size": 34,
+    "name": "outer.receipt",
+    "sha256": "1e0fc25ee4b6b794574f44d91de028062e872cbcd976541d2f78a7dfec5f6589"
+  }
+]
