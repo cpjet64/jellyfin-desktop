@@ -3,6 +3,7 @@
 #include "recovery_actor/NativeEvents.h"
 #include <QCoreApplication>
 #include <QtTest/QtTest>
+#include <limits>
 
 class TestPlayerRecoveryActor : public QObject {
   Q_OBJECT
@@ -97,6 +98,9 @@ private slots:
   void boundedPreparationRetries();
   void preparationDeadline();
   void malformedPreparationFails();
+  void retryNearClockLimit();
+  void preparationClockRegression_data();
+  void preparationClockRegression();
 };
 
 void TestPlayerRecoveryActor::pendingPreferences_data()
@@ -441,5 +445,6 @@ void TestPlayerRecoveryActor::malformedPreparationFails()
   QCOMPARE(f.queries.size(), std::size_t{1});
 }
 
+#include "recovery_actor/TimingCases.h"
 QTEST_GUILESS_MAIN(TestPlayerRecoveryActor)
 #include "test_recovery_actor.moc"
