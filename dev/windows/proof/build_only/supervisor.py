@@ -63,14 +63,44 @@ def _receipt(path):
         raise
 
 
-def _pin_sources(api, stack, expected):
+@contextmanager
+def _pin_stack(handoff):
+    with ExitStack() as stack:
+        try:
+            yield stack
+        except BaseException as exc:
+            if handoff.primary_error is None:
+                handoff.primary_error = exc
+            raise
+
+
+@contextmanager
+def _tracked_pin(handoff, api, path, expected_hash, expected_size=None):
+    try:
+        pin = FilePin(api, path, expected_hash, expected_size)
+    except RetainedHandlesError as exc:
+        handoff.retain(exc)
+        handoff.cleanup_errors.append(repr(exc))
+        raise
+    try:
+        yield pin
+    finally:
+        try:
+            pin.close()
+        except RetainedHandlesError as exc:
+            handoff.retain(exc)
+            handoff.cleanup_errors.append(repr(exc))
+            raise
+
+
+def _pin_sources(api, stack, expected, handoff):
     directory = Path(os.path.abspath(__file__)).parent
     records = []
     pins = []
     for name in SOURCE_FILES:
         path = directory / name
         digest, size = _hash(path)
-        pin = stack.enter_context(FilePin(api, str(path), digest, size))
+        pin = stack.enter_context(_tracked_pin(handoff, api, str(path), digest, size))
         records.append([name, digest])
         pins.append(pin)
     encoded = json.dumps(records, separators=(',', ':'), ensure_ascii=True).encode('ascii')
@@ -201,13 +231,13 @@ def _close_launch_failure(api, job, failure):
 def _run_job(api, policy, env, started, receipt, handoff):
     import msvcrt
     command = inspect_command_inputs(policy, env)
-    with ExitStack() as stack:
-        sources = _pin_sources(api, stack, policy.source_sha256)
-        executable = stack.enter_context(FilePin(api, command.executable, command.executable_sha256,
-                                                 command.executable_size))
-        response = stack.enter_context(FilePin(api, command.response_path, command.response_sha256))
-        telemetry = stack.enter_context(FilePin(api, policy.telemetry_path, policy.telemetry_sha256,
-                                                policy.telemetry_size))
+    with _pin_stack(handoff) as stack:
+        sources = _pin_sources(api, stack, policy.source_sha256, handoff)
+        executable = stack.enter_context(_tracked_pin(handoff, api, command.executable, command.executable_sha256,
+                                                      command.executable_size))
+        response = stack.enter_context(_tracked_pin(handoff, api, command.response_path, command.response_sha256))
+        telemetry = stack.enter_context(_tracked_pin(handoff, api, policy.telemetry_path, policy.telemetry_sha256,
+                                                     policy.telemetry_size))
         observed_id = ':'.join(str(part) for part in telemetry.file_id)
         if observed_id != policy.telemetry_file_id:
             raise ValueError('telemetry file identity mismatch')
@@ -286,13 +316,14 @@ def _supervise_owned(policy, receipt_path, handoff):
         try:
             _run_job(api, policy, env, started, state, handoff)
         except RetainedHandlesError as exc:
-            state['reason'] = repr(exc)
+            state['reason'] = repr(handoff.primary_error if handoff.primary_error is not None else exc)
             handoff.retain(exc)
-            failure = exc
+            failure = handoff.primary_error if handoff.primary_error is not None else exc
         except BaseException as exc:
-            state['reason'] = repr(exc)
-            failure = exc
+            state['reason'] = repr(handoff.primary_error if handoff.primary_error is not None else exc)
+            failure = handoff.primary_error if handoff.primary_error is not None else exc
         if failure is not None:
+            state['errors'].extend(handoff.cleanup_errors)
             state['errors'].extend(_close_retained(handoff))
         state['owned'] = {'opened': api.opened, 'closed': api.closed, 'failed': api.close_failed}
         try:

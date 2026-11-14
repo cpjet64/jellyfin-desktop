@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from build_only.identity import RetainedHandlesError
 from build_only.lifecycle import CleanupHandoff, settle
-from build_only.supervisor import _close_retained, _supervise
+from build_only.supervisor import _close_retained, _pin_stack, _supervise, _tracked_pin
 
 
 class Clock:
@@ -205,25 +205,50 @@ class LifecycleTests(unittest.TestCase):
         self.assertIs(handoff.handles[0], handle)
 
     def test_secondary_failure_keeps_owner_and_unresolved_root(self):
-        handle, root = RetainedHandle(fail=True), Root(signaled=False)
-        original = RetainedHandlesError('first failure', (handle,))
+        ledger = SimpleNamespace(opened=2, closed=0, close_failed=0, in_any_job=lambda: True)
+        handles = (RetainedHandle(fail=True, ledger=ledger), RetainedHandle(fail=True, ledger=ledger))
+        root, primary = Root(signaled=False), ValueError('primary body failure')
+        captured = []
+        receipt = SimpleNamespace(write=captured.append, flush=lambda: None)
+        policy = SimpleNamespace(command=object())
 
-        def fail_owned(policy, path, handoff):
-            handoff.retain(original)
+        class FailingPin:
+            def __init__(self, handle):
+                self.handle = handle
+
+            def close(self):
+                ledger.close_failed += 1
+                raise RetainedHandlesError('pin close failed', (self.handle,))
+
+        def fail_job(api, current, env, started, state, handoff):
             handoff.root = root
-            handoff.deadline = 10.0
-            errors = _close_retained(handoff, clock=lambda: 1.0)
-            self.assertEqual(len(errors), 1)
-            raise OSError('secondary failure')
+            handoff.deadline = float('inf')
+            with _pin_stack(handoff) as stack:
+                stack.enter_context(_tracked_pin(handoff, api, 'first', 'hash'))
+                stack.enter_context(_tracked_pin(handoff, api, 'second', 'hash'))
+                raise primary
 
-        with patch('build_only.supervisor._supervise_owned', side_effect=fail_owned):
-            with self.assertRaisesRegex(OSError, 'secondary failure') as caught:
-                _supervise(object(), 'unused')
+        with patch('build_only.supervisor.WinAPI', return_value=ledger), \
+             patch('build_only.supervisor._environment', return_value={}), \
+             patch('build_only.supervisor.inspect_command_inputs'), \
+             patch('build_only.supervisor._receipt', return_value=nullcontext(receipt)), \
+             patch('build_only.supervisor.policy_hash', return_value='policy'), \
+             patch('build_only.supervisor.FilePin', side_effect=[FailingPin(handles[0]), FailingPin(handles[1])]), \
+             patch('build_only.supervisor._run_job', side_effect=fail_job):
+            with self.assertRaisesRegex(RuntimeError, 'build-only supervision failed') as caught:
+                _supervise(policy, 'unused')
         handoff = caught.exception.cleanup_handoff
         self.assertIs(handoff.root, root)
-        self.assertIs(handoff.original_error, original)
-        self.assertIs(handoff.handles[0], handle)
-        self.assertEqual(handle.calls, 1)
+        self.assertIs(handoff.primary_error, primary)
+        self.assertIs(caught.exception.__cause__, primary)
+        self.assertEqual(len(handoff.handles), 2)
+        self.assertIs(handoff.handles[0], handles[1])
+        self.assertIs(handoff.handles[1], handles[0])
+        self.assertEqual([handle.calls for handle in handles], [1, 1])
+        record = json.loads(captured[0])
+        self.assertIn('primary body failure', record['evidence']['reason'])
+        self.assertEqual(len(record['evidence']['errors']), 4)
+        self.assertEqual(record['evidence']['owned']['failed'], 4)
 
     def test_natural(self):
         api = FakeAPI([(0, 1)])

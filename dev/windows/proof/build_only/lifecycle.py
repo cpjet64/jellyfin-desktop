@@ -16,6 +16,8 @@ class CleanupHandoff:
         self.deadline = None
         self.root = None
         self.original_error = None
+        self.primary_error = None
+        self.cleanup_errors = []
 
     def retain(self, error):
         if self.original_error is None:
