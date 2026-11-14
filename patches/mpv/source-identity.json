@@ -3,6 +3,25 @@
   "commit": "01e2533f3143b8940857ca419b0b367f583e05ca",
   "patch": "0001-recovery-frame-observation.patch",
   "patch_sha256": "1b44233c501f7cbab66e64269f2d83f0f57b7bc5aceca8975cb218ce36b52edc",
+  "legacy_patch_fields_scope": "first patch only; use ordered_patches for the complete private bridge",
+  "patch_identity_basis": "committed Git blob bytes, not checkout-dependent line endings",
+  "ordered_patches": [
+    {"path":"0001-recovery-frame-observation.patch","size_bytes":9595,"git_blob":"e36fa6b34f97e7ec2a11e4bab69405222be12a42","sha256":"1b44233c501f7cbab66e64269f2d83f0f57b7bc5aceca8975cb218ce36b52edc"},
+    {"path":"0002-recovery-seek-identity.patch","size_bytes":14090,"git_blob":"26880cada9a438d798bfa9ade1aa12709e37551e","sha256":"97150ebc3f75adad6c1a4591c0a1c1a168a82d7190cd5d59b03150bf17d292a7"},
+    {"path":"0003-recovery-seek-epoch-tests.patch","size_bytes":9275,"git_blob":"10057a5215133ce0e73ccfe23bd0f38d169eb1c4","sha256":"6f6221c6aa1a23d8991324d7cad5748a1a0768ad8f318bffb360ca36f8975e7d"}
+  ],
+  "private_abi": {
+    "frame_observation_versions": [1, 2],
+    "owned_seek_version": 1,
+    "required_symbols": [
+      "mpv_render_context_render_recovery_v1",
+      "mpv_render_context_render_recovery_v2",
+      "mpv_recovery_seek_async_v1",
+      "mpv_recovery_seek_cancel_v1"
+    ],
+    "capability_status": "source declarations only; exports and behavior unverified"
+  },
+  "files_scope": "selected upstream inputs; not a complete transitive build manifest",
   "files": [
     {"path":"player/core.h","git_blob":"2889d352bdd53a91d072097e96fe35ea4804ecb0","sha256":"ba79a432d140bb0098e999d9cfdc85dd45c75a6d0c81f15961b73f414aedb62d"},
     {"path":"player/video.c","git_blob":"60430224d10b15da28a13556d25ccb223ad541f8","sha256":"3ccce2b694041ac12aab56fee803b06fba695ffb3f848f915e1acc7d2f5e632b"},
@@ -12,8 +31,12 @@
     {"path":"common/playlist.h","git_blob":"1d5e112b401229cec08ab75420777789ae709254","sha256":"25e9ab84eda6eef6e461327c1d42aa946aecabb8d2917684fe92182acff8c545"},
     {"path":"include/mpv/render.h","git_blob":"0b59982fc49974af0aa644c0b6e34fbdac6b38a6","sha256":"f2550aa29b2e9b20988bd954b4383e9fa05fd9e40d1669fbc6edf2afac603f15"},
     {"path":"player/playloop.c","git_blob":"e35b2e863933b63d3986ccb48cccf9e1ff3b6a17","sha256":"4ee921094a1a038bd236f6e24eab7693b359f668bb27ce84908f4b5d6f5918c4"},
+    {"path":"player/client.c","git_blob":"61c998dbb8596a6a85373a058693bc0d23703b53","sha256":"56ed96e2b5d9131d4ac89d29e12c87ea9a34ef9018f0df46a735fa332d5f6e63"},
+    {"path":"player/client.h","git_blob":"eed1a1cc8a225422cd54f823f23c7d7a9d2fcbbc","sha256":"811f0ac7191a0177a312ddc415cc7d3c07dabbf2926c41efceba21798922bf53"},
+    {"path":"test/meson.build","git_blob":"994dc6839bb08850354319ad06ec21c1d65a4944","sha256":"97b8a09824239ff69f13c2c3035b2219757e705939cab80321ee58f565058224"},
     {"path":"meson.build","git_blob":"45742345a6aa2c85cbd2d4cb84d03974f82ec83d","sha256":"26ac765a1f6c685ec8678ccdd313187ad5c1871e74924dad11d6c412dfd88074"}
   ],
   "new_upstream_file": "include/mpv/recovery_frame_observation.h",
-  "status": "source patch only; no build, exported binary, or runtime capability verified"
+  "additional_patch_created_files": ["player/recovery_seek_epoch.h", "test/recovery_seek_epoch.c"],
+  "status": "ordered source patches only; no build, exported binary, unit execution, or runtime capability verified"
 }
