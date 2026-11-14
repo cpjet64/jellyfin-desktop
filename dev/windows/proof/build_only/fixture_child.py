@@ -3,10 +3,13 @@ import subprocess
 import sys
 import time
 
+DETACHED_PROCESS = 0x00000008
+
 
 def spawn(mode, output):
     return subprocess.Popen([sys.executable, "-B", __file__, mode, output], close_fds=True,
-                            creationflags=subprocess.CREATE_NO_WINDOW)
+                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            creationflags=DETACHED_PROCESS)
 
 
 def main(mode, output):

@@ -83,7 +83,7 @@ def _attributes(api, handles):
     return storage, values
 
 
-def _create(api, job, executable, args, cwd, handles, env, root_verifier):
+def _create(api, job, executable, args, cwd, handles, env, root_verifier, fixture):
     command = C.create_unicode_buffer(subprocess.list2cmdline([executable, *args]))
     environment = _environment(env)
     storage, values = _attributes(api, handles)
@@ -94,7 +94,8 @@ def _create(api, job, executable, args, cwd, handles, env, root_verifier):
         startup.startup.stdin, startup.startup.stdout, startup.startup.stderr = (h.value for h in handles)
         startup.attributes = C.cast(storage, C.c_void_p)
         info = w.PROCESS_INFORMATION()
-        flags = w.CREATE_SUSPENDED | w.CREATE_NO_WINDOW | w.EXTENDED_STARTUPINFO_PRESENT
+        console = w.DETACHED_PROCESS if fixture else w.CREATE_NO_WINDOW
+        flags = w.CREATE_SUSPENDED | console | w.EXTENDED_STARTUPINFO_PRESENT
         if environment is not None:
             flags |= CREATE_UNICODE_ENVIRONMENT
         api.check(api.k.CreateProcessW(executable, command, None, None, True, flags, environment, cwd,
@@ -180,7 +181,7 @@ def _emergency_settle(api, job, root, deadline):
     return None, True
 
 
-def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_verifier, env=None):
+def _launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_verifier, env, fixture):
     if os.name != 'nt':
         raise OSError('Windows is required')
     if not os.path.isabs(executable) or not os.path.isabs(cwd):
@@ -197,7 +198,7 @@ def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_v
         handles.append(w.Handle(api, raw))
         handles.append(_duplicate(api, stdout_handle))
         handles.append(_duplicate(api, stderr_handle))
-        root = _create(api, job, executable, list(args), cwd, handles, env, root_verifier)
+        root = _create(api, job, executable, list(args), cwd, handles, env, root_verifier, fixture)
     except BaseException as error:
         failure = error
         deadline = error.cleanup_deadline if isinstance(error, LaunchFailure) else time.monotonic() + 10
@@ -220,3 +221,11 @@ def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_v
             raise failure
         raise LaunchFailure('launch preparation failed', cleanup_deadline=deadline) from failure
     return root
+
+
+def launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_verifier, env=None):
+    return _launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_verifier, env, False)
+
+
+def _launch_fixture(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_verifier, env=None):
+    return _launch(api, job, executable, args, cwd, stdout_handle, stderr_handle, root_verifier, env, True)

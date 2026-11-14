@@ -15,7 +15,7 @@ from time import monotonic
 from .identity import FilePin, ObservedFile, RetainedHandlesError
 from .lifecycle import CleanupHandoff, settle
 from .policy import PRODUCTION_POLICIES, inspect_command_inputs, policy_hash
-from .spawn import launch, LaunchFailure
+from .spawn import launch, _launch_fixture, LaunchFailure
 from .winapi import WinAPI
 from .receipt_file import ReceiptFile, ReceiptCloseError
 
@@ -230,9 +230,18 @@ def _close_launch_failure(api, job, failure):
     return errors
 
 
+def _select_launcher(policy):
+    if policy.kind == 'fixture':
+        _validate_fixture(policy)
+        if policy.command.args[2] in ('natural', 'residual', 'rootfail'):
+            return _launch_fixture
+    return launch
+
+
 def _run_job(api, policy, env, started, receipt, handoff):
     import msvcrt
     command = inspect_command_inputs(policy, env)
+    selected_launch = _select_launcher(policy)
     with _pin_stack(handoff) as stack:
         sources = _pin_sources(api, stack, policy.source_sha256, handoff)
         executable = stack.enter_context(_tracked_pin(handoff, api, command.executable, command.executable_sha256,
@@ -262,7 +271,7 @@ def _run_job(api, policy, env, started, receipt, handoff):
             source.assert_path_unchanged()
         started.append(monotonic())
         try:
-            root = launch(api, job, command.executable, command.args, command.cwd,
+            root = selected_launch(api, job, command.executable, command.args, command.cwd,
                           msvcrt.get_osfhandle(stdout.fileno()), msvcrt.get_osfhandle(stderr.fileno()),
                           lambda process, owned_job: executable.verify_process(api, process, owned_job), env)
         except LaunchFailure as exc:
