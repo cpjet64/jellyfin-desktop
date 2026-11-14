@@ -1,5 +1,5 @@
 """Settle a private job without accepting unidentified process termination."""
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import ntpath
 from time import monotonic, sleep
 
@@ -61,6 +61,21 @@ def _grace(api, job, end, clock, pause, evidence):
         pause(min(0.025, max(0.0, end - clock())))
 
 
+@contextmanager
+def _retained_process(api, pid, handoff):
+    from build_only.identity import RetainedHandlesError
+    process = api.open_process(pid)
+    try:
+        yield process
+    finally:
+        try:
+            process.close()
+        except BaseException as error:
+            retained = RetainedHandlesError('residual handle close failed', (process,))
+            handoff.retain(retained)
+            raise retained from error
+
+
 def _identify(api, job, pins, baseline, end, clock, stack, evidence, handoff):
     pids = tuple(api.members(job))
     if len(pids) != len(set(pids)) or len(pids) != baseline['active']:
@@ -68,7 +83,7 @@ def _identify(api, job, pins, baseline, end, clock, stack, evidence, handoff):
     processes = []
     for pid in pids:
         _milliseconds(end, clock)
-        process = stack.enter_context(api.open_process(pid))
+        process = stack.enter_context(_retained_process(api, pid, handoff))
         processes.append((pid, process))
     used = set()
     for pid, process in processes:
@@ -83,6 +98,7 @@ def _identify(api, job, pins, baseline, end, clock, stack, evidence, handoff):
                 raise SettlementError('unknown, ambiguous, or excessive residual')
             role, pin = matches[0]
             identity = pin.verify_process(api, process, job)
+            identity['retained_final_path'] = pin.final_path
             used.add(role)
         except Exception as exc:
             from build_only.identity import RetainedHandlesError
