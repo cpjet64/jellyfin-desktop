@@ -91,7 +91,13 @@ class Pin:
 
     def verify_process(self, api, process, job):
         if not self.valid:
-            raise ValueError("wrong identity")
+            error = ValueError("wrong identity")
+            error.identity_observation = {"operation": "process_reported_image",
+                                          "process_creation_time": 100,
+                                          "process_image_path": r"C:\fixture\child.exe",
+                                          "input_path": None, "final_path": None, "file_id": None,
+                                          "observed_size": 12, "expected_size": 13}
+            raise error
         return {"creation_time": 100}
 
 
@@ -163,6 +169,11 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual(result["result"], "failed")
             self.assertEqual(api.terminated, [])
             self.assertTrue(api.emergency)
+            if failure == "identity":
+                for expected in ("pid=20", "verify_process", "ValueError", "wrong identity",
+                                 "process_reported_image", "process_creation_time", "100",
+                                 "process_image_path", "child.exe"):
+                    self.assertIn(expected, result["error"])
 
     def test_new_association_before_or_after_intervention(self):
         for states in ([(1, 2), (1, 2), (1, 3), (0, 3)],
