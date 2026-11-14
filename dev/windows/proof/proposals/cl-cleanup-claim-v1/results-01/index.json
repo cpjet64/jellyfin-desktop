@@ -1,0 +1,28 @@
+{
+  "schema": "preflight-evidence-copy-v1",
+  "source_sha": "3fff68c5c5454a46eb09bb5d0c18eca54fe34d76",
+  "allocation": "50d33e6b-573d-5b99-b215-9fc896ebb6ce",
+  "scope": "metadata preflight only; no compiler execution or product qualification",
+  "files": [
+    {
+      "path": "result.json",
+      "bytes": 12746,
+      "sha256": "672c7ae1298a59b7d37d7595cd7dd7f33fc5c3c90a591498e0ca6820464be020"
+    },
+    {
+      "path": "stdout.log",
+      "bytes": 8509,
+      "sha256": "7f7a4e3c9bda26de756187dfd62cb6431173fdf6d0cf376370ad97252d35d88e"
+    },
+    {
+      "path": "stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "outer.receipt",
+      "bytes": 206,
+      "sha256": "07d1f3b47a29ba8cbbce135d4e34624d39a2b8c71bcb495a46f3a95a2a249103"
+    }
+  ]
+}

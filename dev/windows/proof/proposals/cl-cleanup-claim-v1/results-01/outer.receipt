@@ -1,0 +1,9 @@
+receipt_version=1
+root_pid=38548
+root_exit=0
+timeout=0 active=0
+handles_before=74 handles_after=79 measured=1
+owned_opened=6 owned_closed=6 close_failed=0
+handles_complete=1
+final_result=0
+proof_complete=1
