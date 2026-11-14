@@ -148,7 +148,7 @@ void PlayerComponent::play()
     return;
   }
   QStringList args = (QStringList() << "set" << "pause" << "no");
-  if (recoveryTestMode()) applySelectedPause(false); else m_mpv->command( args);
+  ordinaryPlayerCommand(args);
   m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Queued);
 }
 
@@ -165,7 +165,7 @@ void PlayerComponent::pause()
     return;
   }
   QStringList args = (QStringList() << "set" << "pause" << "yes");
-  if (recoveryTestMode()) applySelectedPause(true); else m_mpv->command( args);
+  ordinaryPlayerCommand(args);
   m_playbackIntent.dispatch(revision, PlaybackIntent::Dispatch::Queued);
 }
 

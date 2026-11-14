@@ -391,12 +391,15 @@ private:
   void updateVideoAspectSettings();
   QVariantList findStreamsForURL(const QString &url);
   void reselectStream(const QVariant &streamSelection, MediaType target);
+  void selectLegacyStream(const QVariant& selection, MediaType target, const QString& property,
+                          const QString& addCommand, const QString& streamType);
+  int ordinaryProperty(const QString& name, const QVariant& value);
+  void ordinaryPlayerCommand(const QStringList& args);
 
   MpvController* m_mpv = nullptr;
 #ifdef PLAYER_RECOVERY_ACTOR_TEST
-  std::function<void(const QVariant&, const QVariant&)> ordinaryTracksDispatch_;
-  std::function<void(const QVariant&, MediaType)> ordinaryReselectDispatch_;
-  std::function<int(bool)> ordinaryPauseDispatch_;
+  std::function<int(const QString&, const QVariant&)> ordinaryPropertyDispatch_;
+  std::function<void(const QStringList&)> ordinaryPlayerCommandDispatch_;
   std::function<void(quint64)> ordinaryHookDispatch_;
   std::function<void(const QString&)> ordinaryLegacyHookDispatch_;
   bool syntheticControllerBound_ = false;

@@ -130,7 +130,7 @@ bool PlayerComponentRecovery::userChanged(bool clear, PlaybackIntent::ChangeKind
     replacementArming_ = false; ordinaryReplacement_.revoke();
   }
   if (!preferenceDeferred_) {
-    if (ordinaryLoad_.pending) { if (clear) ordinaryLoad_ = {}; else flushOrdinaryLoad(false); }
+    ordinaryLoad_ = {};
     ordinarySelection_.revoke(); ordinaryAfterId_ = 0; ordinaryPreferences_ = {};
   }
   const bool cancelled = cancelOwnedSeek();

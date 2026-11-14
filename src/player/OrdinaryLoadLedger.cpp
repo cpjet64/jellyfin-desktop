@@ -31,7 +31,7 @@ void OrdinaryLoadLedger::reply(std::uint64_t userdata, bool success)
 }
 bool OrdinaryLoadLedger::available() const
 {
-  if (ambiguous_) return false;
+  if (ambiguous_ || loads_.size() >= 64) return false;
   for (const auto& load : loads_) if (!load.second.started) return false;
   return true;
 }
