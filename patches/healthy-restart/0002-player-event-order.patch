@@ -1,7 +1,7 @@
 diff --git a/player/PlayerMpvEvents.cpp b/player/PlayerMpvEvents.cpp
 --- a/player/PlayerMpvEvents.cpp
 +++ b/player/PlayerMpvEvents.cpp
-@@ -21,8 +21,6 @@ void PlayerComponent::setupMpvEvents()
+@@ -88,9 +88,7 @@ void PlayerComponent::setupMpvEvents()
    connect(this, &PlayerComponent::onMpvEvents, this, &PlayerComponent::handleMpvEvents,
            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
 -#endif
@@ -11,12 +11,14 @@ diff --git a/player/PlayerMpvEvents.cpp b/player/PlayerMpvEvents.cpp
 +#else
 +  mpv_set_wakeup_callback(m_mpv->mpv(), wakePlayer, this);
  #endif
+ #endif
  }
-@@ -33,5 +31,7 @@ void PlayerComponent::finishMpvEventSetup()
+@@ -103,6 +101,8 @@ void PlayerComponent::finishMpvEventSetup()
  #ifndef MPVQT_EXTERNAL_EVENTS
    connect(this, &PlayerComponent::onMpvEvents, this, &PlayerComponent::handleMpvEvents, Qt::QueuedConnection);
 +#else
 +  mpv_set_wakeup_callback(m_mpv->mpv(), wakePlayer, this);
  #endif
    emit onMpvEvents();
+ #endif
  }
