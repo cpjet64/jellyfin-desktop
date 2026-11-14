@@ -13,6 +13,32 @@
       "gitlink_commit": "4b313cfd2e1b389ae632b36dcd50402307289af2",
       "gitlink_committer_time": "2026-06-04T12:05:29Z",
       "evidence": "Pinned parent .gitmodules URL and tree gitlink, with direct GitHub commit metadata lookup; child transitive inputs remain unverified."
+    },
+    {
+      "parent": "libsrt",
+      "parent_repository": "https://github.com/Haivision/srt",
+      "parent_commit": "9f2390232a8256ed4c72a5418c2b2777c49ad737",
+      "provider_recipe": "packages/libsrt.cmake",
+      "provider_selection": "GIT_SUBMODULES not specified; pinned CMake ExternalProject default applies",
+      "gitmodules_blob": "0c81e9233a7decab1658201c282e08db3bdce22b",
+      "path": "submodules/abi-compliance-checker",
+      "repository": "https://github.com/lvc/abi-compliance-checker.git",
+      "gitlink_commit": "7c175c45a8ba9ac41b8e47d8ebbab557b623b18e",
+      "gitlink_committer_time": "2021-09-13T19:19:24Z",
+      "evidence": "Pinned parent .gitmodules URL and tree gitlink, with direct GitHub commit metadata lookup; child transitive inputs remain unverified."
+    },
+    {
+      "parent": "libpsl",
+      "parent_repository": "https://github.com/rockdaboot/libpsl",
+      "parent_commit": "aa3a80e18f25caf3916636c8668dcc0fff7c016d",
+      "provider_recipe": "packages/libpsl.cmake",
+      "provider_selection": "GIT_SUBMODULES not specified; pinned CMake ExternalProject default applies",
+      "gitmodules_blob": "d74114da8a844275a0c817b33857d661cfa3539d",
+      "path": "list",
+      "repository": "https://github.com/publicsuffix/list",
+      "gitlink_commit": "e1b8015c3b2f0f4f8c18659c2480fc1a22c07b20",
+      "gitlink_committer_time": "2026-07-25T14:19:54Z",
+      "evidence": "Pinned parent .gitmodules URL and tree gitlink, with direct GitHub commit metadata lookup; child transitive inputs remain unverified."
     }
   ]
 }
