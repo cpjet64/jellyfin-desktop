@@ -19,10 +19,12 @@ public:
   std::uint64_t userdata() const { return Tag | sequence_; }
 private:
   bool matches(Key current) const;
+  bool observeTime(std::int64_t nowMs);
   void settle();
   Key key_;
   State state_ = State::Empty;
   std::uint64_t sequence_ = 0;
   std::int64_t deadline_ = 0, replyEntry_ = 0, startedEntry_ = 0;
+  std::int64_t lastEventTime_ = -1;
   bool replySeen_ = false, startSeen_ = false;
 };

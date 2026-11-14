@@ -10,7 +10,13 @@ bool AutomaticRecoveryLoad::begin(Key key, std::uint64_t sequence, std::int64_t 
   if (state_ == State::Pending || !key.session || !key.revision || !key.generation ||
       !sequence || sequence <= sequence_ || sequence > MaxSequence || deadlineMs <= 0) return false;
   key_ = key; sequence_ = sequence; deadline_ = deadlineMs; replyEntry_ = startedEntry_ = 0;
-  replySeen_ = startSeen_ = false; state_ = State::Pending; return true;
+  replySeen_ = startSeen_ = false; lastEventTime_ = -1; state_ = State::Pending; return true;
+}
+bool AutomaticRecoveryLoad::observeTime(std::int64_t nowMs)
+{
+  if (nowMs < 0 || (state_ == State::Pending && nowMs >= deadline_)) { state_ = State::Expired; return false; }
+  if (nowMs < lastEventTime_) { state_ = State::Failed; return false; }
+  lastEventTime_ = nowMs; return true;
 }
 void AutomaticRecoveryLoad::settle()
 {
@@ -19,7 +25,7 @@ void AutomaticRecoveryLoad::settle()
 void AutomaticRecoveryLoad::reply(std::uint64_t userdata, bool ok, std::int64_t entry, std::int64_t nowMs)
 {
   if (state_ != State::Pending || userdata != this->userdata()) return;
-  if (nowMs < 0 || nowMs >= deadline_) { state_ = State::Expired; return; }
+  if (!observeTime(nowMs)) return;
   if (replySeen_ || !ok || entry <= 0) { state_ = State::Failed; return; }
   replySeen_ = true; replyEntry_ = entry; settle();
 }
@@ -27,7 +33,7 @@ void AutomaticRecoveryLoad::started(std::int64_t entry, std::int64_t nowMs)
 {
   if (state_ == State::Accepted) { state_ = State::Failed; return; }
   if (state_ != State::Pending) return;
-  if (nowMs < 0 || nowMs >= deadline_) { state_ = State::Expired; return; }
+  if (!observeTime(nowMs)) return;
   if (startSeen_ || entry <= 0) { state_ = State::Failed; return; }
   startSeen_ = true; startedEntry_ = entry; settle();
 }
@@ -39,7 +45,7 @@ void AutomaticRecoveryLoad::ended(std::int64_t entry)
 AutomaticRecoveryLoad::State AutomaticRecoveryLoad::poll(Key current, std::int64_t nowMs)
 {
   if ((state_ == State::Pending || state_ == State::Accepted) && !matches(current)) state_ = State::Failed;
-  if (state_ == State::Pending && (nowMs < 0 || nowMs >= deadline_)) state_ = State::Expired;
+  if (state_ == State::Pending || state_ == State::Accepted) observeTime(nowMs);
   return state_;
 }
 void AutomaticRecoveryLoad::invalidate() { state_ = State::Failed; }
