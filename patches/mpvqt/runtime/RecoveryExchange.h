@@ -3,6 +3,7 @@
 #include <QtGlobal>
 #include <mutex>
 #include <memory>
+#include <deque>
 #include "RecoveryFrameObservation.h"
 #include "QtSubmissionBridge.h"
 
@@ -31,7 +32,8 @@ struct RecoveryExchange {
     QtRecoverySwapTicketV1 ticket{};
     QtRecoveryFrameV1 ticketFrame{};
     bool ticketPending = false;
-    bool submissionPending = false;
+    quint64 lastQtFrameSerial = 0;
+    std::deque<QtRecoverySubmissionV1> submissions;
     QtRecoverySubmissionV1 submission{};
     bool bootstrapSupported = false;
 };

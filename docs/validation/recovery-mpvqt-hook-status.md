@@ -21,6 +21,9 @@ Known blockers:
   source and ABI must be integrated and independently reviewed; no matching
   binary or runtime capability has been verified. Public Qt signals only
   trigger a private poll and do not themselves establish successful submission.
+  A retained native frame may be observed under later Qt tickets in the same
+  scope; accepted ticket serials cannot be replayed. The notification queue is
+  bounded, so completions may be missed when the GUI consumer is stalled.
 - Lost-context quarantine currently occurs without an owned stop request and
   acknowledgement, so audio can continue.
 - Adopt-failure fallback queues cleanup on the worker; failed queueing retains

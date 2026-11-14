@@ -6,10 +6,10 @@ set(_recovery_inputs
   "mpvrenderer.cpp|b519e71867813e8bcb73ef4353df1d32700e0ca988575c1e2f4017c1d1d1b798"
   "mpvrenderer.h|a35f52d0d4641db2c4bb03d0ced7ba40864f6e6b471b2cb42cc3e7068dda919f")
 set(_recovery_outputs
-  "mpvabstractitem.cpp|8b3d91ebcf00e8a0aefa6e2ba69b2d9cae5e90d60ebc6ca25afabf286a0a17c3"
+  "mpvabstractitem.cpp|27418b4b3a6aba7a2aa548b1db9917f859a94cbeaaf7174020cbc639d7a27654"
   "mpvabstractitem.h|5ff2f9bc241f10bb1ed90bb09d65651e5be74db855120e64e8714768e08f5b47"
   "mpvabstractitem_p.h|fb095701688d77140f266eb3fe0f6878e33b67d7de63b153d5208c7cd7793d62"
-  "mpvrenderer.cpp|c8c6bea695e297883bf9bc14edaff5a4a51666273dc69c60928709bbb39661ba"
+  "mpvrenderer.cpp|ea31504fab87e88dba44b49102363713cf21d6c327649f4143cd72ea75e84c32"
   "mpvrenderer.h|0896da8ffc50b34e5498853228ddcd6c54c2578cc9610b665eb8395fc5a7ed4c")
 
 function(_verify_recovery_sources entries)
