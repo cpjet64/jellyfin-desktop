@@ -395,6 +395,7 @@ private:
   MpvController* m_mpv = nullptr;
 #ifdef PLAYER_RECOVERY_ACTOR_TEST
   std::function<void(const QVariant&, const QVariant&)> ordinaryTracksDispatch_;
+  std::function<void(const QVariant&, MediaType)> ordinaryReselectDispatch_;
   std::function<int(bool)> ordinaryPauseDispatch_;
   std::function<void(quint64)> ordinaryHookDispatch_;
   std::function<void(const QString&)> ordinaryLegacyHookDispatch_;

@@ -87,6 +87,7 @@ bool PlayerComponentRecovery::preserveOrdinaryPreference(PlaybackIntent::ChangeK
 {
   const bool allowed = kind == PlaybackIntent::ChangeKind::Pause || kind == PlaybackIntent::ChangeKind::Resume ||
                        kind == PlaybackIntent::ChangeKind::Audio || kind == PlaybackIntent::ChangeKind::Subtitle;
+  if (!ordinaryLoad_.pending && !ordinarySelection_.active()) ordinaryPreferences_.active = false;
   if (!allowed || !ordinaryPreferences_.active ||
       !intent.epoch || !intent.request || intent.epoch != ordinaryPreferences_.epoch ||
       intent.request != ordinaryPreferences_.request || player_->m_mpvGeneration != ordinaryPreferences_.binding ||
@@ -124,9 +125,14 @@ bool PlayerComponentRecovery::ordinaryPreferenceCurrent() const
 
 bool PlayerComponentRecovery::flushOrdinaryLoad(bool allowSelection)
 {
-  if (!ordinaryLoad_.pending || (!core_ && !player_->recoveryTestMode())) return false;
+  if (!ordinaryLoad_.pending) return false;
+  if (!core_ && !player_->recoveryTestMode()) {
+    ordinaryLoad_ = {}; ordinaryPreferences_.active = false; return false;
+  }
   auto load = ordinaryLoad_; ordinaryLoad_ = {};
-  if (!setPauseOption(load.command, !load.options.value("autoplay").toBool())) return false;
+  if (!setPauseOption(load.command, !load.options.value("autoplay").toBool())) {
+    ordinaryPreferences_.active = false; return false;
+  }
   const auto current = player_->m_playbackIntent.snapshot();
   const bool qualified = allowSelection && !startSerialExhausted_ && ordinaryLedger_.available() &&
       load.beforeStart == startSerial_ && current.revision == load.key.revision && player_->m_mpvGeneration == load.key.generation;
@@ -142,11 +148,12 @@ bool PlayerComponentRecovery::flushOrdinaryLoad(bool allowSelection)
   }, load.key, load.command, load.url, load.options, load.metadata, load.audio, load.subtitle,
       !load.options.value("autoplay").toBool(), clockNow());
   if (!accepted) player_->m_playbackIntent.dispatch(load.key.revision, PlaybackIntent::Dispatch::NativeRejected);
+  if (!accepted || !ordinarySelection_.active()) ordinaryPreferences_.active = false;
   ordinaryBeforeEntries_.clear();
   return accepted;
 }
 
-void PlayerComponentRecovery::ordinaryEvent(const mpv_event* event, std::int64_t now)
+void PlayerComponentRecovery::ordinaryEvent(const mpv_event* event, std::int64_t now, bool ordinaryReplacementEnd)
 {
   if (!event) return;
   if (ordinaryLoad_.pending && event->event_id == MPV_EVENT_GET_PROPERTY_REPLY &&
@@ -170,7 +177,7 @@ void PlayerComponentRecovery::ordinaryEvent(const mpv_event* event, std::int64_t
   }
   if (event->event_id == MPV_EVENT_END_FILE) {
     const auto* end = static_cast<const mpv_event_end_file*>(event->data);
-    ordinarySelection_.ended(end ? end->playlist_entry_id : 0);
+    if (!ordinaryReplacementEnd) ordinarySelection_.ended(end ? end->playlist_entry_id : 0);
   } else if (event->event_id == MPV_EVENT_FILE_LOADED) {
     ordinarySelection_.loaded(lastStartedEntry_, startSerial_);
   } else if (event->event_id == MPV_EVENT_QUEUE_OVERFLOW || event->event_id == MPV_EVENT_SHUTDOWN) {

@@ -33,7 +33,7 @@ public:
   bool queue(const QStringList& command, const QString& url, const QVariantMap& options,
              const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle);
   bool userChanged(bool clear, PlaybackIntent::ChangeKind kind = PlaybackIntent::ChangeKind::Revoke);
-  bool ownsEnd(const mpv_event* event);
+  bool ownsEnd(const mpv_event* event, bool& ordinaryReplacementEnd);
   bool restoring() const { return restoring_; }
   bool recoveryPreloadAllowed() const;
   bool prepareRecoveryPreload();
@@ -61,7 +61,7 @@ private:
   bool ordinaryPreferenceCurrent() const;
   bool applyOrdinaryPause();
   void tick();
-  void event(const mpv_event* event, std::int64_t now);
+  void event(const mpv_event* event, std::int64_t now, bool ordinaryReplacementEnd);
   void usability(std::uint64_t generation, std::uint64_t request, bool usable);
   void beginObservation(AutomaticRecoverySession::Key key, std::int64_t entry, std::int64_t now);
   bool sameIntent() const;
@@ -89,7 +89,7 @@ private:
   void seekSubmission(const AutomaticRecoveryOwnedSeek::Submission& submission, std::int64_t now);
   void seekQtSubmission(std::uint64_t generation, const QtRecoverySubmissionV1& submission, std::uint64_t operationId);
   void beginSeekRecovery(AutomaticRecoveryOwnedSeek::State reason, std::int64_t now);
-  void ordinaryEvent(const mpv_event* event, std::int64_t now);
+  void ordinaryEvent(const mpv_event* event, std::int64_t now, bool ordinaryReplacementEnd);
   bool beginOrdinaryLoad(const QStringList& command, const QString& url, const QVariantMap& options,
                          const QVariantMap& metadata, const QVariant& audio, const QVariant& subtitle,
                          AutomaticRecoverySession::Key key);

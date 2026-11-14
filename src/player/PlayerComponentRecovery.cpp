@@ -182,8 +182,9 @@ void PlayerComponentRecovery::drain()
       native = mpv_wait_event(lease.get(), 0);
     if (!native) break;
     if (native->event_id == MPV_EVENT_NONE) break;
-    const bool internalEnd = ownsEnd(native);
-    event(native, clockNow());
+    bool ordinaryReplacementEnd = false;
+    const bool internalEnd = ownsEnd(native, ordinaryReplacementEnd);
+    event(native, clockNow(), ordinaryReplacementEnd);
     if (!current()) return;
     player_->observeNativeReceipt(native);
     if (!current()) return;
@@ -204,14 +205,14 @@ void PlayerComponentRecovery::drain()
   }
   if (!replacementTransition_) player_->updatePlaybackState();
 }
-bool PlayerComponentRecovery::ownsEnd(const mpv_event* event)
+bool PlayerComponentRecovery::ownsEnd(const mpv_event* event, bool& ordinaryReplacementEnd)
 {
   if (!event || event->event_id != MPV_EVENT_END_FILE || !event->data) return false;
   const auto* end = static_cast<const mpv_event_end_file*>(event->data);
   const auto intent = player_->m_playbackIntent.snapshot();
   const OrdinaryReplacementEnd::Identity identity{intent.epoch, intent.request, player_->m_mpvGeneration, intent.revision};
   if (ordinaryReplacement_.consume(end->playlist_entry_id, end->reason == MPV_END_FILE_REASON_STOP, startSerial_,
-                                   identity, clockNow())) return true;
+                                   identity, clockNow())) { ordinaryReplacementEnd = true; return true; }
   return validRestore(clockNow()) &&
       end->playlist_entry_id == saved_.entry && end->reason == MPV_END_FILE_REASON_STOP;
 }

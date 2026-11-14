@@ -30,7 +30,7 @@ void PlayerComponentRecovery::recordSourceFrame(std::uint64_t generation, const 
   if (frame.source_frame_serial > lastSource_) lastSource_ = frame.source_frame_serial;
 }
 
-void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
+void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now, bool ordinaryReplacementEnd)
 {
   if (native && native->event_id == MPV_EVENT_START_FILE && native->data) {
     lastStartedEntry_ = static_cast<const mpv_event_start_file*>(native->data)->playlist_entry_id;
@@ -77,7 +77,7 @@ void PlayerComponentRecovery::event(const mpv_event* native, std::int64_t now)
     observation_.observe(native, saved_.key, runtime_.eventEpoch(), now, dispatch);
     return;
   }
-  ordinaryEvent(native, now);
+  ordinaryEvent(native, now, ordinaryReplacementEnd);
   const auto intent = player_->m_playbackIntent.snapshot();
   seekReply(native, now);
   const auto active = runtime_.activeKey();

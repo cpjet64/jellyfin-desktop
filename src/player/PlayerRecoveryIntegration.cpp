@@ -198,3 +198,111 @@ bool PlayerComponent::applyPreloadedStreams(const QString& hookToken)
 #endif
   return true;
 }
+
+void PlayerComponent::reselectStream(const QVariant &streamSelection, MediaType target)
+{
+#ifdef PLAYER_RECOVERY_ACTOR_TEST
+  if (recoveryTestMode() && ordinaryReselectDispatch_) { ordinaryReselectDispatch_(streamSelection, target); return; }
+#endif
+  if (!m_mpv) {
+    qWarning() << "PlayerComponent::reselectStream: mpv not initialized yet";
+    return;
+  }
+
+  QString streamIdPropertyName;
+  QString streamAddCommandName;
+  QString mpvStreamTypeName;
+
+  switch (target)
+  {
+  case MediaType::Subtitle:
+    mpvStreamTypeName = "sub";
+    streamIdPropertyName = "sid";
+    streamAddCommandName = "sub-add";
+    break;
+  case MediaType::Audio:
+    mpvStreamTypeName = "audio";
+    streamIdPropertyName = "aid";
+    streamAddCommandName = "audio-add";
+    break;
+  }
+
+  // Check for string format first (handles "#,URL" and "#index")
+  QString streamSelectionStr = streamSelection.toString();
+  bool isStringFormat = streamSelectionStr.startsWith("#") || !streamSelection.canConvert<int>();
+
+  // Handle integer Jellyfin stream index (new format)
+  if (!isStringFormat && streamSelection.canConvert<int>()) {
+    int index = streamSelection.toInt();
+    if (index < 0) {
+      m_mpv->setProperty(streamIdPropertyName, "no");
+    } else {
+      // Jellyfin stream index is the MPV track ID (already 1-based)
+      m_mpv->setProperty(streamIdPropertyName, index);
+    }
+    return;
+  }
+
+  // Handle legacy string format "#1" or "#,http://..."
+  QString streamName;
+  QString streamID;
+
+  if (streamSelectionStr.startsWith("#"))
+  {
+    qsizetype splitPos = streamSelectionStr.indexOf(",");
+    if (splitPos < 0)
+    {
+      // Stream from the main file
+      streamID = streamSelectionStr.mid(1);
+      streamName = "";
+    }
+    else
+    {
+      // Stream from an external file
+      streamID = streamSelectionStr.mid(1, splitPos - 1);
+      streamName = streamSelectionStr.mid(splitPos + 1);
+    }
+  }
+  else if (streamSelectionStr.isEmpty() || !streamSelection.isValid())
+  {
+    m_mpv->setProperty( streamIdPropertyName, "no");
+    return;
+  }
+
+  if (!streamName.isEmpty())
+  {
+    auto streams = findStreamsForURL(streamName);
+    if (streams.isEmpty())
+    {
+      QStringList args = (QStringList() << streamAddCommandName << streamName);
+      m_mpv->command( args);
+    }
+  }
+
+  QString selection = "no";
+
+  if (!streamID.isEmpty())
+  {
+    selection = streamID;
+  } else {
+    for (auto stream : findStreamsForURL(streamName))
+    {
+      auto map = stream.toMap();
+
+      if (map["type"].toString() != mpvStreamTypeName)
+      {
+        continue;
+      } else if (map["external-filename"].toString() == streamName) {
+        selection = map["id"].toString();
+        break;
+      }
+    }
+  }
+
+  // Fallback to the first stream if none could be found.
+  // Useful if web-client uses wrong stream IDs when e.g. transcoding.
+  if ((target == MediaType::Audio || !streamID.isEmpty()) && selection == "no")
+    selection = "1";
+
+  m_mpv->setProperty( streamIdPropertyName, selection);
+}
