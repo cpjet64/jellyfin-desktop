@@ -126,7 +126,7 @@ private:
   std::int64_t transitionDeadline_ = 0;
   std::uint64_t lastSource_ = 0;
   std::uint64_t sourceGeneration_ = 0, sourceEntry_ = 0, sourceFirst_ = 0;
-  std::uint64_t sourceDiscontinuity_ = 0, seekOperationSequence_ = 0, seekReplySequence_ = 0;
+  std::uint64_t sourceDiscontinuity_ = 0;
   std::uint64_t bootstrapEntry_ = 0, bootstrapSource_ = 0, bootstrapDiscontinuity_ = 0;
   std::uint64_t bootstrapGeneration_ = 0, bootstrapEpoch_ = 0, bootstrapWindow_ = 0, bootstrapScene_ = 0;
   std::uint64_t seekBaselineSource_ = 0, seekBaselineDiscontinuity_ = 0;

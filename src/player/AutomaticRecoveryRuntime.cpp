@@ -3,7 +3,7 @@
 #include <QByteArray>
 #include <QVector>
 #include <limits>
-#include <atomic>
+#include "RecoveryIdentity.h"
 
 bool AutomaticRecoveryRuntime::submitUserLoad(const CommandDispatch& dispatch, Key key, const QStringList& command,
     const QString& url, const QVariantMap& options, const QVariantMap& metadata,
@@ -101,15 +101,7 @@ bool AutomaticRecoveryRuntime::replaceActiveEntry(Key current, std::int64_t prev
 bool AutomaticRecoveryRuntime::selections(std::int64_t entry, Key current, QVariant& audio, QVariant& subtitle) const
 { return queue_.selections(entry, current, audio, subtitle); }
 std::uint64_t AutomaticRecoveryRuntime::reserveSequence()
-{
-  static std::atomic<std::uint64_t> next{1};
-  auto value = next.load();
-  while (value && value <= AutomaticRecoveryLoad::MaxSequence) {
-    const auto following = value == AutomaticRecoveryLoad::MaxSequence ? 0 : value + 1;
-    if (next.compare_exchange_weak(value, following)) return value;
-  }
-  return 0;
-}
+{ return RecoveryIdentity::take(RecoveryIdentity::Domain::Load); }
 bool AutomaticRecoveryRuntime::takeTimeout(Key current, std::int64_t nowMs, std::uint64_t& sequence)
 {
   if (!current.session || !current.revision || !current.generation || current.generation != generation_ ||

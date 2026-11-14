@@ -1,4 +1,5 @@
 #include "PlayerComponent.h"
+#include "RecoveryIdentity.h"
 #include "PlaybackCheckpoint.h"
 #include <MpvController>
 #include <cstring>
@@ -57,6 +58,9 @@ bool PlayerComponent::beginNativeReceipt(FixtureAsset asset, const QString& fixt
   if (previous.submitted && !previous.settled) return false;
   if (previous.key.attempt && !previous.invalid) { invalidateNativeReceipt(); return false; }
   const PlaybackNativeReceipts::Key key{host, m_mpvGeneration, intent.revision, attempt};
+  const auto sequence = RecoveryIdentity::take(RecoveryIdentity::Domain::FixtureLoad);
+  if (!sequence) return false;
+  m_receiptUserdata = receiptTag | sequence;
   m_lastReceiptAttempt = attempt;
   m_lastReceiptRevision = intent.revision;
   m_nativeReceipts = PlaybackNativeReceipts{};
@@ -71,14 +75,14 @@ bool PlayerComponent::beginNativeReceipt(FixtureAsset asset, const QString& fixt
 #else
     const char* args[] = {"loadfile", path.constData(), "replace", "pause=yes", nullptr};
 #endif
-    if (m_restoreDispatch) result = m_restoreDispatch(receiptTag | attempt, args);
-    else result = nativeAsyncCommand(receiptTag | attempt, args);
+    if (m_restoreDispatch) result = m_restoreDispatch(m_receiptUserdata, args);
+    else result = nativeAsyncCommand(m_receiptUserdata, args);
   } else if (m_receiptDispatch) {
-    result = m_receiptDispatch(attempt, fixturePath);
+    result = m_receiptDispatch(m_receiptUserdata, fixturePath);
   } else if (m_mpv && m_mpv->mpv()) {
     const auto path = fixturePath.toUtf8();
     const char* args[] = {"loadfile", path.constData(), "replace", nullptr};
-    result = nativeAsyncCommand(receiptTag | attempt, args);
+    result = nativeAsyncCommand(m_receiptUserdata, args);
   }
   m_nativeReceipts.submitted(result);
   return result >= 0;
@@ -100,6 +104,7 @@ bool PlayerComponent::consumeFixtureCheckpoint(PlaybackNativeReceipts::Key key, 
 
 void PlayerComponent::invalidateNativeReceipt()
 {
+  m_receiptUserdata = 0;
   m_fixturePosition = -1;
   m_nativeObservation.valid = false;
   m_nativeReceipts.invalidate();
@@ -149,7 +154,7 @@ void PlayerComponent::observeNativeReceipt(const mpv_event* event)
   if (receipt.key.revision != m_playbackIntent.snapshot().revision) invalidateNativeReceipt();
   switch (event->event_id) {
   case MPV_EVENT_COMMAND_REPLY:
-    if (event->reply_userdata == (receiptTag | receipt.key.attempt))
+    if (m_receiptUserdata && event->reply_userdata == m_receiptUserdata)
       m_nativeReceipts.reply(receipt.key.attempt, event->error >= 0, entryFromReply(event));
     break;
   case MPV_EVENT_START_FILE:

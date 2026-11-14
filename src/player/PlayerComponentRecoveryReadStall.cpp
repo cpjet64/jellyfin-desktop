@@ -2,6 +2,7 @@
 #ifdef MPVQT_RECOVERY_RUNTIME
 #include "MpvVideoItem.h"
 #include "PlayerComponent.h"
+#include "RecoveryIdentity.h"
 #include "system/WebClientFaultGuard.h"
 #include <QQuickWindow>
 #include <limits>
@@ -51,10 +52,11 @@ void PlayerComponentRecovery::watchdogObservation(AutomaticRecoverySession::Key 
     awaitingUsability_ = false; frameGate_.invalidate(); readStall_.reset(); return;
   }
   if (action != AutomaticRecovery::Action::Reload) return;
-  if (request_ == std::numeric_limits<std::uint64_t>::max()) { policy_.fail(); return; }
+  request_ = RecoveryIdentity::take(RecoveryIdentity::Domain::Usability);
+  if (!request_) { policy_.fail(); return; }
   saved_ = snapshot; rendererGeneration_ = item_->recoveryRendererGeneration();
   if (!rendererGeneration_ || !armFrameAttempt()) { clearFrameAttempt(); policy_.fail(); return; }
   readStall_.reset(); awaitingUsability_ = true;
-  item_->requestRendererUsability(rendererGeneration_, ++request_, policy_.deadlineMs());
+  item_->requestRendererUsability(rendererGeneration_, request_, policy_.deadlineMs());
 }
 #endif

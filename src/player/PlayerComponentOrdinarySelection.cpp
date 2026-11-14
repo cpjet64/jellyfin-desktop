@@ -2,21 +2,16 @@
 #ifdef MPVQT_RECOVERY_RUNTIME
 #include "OrdinaryPlaylist.h"
 #include "PlayerComponent.h"
+#include "RecoveryIdentity.h"
 #include "RendererOwners.h"
-#include <atomic>
 #include <cstring>
 #include <limits>
 
 namespace {
 std::uint64_t nextPlaylistQuery()
 {
-  static std::atomic<std::uint64_t> next{1};
-  constexpr std::uint64_t limit = (std::uint64_t{1} << 59) - 1;
-  auto value = next.load();
-  while (value && value <= limit) {
-    if (next.compare_exchange_weak(value, value == limit ? 0 : value + 1)) return (std::uint64_t{1} << 59) | value;
-  }
-  return 0;
+  const auto value = RecoveryIdentity::take(RecoveryIdentity::Domain::PlaylistQuery);
+  return value ? (std::uint64_t{1} << 59) | value : 0;
 }
 const mpv_node* playlistReply(const mpv_event* event, std::uint64_t id)
 {
