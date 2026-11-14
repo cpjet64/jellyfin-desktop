@@ -324,7 +324,8 @@ def headless_checks(mode="system"):
                  "renderer_admission_failedReservationRetiresBeforeReadmission",
                  "renderer_admission_internalWakeBeforeBindingIsDrained",
                  "renderer_admission_sameCoreConsumerCanRebindAndDrain") if mode == "static" else ()
-    required = HEADLESS_TESTS + admission
+    actor = ("test_recovery_actor",) if mode == "static" else ()
+    required = HEADLESS_TESTS + admission + actor
     expression = "^(" + "|".join(required) + ")$"
     report_path = RESULTS / "headless-ctest.xml"
     command("headless-ctest", ["ctest", "--test-dir", str(BUILD), "-R", expression,
