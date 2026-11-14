@@ -2,7 +2,7 @@
   "upstream": "https://github.com/mpv-player/mpv",
   "commit": "01e2533f3143b8940857ca419b0b367f583e05ca",
   "patch": "0001-recovery-frame-observation.patch",
-  "patch_sha256": "d89424e43925a2e2cc3a4fbacafa2cd20ee620be46eae5c44bd685e5e31fac06",
+  "patch_sha256": "1b44233c501f7cbab66e64269f2d83f0f57b7bc5aceca8975cb218ce36b52edc",
   "files": [
     {"path":"player/core.h","git_blob":"2889d352bdd53a91d072097e96fe35ea4804ecb0","sha256":"ba79a432d140bb0098e999d9cfdc85dd45c75a6d0c81f15961b73f414aedb62d"},
     {"path":"player/video.c","git_blob":"60430224d10b15da28a13556d25ccb223ad541f8","sha256":"3ccce2b694041ac12aab56fee803b06fba695ffb3f848f915e1acc7d2f5e632b"},

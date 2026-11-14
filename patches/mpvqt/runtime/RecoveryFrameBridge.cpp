@@ -100,7 +100,11 @@ bool validObservation(const RecoveryFrameObservationV1 &observation)
            observation.playlist_entry_id > 0 &&
            observation.playlist_entry_id <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) &&
            observation.discontinuity_id && observation.source_frame_serial &&
-           observation.render_serial && std::isfinite(observation.media_pts) &&
+           observation.render_serial &&
+           observation.discontinuity_id <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) &&
+           observation.source_frame_serial <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) &&
+           observation.render_serial <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) &&
+           std::isfinite(observation.media_pts) &&
            observation.media_pts >= 0.0 &&
            observation.media_pts <= static_cast<double>(std::numeric_limits<int64_t>::max() / 2000);
 }

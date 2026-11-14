@@ -12,7 +12,7 @@ index 2889d352..3ae30e46 100644
      char *stream_open_filename;
      char **playlist_paths; // used strictly for playlist validation
 diff --git a/player/video.c b/player/video.c
-index 60430224..b74e5235 100644
+index 60430224..51895549 100644
 --- a/player/video.c
 +++ b/player/video.c
 @@ -28,6 +28,7 @@
@@ -27,7 +27,7 @@ index 60430224..b74e5235 100644
  
  void reset_video_state(struct MPContext *mpctx)
  {
-+    if (mpctx->recovery_discontinuity < UINT64_MAX)
++    if (mpctx->recovery_discontinuity < INT64_MAX)
 +        mpctx->recovery_discontinuity++;
      if (mpctx->vo_chain) {
          vo_chain_reset_state(mpctx->vo_chain);
@@ -42,8 +42,8 @@ index 60430224..b74e5235 100644
 +    if (!mpctx->recovery_discontinuity)
 +        mpctx->recovery_discontinuity = 1;
 +    if (frame->current && mpctx->playing && mpctx->playing->id &&
-+        mpctx->playing->id <= INT64_MAX && mpctx->recovery_discontinuity != UINT64_MAX &&
-+        mpctx->recovery_source_serial < UINT64_MAX) {
++        mpctx->playing->id <= INT64_MAX && mpctx->recovery_discontinuity < INT64_MAX &&
++        mpctx->recovery_source_serial < INT64_MAX) {
 +        frame->recovery_entry_id = mpctx->playing->id;
 +        frame->recovery_discontinuity = mpctx->recovery_discontinuity;
 +        frame->recovery_source_serial = ++mpctx->recovery_source_serial;
@@ -80,7 +80,7 @@ index f24918d4..e64c102c 100644
      // If 0, present immediately.
      int64_t pts;
 diff --git a/video/out/vo_libmpv.c b/video/out/vo_libmpv.c
-index 558a1de1..39e8ec3b 100644
+index 558a1de1..78e33efe 100644
 --- a/video/out/vo_libmpv.c
 +++ b/video/out/vo_libmpv.c
 @@ -26,6 +26,7 @@
@@ -99,7 +99,7 @@ index 558a1de1..39e8ec3b 100644
      struct mp_image_params img_params;
      int vp_w, vp_h;
      bool flip;
-@@ -333,39 +335,57 @@ bool mp_render_context_acquire(mpv_render_context *ctx)
+@@ -333,39 +335,59 @@ bool mp_render_context_acquire(mpv_render_context *ctx)
      return atomic_compare_exchange_strong(&ctx->in_use, &prev, true);
  }
  
@@ -133,8 +133,10 @@ index 558a1de1..39e8ec3b 100644
 +{
 +    if (!observation || !frame || !frame->current || !frame->recovery_entry_id ||
 +        !frame->recovery_discontinuity || !frame->recovery_source_serial ||
++        frame->recovery_discontinuity >= INT64_MAX ||
++        frame->recovery_source_serial >= INT64_MAX ||
 +        frame->recovery_media_pts == MP_NOPTS_VALUE || !isfinite(frame->recovery_media_pts) ||
-+        ctx->recovery_render_serial == UINT64_MAX)
++        ctx->recovery_render_serial >= INT64_MAX)
 +        return;
 +    observation->valid = 1;
 +    observation->playlist_entry_id = frame->recovery_entry_id;
@@ -181,7 +183,7 @@ index 558a1de1..39e8ec3b 100644
      }
  
      if (ctx->need_reconfig)
-@@ -411,6 +431,9 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
+@@ -411,6 +433,9 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
      if (do_render)
          err = ctx->renderer->fns->render(ctx->renderer, params, frame);
  
@@ -191,7 +193,7 @@ index 558a1de1..39e8ec3b 100644
      if (frame != &dummy)
          talloc_free(frame);
  
-@@ -426,6 +449,24 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
+@@ -426,6 +451,24 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
      return err;
  }
  
